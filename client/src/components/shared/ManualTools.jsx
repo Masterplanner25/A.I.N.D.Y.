@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { safeMap } from "../../utils/safe";
 
 // Revenue & growth calculators
+import TwrPanel from "../app/TwrPanel";
 import IncomeEfficiencyPanel from "../app/IncomeEfficiencyPanel";
 import RevenueScalingPanel from "../app/RevenueScalingPanel";
 import BusinessGrowthPanel from "../app/BusinessGrowthPanel";
@@ -23,6 +24,7 @@ const SECTIONS = [
   {
     title: "Revenue & growth",
     panels: [
+      ["twr", TwrPanel],
       ["income-efficiency", IncomeEfficiencyPanel],
       ["revenue-scaling", RevenueScalingPanel],
       ["business-growth", BusinessGrowthPanel],

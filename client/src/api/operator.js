@@ -61,6 +61,14 @@ export function getObservabilityRequests(windowHours = 24, limit = 50, errorLimi
   return authRequest(`${ROUTES.OPERATOR.OBSERVABILITY_REQUESTS}?${params.toString()}`, { method: "GET" });
 }
 
+// Execution graph for a single trace. No ui-kit ROUTES constant yet — /platform is
+// runtime-owned (never /apps-mounted), so the path is a literal like the other operator routes.
+export function getExecutionGraph(traceId) {
+  return authRequest(`/platform/observability/execution_graph/${encodeURIComponent(traceId)}`, {
+    method: "GET",
+  });
+}
+
 export function getObservabilityDashboard(windowHours = 24) {
   const params = new URLSearchParams({
     window_hours: String(windowHours),
