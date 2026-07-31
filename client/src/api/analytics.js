@@ -117,6 +117,12 @@ export const getMyScore = taggedRequest("analytics", () =>
   authRequest(ROUTES.ANALYTICS.SCORES_ME, { method: "GET" }).then(unwrapEnvelope)
 );
 
+// Three-axis snapshot (Volume / Worth / Trajectory). No ui-kit ROUTES constant yet —
+// this is a newer app route not in the shared map, so the /apps-mounted path is a literal.
+export const getThreeAxis = taggedRequest("analytics", () =>
+  authRequest("/apps/analytics/three-axis", { method: "GET" }).then(unwrapEnvelope)
+);
+
 export const recalculateScore = taggedRequest("analytics", () =>
   authRequest(ROUTES.ANALYTICS.SCORES_RECALCULATE, { method: "POST" }).then(unwrapEnvelope)
 );
