@@ -1,4 +1,4 @@
-import { adminRequest as authRequest } from "./_core.js";
+import { adminRequest as authRequest, unwrapEnvelope } from "./_core.js";
 import { ROUTES } from "./_routes.js";
 
 export function getFlowRuns(status = null, workflowType = null, limit = 20) {
@@ -67,6 +67,33 @@ export function getExecutionGraph(traceId) {
   return authRequest(`/platform/observability/execution_graph/${encodeURIComponent(traceId)}`, {
     method: "GET",
   });
+}
+
+// ── Dead-Letter Queue (control-plane actions) ────────────────────────────────
+// /platform is runtime-owned (never /apps-mounted) and these queue routes wrap their
+// payload in the standard {status, data} envelope, so unwrap to a flat object.
+export function getQueueHealth() {
+  return authRequest("/platform/queue/health", { method: "GET" }).then(unwrapEnvelope);
+}
+
+export function getDeadLetters(limit = 100) {
+  return authRequest(`/platform/queue/dead-letters?limit=${limit}`, { method: "GET" }).then(unwrapEnvelope);
+}
+
+export function replayDeadLetter(jobId) {
+  return authRequest(`/platform/queue/dead-letters/${encodeURIComponent(jobId)}/replay`, {
+    method: "POST",
+  }).then(unwrapEnvelope);
+}
+
+export function deleteDeadLetter(jobId) {
+  return authRequest(`/platform/queue/dead-letters/${encodeURIComponent(jobId)}`, {
+    method: "DELETE",
+  }).then(unwrapEnvelope);
+}
+
+export function drainDeadLetters() {
+  return authRequest("/platform/queue/dead-letters/drain", { method: "POST" }).then(unwrapEnvelope);
 }
 
 export function getObservabilityDashboard(windowHours = 24) {
