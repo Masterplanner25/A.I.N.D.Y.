@@ -40,6 +40,7 @@ const NAV_GROUPS = [
     links: [
       { to: "/analytics", label: "Analytics" },
       { to: "/kpi", label: "KPI Snapshot" },
+      { to: "/tools", label: "Manual Tools" },
     ],
   },
   {

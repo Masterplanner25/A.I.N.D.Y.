@@ -9,6 +9,7 @@ import {
 import ErrorBoundary, { RouteErrorBoundary } from "./components/shared/ErrorBoundary";
 import AppShell from "./components/shared/AppShell";
 import KPIDashboard from "./components/shared/KPIDashboard";
+import ManualTools from "./components/shared/ManualTools";
 import ProtectedRoute from "./components/shared/ProtectedRoute";
 import { VersionMismatchBanner } from "./components/shared/VersionMismatchBanner";
 import { useAuth } from "./context/AuthContext";
@@ -243,6 +244,7 @@ export default function App() {
                     <Route path="/masterplan" element={<AppProfileRoute element={routeElement("MasterPlan", <MasterPlanDashboard />)} />} />
                     <Route path="/analytics" element={<AppProfileRoute element={routeElement("Analytics", <AnalyticsPanel />)} />} />
                     <Route path="/kpi" element={<AppProfileRoute element={routeElement("KPI Snapshot", <KPIDashboard />)} />} />
+                    <Route path="/tools" element={<AppProfileRoute element={routeElement("Manual Tools", <ManualTools />)} />} />
                     <Route path="/search/research" element={<AppProfileRoute element={routeElement("Research", <ResearchEngine />)} />} />
                     <Route path="/search/seo" element={<AppProfileRoute element={routeElement("AI SEO", <AiSeoTool />)} />} />
                     <Route path="/search/leadgen" element={<AppProfileRoute element={routeElement("Lead Generation", <LeadGen />)} />} />

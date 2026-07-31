@@ -1385,7 +1385,11 @@ KPI decision and this one should be made together rather than separately.
 
 A is strictly better than leaving it; B is A plus the control-plane work already scoped in item 29.
 
-**Status:** diagnosed. Decision belongs with the item 18 / item 29 decisions, not on its own.
+**Status:** ✅ RESOLVED via **option B** (owner, 2026-07-31), on `feat/kpi-scores-dashboard`. The
+13 app calculators moved to a new app-side `/tools` drawer (3 name-colliders deleted — `/kpi` now
+computes real system-fed versions); the freed Executions tab was rebuilt into a real execution
+console over `flows/runs` + `observability/execution_graph`. See
+`docs/handoffs/KPI_DASHBOARD_WIRING.md`.
 
 ---
 

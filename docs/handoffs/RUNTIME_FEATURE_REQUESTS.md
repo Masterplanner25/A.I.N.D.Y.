@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-07-19"
+last_verified: "2026-07-31"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -295,6 +295,75 @@ the existing `{data: recommendation}` envelope, then integration-test end-to-end
 - App: `apps/analytics/nodus/reasoning_apply_v1.nd`, `apps/analytics/agents/tools.py`
   (`reasoning.evaluate`), `apps/analytics/services/reasoning/`, the `APP-DEBT-MIGRATED-1`
   Nodus-native reasoning row in `TECH_DEBT.md`.
+
+---
+
+## FR-6 — Self-service password management (change + reset) 🔴 net-new
+
+**apps-monolith ref:** surfaced in the KPI-dashboard walk (2026-07-31) · **Status:** confirmed
+gap, verified against the live OpenAPI on `aindy-runtime==1.10.2`.
+
+### Today (the limitation)
+The entire auth surface is four routes:
+
+```
+POST /auth/register   POST /auth/login   POST /auth/logout
+POST /auth/admin/invalidate-sessions/{user_id}
+```
+
+There is **no forgot-password, no reset-token, and no change-password endpoint** — verified by
+enumerating the live `/openapi.json` on 1.10.2. Consequences:
+
+- A user who forgets their password has **zero recovery path** through the product.
+- Even a **logged-in** user cannot change their own password — there is no route for it.
+- The only way to set a password is a direct `UPDATE users SET hashed_password = …` against
+  Postgres, hashing with the runtime's own `hash_password()`. That is exactly what had to be done
+  this session to restore admin access (`admin@local.test`), and it is the same class of gap as
+  the **first-admin bootstrap** finding (walk-log item 29: `admin/users/{id}/promote` is
+  admin-gated with no UI, so the first admin was made via a direct DB `UPDATE`). Auth
+  self-service — recovery, rotation, and bootstrap — is thin across the board and currently
+  requires DB surgery.
+
+### Why this is a runtime request (not app-fixable here)
+Auth is unambiguously runtime-owned: `/auth/*` is in `RUNTIME_OWNED_PREFIXES`
+(`client/src/api/_routes.js`), the routes are mounted by the runtime, password hashing/verifying
+lives in `AINDY.services.auth_service` (`hash_password`, `verify_password`, `pwd_context`), and
+this repo does not own `AINDY/`. Even the client auth calls (`loginUser`, `registerUser`) are
+re-exported from `@aindy/ui-kit`. There is no `register_*` hook that lets an app add an auth
+route, so this is a build against `aindy-runtime`.
+
+### The ask (runtime) — sliceable, cheapest first
+1. **`POST /auth/password/change`** (authenticated) — verify current password, set new. Needs no
+   delivery channel, so it is the smallest useful slice and closes the "logged-in user can't
+   rotate" gap on its own. Should invalidate existing sessions on success (the
+   `invalidate-sessions` machinery already exists).
+2. **`POST /auth/password/forgot`** — issue a time-boxed, single-use reset token for an email.
+3. **`POST /auth/password/reset`** — consume the token, set the new password, invalidate sessions.
+
+All three reuse `hash_password` / `verify_password`. **Delivery dependency:** the forgot/reset
+pair needs a way to get the token to the user (email). That ties to **FR-1** (connector +
+capability-enforced egress) — the runtime could either send via its own channel or return the
+token for the app to deliver through the future email connector. Because of that coupling, **item
+1 (change-password) is independently shippable now**; items 2–3 can follow the FR-1 egress work.
+
+### App-side adoption (the contract)
+Once the endpoints exist, this repo wires the UI — no runtime dependency beyond the routes:
+- a **"Forgot password?"** link on `client/src/components/shared/LoginPage.jsx` → a reset form
+  that calls `/auth/password/forgot` then `/auth/password/reset`;
+- an in-app **"Change password"** control calling `/auth/password/change`.
+
+Nothing to wire until the routes ship. Same pattern as the rest of the frontend walk: the UI is
+app-owned and cheap; the capability underneath must exist first.
+
+### References
+- Runtime: `AINDY/services/auth_service.py` (`hash_password`, `verify_password`, `pwd_context`;
+  the four `/auth/*` routes), `users.hashed_password` column.
+- App: `client/src/components/shared/LoginPage.jsx`, `client/src/api/auth.js` (ui-kit re-exports),
+  `RUNTIME_OWNED_PREFIXES` in `client/src/api/_routes.js`.
+- Relation: sibling of **walk-log item 29** (first-admin bootstrap has no UI path) in
+  `docs/handoffs/FRONTEND_WALK_LOG.md`; forgot/reset delivery depends on **FR-1**.
+
+---
 
 ## What this is
 
