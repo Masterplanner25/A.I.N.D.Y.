@@ -1,7 +1,8 @@
 # KPI Dashboard Wiring Plan
 
-**Status:** planned, not started · **Owner decision captured:** walk-log items 18 & 32
-**Scope:** frontend-only · **Backend changes:** none · **Migrations:** none
+**Status:** ✅ implemented on `feat/kpi-scores-dashboard` (2026-07-31) · **Owner decisions
+captured:** walk-log items 18 & 32 · **Scope:** frontend-only · **Backend changes:** none ·
+**Migrations:** none
 
 ---
 
@@ -110,19 +111,23 @@ applies only to the `CALCULATE_*` keys, so it does not interfere.
 
 ---
 
-## Implementation steps
+## Implementation steps — all ✅ done (2026-07-31)
 
-1. **Add `getThreeAxis`** to `client/src/api/analytics.js` (~6 lines, mirrors `getMyScore`,
-   `.then(unwrapEnvelope)`).
-2. **Build `KpiDashboard`** — one data-fetching container (parallel `getMyScore` +
-   `getScoreHistory` + `getThreeAxis`) plus ~4 small tile components (Hero, KpiTile, AxisTile,
-   Sparkline). Handle the empty state.
-3. **Rewire the route** at `client/src/App.jsx:245` — swap `<KPIDashboard />` for the new
-   component. Remove the old import (`client/src/components/shared/KPIDashboard.jsx`).
-4. **Manual calculators disposition** — see below.
-5. **Close item 32** — the platform Executions tab (`client/src/components/platform/
-   ExecutionConsole.jsx`) is the same 13 calculators; retire it once they live in the app-side
-   drawer (or are deleted).
+1. ✅ **`getThreeAxis`** added to `client/src/api/analytics.js` (literal `/apps/analytics/three-axis`
+   path — no ui-kit constant).
+2. ✅ **`KPIDashboard` rewritten** (`client/src/components/shared/KPIDashboard.jsx`) — Hero ring +
+   provenance + Recalculate + history sparkline, Row A (5 KPIs), Row B (3 axes), real empty state.
+   Replaced in place, so the `App.jsx:245` route needed no change. Verified live: Row B renders
+   with correct numbers.
+3. ✅ **Manual Tools drawer** — new `/tools` page (`ManualTools.jsx`) under the ANALYTICS nav group
+   holds the 10 parked what-if calculators + `TwrPanel` (TWR, extracted from the old console),
+   behind an honesty banner. `AppShell.jsx` + `App.jsx` wired.
+4. ✅ **Colliders deleted** — `ExecutionSpeedPanel`, `DecisionEfficiencyPanel`,
+   `AIProductivityBoostPanel` removed (real system-fed twins live on `/kpi`).
+5. ✅ **Item 32 resolved via option B** — `ExecutionConsole.jsx` rewritten into a *real* execution
+   console: live request pulse (`observability/requests`), filterable flow-runs table
+   (`flows/runs`), per-run execution-graph trace (`observability/execution_graph/{trace_id}`).
+   The `/executions` route/nav are unchanged, so coupled tests stay green. Full suite: 171 pass.
 
 ---
 
