@@ -28,6 +28,15 @@ export function getFlowRegistry() {
   return authRequest(ROUTES.OPERATOR.FLOW_REGISTRY, { method: "GET" });
 }
 
+// Run a registered flow on demand. Body is FlowRunRequest ({state?}). /platform is
+// runtime-owned; no ui-kit constant for the by-name run route, so the path is a literal.
+export function runFlow(name, state = {}) {
+  return authRequest(`/platform/flows/${encodeURIComponent(name)}/run`, {
+    method: "POST",
+    body: JSON.stringify({ state }),
+  }).then(unwrapEnvelope);
+}
+
 export function getFlowStrategies() {
   return authRequest(ROUTES.OPERATOR.FLOW_STRATEGIES, { method: "GET" });
 }
@@ -67,6 +76,18 @@ export function getExecutionGraph(traceId) {
   return authRequest(`/platform/observability/execution_graph/${encodeURIComponent(traceId)}`, {
     method: "GET",
   });
+}
+
+// ── Admin users (control-plane: promotion) ───────────────────────────────────
+// GET returns a flat {users:[…]}; promote wraps in the {status,data} envelope.
+export function getAdminUsers() {
+  return authRequest("/platform/admin/users", { method: "GET" });
+}
+
+export function promoteUser(userId) {
+  return authRequest(`/platform/admin/users/${encodeURIComponent(userId)}/promote`, {
+    method: "POST",
+  }).then(unwrapEnvelope);
 }
 
 // ── Dead-Letter Queue (control-plane actions) ────────────────────────────────

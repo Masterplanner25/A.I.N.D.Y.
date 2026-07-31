@@ -22,6 +22,7 @@ const NAV_GROUPS = [
       { to: "/registry", label: "Registry", external: true },
       { to: "/executions", label: "Executions", external: true, runtimeOnlySafe: false },
       { to: "/trace", label: "Ripple Trace", external: true, runtimeOnlySafe: false },
+      { to: "/users", label: "Admin Users", external: true, runtimeOnlySafe: false },
     ],
   },
   {

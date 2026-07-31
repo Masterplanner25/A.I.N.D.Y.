@@ -23,6 +23,7 @@ describe("PlatformNav", () => {
       "/observability",
       "/health",
       "/trace",
+      "/users",
     ];
 
     const actual = [];
