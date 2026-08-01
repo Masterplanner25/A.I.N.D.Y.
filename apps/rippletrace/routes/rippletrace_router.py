@@ -11,7 +11,9 @@ from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 
+from apps.rippletrace.services import content_ingest
 from apps.rippletrace.services import rippletrace_services
+from apps.rippletrace.services.content_fetch import ContentFetchError
 from AINDY.services.auth_service import get_current_user
 from apps.rippletrace.services import causal_engine
 from apps.rippletrace.services import learning_engine
@@ -79,6 +81,16 @@ class Ping(BaseModel):
     external_url: Optional[str] = None
     reaction_notes: Optional[str] = None
     strength: Optional[float] = Field(1.0, ge=0.0)
+
+
+class IngestUrlRequest(BaseModel):
+    """A URL the user published. Whether it is a page or a feed is detected, not asked."""
+
+    url: str = Field(..., min_length=1, max_length=2048)
+
+
+class ContentSourceUpdate(BaseModel):
+    active: bool
 
 
 class RippleEvent(BaseModel):
@@ -186,6 +198,126 @@ async def recent_ripples(
         )
 
     return await execute_with_pipeline(request, "rippletrace_recent", handler)
+
+
+# === Content ingestion ===
+# Registered well above the `/{trace_id}` catch-all at the bottom of this module —
+# routes are matched in declaration order, so `/sources` declared after it would be
+# swallowed as a trace id.
+
+
+@router.post("/ingest")
+@limiter.limit("10/minute")
+async def ingest_content_url(
+    request: Request,
+    body: IngestUrlRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Ingest a published URL. A feed becomes a subscription; a page becomes one drop point."""
+
+    def handler(ctx):
+        try:
+            return content_ingest.ingest_url(
+                db, url=body.url, user_id=str(current_user["sub"])
+            )
+        except ContentFetchError as exc:
+            # A bad or non-public URL is the user's input being wrong, not a server
+            # fault — surface the reason instead of a generic 500.
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "content_fetch_failed", "message": str(exc)},
+            ) from exc
+
+    result = await execute_with_pipeline(request, "rippletrace_ingest_url", handler)
+    return _with_execution_envelope(result)
+
+
+@router.get("/sources")
+@limiter.limit("60/minute")
+async def list_content_sources(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    def handler(ctx):
+        return {"sources": content_ingest.list_sources(db, user_id=str(current_user["sub"]))}
+
+    result = await execute_with_pipeline(request, "rippletrace_list_sources", handler)
+    return _with_execution_envelope(result)
+
+
+@router.post("/sources/{source_id}/poll")
+@limiter.limit("10/minute")
+async def poll_content_source(
+    request: Request,
+    source_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    def handler(ctx):
+        source = content_ingest.get_source(
+            db, source_id=source_id, user_id=str(current_user["sub"])
+        )
+        if source is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "source_not_found", "message": "Content source not found"},
+            )
+        outcome = content_ingest.poll_source(db, source)
+        return {"source": content_ingest.source_to_dict(source), **outcome}
+
+    result = await execute_with_pipeline(request, "rippletrace_poll_source", handler)
+    return _with_execution_envelope(result)
+
+
+@router.patch("/sources/{source_id}")
+@limiter.limit("30/minute")
+async def update_content_source(
+    request: Request,
+    source_id: str,
+    body: ContentSourceUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    def handler(ctx):
+        updated = content_ingest.set_source_active(
+            db,
+            source_id=source_id,
+            user_id=str(current_user["sub"]),
+            active=body.active,
+        )
+        if updated is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "source_not_found", "message": "Content source not found"},
+            )
+        return updated
+
+    result = await execute_with_pipeline(request, "rippletrace_update_source", handler)
+    return _with_execution_envelope(result)
+
+
+@router.delete("/sources/{source_id}")
+@limiter.limit("30/minute")
+async def delete_content_source(
+    request: Request,
+    source_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    def handler(ctx):
+        if not content_ingest.delete_source(
+            db, source_id=source_id, user_id=str(current_user["sub"])
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "source_not_found", "message": "Content source not found"},
+            )
+        return {"deleted": True, "id": source_id}
+
+    result = await execute_with_pipeline(request, "rippletrace_delete_source", handler)
+    return _with_execution_envelope(result)
 
 
 @router.post("/event")

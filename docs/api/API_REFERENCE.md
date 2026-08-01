@@ -1,6 +1,6 @@
 ---
 title: "App HTTP REST API Reference"
-last_verified: "2026-07-18"
+last_verified: "2026-08-01"
 api_version: "1.0"
 status: current
 owner: "apps-team"
@@ -1740,6 +1740,15 @@ Get Event Upstream
 
 **Response 200:** unspecified
 
+#### POST /apps/rippletrace/ingest
+Ingest Content Url
+
+Ingest a published URL. A feed (RSS/Atom) is registered as a recurring content source and its entries become drop points; a page becomes a single drop point and reports any feed it advertises under `suggested_feeds`.
+
+**Body:** url: string (required)
+
+**Response 200:** unspecified
+
 #### POST /apps/rippletrace/learning/adjust
 Adjust Learning Thresholds
 
@@ -1848,6 +1857,34 @@ Get Drop Point Recommendation
 Get Ripples
 
 **Parameters:** drop_point_id (path): string
+
+**Response 200:** unspecified
+
+#### GET /apps/rippletrace/sources
+List Content Sources
+
+**Response 200:** unspecified
+
+#### PATCH /apps/rippletrace/sources/{source_id}
+Update Content Source
+
+**Parameters:** source_id (path): string
+
+**Body:** active: boolean (required)
+
+**Response 200:** unspecified
+
+#### DELETE /apps/rippletrace/sources/{source_id}
+Delete Content Source
+
+**Parameters:** source_id (path): string
+
+**Response 200:** unspecified
+
+#### POST /apps/rippletrace/sources/{source_id}/poll
+Poll Content Source
+
+**Parameters:** source_id (path): string
 
 **Response 200:** unspecified
 

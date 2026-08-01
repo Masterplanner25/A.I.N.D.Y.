@@ -1,7 +1,14 @@
 """Public interface for the rippletrace app. Other apps must only import from this file."""
 
 from apps.rippletrace.flow_strategy import update_strategy_score
-from apps.rippletrace.models import DropPointDB, PingDB, PlaybookDB, RippleEdge, StrategyDB
+from apps.rippletrace.models import (
+    ContentSourceDB,
+    DropPointDB,
+    PingDB,
+    PlaybookDB,
+    RippleEdge,
+    StrategyDB,
+)
 from apps.rippletrace.services.rippletrace_service import (
     build_trace_graph,
     generate_trace_insights,
@@ -19,6 +26,7 @@ from apps.rippletrace.services.rippletrace_services import (
 )
 
 __all__ = [
+    "ContentSourceDB",
     "DropPointDB",
     "PingDB",
     "PlaybookDB",
