@@ -712,7 +712,8 @@ top-level routes, and the connective tissue went with the split.
 
 - **Tasks cannot be attached to a plan from the UI.** `Task.masterplan_id` exists, is indexed,
   and drives ETA/WCU recalculation and the completion cascade. `TaskCreate` accepts it.
-  `masterplan_id` appears in the client only in `AnalyticsPanel` and the projection context —
+  `masterplan_id` appeared in the client only in `AnalyticsPanel` (since removed — item 18)
+  and the projection context —
   **never** in the task-creation path (see item 15: the form sends `{name, priority}`).
   So every task created through the UI is permanently orphaned from every plan.
 - **The link is real on the backend.** Completing a task recalculates the active plan's ETA and
@@ -754,7 +755,7 @@ independently of any redesign.
 
 ---
 
-### 18. Analytics and KPI Snapshot — owner verdict on scope — `Design`
+### 18. Analytics and KPI Snapshot — owner verdict on scope — `Design` → `Defect` — CLOSED
 
 **Analytics (`/analytics`)** is LinkedIn analytics, and owner-specific: it reflects one person's
 channel rather than anything a general user of the product would have. Flagged by the owner as a
@@ -764,8 +765,75 @@ candidate for removal rather than redesign.
 numbers and it computes. Nothing is wrong with it as built; the owner's original intent was a
 **dashboard** (values derived from the system's own data), not a manual calculator.
 
-**Status:** owner verdict recorded — two more surfaces to either redesign or remove. Not walked
-in depth, since scope is the open question rather than correctness.
+**KPI half: CLOSED (#168).** Rewired onto the live Infinity score engine; the manual calculators
+were parked in a `/tools` drawer. See `docs/handoffs/KPI_DASHBOARD_WIRING.md`.
+
+---
+
+**Analytics half: CLOSED.** Walked in depth, and the scope question was overtaken by fact — the
+surface was not merely narrow, it had **never once worked**. `canonical_metrics`, the table the
+whole surface exists to populate, held **0 rows**. Three independent breaks, each verified live:
+
+1. **The form never matched its own API — HTTP 422 on every submit.** `AnalyticsPanel` sent
+   `reach` / `interactions` / `followers`; `LinkedInRawInput` accepts none of those names and
+   requires `scope_type` + `members_reached`, which the form never collected. Only `impressions`
+   mapped 1:1. Reproduced with the exact client payload:
+   `422 missing: body.scope_type, body.members_reached`.
+2. **The backend fails too, on a contract-correct payload — HTTP 500.**
+   `analytics_linkedin_ingest_node` serializes through a syscall (`data.model_dump()`, a dict),
+   but `apps/social/services/linkedin_adapter.py:5` does attribute access (`raw.likes`):
+   `AttributeError: 'dict' object has no attribute 'likes'`. The adapter was never converted
+   from object to dict access when the syscall indirection landed, so the write path is
+   structurally incapable of succeeding.
+3. **The prerequisite could not be created either.** Analytics requires a `masterplan_id`; the
+   DB held 0 masterplans and `/apps/compute/create_masterplan` returned 500 unconditionally
+   (see item 34).
+4. **Zero test coverage** on the whole path — no test touched `linkedin_adapter` or the route,
+   which is why three simultaneous breaks went unnoticed.
+
+**The dead-twin pattern, third instance.** As with `/kpi` (and the response-envelope class from
+the prior walk), a working system-fed engine already existed and the wrong surface was wired to
+the nav. `GET /apps/social/analytics` returns real `overview` / `top_posts` / `trend` / `signals`
+computed from actual posts — it was only rendered inside the Trust Feed, and its `signals` field
+was dropped entirely.
+
+**Fixed.** `/analytics` now renders the live social engine (`SocialAnalytics.jsx`), including the
+previously unrendered `signals`. `AnalyticsPanel.jsx` and the two dead API wrappers are deleted.
+Per owner decision the **backend is parked, not deleted** — `linkedin/manual`, the masterplan
+analytics reads, the flow nodes and `CanonicalMetricDB` remain in place but are unused and
+unreferenced by any client. Nothing consumes `canonical_metrics`; the Infinity scoring services
+do not read it, so parking costs nothing.
+
+**Still open (owner's original point stands):** if manual channel ingest is ever wanted, it needs
+all three breaks fixed plus a decision about which channels — not just LinkedIn.
+
+---
+
+### 34. `/apps/compute/create_masterplan` could never succeed — `Defect` — FIXED
+
+**Found while answering item 18** (analytics needs a `masterplan_id`, and none could be made).
+
+`create_masterplan_compute` passed the request body straight into `MasterPlan(**data)`. Two
+things made that impossible:
+
+- `MasterPlanInput` required a `name` field **the ORM has no column for** →
+  `TypeError: 'name' is an invalid keyword argument for MasterPlan` → HTTP 500 on every call.
+- `master_plans.target_date` is NOT NULL and was never supplied, so even without `name` the
+  insert would have failed.
+
+**A third problem sat behind those:** the compute routes returned the ORM object itself, which
+the response envelope rendered as `{}` — `/apps/compute/masterplans` listed `[{}]` and a created
+plan came back with no id. The route family is itself a **dead twin** of the working
+`/apps/masterplans/`, which projects its rows explicitly.
+
+**Fixed.** `name` is now optional and discarded (no column to map it to); `target_date` is
+derived from the horizon exactly as `create_masterplan_from_genesis` does; `is_origin` follows
+the same per-user lineage rule; and both compute routes return an explicit projection matching
+the masterplan domain's own shape. Verified live: create → 200 with the plan body, list → real
+rows. Covered by `tests/unit/test_compute_masterplan_create.py` (6 tests).
+
+**Left open:** `apps/masterplan/schemas/masterplan.py::MasterPlanInput` is a second, entirely
+unreferenced copy of the same schema — dead duplicate, not deleted here to keep the diff focused.
 
 ---
 

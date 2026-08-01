@@ -1,19 +1,13 @@
 import { authRequest, taggedRequest, unwrapEnvelope } from "./_core.js";
 import { ROUTES } from "./_routes.js";
 
-export const ingestLinkedInManual = taggedRequest("analytics", (payload) =>
-  authRequest(ROUTES.ANALYTICS.LINKEDIN_MANUAL, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }).then(unwrapEnvelope)
-);
-
-export const getMasterplanSummary = taggedRequest("analytics", (masterplanId, groupBy = null) => {
-  const query = groupBy ? `?group_by=${encodeURIComponent(groupBy)}` : "";
-  return authRequest(`${ROUTES.ANALYTICS.MASTERPLAN_SUMMARY(masterplanId)}${query}`, {
-    method: "GET",
-  }).then(unwrapEnvelope);
-});
+// The LinkedIn manual-ingest wrappers (`ingestLinkedInManual`, `getMasterplanSummary`)
+// were removed with the /analytics rewire. The surface that called them could never
+// succeed: the form's fields did not match `LinkedInRawInput` (422 on every submit) and
+// the adapter behind the syscall boundary received a dict where it expected an object
+// (500 even with a correct payload), so `canonical_metrics` never held a row. The
+// backend routes are parked, not deleted — see docs/handoffs/FRONTEND_WALK_LOG.md item 18.
+// /analytics now renders the system-fed social engine via api/social.js.
 
 export const calculateTwr = taggedRequest("analytics", (payload) =>
   authRequest(ROUTES.ANALYTICS.CALCULATE_TWR, {
