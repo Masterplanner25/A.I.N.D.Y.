@@ -14,6 +14,7 @@ def register() -> None:
     _register_flow_results()
     _register_required_flow_nodes()
     _register_health_check()
+    _register_scheduled_jobs()
 
 
 def _register_models() -> None:
@@ -88,6 +89,43 @@ def _check_rippletrace_health() -> dict:
         ),
         "engines": engine_health,
     }
+
+
+def _register_scheduled_jobs() -> None:
+    """Poll registered content feeds so published work becomes drop points on its own.
+
+    The runtime adds app scheduled jobs to APScheduler without coalesce/max_instances,
+    so the handler carries its own non-blocking re-entrancy guard rather than relying
+    on the scheduler to prevent overlap.
+    """
+    from AINDY.platform_layer.registry import register_scheduled_job
+    from apps.rippletrace.services.content_ingest import (
+        POLL_JOB_INTERVAL_MINUTES,
+        poll_due_sources,
+    )
+
+    from apps.rippletrace.services.ripple_detection import (
+        DETECTION_JOB_INTERVAL_MINUTES,
+        detect_due_mentions,
+    )
+
+    register_scheduled_job(
+        "rippletrace_poll_content_sources",
+        poll_due_sources,
+        name="Poll rippletrace content sources",
+        trigger="interval",
+        trigger_kwargs={"minutes": POLL_JOB_INTERVAL_MINUTES},
+    )
+    # Registered unconditionally; the handler itself no-ops unless
+    # AINDY_RIPPLE_MENTION_DETECTION is set, so the flag can be flipped without a
+    # redeploy and the job shows up in the registry either way.
+    register_scheduled_job(
+        "rippletrace_detect_mentions",
+        detect_due_mentions,
+        name="Detect rippletrace content mentions",
+        trigger="interval",
+        trigger_kwargs={"minutes": DETECTION_JOB_INTERVAL_MINUTES},
+    )
 
 
 def _register_syscalls() -> None:

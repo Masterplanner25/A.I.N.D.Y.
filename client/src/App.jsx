@@ -35,6 +35,7 @@ const LeadGen = lazy(() => import("./components/app/LeadGen"));
 const Feed = lazy(() => import("./components/app/Feed"));
 const ProfileView = lazy(() => import("./components/app/ProfileView"));
 const InfiniteNetwork = lazy(() => import("./components/app/InfiniteNetwork"));
+const RippleTrace = lazy(() => import("./components/app/RippleTrace"));
 const FreelanceDashboard = lazy(() => import("./components/app/FreelanceDashboard"));
 const ARMAnalyze = lazy(() => import("./components/app/ARMAnalyze"));
 const ARMConfig = lazy(() => import("./components/app/ARMConfig"));
@@ -251,6 +252,7 @@ export default function App() {
                     <Route path="/social" element={<AppProfileRoute element={routeElement("Social Feed", <Feed />)} />} />
                     <Route path="/profile/:username" element={<AppProfileRoute element={routeElement("Profile", <ProfileView />)} />} />
                     <Route path="/network" element={<AppProfileRoute element={routeElement("Network", <InfiniteNetwork />)} />} />
+                    <Route path="/rippletrace" element={<AppProfileRoute element={routeElement("RippleTrace", <RippleTrace />)} />} />
                     <Route path="/freelance" element={<AppProfileRoute element={routeElement("Freelance Dashboard", <FreelanceDashboard />)} />} />
                     <Route path="/arm/analyze" element={<AppProfileRoute element={routeElement("ARM Analyze", <ARMAnalyze />)} />} />
                     <Route path="/arm/config" element={<AppProfileRoute element={routeElement("ARM Config", <ARMConfig />)} />} />

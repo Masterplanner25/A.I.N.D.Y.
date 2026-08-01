@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
+import ChangePasswordDialog from "./ChangePasswordDialog";
 import { useAuth } from "../../context/AuthContext";
 import { useSystem } from "../../context/SystemContext";
 import { safeMap } from "../../utils/safe";
@@ -53,6 +54,7 @@ const NAV_GROUPS = [
       { to: "/search/seo", label: "AI SEO" },
       { to: "/search/leadgen", label: "Lead Gen" },
       { to: "/social", label: "Social Feed" },
+      { to: "/rippletrace", label: "RippleTrace" },
       { to: "/network", label: "Network" },
       { to: "/freelance", label: "Freelance" },
     ],
@@ -126,6 +128,7 @@ export default function AppShell() {
   const { isAdmin, logout, user } = useAuth();
   const { system } = useSystem();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const runtimeOnly = system?.runtime?.boot_mode === "runtime-only";
 
   const visibleGroups = useMemo(
@@ -215,6 +218,10 @@ export default function AppShell() {
         />
       ) : null}
 
+      {passwordDialogOpen ? (
+        <ChangePasswordDialog onClose={() => setPasswordDialogOpen(false)} />
+      ) : null}
+
       <div className="flex h-full min-h-0 flex-1 flex-col lg:ml-0">
         <header className="sticky top-0 z-20 border-b border-zinc-800/60 bg-[#09090b]/95 backdrop-blur">
           <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
@@ -242,6 +249,13 @@ export default function AppShell() {
                   Active Identity
                 </p>
                 <p className="text-sm text-zinc-200">{user?.email || "Unknown user"}</p>
+                <button
+                  type="button"
+                  onClick={() => setPasswordDialogOpen(true)}
+                  className="mt-1 text-[10px] uppercase tracking-[0.18em] text-zinc-500 hover:text-zinc-300"
+                >
+                  Change password
+                </button>
               </div>
               <button
                 type="button"

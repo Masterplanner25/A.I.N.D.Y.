@@ -33,6 +33,45 @@ export function getInfluenceGraph() {
   return authRequest("/apps/rippletrace/influence/graph", { method: "GET" });
 }
 
+// Content ingestion. Like getInfluenceGraph above, these are app-owned routes that
+// predate nothing in the ui-kit ROUTES map, so the full /apps path is written directly.
+
+export function ingestContentUrl(url) {
+  return authRequest("/apps/rippletrace/ingest", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function getContentSources() {
+  return authRequest("/apps/rippletrace/sources", { method: "GET" });
+}
+
+export function pollContentSource(sourceId) {
+  return authRequest(`/apps/rippletrace/sources/${sourceId}/poll`, { method: "POST" });
+}
+
+export function setContentSourceActive(sourceId, active) {
+  return authRequest(`/apps/rippletrace/sources/${sourceId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ active }),
+  });
+}
+
+export function deleteContentSource(sourceId) {
+  return authRequest(`/apps/rippletrace/sources/${sourceId}`, { method: "DELETE" });
+}
+
+export function detectRipples(limit = 5) {
+  return authRequest(`/apps/rippletrace/detect?limit=${limit}`, { method: "POST" });
+}
+
+export function detectRipplesForDropPoint(dropPointId) {
+  return authRequest(`/apps/rippletrace/drop_points/${dropPointId}/detect`, {
+    method: "POST",
+  });
+}
+
 export function getCausalChain(dropPointId, depth = 3) {
   return authRequest(`${ROUTES.RIPPLETRACE.CAUSAL_CHAIN(dropPointId)}?depth=${depth}`);
 }

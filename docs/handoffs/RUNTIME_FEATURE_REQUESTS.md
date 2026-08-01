@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-07-31"
+last_verified: "2026-08-01"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -298,10 +298,63 @@ the existing `{data: recommendation}` envelope, then integration-test end-to-end
 
 ---
 
-## FR-6 — Self-service password management (change + reset) 🔴 net-new
+## FR-6 — Self-service password management (change + reset) 🟡 item 1 SHIPPED, items 2–3 awaiting our call
 
-**apps-monolith ref:** surfaced in the KPI-dashboard walk (2026-07-31) · **Status:** confirmed
-gap, verified against the live OpenAPI on `aindy-runtime==1.10.2`.
+**apps-monolith ref:** surfaced in the KPI-dashboard walk (2026-07-31) · **Status:** item 1
+shipped in `aindy-runtime==1.11.0` (2026-08-01); items 2–3 blocked on a delivery decision the
+runtime asked us to make.
+
+### ✅ Item 1 closed — `POST /auth/password/change` (runtime 1.11.0)
+
+Shipped as specified: Bearer-only, `5/minute`, min length 8, bumps `token_version`, returns a
+freshly-versioned token in the canonical envelope so `unwrapEnvelope` and the existing token-store
+path apply unchanged. **The returned token must be stored** — the version bump invalidates every
+session including the caller's, so keeping the old token 401s the next request.
+
+App-side wiring (the in-app "Change password" control) is now unblocked and is ours to build.
+
+### 📮 Our answer on items 2–3: **(a) — the runtime sends it**
+
+The runtime handoff asked us to choose between **(a)** the runtime delivering the reset mail via
+an `email` connector, and **(b)** the runtime returning the token for us to deliver.
+
+**We choose (a).** The reasoning, so it does not have to be re-derived:
+
+- **(b) does not actually deliver FR-6.** The runtime is right that a response body carrying a
+  live credential-reset token is only safe behind an admin/service-authenticated caller. But the
+  gap FR-6 exists to close is *a user who forgot their password has zero recovery path* — an
+  endpoint a locked-out user cannot call does not close it. We would build (b), still not have
+  the feature, and be left permanently guarding a token-minting route.
+- **The connector is not throwaway work.** An `email` channel is wanted regardless — freelance
+  order and payment notifications have the same dependency. Under (a) that cost is paid once, by
+  the layer that owns egress policy, rather than duplicated per consumer.
+- **(b) also moves the security boundary to the weaker side.** Under (a) the token never leaves
+  the runtime; under (b) it crosses a process boundary into an app that does not own auth, and
+  every future caller of that route becomes an auth-surface reviewer.
+
+**Positions on the open sub-questions** (all ours to be overruled on — they are runtime calls, we
+are only removing ambiguity):
+
+| Question | Our position | Why |
+|---|---|---|
+| Token storage | **Stateless signed token** carrying `user_id` + `token_version` | Self-invalidating: the reset itself bumps `token_version`, so the token is single-use *by construction* rather than by bookkeeping. No table, no migration, no cleanup job. |
+| Single-use | Falls out of the above | A consumed token's `token_version` no longer matches. Replay fails without a revocation list. |
+| TTL | **30–60 minutes** | Long enough to survive a slow mail hop, short enough that a leaked inbox is not an indefinite backdoor. |
+| Unknown email on `/forgot` | **Always 200** | Otherwise the endpoint is an account-enumeration oracle. Agreed with the runtime's own read. |
+| Rate limit | Stricter than `/change`'s `5/minute` — suggest **3/minute per IP + per email** | `/forgot` is unauthenticated, so it is the cheapest endpoint to abuse for mail-bombing. |
+
+**Dependency we accept:** this now sits behind FR-1 connector + capability-enforced egress. We are
+not asking for it ahead of that work; we are answering so it is not blocked on us.
+
+### Related: no password policy on `register_user`
+
+The runtime flagged that `MIN_PASSWORD_LENGTH` guards `/auth/password/change` only, and that
+adding it to `register_user` would reject existing callers. **We want it on register too**, but
+agree it is a separate, breaking-ish decision — flagging it here rather than bundling it. This
+repo has no production user base whose passwords would be invalidated, so from our side the
+migration cost is zero.
+
+### Original filing (for context)
 
 ### Today (the limitation)
 The entire auth surface is four routes:
