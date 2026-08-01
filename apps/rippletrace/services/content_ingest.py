@@ -172,9 +172,16 @@ def upsert_drop_point(
     identifier = drop_point_id_for(user_id, canonical)
     themes = derive_themes(title=title, summary=summary, tags=tags or [])
     resolved_platform = platform or infer_platform(canonical)
-    # date_dropped is a legacy naive column; storing an aware value here makes
+    # Left NULL when the source published no date, rather than defaulted to "now".
+    # "Now" is a lie that costs something concrete: echo detection rejects results
+    # predating the drop point, so an ingestion-time stamp makes essentially the whole
+    # web look like prior art and detection silently finds nothing forever. NULL says
+    # what is true — the publication date is unknown — and every consumer already
+    # handles it (threadweaver's _minutes_difference and build_strategies both guard).
+    #
+    # date_dropped is also a legacy naive column, so an aware value would make
     # threadweaver compare naive-from-DB against aware-in-session. See naive_utc().
-    dropped_at = naive_utc(published_at or _utcnow())
+    dropped_at = naive_utc(published_at)
     display_title = (title or "").strip() or canonical
 
     row = db.query(DropPointDB).filter(DropPointDB.id == identifier).first()

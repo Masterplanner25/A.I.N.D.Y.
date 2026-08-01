@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { clearStoredToken, getStoredToken, setStoredToken } from "../api/_core.js";
-import { loginUser, registerUser } from "../api/auth.js";
+import { changePassword, loginUser, registerUser } from "../api/auth.js";
 
 const AuthContext = createContext(null);
 
@@ -103,6 +103,17 @@ export function AuthProvider({ children }) {
     return nextToken;
   };
 
+  // Rotating the password bumps token_version server-side, invalidating every session
+  // including this one. Storing the returned token is what keeps the user signed in —
+  // treated here, next to login/register, so the token store is written in exactly one
+  // place and cannot be forgotten at a call site.
+  const changeOwnPassword = async (currentPassword, newPassword) => {
+    const nextToken = await changePassword({ currentPassword, newPassword });
+    setStoredToken(nextToken);
+    setToken(nextToken);
+    return nextToken;
+  };
+
   const logout = () => {
     clearStoredToken();
     setToken(null);
@@ -117,6 +128,7 @@ export function AuthProvider({ children }) {
       login,
       register,
       logout,
+      changePassword: changeOwnPassword,
       setToken,
     }),
     [token, user, isAdmin],

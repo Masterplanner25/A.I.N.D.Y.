@@ -25,14 +25,36 @@ aindy-runtime>=1.0,<2.0
 The upper bound is required. The apps repo should not accept unbounded runtime
 upgrades.
 
-Validated on `2026-07-19`:
+Validated on `2026-08-01`:
 
-- installed runtime version: `1.10.2`
-- apps repo dependency (pinned in `pyproject.toml`): `aindy-runtime>=1.10.2,<2.0`
+- installed runtime version: `1.11.0`
+- apps repo dependency (pinned in `pyproject.toml`): `aindy-runtime>=1.11.0,<2.0`
 - runtime `/api/version` recommendation: `>=1.0,<2.0`
-- app-profile boot smoke on 1.10.2: `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=17`
+- app-profile boot smoke on 1.11.0: `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=17`
 
-Floor raised to `1.10.2` to adopt v1.10.2 (additive/opt-in, no schema change): the **third and
+Floor raised to `1.11.0` to adopt v1.11.0 (minor, not patch — it adds a public endpoint):
+`POST /auth/password/change`, which closes FR-6 item 1. Nothing in the release is
+source-breaking for app code.
+
+**The one behavioural change that can reach a deployment:** `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`
+default moved `30000 → 60000`, because the flow runner holds its session
+`idle in transaction` for the whole of node execution while a nodus run may legitimately
+occupy 45s (`AINDY_NODUS_MAX_EXECUTION_MS` 30s + `AINDY_NODUS_BOOT_ALLOWANCE_MS` 15s). At 30s a
+slow-but-in-budget run had its connection killed mid-flight.
+
+**A default change only helps deployments that do not pin the value — and this one does.**
+`docker-compose.prod.yml` sets it explicitly to `120000` (verified in the running container),
+which already clears the 45s ceiling, so no action was required. The action item is the negative
+one: **do not lower it below ~45s**, and if either nodus budget is raised, raise this above their
+sum. Root cause is not fixed in 1.11.0 — the transaction is still held across node execution;
+the opt-in fix is `AINDY_MEMORY_RECALL_OWN_SESSION` (default off), which gives memory recall its
+own short-lived session. Runtime tracks it as `DB-NODUS-BUDGET-1`.
+
+**If the `[mcp]` extra is ever installed**, it is now capped at `mcp>=1.0.0,<2`; `mcp 2.0.0`
+removed the 1.x low-level `Server.list_tools()` decorator that `nodus-mcp 0.1.2` is built on. Any
+direct `mcp` install must carry the same cap.
+
+Previously, the floor was raised to `1.10.2` to adopt v1.10.2 (additive/opt-in, no schema change): the **third and
 final RT-MEMTXN-LEAK-1 fix**, closing the issue across all three parts. See
 `RUNTIME_FEATURE_REQUESTS.md` for the live verification numbers.
 

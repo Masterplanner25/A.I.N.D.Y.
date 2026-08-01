@@ -351,7 +351,8 @@ export default function RippleTrace() {
                 <div className="min-w-0">
                   <div className="text-sm text-zinc-100">{point.title}</div>
                   <div className="text-[11px] text-zinc-500 mt-1 break-all">
-                    {point.platform || "unknown"} · {formatWhen(point.date_dropped)}
+                    {point.platform || "unknown"} ·{" "}
+                    {point.date_dropped ? formatWhen(point.date_dropped) : "date unknown"}
                     {point.url ? ` · ${point.url}` : ""}
                   </div>
                   <div className="text-[11px] text-zinc-600 mt-1">

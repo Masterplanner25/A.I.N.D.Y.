@@ -357,6 +357,38 @@ def test_upsert_drop_point_is_idempotent():
         session.close()
 
 
+def test_upsert_leaves_date_null_when_the_source_has_none():
+    """An unknown publication date must stay unknown, not become "now".
+
+    Echo detection rejects results that predate the drop point. Stamping ingestion time
+    onto an undated page makes almost the entire web look like prior art, so detection
+    finds nothing for that page — forever, and silently.
+    """
+    session = _build_session()
+    try:
+        row, _ = content_ingest.upsert_drop_point(
+            session,
+            user_id=str(uuid.uuid4()),
+            url="https://example.com/undated",
+            title="No date on this one",
+        )
+        session.commit()
+        assert row.date_dropped is None
+
+        dated, _ = content_ingest.upsert_drop_point(
+            session,
+            user_id=str(uuid.uuid4()),
+            url="https://example.com/dated",
+            title="This one has a date",
+            published_at=datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc),
+        )
+        session.commit()
+        # Stored naive-UTC, because date_dropped is a legacy naive column.
+        assert dated.date_dropped == datetime(2026, 5, 4, 12, 0)
+    finally:
+        session.close()
+
+
 def test_upsert_leaves_ripple_scores_untouched():
     """Scores belong to threadweaver and are computed from pings.
 
