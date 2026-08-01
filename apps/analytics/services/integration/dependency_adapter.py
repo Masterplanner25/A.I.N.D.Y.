@@ -92,6 +92,23 @@ def fetch_freelance_performance_signals(*, user_id: str) -> list[dict[str, Any]]
     return list(result.get("signals") or [])
 
 
+def fetch_ripple_performance_signals(*, user_id: str, db=None) -> list[dict[str, Any]]:
+    """RippleTrace's view: whether published content reached beyond its own audience.
+
+    Passes ``db`` (unlike the social/search/freelance fetchers) because rippletrace is
+    Postgres-backed — without a session the handler opens its own, which works but adds a
+    connection per loop run.
+    """
+    result = _dispatch_syscall(
+        "sys.v1.rippletrace.get_performance_signals",
+        {"user_id": str(user_id), "limit": 3},
+        user_id=str(user_id),
+        capability="rippletrace.read",
+        db=db,
+    )
+    return list(result.get("signals") or [])
+
+
 def fetch_memory_signals(*, user_id: str, trigger_event: str, db) -> list[dict[str, Any]]:
     normalized_user_id = require_user_id(user_id)
     return list(

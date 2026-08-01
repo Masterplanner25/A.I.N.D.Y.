@@ -137,6 +137,7 @@ def _resolve_via_goal_metric(domain: str, capability: str) -> Callable[..., floa
 
 _freelance_metric = _resolve_via_goal_metric("freelance", "freelance.read")
 _social_metric = _resolve_via_goal_metric("social", "social.read")
+_rippletrace_metric = _resolve_via_goal_metric("rippletrace", "rippletrace.read")
 
 
 _RESOLVERS: dict[str, Callable[..., float | None]] = {
@@ -145,6 +146,11 @@ _RESOLVERS: dict[str, Callable[..., float | None]] = {
     "impressions": _social_metric,
     "clicks": _social_metric,
     "posts": _social_metric,
+    # Answerable only since rippletrace gained a data supply — the table was empty
+    # before, so this unit resolved to `unsupported_unit`. Note rippletrace reports
+    # `scope: "global"` for it: playbooks carry no owner, because the strategies they
+    # derive from are built across all drop points without a user filter.
+    "playbooks": _rippletrace_metric,
 }
 
 
