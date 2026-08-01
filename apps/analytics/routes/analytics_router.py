@@ -354,6 +354,43 @@ async def list_worth_declarations(
     return _with_execution_envelope(result)
 
 
+@router.get("/goal-attainment")
+@limiter.limit("60/minute")
+async def get_goal_attainment(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Resolve the active plan's declared goal against real domain signals.
+
+    Phase 0 of the goal-attainment work (see
+    docs/handoffs/MASTERPLAN_GOAL_ATTAINMENT_SPEC.md): read-only and **not wired into
+    scoring** — `masterplan_progress` is unchanged. This route exists so the resolver
+    can be inspected against real plans before it influences anything.
+
+    `supported: false` is a normal answer (undeclared goal, unsupported unit, degraded
+    domain), not an error — it carries a `reason` and means "the existing formula
+    applies". Only `tasks` resolves today; `supported_units` reports the live set.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.analytics.services.integration.goal_attainment import (
+            resolve_for_active_plan,
+            supported_units,
+        )
+
+        result = resolve_for_active_plan(db, user_id)
+        result["supported_units"] = supported_units()
+        return result
+
+    result = await execute_with_pipeline(
+        request=request, route_name="analytics.goal_attainment", handler=handler,
+        user_id=user_id, metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
 @router.get("/three-axis/shadow")
 @limiter.limit("60/minute")
 async def get_three_axis_shadow_report(

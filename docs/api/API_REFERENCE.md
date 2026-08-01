@@ -2112,6 +2112,15 @@ Adapt Policy Thresholds Endpoint
 
 **Response 200:** unspecified
 
+#### GET /apps/analytics/goal-attainment
+Get Goal Attainment — resolves the active MasterPlan's declared goal (`goal_value` +
+`goal_unit`) against real domain signals. Phase 0: read-only and **not wired into scoring**
+(`masterplan_progress` is unchanged). `supported: false` is a normal answer carrying a
+`reason` — undeclared goal, unsupported unit, or a degraded domain — and means the existing
+formula applies. Only the `tasks` unit resolves today; `supported_units` reports the live set.
+
+**Response 200:** unspecified
+
 #### GET /apps/analytics/three-axis
 Get Three Axis Snapshot — observability snapshot of the Volume / Worth / Trajectory axes
 alongside the (unchanged) `master_score` (three-axis score model, Phase A; measurement only,
