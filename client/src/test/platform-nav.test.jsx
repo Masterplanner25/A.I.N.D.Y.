@@ -24,6 +24,7 @@ describe("PlatformNav", () => {
       "/health",
       "/trace",
       "/users",
+      "/webhooks",
     ];
 
     const actual = [];

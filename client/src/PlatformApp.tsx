@@ -15,6 +15,7 @@ const AgentApprovalInbox = lazy(() => import("./components/platform/AgentApprova
 const AgentRegistry = lazy(() => import("./components/platform/AgentRegistry"));
 const RippleTraceViewer = lazy(() => import("./components/platform/RippleTraceViewer"));
 const AdminUsers = lazy(() => import("./components/platform/AdminUsers"));
+const WebhooksPanel = lazy(() => import("./components/platform/WebhooksPanel"));
 
 function redirectToApp(path: string) {
   const base = import.meta.env.VITE_APP_BASE_URL ?? "/";
@@ -75,6 +76,7 @@ export default function PlatformApp() {
                 <Route path="/registry" element={platformRoute("Registry", <AgentRegistry />)} />
                 <Route path="/trace" element={platformRoute("Trace", <RippleTraceViewer />)} />
                 <Route path="/users" element={platformRoute("Admin Users", <AdminUsers />)} />
+                <Route path="/webhooks" element={platformRoute("Webhooks", <WebhooksPanel />)} />
                 <Route path="*" element={<Navigate to="/agent" replace />} />
               </Routes>
             </ErrorBoundary>
