@@ -54,7 +54,10 @@ legacy_router = APIRouter(tags=["Compute"])
 
 
 class MasterPlanInput(BaseModel):
-    name: str
+    # `name` maps to no MasterPlan column. It is kept (optional) so any existing caller
+    # still validates, but it is discarded on create — plans are labelled by the
+    # auto-numbered `version_label` the genesis factory assigns, not a free-text name.
+    name: str | None = None
     start_date: datetime
     duration_years: int
     wcu_target: float

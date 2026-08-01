@@ -361,7 +361,7 @@ Process Virality
 #### POST /apps/compute/create_masterplan
 Create Masterplan
 
-**Body:** books_required: integer (required), duration_years: integer (required), name: string (required), platform_required: boolean (required), playbooks_required: integer (required), revenue_target: number (required), start_date: string (required), studio_required: boolean (required), wcu_target: number (required)
+**Body:** books_required: integer (required), duration_years: integer (required), name: string | null, platform_required: boolean (required), playbooks_required: integer (required), revenue_target: number (required), start_date: string (required), studio_required: boolean (required), wcu_target: number (required)
 
 **Response 200:** unspecified
 

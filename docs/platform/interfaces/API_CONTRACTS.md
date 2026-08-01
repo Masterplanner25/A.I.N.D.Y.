@@ -1267,6 +1267,9 @@ Query Params: None
 Response: ORM `CanonicalMetricDB` object.
 Status Codes: 200, 404 if MasterPlan not found.
 Notes: route now enters the route execution pipeline but preserves the ORM response shape.
+**PARKED — non-functional.** The adapter behind this route receives a dict where it expects an
+object, so the call fails with HTTP 500 and `canonical_metrics` has never held a row. Its UI was
+removed in walk-log item 18; the route stays registered but has no client.
 
 `GET /analytics/masterplan/{masterplan_id}`
 Method: GET
@@ -1566,8 +1569,9 @@ Routes returning ORM objects without `response_model` declarations:
 - `GET /analytics/masterplan/{masterplan_id}` returns list of `CanonicalMetricDB`
 - `apps/analytics/routes/main_router.py`:
 - `GET /results` returns list of `CalculationResult`
-- `POST /create_masterplan` returns `MasterPlan` (both duplicate handlers)
-- `GET /masterplans` returns list of `MasterPlan`
+- `POST /create_masterplan` and `GET /masterplans` **no longer** return ORM objects — both now
+  return an explicit dict projection (`_serialize_masterplan`). They previously serialized to
+  `{}`, so callers could not read back even a created plan's id. See walk-log item 34.
 - `apps/rippletrace/routes/rippletrace_router.py`:
 - `POST /rippletrace/drop_point` returns `DropPointDB`
 - `POST /rippletrace/ping` returns `PingDB`

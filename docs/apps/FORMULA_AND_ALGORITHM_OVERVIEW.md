@@ -384,10 +384,15 @@ loop forever:
 
 ## 7. Data Transformation Pipelines
 
-### LinkedIn Analytics (`apps/social/services/linkedin_adapter.py`)
+### LinkedIn Analytics (`apps/social/services/linkedin_adapter.py`) — PARKED, non-functional
 - Input: `LinkedInRawInput`
 - Transform: compute interaction_volume and intent_signals; compute rates via `calculate_rates`
 - Output: canonical dict persisted to `CanonicalMetricDB` (`apps/analytics/routes/analytics_router.py`)
+- **Status:** this pipeline has never produced a row. The adapter does attribute access
+  (`raw.likes`) but the ingest node dispatches `data.model_dump()` across a syscall boundary, so
+  it receives a dict → `AttributeError` → HTTP 500. Its UI was removed in walk-log item 18; the
+  routes remain registered but unused, and nothing consumes `CanonicalMetricDB`. Fix the
+  dict/object mismatch before relying on any of it.
 
 ### Research Results (`apps/search/services/research_results_service.py`)
 - Input: `ResearchResultCreate`
