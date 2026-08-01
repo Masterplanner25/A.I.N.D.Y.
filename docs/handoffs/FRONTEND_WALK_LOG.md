@@ -1271,18 +1271,23 @@ admin-gated and has no UI, so there is no bootstrap path from a running system.
 `POST /platform/syscall` is deliberately left off that list — arbitrary syscall dispatch from a
 browser is a different risk class and wants an explicit decision, not a convenience button.
 
-**Status:** 🟡 IN PROGRESS — control plane phase 1 shipped on `feat/platform-control-plane`
-(2026-07-31). The three cheapest upgrades are done: **(1)** dead-letter Replay / Delete / Drain
-(new DLQ panel on Observability), **(2)** run-a-flow-on-demand (Run button per FlowCard in the
-Registry), **(3)** admin promotion (new `/platform/users` panel — closes the "edit the DB to make
-a second admin" gap; the *first* admin still needs a DB bootstrap → FR-6). All actions confirm-gated.
+**Status:** ✅ CLOSED (2026-07-31) — every write route that is *appropriate to expose as an
+operator action* is now wired; what remains is design work, not wiring, and is captured as
+follow-ups below. Delivered across two merged PRs (#169 phase 1, #170 phase 2).
+
+**Phase 1 (merged #169)** — the three cheapest upgrades: **(1)** dead-letter Replay / Delete /
+Drain (new DLQ panel on Observability), **(2)** run-a-flow-on-demand (Run button per FlowCard in
+the Registry), **(3)** admin promotion (new `/platform/users` panel — closes the "edit the DB to
+make a second admin" gap; the *first* admin still needs a DB bootstrap → FR-6). All actions
+confirm-gated.
 
 **Phase 2 (2026-07-31, branch `feat/platform-control-plane-phase2`):** **Webhooks** — new
 `/platform/webhooks` panel, full list/create/delete CRUD over the previously-unwired webhook
 routes (operator-created subscriptions use `owner_class=first-party-app`; external-third-party
 would require declared provenance).
 
-**Still deferred, with findings:**
+**Intentionally not built — design decisions, tracked as follow-ups (why item 29 is CLOSED, not
+incomplete):**
 - **Agent register/delete** — needs a design decision, not a button. The `/registry` panel
   (`AgentRegistry`) lists *memory-namespace* agents via `/apps/memory/agents`, but the
   register/delete routes are `/platform/admin/agents` — a **different agent concept**. Wiring
