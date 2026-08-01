@@ -103,14 +103,24 @@ Rules:
 
 | `goal_unit` (+ aliases) | Domain | Source | Status |
 |---|---|---|---|
-| `tasks` | tasks | completed tasks for the plan | ✅ **works today** — `sys.v1.task.list_for_masterplan` |
-| `USD`, `revenue`, `$` | freelance | `update_revenue_metrics` sums delivered-order prices into `revenue_metrics` | ⚠️ data exists, **needs read syscall** |
-| `impressions`, `clicks`, `posts` | social | `summarize_social_performance()["overview"]` — `total_impressions`, `total_clicks`, `post_count` | ⚠️ data exists, **needs read syscall** (signals syscall discards these) |
+| `tasks` | tasks | completed tasks for the plan | ✅ **Phase 0** — `sys.v1.task.list_for_masterplan` |
+| `USD`, `revenue`, `$` | freelance | delivered-order prices, summed live | ✅ **Phase 1** — `sys.v1.freelance.get_goal_metric` |
+| `impressions`, `clicks`, `posts` | social | `summarize_social_performance()["overview"]` | ✅ **Phase 1** — `sys.v1.social.get_goal_metric` |
 | `playbooks` | rippletrace | `PlaybookDB` count | ❌ needs syscall — **and the table is empty** |
 | `books` | authorship | — | ❌ **no publication concept exists**; the domain has one route (`/reclaim`) |
 
-**Honest read:** one unit works today, two are a thin syscall over data that already exists, and
-two are not real yet. Ship the first three; leave the registry open.
+**Scope decisions made in Phase 1:**
+
+- **Freelance answers user-wide, not plan-scoped**, even though `FreelanceOrder` carries
+  `masterplan_id`. Orders are rarely plan-linked in practice, so plan-scoping would report 0 for
+  almost everyone. The response carries `scope` explicitly rather than leaving it implicit.
+- **Revenue is summed live from delivered orders**, not read from `revenue_metrics` — that table
+  has no `user_id` (it is a global snapshot) and so cannot answer a per-user goal.
+- **A degraded domain reports `supported: False`, never 0.** Social reads Mongo and degrades; a
+  degraded read must not be scored as "achieved nothing".
+
+**Remaining:** `playbooks` and `books` have no signal to read. The registry slots exist; the
+underlying data does not.
 
 `studio_ready` has no plausible domain feeder and should be dropped rather than mapped.
 
