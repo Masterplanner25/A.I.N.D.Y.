@@ -23,6 +23,7 @@ const NAV_GROUPS = [
       { to: "/executions", label: "Executions", external: true, runtimeOnlySafe: false },
       { to: "/trace", label: "Ripple Trace", external: true, runtimeOnlySafe: false },
       { to: "/users", label: "Admin Users", external: true, runtimeOnlySafe: false },
+      { to: "/webhooks", label: "Webhooks", external: true, runtimeOnlySafe: false },
     ],
   },
   {

@@ -18,6 +18,7 @@ export const PLATFORM_LINKS = [
   { to: "/health", label: "Health" },
   { to: "/trace", label: "Trace" },
   { to: "/users", label: "Admin Users" },
+  { to: "/webhooks", label: "Webhooks" },
 ];
 
 const linkStyle = (isActive) => ({

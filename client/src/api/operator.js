@@ -78,6 +78,30 @@ export function getExecutionGraph(traceId) {
   });
 }
 
+// ── Webhooks (control-plane: subscription CRUD) ──────────────────────────────
+// GET returns a flat {webhooks:[…]}; DELETE returns 204 (empty body → resolves "").
+export function getWebhooks() {
+  return authRequest("/platform/webhooks", { method: "GET" }).then(unwrapEnvelope);
+}
+
+export function createWebhook({ event_type, callback_url, secret }) {
+  // Operator-created subscriptions are first-party (the operator owns this deployment).
+  // external-third-party ownership additionally requires declared provenance — not something
+  // an operator supplies from this console.
+  const body = { event_type, callback_url, owner_class: "first-party-app" };
+  if (secret) body.secret = secret;
+  return authRequest("/platform/webhooks", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }).then(unwrapEnvelope);
+}
+
+export function deleteWebhook(subscriptionId) {
+  return authRequest(`/platform/webhooks/${encodeURIComponent(subscriptionId)}`, {
+    method: "DELETE",
+  });
+}
+
 // ── Admin users (control-plane: promotion) ───────────────────────────────────
 // GET returns a flat {users:[…]}; promote wraps in the {status,data} envelope.
 export function getAdminUsers() {

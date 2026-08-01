@@ -1275,10 +1275,24 @@ browser is a different risk class and wants an explicit decision, not a convenie
 (2026-07-31). The three cheapest upgrades are done: **(1)** dead-letter Replay / Delete / Drain
 (new DLQ panel on Observability), **(2)** run-a-flow-on-demand (Run button per FlowCard in the
 Registry), **(3)** admin promotion (new `/platform/users` panel — closes the "edit the DB to make
-a second admin" gap; the *first* admin still needs a DB bootstrap → FR-6). All actions
-confirm-gated. Deferred: **(4)** Nodus + node/agent registration (real UI design, its own pass)
-and `POST /platform/syscall` (deliberately excluded — different risk class). See
-`docs/handoffs/KPI_DASHBOARD_WIRING.md` sibling pattern.
+a second admin" gap; the *first* admin still needs a DB bootstrap → FR-6). All actions confirm-gated.
+
+**Phase 2 (2026-07-31, branch `feat/platform-control-plane-phase2`):** **Webhooks** — new
+`/platform/webhooks` panel, full list/create/delete CRUD over the previously-unwired webhook
+routes (operator-created subscriptions use `owner_class=first-party-app`; external-third-party
+would require declared provenance).
+
+**Still deferred, with findings:**
+- **Agent register/delete** — needs a design decision, not a button. The `/registry` panel
+  (`AgentRegistry`) lists *memory-namespace* agents via `/apps/memory/agents`, but the
+  register/delete routes are `/platform/admin/agents` — a **different agent concept**. Wiring
+  actions onto that panel would act on a different entity than the one shown. Requires
+  reconciling the two agent surfaces (or a separate "Admin Agents" panel) first.
+- **Node registration** — not a browser-appropriate surface: `POST /nodes/register` needs a
+  `handler` (deployed code reference) and there is no list route (only `GET /nodes/{name}`).
+- **Nodus** (upload / run / flow / schedule) — bigger; schedule mgmt (cron + script picker) is
+  the tractable slice for a future pass.
+- **`POST /platform/syscall`** — deliberately excluded (different risk class).
 
 ### 30. The platform SPA had no navigation — `Defect`
 
