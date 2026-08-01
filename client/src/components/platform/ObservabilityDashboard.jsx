@@ -27,6 +27,7 @@ import {
   SurfaceGrid,
   SurfacePanel,
   surfacePalette } from "./SurfacePrimitives";import { safeMap } from "../../utils/safe";
+import DeadLetterQueuePanel from "./DeadLetterQueuePanel";
 
 function chartLabel(value) {
   if (!value) return "";
@@ -444,6 +445,10 @@ function ObservabilityDashboardContent() {
           </SurfaceGrid>
         </> :
       null}
+
+      {/* Dead-Letter Queue — self-contained (own load/error), always available so a failed
+          dashboard fetch never hides the control-plane actions. */}
+      <DeadLetterQueuePanel />
     </PageShell>);
 
 }

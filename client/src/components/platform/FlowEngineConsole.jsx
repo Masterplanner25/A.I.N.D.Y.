@@ -5,6 +5,7 @@ import {
   getFlowRunHistory,
   resumeFlowRun,
   getFlowRegistry,
+  runFlow,
   getAutomationLogs,
   replayAutomationLog,
   getSchedulerStatus,
@@ -1192,8 +1193,26 @@ function NodeBox({ name, highlighted }) {
 
 function FlowCard({ flowName, registry }) {
   const [expanded, setExpanded] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState(null); // {ok, message}
   const flow = (registry?.flow_definitions ?? {})[flowName];
   if (!flow) return null;
+
+  const handleRun = async () => {
+    setConfirming(false);
+    setRunning(true);
+    setRunResult(null);
+    try {
+      const res = await runFlow(flowName);
+      const runId = res?.run_id || res?.id || res?.data?.run_id;
+      setRunResult({ ok: true, message: runId ? `Run started · ${runId}` : "Run started." });
+    } catch (err) {
+      setRunResult({ ok: false, message: err?.message || "Run failed." });
+    } finally {
+      setRunning(false);
+    }
+  };
 
   return (
     <div
@@ -1212,10 +1231,29 @@ function FlowCard({ flowName, registry }) {
           <span style={{ fontSize: 14, color: C.text0, fontWeight: "bold" }}>{flowName}</span>
           <Badge label={`${flow.node_count} nodes`} />
         </div>
-        <button onClick={() => setExpanded((e) => !e)} style={btnStyle("secondary")}>
-          {expanded ? "▲ Collapse" : "▶ Expand"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {confirming ? (
+            <>
+              <span style={{ fontSize: 12, color: C.text1 }}>Run {flowName}?</span>
+              <button onClick={handleRun} disabled={running} style={btnStyle("primary")}>
+                {running ? "Running…" : "Confirm"}
+              </button>
+              <button onClick={() => setConfirming(false)} disabled={running} style={btnStyle("secondary")}>Cancel</button>
+            </>
+          ) : (
+            <button onClick={() => setConfirming(true)} disabled={running} style={btnStyle("primary")}>▶ Run</button>
+          )}
+          <button onClick={() => setExpanded((e) => !e)} style={btnStyle("secondary")}>
+            {expanded ? "▲ Collapse" : "▶ Expand"}
+          </button>
+        </div>
       </div>
+
+      {runResult && (
+        <div style={{ fontSize: 12, marginTop: 8, color: runResult.ok ? C.accent : "#f44336" }}>
+          {runResult.message}
+        </div>
+      )}
 
       <div style={{ fontSize: 12, color: C.text1, marginTop: 6 }}>
         <span style={{ color: C.accent }}>{flow.start}</span>

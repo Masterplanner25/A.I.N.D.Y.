@@ -17,6 +17,7 @@ export const PLATFORM_LINKS = [
   { to: "/observability", label: "Observability" },
   { to: "/health", label: "Health" },
   { to: "/trace", label: "Trace" },
+  { to: "/users", label: "Admin Users" },
 ];
 
 const linkStyle = (isActive) => ({

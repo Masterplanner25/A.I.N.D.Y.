@@ -1271,8 +1271,14 @@ admin-gated and has no UI, so there is no bootstrap path from a running system.
 `POST /platform/syscall` is deliberately left off that list — arbitrary syscall dispatch from a
 browser is a different risk class and wants an explicit decision, not a convenience button.
 
-**Status:** design decision for the owner. Nothing here is broken; the record half works. The
-question is whether the operator surface should be able to act on what it shows.
+**Status:** 🟡 IN PROGRESS — control plane phase 1 shipped on `feat/platform-control-plane`
+(2026-07-31). The three cheapest upgrades are done: **(1)** dead-letter Replay / Delete / Drain
+(new DLQ panel on Observability), **(2)** run-a-flow-on-demand (Run button per FlowCard in the
+Registry), **(3)** admin promotion (new `/platform/users` panel — closes the "edit the DB to make
+a second admin" gap; the *first* admin still needs a DB bootstrap → FR-6). All actions
+confirm-gated. Deferred: **(4)** Nodus + node/agent registration (real UI design, its own pass)
+and `POST /platform/syscall` (deliberately excluded — different risk class). See
+`docs/handoffs/KPI_DASHBOARD_WIRING.md` sibling pattern.
 
 ### 30. The platform SPA had no navigation — `Defect`
 
