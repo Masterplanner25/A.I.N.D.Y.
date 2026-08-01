@@ -166,12 +166,15 @@ def upsert_drop_point(
     and are computed from pings. A freshly ingested publication genuinely has no
     ripple yet, and writing a placeholder would be inventing one.
     """
+    from apps.rippletrace.services.ripple_detection import naive_utc
+
     canonical = normalize_url(url)
     identifier = drop_point_id_for(user_id, canonical)
     themes = derive_themes(title=title, summary=summary, tags=tags or [])
     resolved_platform = platform or infer_platform(canonical)
-    # date_dropped is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
-    dropped_at = published_at or _utcnow()
+    # date_dropped is a legacy naive column; storing an aware value here makes
+    # threadweaver compare naive-from-DB against aware-in-session. See naive_utc().
+    dropped_at = naive_utc(published_at or _utcnow())
     display_title = (title or "").strip() or canonical
 
     row = db.query(DropPointDB).filter(DropPointDB.id == identifier).first()
@@ -184,7 +187,7 @@ def upsert_drop_point(
         # entities from prose would pollute the strategy conditions built on top of it.
         row.tagged_entities = row.tagged_entities or ""
         if published_at is not None:
-            row.date_dropped = published_at
+            row.date_dropped = naive_utc(published_at)
         return row, False
 
     row = DropPointDB(

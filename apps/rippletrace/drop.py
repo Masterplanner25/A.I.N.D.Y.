@@ -17,6 +17,10 @@ class DropPointDB(Base):
     narrative_score = Column(Float, nullable=True)
     velocity_score = Column(Float, nullable=True)
     spread_score = Column(Float, nullable=True)
+    # Last time the web was searched for echoes of this drop point. Separate from the
+    # score columns because "we looked and found nothing" and "we never looked" are
+    # different states, and only the second is worth spending another search on.
+    mentions_checked_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class PingDB(Base):

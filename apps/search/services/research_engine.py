@@ -1,3 +1,5 @@
+import os
+
 import requests
 from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
 from AINDY.config import settings
@@ -7,16 +9,46 @@ from AINDY.db import models
 from AINDY.platform_layer.external_call_service import perform_external_call
 
 def web_search(query: str) -> str:
-    """External web or API search."""
-    url = f"https://api.perplexity.ai/search?q={query}"
+    """External web search via the Perplexity Search API.
+
+    Previously this issued ``GET https://api.perplexity.ai/search?q=…`` with no
+    Authorization header — right host, wrong method, no auth — so it never returned
+    results even before a key existed. The endpoint takes a POST with the query in a
+    JSON body and a Bearer token, and answers with structured
+    ``{title, url, snippet}`` rows.
+
+    Returns flattened text because the caller (``ai_analyze``) wants prose to summarize.
+    """
+    key = (os.environ.get("PERPLEXITY_API_KEY") or "").strip()
+    if not key:
+        raise RuntimeError(
+            "PERPLEXITY_API_KEY is not set; web research is unavailable."
+        )
+
+    url = "https://api.perplexity.ai/search"
     resp = perform_external_call(
         service_name="http",
         endpoint=url,
-        method="GET",
+        method="POST",
         extra={"purpose": "research_web_search", "provider": "perplexity"},
-        operation=lambda: requests.get(url),
+        operation=lambda: requests.post(
+            url,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"query": query, "max_results": 10},
+            timeout=20,
+        ),
     )
-    return resp.text[:5000]  # limit content size
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Web search failed with HTTP {resp.status_code}.")
+
+    results = (resp.json() or {}).get("results") or []
+    rendered = "\n\n".join(
+        f"{row.get('title', '').strip()}\n{row.get('url', '').strip()}\n"
+        f"{row.get('snippet', '').strip()}"
+        for row in results
+        if isinstance(row, dict)
+    )
+    return rendered[:5000]  # limit content size
 
 def ai_analyze(content: str) -> str:
     """Summarize and extract next actions."""

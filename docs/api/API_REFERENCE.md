@@ -1707,6 +1707,23 @@ Get Influence Graph
 
 **Response 200:** unspecified
 
+#### POST /apps/rippletrace/detect
+Detect Ripples — search the web for echoes of this user's drop points that are due for a
+check, recording each new external reference as a ping. Results on the drop point's own
+host, the drop point itself, and pages published before it are rejected rather than
+recorded. Returns 503 when `PERPLEXITY_API_KEY` is unset.
+
+**Parameters:** limit (query): integer (default 5, max 10)
+
+**Response 200:** unspecified
+
+#### POST /apps/rippletrace/drop_points/{drop_point_id}/detect
+Detect Ripples For Drop Point
+
+**Parameters:** drop_point_id (path): string
+
+**Response 200:** unspecified
+
 #### POST /apps/rippletrace/drop_point
 Create Drop Point
 

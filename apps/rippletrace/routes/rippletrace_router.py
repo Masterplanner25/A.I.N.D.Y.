@@ -12,8 +12,10 @@ from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 
 from apps.rippletrace.services import content_ingest
+from apps.rippletrace.services import ripple_detection
 from apps.rippletrace.services import rippletrace_services
 from apps.rippletrace.services.content_fetch import ContentFetchError
+from apps.rippletrace.services.mention_search import MentionSearchUnavailable
 from AINDY.services.auth_service import get_current_user
 from apps.rippletrace.services import causal_engine
 from apps.rippletrace.services import learning_engine
@@ -37,6 +39,14 @@ router = APIRouter(
     tags=["RippleTrace"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+def uuid_or_none(value):
+    """Ownership filters compare against a UUID column; a malformed id must not 500."""
+    try:
+        return UUID(str(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _with_execution_envelope(payload):
@@ -230,6 +240,67 @@ async def ingest_content_url(
             ) from exc
 
     result = await execute_with_pipeline(request, "rippletrace_ingest_url", handler)
+    return _with_execution_envelope(result)
+
+
+@router.post("/detect")
+@limiter.limit("5/minute")
+async def detect_ripples(
+    request: Request,
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Search the web for echoes of this user's drop points that are due for a check."""
+
+    def handler(ctx):
+        try:
+            return ripple_detection.detect_batch(
+                db,
+                user_id=str(current_user["sub"]),
+                limit=max(1, min(ripple_detection.MAX_DROP_POINTS_PER_RUN, int(limit))),
+            )
+        except MentionSearchUnavailable as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={"error": "mention_search_unavailable", "message": str(exc)},
+            ) from exc
+
+    result = await execute_with_pipeline(request, "rippletrace_detect_batch", handler)
+    return _with_execution_envelope(result)
+
+
+@router.post("/drop_points/{drop_point_id}/detect")
+@limiter.limit("10/minute")
+async def detect_ripples_for_drop_point(
+    request: Request,
+    drop_point_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    def handler(ctx):
+        from apps.rippletrace.models import DropPointDB
+
+        user_id = str(current_user["sub"])
+        drop_point = (
+            db.query(DropPointDB)
+            .filter(DropPointDB.id == drop_point_id, DropPointDB.user_id == uuid_or_none(user_id))
+            .first()
+        )
+        if drop_point is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "drop_point_not_found", "message": "Drop point not found"},
+            )
+        try:
+            return ripple_detection.detect_for_drop_point(db, drop_point, user_id=user_id)
+        except MentionSearchUnavailable as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={"error": "mention_search_unavailable", "message": str(exc)},
+            ) from exc
+
+    result = await execute_with_pipeline(request, "rippletrace_detect_drop_point", handler)
     return _with_execution_envelope(result)
 
 

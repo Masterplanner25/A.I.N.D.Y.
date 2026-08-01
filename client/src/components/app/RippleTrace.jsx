@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   deleteContentSource,
+  detectRipples,
+  detectRipplesForDropPoint,
   getContentSources,
   getRippleDropPoints,
   ingestContentUrl,
@@ -115,6 +117,41 @@ export default function RippleTrace() {
       await load();
     } catch (err) {
       setError(err.message || "Could not check that source");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDetect(dropPointId) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = dropPointId
+        ? await detectRipplesForDropPoint(dropPointId)
+        : await detectRipples(5);
+      const created = unwrap(response, "created") ?? 0;
+      // A search that returns only your own site is working correctly, not failing —
+      // say so, or "0 ripples" reads as a broken feature.
+      const rejected = unwrap(response, "rejected");
+      const filtered = rejected
+        ? Object.values(rejected).reduce((total, count) => total + count, 0)
+        : 0;
+      setNotice(
+        created > 0
+          ? `Found ${created} new ripple${created === 1 ? "" : "s"}.`
+          : filtered > 0
+            ? `No new ripples — ${filtered} result${filtered === 1 ? "" : "s"} were your own pages or predate the post.`
+            : "No new ripples found."
+      );
+      await load();
+    } catch (err) {
+      const detail = err?.data?.detail;
+      setError(
+        detail?.error === "mention_search_unavailable"
+          ? detail.message
+          : err.message || "Could not check for ripples"
+      );
     } finally {
       setBusy(false);
     }
@@ -285,11 +322,23 @@ export default function RippleTrace() {
       </section>
 
       <section className="border border-zinc-800 rounded-lg bg-zinc-950/70 p-4">
-        <h2 className="text-sm font-semibold text-zinc-100">Tracked content</h2>
-        <p className="text-xs text-zinc-500 mb-3">
-          Each of these is watched for ripples — references and echoes elsewhere. Scores stay at
-          zero until a ripple is recorded against them.
-        </p>
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Tracked content</h2>
+            <p className="text-xs text-zinc-500">
+              Ripples are references to these elsewhere. Your own pages don't count, so scores
+              stay at zero until someone else picks it up.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleDetect(null)}
+            disabled={busy || dropPoints.length === 0}
+            className="shrink-0 rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 hover:border-zinc-500 disabled:opacity-40"
+          >
+            Check for ripples
+          </button>
+        </div>
 
         {!loading && dropPoints.length === 0 && (
           <div className="text-xs text-zinc-500">Nothing tracked yet.</div>
@@ -298,15 +347,27 @@ export default function RippleTrace() {
         <div className="space-y-2">
           {safeMap(dropPoints, (point) => (
             <div key={point.id} className="border border-zinc-800 rounded-md p-3 bg-zinc-900/70">
-              <div className="text-sm text-zinc-100">{point.title}</div>
-              <div className="text-[11px] text-zinc-500 mt-1 break-all">
-                {point.platform || "unknown"} · {formatWhen(point.date_dropped)}
-                {point.url ? ` · ${point.url}` : ""}
-              </div>
-              <div className="text-[11px] text-zinc-600 mt-1">
-                narrative {Number(point.narrative_score || 0).toFixed(2)} · velocity{" "}
-                {Number(point.velocity_score || 0).toFixed(2)} · spread{" "}
-                {Number(point.spread_score || 0).toFixed(0)}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm text-zinc-100">{point.title}</div>
+                  <div className="text-[11px] text-zinc-500 mt-1 break-all">
+                    {point.platform || "unknown"} · {formatWhen(point.date_dropped)}
+                    {point.url ? ` · ${point.url}` : ""}
+                  </div>
+                  <div className="text-[11px] text-zinc-600 mt-1">
+                    narrative {Number(point.narrative_score || 0).toFixed(2)} · velocity{" "}
+                    {Number(point.velocity_score || 0).toFixed(2)} · spread{" "}
+                    {Number(point.spread_score || 0).toFixed(0)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDetect(point.id)}
+                  disabled={busy}
+                  className="shrink-0 text-xs text-blue-400 hover:text-blue-300 disabled:opacity-40"
+                >
+                  Check
+                </button>
               </div>
             </div>
           ))}

@@ -39,6 +39,12 @@ services:
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      # Perplexity Search API — powers search/research and rippletrace mention detection.
+      # Without it both degrade to "unavailable" rather than failing; nothing else needs it.
+      PERPLEXITY_API_KEY: "${PERPLEXITY_API_KEY:-}"
+      # Scheduled ripple mention detection spends a Perplexity call per drop point, so the
+      # background job is opt-in. The per-drop-point and batch routes work regardless.
+      AINDY_RIPPLE_MENTION_DETECTION: "${AINDY_RIPPLE_MENTION_DETECTION:-}"
       # Agent PLANNER backend (BUILD_PLAN Track 2). Default runtime_local (deterministic,
       # no egress). Flip to anthropic_chat in your .env to have Claude author real plans —
       # that path needs ANTHROPIC_API_KEY (above) + outbound HTTPS to api.anthropic.com.

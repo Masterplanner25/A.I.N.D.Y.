@@ -62,6 +62,16 @@ export function deleteContentSource(sourceId) {
   return authRequest(`/apps/rippletrace/sources/${sourceId}`, { method: "DELETE" });
 }
 
+export function detectRipples(limit = 5) {
+  return authRequest(`/apps/rippletrace/detect?limit=${limit}`, { method: "POST" });
+}
+
+export function detectRipplesForDropPoint(dropPointId) {
+  return authRequest(`/apps/rippletrace/drop_points/${dropPointId}/detect`, {
+    method: "POST",
+  });
+}
+
 export function getCausalChain(dropPointId, depth = 3) {
   return authRequest(`${ROUTES.RIPPLETRACE.CAUSAL_CHAIN(dropPointId)}?depth=${depth}`);
 }

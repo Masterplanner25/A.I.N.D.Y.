@@ -104,12 +104,27 @@ def _register_scheduled_jobs() -> None:
         poll_due_sources,
     )
 
+    from apps.rippletrace.services.ripple_detection import (
+        DETECTION_JOB_INTERVAL_MINUTES,
+        detect_due_mentions,
+    )
+
     register_scheduled_job(
         "rippletrace_poll_content_sources",
         poll_due_sources,
         name="Poll rippletrace content sources",
         trigger="interval",
         trigger_kwargs={"minutes": POLL_JOB_INTERVAL_MINUTES},
+    )
+    # Registered unconditionally; the handler itself no-ops unless
+    # AINDY_RIPPLE_MENTION_DETECTION is set, so the flag can be flipped without a
+    # redeploy and the job shows up in the registry either way.
+    register_scheduled_job(
+        "rippletrace_detect_mentions",
+        detect_due_mentions,
+        name="Detect rippletrace content mentions",
+        trigger="interval",
+        trigger_kwargs={"minutes": DETECTION_JOB_INTERVAL_MINUTES},
     )
 
 

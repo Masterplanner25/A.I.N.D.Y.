@@ -29,7 +29,23 @@ def classify_connection_type(summary: Optional[str]) -> str:
     return "direct"
 
 
+def _to_naive_utc(value: Optional[datetime]) -> Optional[datetime]:
+    """Fold a timestamp onto naive UTC so mixed-awareness operands can be compared.
+
+    ``drop_points.date_dropped`` and ``pings.date_detected`` are naive columns, so a
+    value re-read from the database is naive while one still sitting in the session
+    from a write may be aware. Subtracting the two raises, ``analyze_drop_point``
+    catches it, and the drop point keeps a score of 0 with no visible error — the
+    pings are there and the numbers never move. Normalizing here removes the whole
+    class rather than relying on every writer to remember.
+    """
+    if value is None or value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _minutes_difference(start: Optional[datetime], end: Optional[datetime]) -> float:
+    start, end = _to_naive_utc(start), _to_naive_utc(end)
     if not start or not end:
         return 0.0
     delta = (end - start).total_seconds() / 60.0
