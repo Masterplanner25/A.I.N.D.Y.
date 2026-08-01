@@ -136,9 +136,17 @@ def test_attainment_is_clamped_but_raw_ratio_is_preserved(
     assert result["raw_ratio"] == pytest.approx(expected_raw)
 
 
-def test_supported_units_reports_only_what_resolves_today():
-    # Phase 0 ships `tasks` alone; usd/impressions/etc. are aliased but not resolvable.
-    assert ga.supported_units() == ["tasks"]
+def test_supported_units_reports_what_resolves_today():
+    # Phase 1 adds usd (freelance) and the social counters. `books`/`playbooks` remain
+    # aliased but unresolvable — no domain can answer them yet.
+    assert ga.supported_units() == ["clicks", "impressions", "posts", "tasks", "usd"]
+
+
+@pytest.mark.parametrize("unit", ["books", "playbooks"])
+def test_units_without_a_domain_stay_unsupported(unit):
+    result = _resolve(goal_unit=unit)
+    assert result["supported"] is False
+    assert result["reason"] == "unsupported_unit"
 
 
 # ── the tasks resolver ────────────────────────────────────────────────────────
@@ -181,6 +189,90 @@ def test_tasks_resolver_survives_null_entries(monkeypatch):
         ga, "_dispatch", lambda *_a, **_k: {"tasks": [None, {"status": "completed"}]}
     )
     assert ga._resolve_tasks(None, user_id="u-1", masterplan_id=1) == 1.0
+
+
+# ── get_goal_metric resolvers (Phase 1: freelance, social) ────────────────────
+
+
+@pytest.mark.parametrize(
+    "unit,expected_domain",
+    [
+        ("usd", "sys.v1.freelance.get_goal_metric"),
+        ("impressions", "sys.v1.social.get_goal_metric"),
+        ("clicks", "sys.v1.social.get_goal_metric"),
+        ("posts", "sys.v1.social.get_goal_metric"),
+    ],
+)
+def test_each_unit_dispatches_to_its_own_domain(monkeypatch, unit, expected_domain):
+    seen = {}
+
+    def fake_dispatch(name, payload, **kwargs):
+        seen["name"] = name
+        seen["unit"] = payload.get("unit")
+        return {"supported": True, "value": 7.0}
+
+    monkeypatch.setattr(ga, "_dispatch", fake_dispatch)
+    result = _resolve(goal_unit=unit, goal_value=10)
+
+    assert seen["name"] == expected_domain
+    # The canonical unit must reach the domain, not the caller's raw spelling.
+    assert seen["unit"] == unit
+    assert result["value"] == 7.0
+
+
+def test_alias_is_normalized_before_dispatch(monkeypatch):
+    seen = {}
+
+    def fake_dispatch(name, payload, **kwargs):
+        seen["unit"] = payload.get("unit")
+        return {"supported": True, "value": 1.0}
+
+    monkeypatch.setattr(ga, "_dispatch", fake_dispatch)
+    _resolve(goal_unit="$", goal_value=10)
+    assert seen["unit"] == "usd"
+
+
+def test_domain_reporting_unsupported_yields_unresolved(monkeypatch):
+    """A domain that cannot answer must not be read as an achievement of 0."""
+    monkeypatch.setattr(ga, "_dispatch", lambda *_a, **_k: {"supported": False, "value": 0.0})
+    result = _resolve(goal_unit="usd", goal_value=1000)
+    assert result["supported"] is False
+    assert result["reason"] == "no_value"
+
+
+def test_degraded_domain_yields_unresolved_not_zero(monkeypatch):
+    """Social degrades when Mongo is down — that must not score as 0 progress."""
+    monkeypatch.setattr(
+        ga, "_dispatch", lambda *_a, **_k: {"supported": False, "value": 0.0, "reason": "degraded"}
+    )
+    result = _resolve(goal_unit="impressions", goal_value=500)
+    assert result["supported"] is False
+    assert result["attainment_pct"] is None
+
+
+def test_failed_syscall_yields_unresolved(monkeypatch):
+    # _dispatch returns {} on non-success; .get("supported") is then falsy.
+    monkeypatch.setattr(ga, "_dispatch", lambda *_a, **_k: {})
+    result = _resolve(goal_unit="usd", goal_value=1000)
+    assert result["supported"] is False
+
+
+@pytest.mark.parametrize("bad", [None, "not-a-number", [], {}])
+def test_non_numeric_domain_value_yields_unresolved(monkeypatch, bad):
+    monkeypatch.setattr(ga, "_dispatch", lambda *_a, **_k: {"supported": True, "value": bad})
+    result = _resolve(goal_unit="usd", goal_value=1000)
+    assert result["supported"] is False
+    assert result["reason"] == "no_value"
+
+
+def test_revenue_attainment_resolves_end_to_end(monkeypatch):
+    monkeypatch.setattr(ga, "_dispatch", lambda *_a, **_k: {"supported": True, "value": 25000.0})
+    result = _resolve(goal_unit="revenue", goal_value=100000)
+
+    assert result["supported"] is True
+    assert result["unit"] == "usd"
+    assert result["value"] == 25000.0
+    assert result["attainment_pct"] == pytest.approx(0.25)
 
 
 # ── active-plan wrapper ───────────────────────────────────────────────────────

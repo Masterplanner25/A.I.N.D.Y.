@@ -85,10 +85,13 @@ def _dispatch(name: str, payload: dict[str, Any], *, user_id: str, capability: s
 # sys.v1.<domain>.get_goal_metric, which does not exist yet.
 
 
-def _resolve_tasks(db, *, user_id: str, masterplan_id: Any) -> float | None:
+def _resolve_tasks(db, *, user_id: str, masterplan_id: Any, _unit: str = "tasks") -> float | None:
     """Completed tasks for this plan, via the existing task syscall.
 
     Scoped to the plan rather than the user: a plan's goal is about that plan's work.
+    Unlike the freelance/social resolvers this predates the uniform ``get_goal_metric``
+    contract and reuses ``sys.v1.task.list_for_masterplan``; ``_unit`` is accepted only
+    to keep every resolver's signature identical.
     """
     if masterplan_id is None:
         return None
@@ -105,8 +108,43 @@ def _resolve_tasks(db, *, user_id: str, masterplan_id: Any) -> float | None:
     return float(sum(1 for task in tasks if (task or {}).get("status") == "completed"))
 
 
+def _resolve_via_goal_metric(domain: str, capability: str) -> Callable[..., float | None]:
+    """Build a resolver over the uniform ``sys.v1.<domain>.get_goal_metric`` contract.
+
+    A domain answering ``supported: False`` (unknown unit, or degraded — Mongo down for
+    social, say) yields ``None``, which surfaces as an unresolved attainment rather than
+    a misleading 0. Scoring against a phantom zero would be worse than not scoring.
+    """
+
+    def _resolver(db, *, user_id: str, masterplan_id: Any, _unit: str) -> float | None:
+        data = _dispatch(
+            f"sys.v1.{domain}.get_goal_metric",
+            {"unit": _unit, "user_id": str(user_id), "masterplan_id": masterplan_id},
+            user_id=str(user_id),
+            capability=capability,
+            db=db,
+        )
+        if not data.get("supported"):
+            return None
+        value = data.get("value")
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    return _resolver
+
+
+_freelance_metric = _resolve_via_goal_metric("freelance", "freelance.read")
+_social_metric = _resolve_via_goal_metric("social", "social.read")
+
+
 _RESOLVERS: dict[str, Callable[..., float | None]] = {
     "tasks": _resolve_tasks,
+    "usd": _freelance_metric,
+    "impressions": _social_metric,
+    "clicks": _social_metric,
+    "posts": _social_metric,
 }
 
 
@@ -164,7 +202,7 @@ def resolve_goal_attainment(
         return unresolved("unsupported_unit", unit=unit, goal_value=target)
 
     try:
-        value = resolver(db, user_id=str(user_id), masterplan_id=masterplan_id)
+        value = resolver(db, user_id=str(user_id), masterplan_id=masterplan_id, _unit=unit)
     except Exception as exc:
         # A degraded domain must never break scoring — fall back, don't propagate.
         logger.warning("[GoalAttainment] resolver for unit %r failed: %s", unit, exc)
