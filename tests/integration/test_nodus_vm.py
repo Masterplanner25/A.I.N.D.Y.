@@ -93,7 +93,7 @@ def _register_and_login(client) -> str:
     email = f"test-nodus-{uuid.uuid4().hex[:8]}@aindy.test"
     password = "IntegrationTest1!"
     r = client.post("/auth/register", json={"email": email, "password": password})
-    assert r.status_code in (200, 201), f"register: {r.status_code} {r.text[:200]}"
+    assert r.status_code in (200, 201, 202), f"register: {r.status_code} {r.text[:200]}"
     return _token_from_login(client, email, password)
 
 

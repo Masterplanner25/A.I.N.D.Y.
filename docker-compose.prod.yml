@@ -39,6 +39,25 @@ services:
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      # ── Email verification + password recovery (aindy-runtime >= 2.0.0) ─────────
+      # Registration now returns 202 and emails a verification link; the access token
+      # comes from POST /auth/verify-email. The template MUST point at the client's
+      # /verify-email route or the mail ships a bare token with nowhere to paste it.
+      AINDY_EMAIL_VERIFY_URL_TEMPLATE: "${AINDY_EMAIL_VERIFY_URL_TEMPLATE:-}"
+      AINDY_EMAIL_VERIFY_TTL_HOURS: "${AINDY_EMAIL_VERIFY_TTL_HOURS:-48}"
+      # Leave OFF unless every account is verified — it refuses login for unverified
+      # addresses and is a lockout risk. Existing accounts were backfilled to verified
+      # by the 2.0.0 migration, so new signups are the only unverified ones.
+      AINDY_REQUIRE_VERIFIED_LOGIN: "${AINDY_REQUIRE_VERIFIED_LOGIN:-}"
+      # Delivery is hybrid: a registered `email` connector wins, else runtime SMTP.
+      # With neither configured, verification mail cannot be sent and a new signup
+      # cannot complete — the link never arrives.
+      AINDY_SMTP_HOST: "${AINDY_SMTP_HOST:-}"
+      AINDY_SMTP_PORT: "${AINDY_SMTP_PORT:-587}"
+      AINDY_SMTP_USER: "${AINDY_SMTP_USER:-}"
+      AINDY_SMTP_PASSWORD: "${AINDY_SMTP_PASSWORD:-}"
+      AINDY_SMTP_FROM: "${AINDY_SMTP_FROM:-}"
+      AINDY_SMTP_STARTTLS: "${AINDY_SMTP_STARTTLS:-true}"
       # Perplexity Search API — powers search/research and rippletrace mention detection.
       # Without it both degrade to "unavailable" rather than failing; nothing else needs it.
       PERPLEXITY_API_KEY: "${PERPLEXITY_API_KEY:-}"

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { clearStoredToken, getStoredToken, setStoredToken } from "../api/_core.js";
-import { changePassword, loginUser, registerUser } from "../api/auth.js";
+import { changePassword, loginUser, registerUser, verifyEmailToken } from "../api/auth.js";
 
 const AuthContext = createContext(null);
 
@@ -92,12 +92,21 @@ export function AuthProvider({ children }) {
     return nextToken;
   };
 
+  // aindy-runtime >= 2.0.0: registration no longer authenticates the caller. It returns a
+  // neutral 202 with **no token** and sends a verification link; the access token is
+  // issued by POST /auth/verify-email once the address is confirmed.
+  //
+  // The neutrality is the point — a new address and an already-registered one produce an
+  // identical 202, which is what closes the account-enumeration oracle. So this must not
+  // infer anything from the response, and must never report "already registered".
   const register = async (email, password, username = null) => {
-    const response = await registerUser({ email, password, username });
-    const nextToken = response?.access_token;
-    if (!nextToken) {
-      throw new Error("Authentication did not return an access token.");
-    }
+    await registerUser({ email, password, username });
+    return null; // no session yet; the caller shows "check your email"
+  };
+
+  // Consumes the emailed verification token and starts the session.
+  const verifyEmail = async (verificationToken) => {
+    const nextToken = await verifyEmailToken(verificationToken);
     setStoredToken(nextToken);
     setToken(nextToken);
     return nextToken;
@@ -127,6 +136,7 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(token),
       login,
       register,
+      verifyEmail,
       logout,
       changePassword: changeOwnPassword,
       setToken,
