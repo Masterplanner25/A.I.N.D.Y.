@@ -238,3 +238,46 @@ def test_playbooks_is_now_a_registered_goal_attainment_unit():
     )
     assert "playbooks" in goal_attainment.supported_units()
     assert goal_attainment.normalize_unit("Playbook") == "playbooks"
+
+
+# ── system events must not be learned from as if they were content ────────────
+
+
+def test_system_generated_drop_points_are_excluded_from_strategies():
+    """Sign-ins land on an unowned auto-created drop point.
+
+    Its narrative score is `pings * ln(pings+1)`, so it crosses
+    SUCCESS_NARRATIVE_THRESHOLD after ~8 sign-ins and would then shape the strategies
+    the system recommends — from a drop point titled "Bridge System DropPoint" whose
+    themes are literally "auto". Ownership is the discriminator: every publication path
+    sets user_id, and log_ripple_event deliberately does not.
+    """
+    strategy_engine = pytest.importorskip("apps.rippletrace.services.strategy_engine")
+    session = _build_session()
+    try:
+        high = strategy_engine.SUCCESS_NARRATIVE_THRESHOLD + 10
+        # System-generated: unowned, exactly as log_ripple_event creates it.
+        session.add(
+            DropPointDB(
+                id="bridge", title="Bridge System DropPoint", platform="AINDY",
+                core_themes="auto", tagged_entities="system", intent="auto-generated",
+                user_id=None, narrative_score=high,
+            )
+        )
+        # A real publication, owned.
+        session.add(
+            DropPointDB(
+                id="dp-real", title="A real post", platform="notes.example.com",
+                url="https://notes.example.com/x", core_themes="strategy",
+                tagged_entities="", intent="published", user_id=USER,
+                narrative_score=high, date_dropped=datetime(2026, 7, 1),
+            )
+        )
+        session.commit()
+
+        successful = strategy_engine.get_successful_drops(session)
+        ids = {drop["id"] for drop in successful}
+        assert "bridge" not in ids
+        assert "dp-real" in ids
+    finally:
+        session.close()

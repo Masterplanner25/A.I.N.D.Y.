@@ -22,11 +22,28 @@ def _split_terms(value: Optional[str]) -> List[str]:
 
 
 def get_successful_drops(db: Session) -> List[Dict]:
+    """Published content that travelled — never system-generated event streams.
+
+    Strategies are patterns in *what you published*. System events (sign-ins, bridge
+    connections) are logged as pings against an auto-created, unowned drop point —
+    ``log_ripple_event`` builds it with ``user_id=None``, ``core_themes="auto"``,
+    ``intent="auto-generated"``. Left unfiltered, that synthetic drop point accrues one
+    ping per event and its narrative score is ``pings * ln(pings+1)``: it crosses
+    ``SUCCESS_NARRATIVE_THRESHOLD`` after **8 sign-ins** and then shapes the strategies
+    the system recommends, with themes literally named "auto".
+
+    Owned-only is the filter, because ownership is what distinguishes a publication from
+    a system event here — every ingestion and UI path sets ``user_id``, and
+    ``log_ripple_event`` deliberately does not.
+    """
     from apps.automation.public import list_learning_record_drop_point_ids
 
     narrative_success = (
         db.query(DropPointDB)
-        .filter(DropPointDB.narrative_score >= SUCCESS_NARRATIVE_THRESHOLD)
+        .filter(
+            DropPointDB.narrative_score >= SUCCESS_NARRATIVE_THRESHOLD,
+            DropPointDB.user_id.isnot(None),
+        )
         .all()
     )
     spiked_set = set(list_learning_record_drop_point_ids(db, actual_outcome="spiked"))
@@ -37,7 +54,7 @@ def get_successful_drops(db: Session) -> List[Dict]:
     results = []
     drops = (
         db.query(DropPointDB)
-        .filter(DropPointDB.id.in_(list(unique_ids)))
+        .filter(DropPointDB.id.in_(list(unique_ids)), DropPointDB.user_id.isnot(None))
         .order_by(DropPointDB.date_dropped.asc())
         .all()
     )
