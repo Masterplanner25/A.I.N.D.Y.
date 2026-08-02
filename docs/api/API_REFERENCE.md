@@ -247,37 +247,6 @@ Get Recent Autonomy Decisions
 
 **Response 200:** unspecified
 
-### Bridge
-
-#### POST /apps/bridge/link
-Create Link
-
-**Body:** link_type: string | null, permission: object | null, source_id: string (required), target_id: string (required)
-
-**Response 201:** created_at: string | null (required), id: string (required), link_type: string (required), source_node_id: string (required), strength: string (required), target_node_id: string (required)
-
-#### GET /apps/bridge/nodes
-Search Nodes
-
-**Parameters:** mode (query): string | null, limit (query): integer
-
-**Body:** array[string] | null
-
-**Response 200:** nodes: array[object] (required)
-
-#### POST /apps/bridge/nodes
-Create Node
-
-**Body:** content: string (required), extra: map[unspecified] | null, node_type: string | null, permission: object | null, source: string | null, source_agent: string | null, tags: array[string] | null, user_id: string | null
-
-**Response 201:** content: string (required), extra: map[unspecified] (required), id: string (required), node_type: string | null (required), tags: array[string] (required)
-
-#### POST /apps/bridge/user_event
-Bridge User Event
-
-**Body:** origin: string (required), timestamp: string | null, user: string (required)
-
-**Response 200:** unspecified
 
 ### Compute
 

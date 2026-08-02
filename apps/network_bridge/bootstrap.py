@@ -1,8 +1,11 @@
 """Network bridge domain bootstrap."""
 from __future__ import annotations
 
-BOOTSTRAP_DEPENDS_ON: list[str] = ["authorship", "rippletrace"]
-APP_DEPENDS_ON: list[str] = ["authorship"]
+BOOTSTRAP_DEPENDS_ON: list[str] = ["authorship", "rippletrace", "automation"]
+# automation: `bridge_user_events` is automation-owned, and the sign-in handler writes
+# the system-origin audit row that social's feed surfaces — previously the sole job of
+# the now-removed `bridge` domain.
+APP_DEPENDS_ON: list[str] = ["authorship", "automation"]
 
 
 def register() -> None:

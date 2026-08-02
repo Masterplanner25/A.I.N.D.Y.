@@ -42,7 +42,6 @@ APP_BOOTSTRAP_MODULES: dict[str, str] = {
     "agent": "apps.agent.bootstrap",
     "memory": "apps.memory.bootstrap",
     "authorship": "apps.authorship.bootstrap",
-    "bridge": "apps.bridge.bootstrap",
     "autonomy": "apps.autonomy.bootstrap",
     "dashboard": "apps.dashboard.bootstrap",
     "network_bridge": "apps.network_bridge.bootstrap",
@@ -62,10 +61,9 @@ BOOTSTRAP_DEPENDS_ON_FALLBACKS: dict[str, list[str]] = {
     "agent": [],
     "memory": [],
     "authorship": [],
-    "bridge": ["automation"],
     "autonomy": [],
     "dashboard": [],
-    "network_bridge": ["authorship", "rippletrace"],
+    "network_bridge": ["authorship", "rippletrace", "automation"],
 }
 
 _ACCEPTED_APP_DEPENDS_ON_GAPS: frozenset[tuple[str, str]] = frozenset({
@@ -221,9 +219,6 @@ def bootstrap() -> None:
     # Accepted APP_DEPENDS_ON gaps:
     # - analytics -> arm cannot be added once arm -> analytics is declared,
     #   because that would create an analytics <-> arm cycle.
-    # - bridge -> automation cannot be added because automation already
-    #   depends on other boot-time upstreams and the validator sees a cycle
-    #   once bridge points back at automation.
     # In all accepted cases the calls are deferred inside service functions and never
     # run during register(), so the warnings are structurally accepted and
     # suppressed to avoid startup noise.

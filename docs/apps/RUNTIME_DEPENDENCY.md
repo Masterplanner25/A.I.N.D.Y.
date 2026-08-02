@@ -30,7 +30,7 @@ Validated on `2026-08-01`:
 - installed runtime version: `1.11.0`
 - apps repo dependency (pinned in `pyproject.toml`): `aindy-runtime>=1.11.0,<2.0`
 - runtime `/api/version` recommendation: `>=1.0,<2.0`
-- app-profile boot smoke on 1.11.0: `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=17`
+- app-profile boot smoke on 1.11.0: `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16`
 
 Floor raised to `1.11.0` to adopt v1.11.0 (minor, not patch — it adds a public endpoint):
 `POST /auth/password/change`, which closes FR-6 item 1. Nothing in the release is

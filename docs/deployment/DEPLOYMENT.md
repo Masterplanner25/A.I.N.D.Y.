@@ -69,7 +69,7 @@ commit real values):
 override them only for an external/managed datastore.
 
 `AINDY_BOOT_MODE` is defaulted to `app-profile` inside `docker-compose.prod.yml` — this
-is what makes the 17 domain apps load. (`aindy-runtime serve` setdefaults it to
+is what makes the 16 domain apps load. (`aindy-runtime serve` setdefaults it to
 `runtime-only`, a platform-only profile with **no** apps, so a bare `serve` outside compose
 must set `AINDY_BOOT_MODE=app-profile` explicitly.)
 
