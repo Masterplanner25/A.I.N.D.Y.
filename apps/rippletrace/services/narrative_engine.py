@@ -20,12 +20,25 @@ def _split_terms(value: Optional[str]) -> Set[str]:
 
 
 def _datetime_from_iso(value: Optional[str]) -> datetime:
+    """Parse to *naive UTC*, so a timeline of mixed timestamps can be sorted.
+
+    The timeline mixes sources with different awareness: `date_dropped`,
+    `date_detected` and `score_snapshots.timestamp` are naive columns, while the
+    "current state" event is stamped `datetime.now(timezone.utc)` — aware. Sorting the
+    two together raised "can't compare offset-naive and offset-aware datetimes",
+    which is what actually took out /narrative/summary and /narrative/{id}. Folding
+    everything to naive UTC here keeps the sort total regardless of source, and matches
+    how threadweaver normalizes the same columns.
+    """
     if not value:
         return datetime.min
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return datetime.min
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 def generate_story_summary(narrative_data: Dict) -> str:
