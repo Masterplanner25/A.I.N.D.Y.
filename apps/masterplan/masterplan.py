@@ -95,6 +95,14 @@ class GenesisSessionDB(Base):
 
     summarized_state = Column(JSON, nullable=True)
 
+    # The conversation itself: [{"role": "user"|"assistant", "content": str, "at": iso}].
+    # Genesis previously kept only `summarized_state` — six extracted fields — so every
+    # turn the model saw a compressed snapshot and the new message, and nothing else. It
+    # could not build on what you said two turns ago, which is what made a "strategic
+    # partner" behave like a form-filler with a chat interface. The client held the
+    # conversation in React state only, so a page refresh lost it for the user too.
+    transcript = Column(JSON, nullable=True)
+
     # Block 1 additions
     synthesis_ready = Column(Boolean, nullable=False, default=False)
     draft_json = Column(JSON, nullable=True)

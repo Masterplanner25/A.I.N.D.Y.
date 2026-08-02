@@ -125,6 +125,29 @@ def _handle_get_active_masterplan(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+# Full history is kept for the user to read back; only a recent window is sent to the
+# model (see genesis_ai.build_transcript_window). The cap bounds unbounded growth of a
+# JSON column on a session that never ends.
+MAX_TRANSCRIPT_ENTRIES_STORED = 200
+
+
+def _transcript_entry(role: str, content: str) -> dict:
+    from datetime import datetime, timezone
+
+    return {
+        "role": role,
+        "content": content,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _trim_transcript(entries: list[dict]) -> list[dict]:
+    """Keep the most recent entries. Oldest go first — the near past is what matters."""
+    if len(entries) <= MAX_TRANSCRIPT_ENTRIES_STORED:
+        return entries
+    return entries[-MAX_TRANSCRIPT_ENTRIES_STORED:]
+
+
 def _handle_genesis_execute_llm(payload: dict, ctx: SyscallContext) -> dict:
     from apps.masterplan.models import GenesisSessionDB
     from apps.masterplan.services.genesis_ai import call_genesis_llm
@@ -151,11 +174,14 @@ def _handle_genesis_execute_llm(payload: dict, ctx: SyscallContext) -> dict:
             raise ValueError("GenesisSession not found")
 
         current_state = session.summarized_state or {}
+        transcript = list(session.transcript or [])
+
         llm_output = call_genesis_llm(
             message=message,
             current_state=current_state,
             user_id=str(user_id),
             db=db,
+            transcript=transcript,
         )
 
         state_update = llm_output.get("state_update", {})
@@ -167,6 +193,16 @@ def _handle_genesis_execute_llm(payload: dict, ctx: SyscallContext) -> dict:
             current_state["confidence"] = max(0.0, min(current_state["confidence"], 1.0))
 
         session.summarized_state = current_state
+
+        reply = llm_output.get("reply", "")
+        # Appended after the call, so the model saw the conversation *before* this turn
+        # and the new message exactly once rather than duplicated as history.
+        transcript.append(_transcript_entry("user", message))
+        if reply:
+            transcript.append(_transcript_entry("assistant", reply))
+        # JSON column reassignment (not in-place mutation) so SQLAlchemy marks it dirty.
+        session.transcript = _trim_transcript(transcript)
+
         if llm_output.get("synthesis_ready", False) and not session.synthesis_ready:
             session.synthesis_ready = True
         db.commit()

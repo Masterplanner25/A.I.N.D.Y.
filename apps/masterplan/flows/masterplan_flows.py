@@ -62,6 +62,7 @@ def genesis_session_create_node(state, context):
                         "session_id": existing.id,
                         "resumed": True,
                         "summarized_state": existing.summarized_state,
+                        "transcript": existing.transcript or [],
                         "synthesis_ready": bool(existing.synthesis_ready),
                     }
                 },
@@ -85,6 +86,7 @@ def genesis_session_create_node(state, context):
                     "session_id": session.id,
                     "resumed": False,
                     "summarized_state": session.summarized_state,
+                    "transcript": [],
                     "synthesis_ready": False,
                 }
             },
@@ -112,6 +114,10 @@ def genesis_session_get_node(state, context):
             "status": session.status,
             "synthesis_ready": session.synthesis_ready,
             "summarized_state": session.summarized_state,
+            # Returned so the client can restore the actual conversation on reload.
+            # Without it a refresh replaced the dialogue with a synthetic one-line
+            # summary rebuilt from summarized_state.
+            "transcript": session.transcript or [],
             "created_at": session.created_at,
             "updated_at": session.updated_at,
         }
