@@ -103,7 +103,6 @@ Mutable domain features. All paths below are prefixed with `/apps`.
 - `apps/memory/routes/memory_trace_router.py` (router prefix `/memory`) **[JWT auth required]** → `/apps/memory/traces`, etc. Registered by `apps.memory.bootstrap`.
 - `AINDY/routes/memory_metrics_router.py` is a deprecated reference copy retained in aindy-runtime. No longer registered.
 - `AINDY/routes/memory_trace_router.py` is a deprecated reference copy retained in aindy-runtime. No longer registered.
-- `apps/bridge/routes/bridge_router.py` (router prefix `/bridge`) **[JWT auth required for /nodes and /link; API key for /user_event]** ? `/apps/bridge/*`
 - `apps/freelance/routes/freelance_router.py` (router prefix `/freelance`) **[JWT auth required]** ? `/apps/freelance/*`
 - `apps/search/routes/leadgen_router.py` (router prefix `/leadgen`) **[JWT auth required]** ? `/apps/leadgen/`
 - `apps/analytics/routes/analytics_router.py` (router prefix `/analytics`) **[JWT auth required]** ? `/apps/analytics/*`
@@ -140,9 +139,9 @@ Three principals are supported. All three work on any route that uses the `get_a
   - Keys are SHA-256 hashed at rest; plaintext returned exactly once on creation.
   - Implementation: `auth/api_key_auth.py` — `require_scope("flow.execute")` dependency pattern.
 
-- **Service API key** (`X-API-Key` header) — required on: `network_bridge_router` (Node.js gateway), `db_verify_router` (admin schema inspection), `/apps/bridge/user_event`. Key value from `AINDY_API_KEY` env var.
+- **Service API key** (`X-API-Key` header) — required on: `network_bridge_router` (Node.js gateway), `db_verify_router` (admin schema inspection). Key value from `AINDY_API_KEY` env var.
 
-- **HMAC permission** — deprecated. `/bridge` write routes rely on JWT; `permission` is ignored if provided.
+- **HMAC permission** — deprecated and unused; `permission` is ignored if provided.
 
 - **Public routes** (no auth): `/auth/*`, `/health`, `/health/`, `/ready`, `/health/details`, `GET /`.
 
@@ -533,51 +532,6 @@ Errors: Not explicitly defined.
   Status Codes: 200
   Errors: Not explicitly defined.
 
-### Bridge Routes (`apps/bridge/routes/bridge_router.py`, prefix `/bridge`)
-  `POST /bridge/nodes`
-  Method: POST
-  Request Body: `NodeCreateRequest` (inline Pydantic model) with fields:
-  - `content: str`
-  - `tags: List[str]`
-  - `node_type: str`
-  - `extra: dict`
-  - `permission: TracePermission` (optional, ignored)
-  Query Params: None
-  Response: `NodeResponse` with `id`, `content`, `tags`, `node_type`, `extra`.
-  Auth: JWT required; `user_id` enforced from `current_user["sub"]` (payload user_id is ignored).
-  Status Codes: 201
-Errors: Not explicitly defined.
-
-`GET /bridge/nodes`
-Method: GET
-Request Body: None
-Query Params: `tag` (list), `mode` (default "OR"), `limit` (default 100)
-Response: `NodeSearchResponse` with `nodes: [NodeResponse]`.
-  Auth: JWT required; results filtered by `current_user[\"sub\"]`.
-Status Codes: 200
-Errors: Not explicitly defined.
-
-`POST /bridge/link`
-Method: POST
-Request Body: `LinkCreateRequest` (inline Pydantic model) with fields:
-- `source_id: str`
-- `target_id: str`
-- `link_type: str`
-- `permission: TracePermission` (optional, ignored)
-Query Params: None
-Response: `LinkResponse` with `id`, `source_node_id`, `target_node_id`, `link_type`, `strength`, `created_at`.
-  Auth: JWT required; link creation is rejected if either node is not owned by `current_user[\"sub\"]`.
-Status Codes: 201
-Errors: 400 on invalid IDs (from `ValueError`) is not explicitly mapped.
-
-`POST /bridge/user_event`
-Method: POST
-Request Body: `UserEvent` (inline Pydantic model with `user`, `origin`, optional `timestamp`)
-Query Params: None
-Response: `{ "status": "logged", "user": str, "origin": str, "timestamp": str }`
-Persistence: Writes to `bridge_user_events` with `user_name`, `origin`, `raw_timestamp`, `occurred_at`.
-Status Codes: 200
-Errors: Not explicitly defined.
 
 ### Authorship Routes (`apps/authorship/routes/authorship_router.py`, prefix `/authorship`)
 `POST /authorship/reclaim`
@@ -1547,7 +1501,6 @@ This appendix lists request schemas where they are explicitly defined.
 
 - `apps/analytics/routes/analytics_router.py` ? `AINDY/schemas/analytics.py` (`LinkedInRawInput`)
 - `apps/arm/routes/arm_router.py` ? inline Pydantic models in `apps/arm/routes/arm_router.py` (`AnalyzeRequest`, `GenerateRequest`, `ConfigUpdateRequest`) — updated Phase 1 (2026-03-17)
-- `apps/bridge/routes/bridge_router.py` ? inline Pydantic models in `apps/bridge/routes/bridge_router.py` (`NodeCreateRequest`, `LinkCreateRequest`, `TracePermission`)
 - `apps/freelance/routes/freelance_router.py` ? `AINDY/schemas/freelance.py` (`FreelanceOrderCreate`, `FeedbackCreate`)
 - `apps/masterplan/routes/genesis_router.py` ? untyped `dict` payloads (no Pydantic models defined)
 - `apps/search/routes/leadgen_router.py` ? query parameter only (`query`); no Pydantic body model
@@ -1558,7 +1511,6 @@ This appendix lists request schemas where they are explicitly defined.
 - `apps/tasks/routes/task_router.py` ? `AINDY/schemas/task_schemas.py` (`TaskCreate`, `TaskAction`)
 
 Response schema sources (routes with `response_model`):
-- `apps/bridge/routes/bridge_router.py` ? inline models (`NodeResponse`, `NodeSearchResponse`, `LinkResponse`)
 - `apps/freelance/routes/freelance_router.py` ? `AINDY/schemas/freelance.py` (`FreelanceOrderResponse`, `FeedbackResponse`, `RevenueMetricsResponse`)
 - `apps/search/routes/research_results_router.py` ? `AINDY/schemas/research_results_schema.py` (`ResearchResultResponse`)
 - `apps/social/routes/social_router.py` ? `AINDY/db/models/social_models.py` (`SocialProfile`, `SocialPost`, `FeedItem`)
