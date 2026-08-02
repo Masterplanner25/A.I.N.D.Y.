@@ -51,6 +51,21 @@ function buildResumeMessage(state) {
   return `Session resumed. Here is what I have so far:\n\n${lines}\n\nPick up where we left off — or refine any of the above.`;
 }
 
+// Restore the real conversation when the server has one. `buildResumeMessage` is the
+// fallback for sessions that predate transcript persistence — their dialogue was only
+// ever held in React state and is genuinely gone, so the six-field summary is the most
+// that can honestly be shown.
+function restoreMessages(data) {
+  const transcript = Array.isArray(data?.transcript) ? data.transcript : [];
+  if (transcript.length) {
+    return safeMap(transcript, (entry) => ({
+      role: entry.role === "assistant" ? "ai" : "user",
+      content: entry.content,
+    }));
+  }
+  return [{ role: "ai", content: buildResumeMessage(data?.summarized_state) }];
+}
+
 export default function Genesis() {
   const [started, setStarted] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -84,7 +99,7 @@ export default function Genesis() {
         setSessionId(data.session_id);
         setSynthesisReady(Boolean(data.synthesis_ready));
         setStarted(true);
-        setMessages([{ role: "ai", content: buildResumeMessage(data.summarized_state) }]);
+        setMessages(restoreMessages(data));
       } catch {
         writeStoredSessionId(null); // stale/foreign id — fall back to the start screen
       } finally {
@@ -105,13 +120,16 @@ export default function Genesis() {
       writeStoredSessionId(data.session_id);
       setSynthesisReady(Boolean(data.synthesis_ready));
       setStarted(true);
-      setMessages([
-      {
-        role: "ai",
-        content: data.resumed ?
-        buildResumeMessage(data.summarized_state) :
-        "Initialization sequence active. I have established a secure session. What do you want your life to look like in 5–10 years?"
-      }]
+      setMessages(
+        data.resumed
+          ? restoreMessages(data)
+          : [
+              {
+                role: "ai",
+                content:
+                  "Initialization sequence active. I have established a secure session. What do you want your life to look like in 5–10 years?",
+              },
+            ]
       );
     } catch (err) {
       console.error("Failed to start session:", err);

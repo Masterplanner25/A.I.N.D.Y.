@@ -12,16 +12,43 @@ logger = logging.getLogger(__name__)
 
 MODEL = "gpt-4o-mini"  # efficient + structured
 
+# How many prior turns are replayed to the model. Enough to hold a real thread; bounded
+# so a long session cannot grow the prompt without limit.
+MAX_TRANSCRIPT_TURNS_SENT = 20
+MAX_TRANSCRIPT_CHARS_SENT = 12000
+
 GENESIS_SYSTEM_PROMPT = """
 You are A.I.N.D.Y., a calm and reflective strategic partner helping a user define a long-term MasterPlan.
 
-Rules:
-- Responses must be 2–4 lines maximum.
-- Tone must be calm and minimal.
-- No hype language.
-- No emojis.
-- Ask clarifying questions when mechanism logic is missing.
-- Extract structured signals from user input.
+You are a partner in a conversation, not a form. The dialogue so far is provided; treat it as
+shared history you both remember.
+
+Tone:
+- Calm and minimal. No hype language. No emojis.
+- 2-4 lines for an ordinary turn. Up to 6 when you are proposing synthesis.
+
+How to behave as a partner:
+- Build on what has already been said. Never re-ask something the user has already answered —
+  if you need to revisit it, say why.
+- Probe the weakest part of the plan rather than the next empty field. A vague mechanism matters
+  more than a missing asset list.
+- Push back when something does not hold together: an unrealistic horizon, a mechanism with no
+  route to revenue, two stated goals in tension. Name the tension plainly and ask about it.
+- Reflect understanding back in your own words when the user says something substantial, so they
+  can correct you early.
+- Volunteer what is still thin. The user should never have to ask how far along they are.
+
+On readiness — you decide this, the user should not have to declare it:
+- Set "synthesis_ready": true once vision_summary, time_horizon and mechanism_summary are all
+  present and coherent, and your confidence is at least 0.6.
+- On the turn you first set it true, say so: state that there is enough to synthesize a plan,
+  name anything still thin, and invite them to proceed or keep going.
+- Do not wait to be asked, and do not require any particular phrase from the user.
+
+State extraction:
+- Update only fields the conversation supports. Use null for anything not yet established;
+  never invent a value to fill a field.
+- "confidence" is your own 0.0-1.0 judgement of how well you understand this person's plan.
 
 You MUST return valid JSON in this exact format:
 
@@ -41,7 +68,45 @@ You MUST return valid JSON in this exact format:
 """
 
 
-def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=None):
+def build_transcript_window(
+    transcript: list[dict] | None,
+    *,
+    max_turns: int = MAX_TRANSCRIPT_TURNS_SENT,
+    max_chars: int = MAX_TRANSCRIPT_CHARS_SENT,
+) -> list[dict]:
+    """The most recent turns, as OpenAI chat messages, newest-preserving.
+
+    Trimmed from the front, so the model keeps the part of the conversation nearest to
+    what is being decided now. Malformed entries are skipped rather than raising — a
+    corrupt transcript row must not make the session unusable.
+    """
+    if not transcript:
+        return []
+
+    window: list[dict] = []
+    used = 0
+    for entry in reversed(transcript):
+        if not isinstance(entry, dict):
+            continue
+        role = entry.get("role")
+        content = entry.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str) or not content:
+            continue
+        if len(window) >= max_turns or used + len(content) > max_chars:
+            break
+        window.append({"role": role, "content": content})
+        used += len(content)
+    window.reverse()
+    return window
+
+
+def call_genesis_llm(
+    message: str,
+    current_state: dict,
+    user_id: str = None,
+    db=None,
+    transcript: list[dict] | None = None,
+):
     import logging
 
     # Step 1: Recall relevant past strategic memories before responding
@@ -95,12 +160,13 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
                     )
                 )
     except Exception as exc:
-        emit_observability_event(
-            logger=logger,
-            event="genesis_llm_arm_context_lookup_failed",
-            user_id=user_id,
-            error=str(exc),
-        )
+        # Plain logging, deliberately: the previous call here was to an
+        # `emit_observability_event(logger=..., event=..., error=...)` that is neither
+        # imported in this module nor a real signature (the helper takes event_type /
+        # payload / source). Any failure in this optional lookup therefore raised
+        # NameError from inside the handler and killed the whole Genesis turn — an
+        # enrichment nobody needs taking down the conversation.
+        logger.warning("Genesis ARM context lookup failed: %s", exc)
 
     # Step 2: Build prompt with injected memory + identity context
     identity_context = ""
@@ -110,16 +176,27 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
 
             identity_context = _get_identity_context(user_id, db)
     except Exception as exc:
-        emit_observability_event(
-            logger=logger,
-            event="genesis_llm_identity_context_failed",
-            user_id=user_id,
-            error=str(exc),
-        )
+        logger.warning("Genesis identity context lookup failed: %s", exc)
 
+    # The extracted state is context, not dialogue, so it belongs in the system message.
+    # Keeping it out of the user turn lets the conversation read as an actual conversation:
+    # system → prior turns → the new message.
     system_content = (
-        GENESIS_SYSTEM_PROMPT + prior_context + arm_context + identity_context
+        GENESIS_SYSTEM_PROMPT
+        + prior_context
+        + arm_context
+        + identity_context
+        + "\n\nStructured state extracted so far (update it incrementally):\n"
+        + json.dumps(current_state)
     )
+
+    history = build_transcript_window(transcript)
+    chat_messages = (
+        [{"role": "system", "content": system_content}]
+        + history
+        + [{"role": "user", "content": message}]
+    )
+
     try:
         response = perform_external_call(
             service_name="openai",
@@ -128,27 +205,17 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
             endpoint="chat.completions.create",
             model=MODEL,
             method="openai.chat",
-            extra={"purpose": "genesis_message"},
+            extra={"purpose": "genesis_message", "history_turns": len(history)},
             operation=lambda: chat_completion(
                 get_openai_client(),
                 model=MODEL,
-                messages=[
-                    {"role": "system", "content": system_content},
-                    {
-                        "role": "user",
-                        "content": f"""
-Current Structured State:
-{json.dumps(current_state)}
-
-New User Message:
-{message}
-
-Update the structured state incrementally.
-Return only valid JSON.
-"""
-                    }
-                ],
+                messages=chat_messages,
                 temperature=0.4,
+                # Without this the model occasionally answers in prose, the parse below
+                # fails, and the fallback ships "I need a bit more clarity. Can you
+                # elaborate?" — which reads as the partner being dense rather than as a
+                # format error. The synthesis and audit calls already pin the format.
+                response_format={"type": "json_object"},
                 timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
             ),
         )
@@ -263,12 +330,7 @@ def call_genesis_synthesis_llm(
                     )
                 )
     except Exception as exc:
-        emit_observability_event(
-            logger=logger,
-            event="genesis_synthesis_arm_context_lookup_failed",
-            user_id=user_id,
-            error=str(exc),
-        )
+        logger.warning("Genesis synthesis ARM context lookup failed: %s", exc)
 
     system_prompt = SYNTHESIS_SYSTEM_PROMPT + arm_insights
     response = perform_external_call(
