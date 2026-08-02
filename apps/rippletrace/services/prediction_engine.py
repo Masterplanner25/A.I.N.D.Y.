@@ -9,7 +9,14 @@ from sqlalchemy.orm import Session
 from apps.rippletrace.services.engine_registry import call_with_engine_breaker
 from apps.rippletrace.models import PingDB
 from apps.rippletrace.services.delta_engine import compute_deltas, drop_point_ids_with_history
-from apps.rippletrace.services.learning_engine import get_learning_thresholds, record_prediction
+from apps.rippletrace.services.learning_engine import (
+    DEFAULT_EARLY_NARRATIVE_CEILING,
+    DEFAULT_EARLY_VELOCITY_RATE,
+    DEFAULT_NARRATIVE_TREND,
+    DEFAULT_VELOCITY_TREND,
+    get_learning_thresholds,
+    record_prediction,
+)
 
 HIGH_PING_THRESHOLD = 5
 
@@ -60,11 +67,20 @@ def _predict_drop_point_internal(
         / delta_minutes
     )
 
-    thresholds = get_learning_thresholds(db)
-    velocity_threshold = thresholds.velocity_trend
-    narrative_threshold = thresholds.narrative_trend
-    early_velocity_rate = thresholds.early_velocity_rate
-    early_narrative_ceiling = thresholds.early_narrative_ceiling
+    # `ensure_learning_thresholds` is declared `-> dict[str, Any]` and returns
+    # `row_to_dict(...)`. This read used attribute access, so every call raised
+    # AttributeError and took out /predictions/{id} and /narrative/*. `adjust_thresholds`
+    # in learning_engine reads the same contract by subscript and was always correct —
+    # one consumer was updated when the boundary went dict-shaped and the other was not.
+    # Defaults mirror the ones passed into ensure_learning_thresholds, so a row missing a
+    # column degrades to the documented default instead of a KeyError.
+    thresholds = get_learning_thresholds(db) or {}
+    velocity_threshold = thresholds.get("velocity_trend", DEFAULT_VELOCITY_TREND)
+    narrative_threshold = thresholds.get("narrative_trend", DEFAULT_NARRATIVE_TREND)
+    early_velocity_rate = thresholds.get("early_velocity_rate", DEFAULT_EARLY_VELOCITY_RATE)
+    early_narrative_ceiling = thresholds.get(
+        "early_narrative_ceiling", DEFAULT_EARLY_NARRATIVE_CEILING
+    )
 
     delta_payload = compute_deltas(drop_point_id, db)
     velocity_rate = 0.0

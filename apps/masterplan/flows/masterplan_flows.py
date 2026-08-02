@@ -1,6 +1,21 @@
 from AINDY.runtime.flow_helpers import register_nodes, register_single_node_flows
 
 
+def _iso(value):
+    """Render a datetime/date as ISO, passing anything else through unchanged.
+
+    Flow results are embedded verbatim into the runtime's `execution.completed` system
+    event, which is written to a JSONB column. A raw datetime in a node's output_patch
+    therefore fails the insert with "Object of type datetime is not JSON serializable",
+    and because that event is emitted as *required*, the whole flow reports
+    "Completion finalization failed" — the route 500s even though its query succeeded.
+
+    That is what made GET /apps/masterplans/{id} unusable. `masterplan_anchor_node`
+    already called .isoformat() on its date; the other nodes never did.
+    """
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
 def goals_list_node(state, context):
     try:
         from apps.masterplan.services.goal_service import get_active_goals
@@ -118,8 +133,8 @@ def genesis_session_get_node(state, context):
             # Without it a refresh replaced the dialogue with a synthetic one-line
             # summary rebuilt from summarized_state.
             "transcript": session.transcript or [],
-            "created_at": session.created_at,
-            "updated_at": session.updated_at,
+            "created_at": _iso(session.created_at),
+            "updated_at": _iso(session.updated_at),
         }
         return {"status": "SUCCESS", "output_patch": {"genesis_session_get_result": result}}
     except Exception as e:
@@ -360,7 +375,8 @@ def masterplan_list_node(state, context):
                 {
                     "id": p.id, "version_label": p.version_label, "posture": p.posture,
                     "status": p.status, "is_active": p.is_active,
-                    "created_at": p.created_at, "locked_at": p.locked_at, "activated_at": p.activated_at,
+                    "created_at": _iso(p.created_at), "locked_at": _iso(p.locked_at),
+                    "activated_at": _iso(p.activated_at),
                 }
                 for p in plans
             ]
@@ -384,7 +400,8 @@ def masterplan_get_node(state, context):
         return {"status": "SUCCESS", "output_patch": {"masterplan_get_result": {
             "id": plan.id, "version_label": plan.version_label, "posture": plan.posture,
             "status": plan.status, "is_active": plan.is_active, "structure_json": plan.structure_json,
-            "created_at": plan.created_at, "locked_at": plan.locked_at, "activated_at": plan.activated_at,
+            "created_at": _iso(plan.created_at), "locked_at": _iso(plan.locked_at),
+            "activated_at": _iso(plan.activated_at),
             "linked_genesis_session_id": plan.linked_genesis_session_id,
             "execution_status": execution_status,
         }}}

@@ -108,13 +108,29 @@ async def lock_from_genesis(
 # ------------------------------
 @router.post("/{plan_id}/lock")
 @limiter.limit("30/minute")
-def lock_plan(
+async def lock_plan(
     request: Request,
     plan_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return _with_execution_envelope(_run_flow_masterplan("masterplan_lock", {"plan_id": plan_id}, db, str(current_user["sub"])))
+    user_id = str(current_user["sub"])
+
+    # Through the pipeline for the same reason as masterplan.get: called directly, the
+    # flow's HTTP_404 for a missing plan is raised pre-pipeline and the guard turns it
+    # into an opaque 500.
+    def handler(ctx):
+        return _with_execution_envelope(
+            _run_flow_masterplan("masterplan_lock", {"plan_id": plan_id}, db, user_id)
+        )
+
+    return await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.lock_plan",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
 
 
 # ------------------------------
@@ -147,13 +163,29 @@ async def list_masterplans(
 # ------------------------------
 @router.get("/{plan_id}")
 @limiter.limit("60/minute")
-def get_masterplan(
+async def get_masterplan(
     request: Request,
     plan_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return _run_flow_masterplan("masterplan_get", {"plan_id": plan_id}, db, str(current_user["sub"]))
+    user_id = str(current_user["sub"])
+
+    # Runs through the pipeline like every other managed route. Called directly, the
+    # flow's HTTPException was raised before pipeline entry, so the route guard rewrote
+    # it as RouteExecutionViolation and the caller got an opaque 500 — which is why the
+    # underlying JSON-serialization failure went undiagnosed. A 404 for a missing plan
+    # was equally invisible.
+    def handler(ctx):
+        return _run_flow_masterplan("masterplan_get", {"plan_id": plan_id}, db, user_id)
+
+    return await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.get",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
 
 
 # ------------------------------
@@ -232,13 +264,26 @@ async def get_masterplan_projection(
 # ------------------------------
 @router.post("/{plan_id}/activate")
 @limiter.limit("30/minute")
-def activate_masterplan(
+async def activate_masterplan(
     request: Request,
     plan_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return _with_execution_envelope(_run_flow_masterplan("masterplan_activate", {"plan_id": plan_id}, db, str(current_user["sub"])))
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        return _with_execution_envelope(
+            _run_flow_masterplan("masterplan_activate", {"plan_id": plan_id}, db, user_id)
+        )
+
+    return await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.activate",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
 
 
 @router.post("/{plan_id}/activate-cascade")
