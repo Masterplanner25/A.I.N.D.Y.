@@ -148,26 +148,31 @@ def append_trace_node(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    memory_dao = MemoryNodeDAO(db)
-    node = memory_dao.get_by_id(body.node_id, user_id=str(current_user["sub"]))
-    if not node:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
-        )
+    user_id = str(current_user["sub"])
 
-    dao = MemoryTraceDAO(db)
-    appended = dao.append_node(
-        trace_id=trace_id,
-        node_id=body.node_id,
-        user_id=str(current_user["sub"]),
-        position=body.position,
-    )
-    if not appended:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "trace_not_found", "message": "Trace not found"},
-        )
     def handler(_ctx):
+        # Inside the pipeline: raised before entry, the runtime's route guard rewrites a
+        # deliberate 4xx as RouteExecutionViolation and the caller gets an opaque 500.
+        # The write also belongs in here — it used to run outside the pipeline entirely,
+        # so an append was neither traced nor covered by its failure handling.
+        node = MemoryNodeDAO(db).get_by_id(body.node_id, user_id=user_id)
+        if not node:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+            )
+
+        appended = MemoryTraceDAO(db).append_node(
+            trace_id=trace_id,
+            node_id=body.node_id,
+            user_id=user_id,
+            position=body.position,
+        )
+        if not appended:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "trace_not_found", "message": "Trace not found"},
+            )
         return appended
-    return _execute_memory_trace(request, "memory.traces.append", handler, db=db, user_id=str(current_user["sub"]), success_status_code=201)
+
+    return _execute_memory_trace(request, "memory.traces.append", handler, db=db, user_id=user_id, success_status_code=201)

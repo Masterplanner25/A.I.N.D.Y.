@@ -133,6 +133,9 @@ jobs:
       - name: Check cross-app import boundaries
         run: python scripts/check_app_imports.py
 
+      - name: Check route execution-pipeline contract
+        run: python scripts/check_route_pipeline_contract.py
+
       - name: Validate bootstrap dependency declarations
         run: python -c "from apps._bootstrap_validator import validate_bootstrap_deps; validate_bootstrap_deps('apps'); print('Bootstrap deps OK')"
 

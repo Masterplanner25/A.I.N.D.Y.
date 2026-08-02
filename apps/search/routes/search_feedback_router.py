@@ -66,14 +66,17 @@ def record_search_feedback(
 ):
     """Record implicit (click/dwell/convert/dismiss) or explicit (thumbs_up/thumbs_down)
     feedback on a search result. Idempotent per (user, query, result_ref, signal)."""
-    if (body.signal or "").strip().lower() not in SIGNAL_WEIGHTS:
-        raise HTTPException(
-            status_code=422,
-            detail=f"unknown feedback signal '{body.signal}'; expected one of {sorted(SIGNAL_WEIGHTS)}",
-        )
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
+        # Inside the pipeline: raised before entry, the runtime's route guard cannot
+        # tell a deliberate 4xx from a route bypassing the pipeline and rewrites it as
+        # RouteExecutionViolation, so the caller got an opaque 500 instead of the reason.
+        if (body.signal or "").strip().lower() not in SIGNAL_WEIGHTS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"unknown feedback signal '{body.signal}'; expected one of {sorted(SIGNAL_WEIGHTS)}",
+            )
         return record_feedback(
             db, user_id=user_id, query=body.query, result_ref=body.result_ref,
             signal=body.signal, history_id=body.history_id,
