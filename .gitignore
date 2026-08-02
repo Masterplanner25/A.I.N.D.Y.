@@ -33,3 +33,8 @@ scripts/diag_*.py
 .env
 .env.local
 .env.*.local
+
+# Nodus execution scratch — per-run graph/checkpoint records written by the workflow
+# engine on every local run. Nothing reads them back (no code references the path);
+# they accumulated silently because there was no rule, arriving in unrelated PRs.
+/.nodus/
