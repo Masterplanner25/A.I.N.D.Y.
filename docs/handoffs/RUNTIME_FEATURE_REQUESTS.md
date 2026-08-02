@@ -298,7 +298,7 @@ the existing `{data: recommendation}` envelope, then integration-test end-to-end
 
 ---
 
-## FR-7 — Memory capture: three defects that make recall recall the wrong things 🔴 net-new
+## FR-7 — Memory: four defects that make recall return the wrong things 🔴 net-new
 
 **apps-monolith ref:** found 2026-08-02 while auditing what the system actually remembers.
 Measured on a live corpus of 1,799 memory nodes.
@@ -366,6 +366,52 @@ and the owned subset of them reaches recall as content-free labels.
 **Ask:** either exclude `execution.started` from `AUTO_MEMORY_EVENT_TYPES` (a "something
 began" record has no recall value), or let a policy gate forced captures too. We cannot
 suppress these app-side: `force=True` is checked before the policy is consulted.
+
+### MEM-IMPACT-IGNORES-SIGNIFICANCE-1 — the write lever and the read lever are disconnected 🔴 **the important one**
+
+This is the root cause of the symptom at the top, and it makes the other three secondary.
+
+Recall ranks by `impact_score`. `impact_score` is computed **only** from the causal event
+graph:
+
+```python
+return round(len(downstream) + (trace_depth * 0.75) + failure_bonus, 4)
+```
+
+`significance` — the thing a domain policy declares, the only quality signal an app
+controls — **is not a term in it.** And `impact_score` defaults to `0.0` when there is no
+`source_event_id`, which is the case for every direct `queue_memory_capture` call.
+
+Measured consequence:
+
+```
+impact  node_type  source_agent  content
+ 4.00   outcome    system        Completion finalization failed: ...
+ 3.25   outcome    system        Completion finalization failed: ...
+ 1.50   outcome    system        Nodus worker exceeded 45000ms hard limit
+ 0.00   decision   genesis       Masterplan locked: V1 (posture: Accelerated)
+```
+
+`Masterplan locked` is declared `significance: 1.0`, `node_type: decision`,
+`memory_type: decision`, shared to the `genesis` namespace — the single most deliberate
+memory the system writes. **It scores 0.00 and is never recalled.** Both `decision` nodes
+in the corpus score 0. Every node with non-zero impact has `source_agent = system`.
+
+So an app cannot make a memory recallable. It can decide what to store and how to label
+it; it cannot influence what comes back. Everything that surfaces is a runtime-captured
+system event, and `failure_bonus` (1.5 vs 0.5) means failures win — which is exactly the
+recall we observe.
+
+**Ask:** make `significance` a term in `impact_score` — or rank recall on a blend of the
+two. Any weighting is fine; the requirement is only that a domain declaring a memory
+important can cause it to be recalled. Without this, domain memory policies are
+decorative and the federated model (per-agent memory, `recall_from_agent`,
+`shared_namespaces`) has no path into the Infinity loop, which is its main consumer.
+
+**Partial app-side workaround, not a fix:** a domain can pass `trace_id`/`source_event_id`
+in `extra` so impact is computed rather than defaulted. That lifts a domain decision from
+0.0 to roughly `depth*0.75 + 0.5` — still below any failure at 1.5+. It reorders nothing
+that matters.
 
 ### Not asked for, noted
 
