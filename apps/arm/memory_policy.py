@@ -4,11 +4,13 @@
 POLICIES = {
     "arm_analysis_complete": {
         "significance": 0.7,
+        "default_significance": 0.7,
         "node_type": "insight",
         "tags": ["arm", "analysis"],
     },
     "arm_generation_complete": {
         "significance": 0.6,
+        "default_significance": 0.6,
         "node_type": "outcome",
         "tags": ["arm", "codegen"],
         "shared_namespaces": ["arm"],

@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-08-01"
+last_verified: "2026-08-02"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -295,6 +295,82 @@ the existing `{data: recommendation}` envelope, then integration-test end-to-end
 - App: `apps/analytics/nodus/reasoning_apply_v1.nd`, `apps/analytics/agents/tools.py`
   (`reasoning.evaluate`), `apps/analytics/services/reasoning/`, the `APP-DEBT-MIGRATED-1`
   Nodus-native reasoning row in `TECH_DEBT.md`.
+
+---
+
+## FR-7 — Memory capture: three defects that make recall recall the wrong things 🔴 net-new
+
+**apps-monolith ref:** found 2026-08-02 while auditing what the system actually remembers.
+Measured on a live corpus of 1,799 memory nodes.
+
+### The symptom
+
+Recall (`get_relevant_memories`, which feeds the Infinity loop) returns eight memories for
+our only real user. All eight:
+
+```
+4.00  Completion finalization failed: Required system event 'execution.completed'...
+3.25  Completion finalization failed: Required system event 'execution.completed'...
+1.50  Completion finalization failed: Required system event 'execution.completed'...
+1.50  Completion finalization failed: Required system event 'execution.completed'...
+      Latency spike detected at 5417.09ms
+      Repeated failures detected (2 recent failures)
+      execution.started from analytics.linkedin.manual
+      execution.started from research
+```
+
+Four copies of one bug (fixed the same day), two feedback-detector counts, and two
+content-free labels. No domain outcome, no decision, nothing a strategy could act on.
+
+### MEM-POLICY-KEY-1 — the validator and the engine disagree on a key name
+
+`validate_memory_policy` **requires** `significance` or `base_score`:
+
+```python
+if policy.get("significance") is None and policy.get("base_score") is None:
+    _fail(...)
+```
+
+`MemoryCaptureEngine._score_significance` **reads** `default_significance`:
+
+```python
+base = float(capture_rule.get("default_significance", 0.4))
+```
+
+So a policy that satisfies the validator has **no effect on the score** — base always
+falls back to 0.4. All five of our domain policies were in this state; every declared
+significance was inert. (`register_memory_significance_rule` is not exported either, so
+the `get_memory_significance_rule` path is unreachable from an app.)
+
+**Ask:** have the engine read `significance`/`base_score` — the keys the validator
+demands — or have the validator demand the key the engine reads. Either is fine; the
+present pair cannot both be satisfied. We have worked around it by declaring both keys.
+
+### MEM-DEDUP-TRACEID-1 — dedup is exact-match, and content embeds a trace id
+
+`_is_duplicate` compares content exactly. The four rows above are 4 rows / **4 distinct
+contents** — identical except for the trace id inside the message. The same recurring
+failure therefore never deduplicates and consumes half the recall budget.
+
+**Ask:** dedup on a normalized form (strip trace/run/correlation ids), or on
+`(event_type, source, node_type)` within a window, rather than raw content equality.
+
+### MEM-FORCE-UNGATED-1 — `force=True` system capture bypasses every policy
+
+`capture_system_event_as_memory` captures 8 event types with `context={"significance": 1.0}`
+and `force=True`, which skips the `min_significance` gate entirely. Three of those types
+(`execution.started/completed/failed`) fire on every pipeline run. Result: **1,076 nodes
+with the identical content `"execution.started from async"`** — 60% of the whole corpus —
+and the owned subset of them reaches recall as content-free labels.
+
+**Ask:** either exclude `execution.started` from `AUTO_MEMORY_EVENT_TYPES` (a "something
+began" record has no recall value), or let a policy gate forced captures too. We cannot
+suppress these app-side: `force=True` is checked before the policy is consulted.
+
+### Not asked for, noted
+
+There is no decay or invalidation: the top-ranked memory is a defect fixed hours earlier
+and still outranks everything. That is a design conversation, not a defect.
 
 ---
 
