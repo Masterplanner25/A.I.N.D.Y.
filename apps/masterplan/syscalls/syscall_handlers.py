@@ -148,6 +148,96 @@ def _trim_transcript(entries: list[dict]) -> list[dict]:
     return entries[-MAX_TRANSCRIPT_ENTRIES_STORED:]
 
 
+MAX_IMPORT_CHARS = 20000
+
+
+def _handle_genesis_import_plan(payload: dict, ctx: SyscallContext) -> dict:
+    """Seed a Genesis session from a plan the user already wrote.
+
+    Imports into the *conversation*, not straight into a locked MasterPlan: the whole
+    reason for accepting free text is so an existing plan can be discussed and refined
+    with Genesis before it is locked. The imported text becomes the first user turn and
+    the extraction summary the first assistant turn, so the session opens mid-dialogue
+    with real context rather than from a blank prompt.
+
+    Reuses the active session when one exists — matching `genesis_session_create`'s
+    idempotency — so importing does not silently orphan work already in progress.
+    """
+    from apps.masterplan.models import GenesisSessionDB
+    from apps.masterplan.services.genesis_ai import call_genesis_import_llm
+
+    content = (payload.get("content") or "").strip()
+    if not content:
+        raise ValueError("sys.v1.genesis.import_plan requires 'content'")
+    if len(content) > MAX_IMPORT_CHARS:
+        raise ValueError(
+            f"Plan is too long to import ({len(content)} chars; limit {MAX_IMPORT_CHARS})."
+        )
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        user_id = UUID(str(ctx.user_id))
+        session = (
+            db.query(GenesisSessionDB)
+            .filter(
+                GenesisSessionDB.user_id == user_id,
+                GenesisSessionDB.status == "active",
+            )
+            .order_by(GenesisSessionDB.id.desc())
+            .first()
+        )
+        resumed = session is not None
+        if session is None:
+            session = GenesisSessionDB(
+                user_id=user_id,
+                synthesis_ready=False,
+                summarized_state={
+                    "vision_summary": None, "time_horizon": None,
+                    "mechanism_summary": None, "assets_summary": None,
+                    "inferred_domains": [], "inferred_phases": [], "confidence": 0.0,
+                },
+            )
+            db.add(session)
+            db.flush()
+
+        llm_output = call_genesis_import_llm(content, user_id=str(user_id), db=db)
+
+        current_state = dict(session.summarized_state or {})
+        for key, value in (llm_output.get("state_update") or {}).items():
+            if key in current_state and value is not None:
+                current_state[key] = value
+        if "confidence" in current_state:
+            current_state["confidence"] = max(0.0, min(current_state["confidence"], 1.0))
+        session.summarized_state = current_state
+
+        reply = llm_output.get("reply", "")
+        transcript = list(session.transcript or [])
+        transcript.append(_transcript_entry("user", content))
+        if reply:
+            transcript.append(_transcript_entry("assistant", reply))
+        session.transcript = _trim_transcript(transcript)
+
+        if llm_output.get("synthesis_ready", False) and not session.synthesis_ready:
+            session.synthesis_ready = True
+        db.commit()
+        db.refresh(session)
+
+        return {
+            "session_id": session.id,
+            "resumed": resumed,
+            "reply": reply,
+            "summarized_state": session.summarized_state,
+            "transcript": session.transcript or [],
+            "synthesis_ready": bool(session.synthesis_ready),
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        if owns_session:
+            db.close()
+
+
 def _handle_genesis_execute_llm(payload: dict, ctx: SyscallContext) -> dict:
     from apps.masterplan.models import GenesisSessionDB
     from apps.masterplan.services.genesis_ai import call_genesis_llm
@@ -379,6 +469,13 @@ def register_masterplan_syscall_handlers() -> None:
         handler=_handle_genesis_execute_llm,
         capability="genesis.execute_llm",
         description="Call Genesis LLM and update session state.",
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.genesis.import_plan",
+        handler=_handle_genesis_import_plan,
+        capability="genesis.execute_llm",
+        description="Seed a Genesis session from a plan the user already wrote, so it can be discussed before locking.",
         stable=False,
     )
     register_syscall(

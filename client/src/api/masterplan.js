@@ -5,6 +5,16 @@ export function startGenesisSession() {
   return authRequest(ROUTES.MASTERPLAN.GENESIS_SESSION, { method: "POST" });
 }
 
+// Seeds a Genesis session from a plan the user already wrote, so it can be discussed
+// before being locked. Route is newer than the ui-kit ROUTES map, so the full /apps
+// path is written directly.
+export function importExistingPlan(content) {
+  return authRequest("/apps/genesis/import", {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
 export function sendGenesisMessage(sessionId, message) {
   return authRequest(ROUTES.MASTERPLAN.GENESIS_MESSAGE, {
     method: "POST",

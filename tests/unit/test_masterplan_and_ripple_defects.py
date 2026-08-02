@@ -210,3 +210,89 @@ def test_no_attribute_access_on_learning_thresholds_anywhere():
     assert not offenders, (
         "attribute access on the dict-shaped learning-thresholds contract: " + str(offenders)
     )
+
+
+# ── #6: the phase gate ────────────────────────────────────────────────────────
+
+projection_service = pytest.importorskip("apps.masterplan.services.projection_service")
+
+
+class _Plan:
+    """The subset of MasterPlan columns evaluate_phase reads."""
+
+    def __init__(self, **overrides):
+        self.start_date = datetime(2026, 1, 1)  # naive, like the real DateTime column
+        self.duration_years = 5
+        self.total_wcu = 0
+        self.wcu_target = 3000
+        self.gross_revenue = 0
+        self.revenue_target = 100000
+        self.books_published = 0
+        self.books_required = 3
+        self.platform_required = True
+        self.platform_live = False
+        self.studio_required = True
+        self.studio_ready = False
+        self.active_playbooks = 0
+        self.playbooks_required = 2
+        for key, value in overrides.items():
+            setattr(self, key, value)
+
+
+_NOTHING_DECLARED = dict(
+    wcu_target=0,
+    revenue_target=0,
+    books_required=0,
+    platform_required=False,
+    studio_required=False,
+    playbooks_required=0,
+)
+
+
+def test_evaluate_phase_does_not_raise_on_a_default_plan():
+    """It used to raise TypeError on every call, and wcu_service swallowed it.
+
+    start_date is a naive column; `now` was aware. The comparison sits on the path taken
+    whenever thresholds are unmet — which was always — so the phase silently never
+    advanced and no error ever surfaced.
+    """
+    assert projection_service.evaluate_phase(_Plan()) == 1
+
+
+def test_a_plan_declaring_no_targets_is_not_blocked_by_them():
+    """Requirements are opt-in: five of them have no writer anywhere in the repo."""
+    assert projection_service.evaluate_phase(_Plan(**_NOTHING_DECLARED)) == 2
+
+
+def test_a_declared_target_genuinely_gates():
+    """total_wcu *is* written (wcu_service), so this dimension is real, not decorative."""
+    gated = dict(_NOTHING_DECLARED, wcu_target=3000)
+    assert projection_service.evaluate_phase(_Plan(**gated)) == 1
+    assert projection_service.evaluate_phase(_Plan(**gated, total_wcu=3500)) == 2
+
+
+def test_boolean_requirements_gate_only_when_required():
+    required = dict(_NOTHING_DECLARED, platform_required=True, platform_live=False)
+    assert projection_service.evaluate_phase(_Plan(**required)) == 1
+    satisfied = dict(required, platform_live=True)
+    assert projection_service.evaluate_phase(_Plan(**satisfied)) == 2
+
+
+def test_the_time_fallback_still_advances_a_finished_plan():
+    assert projection_service.evaluate_phase(_Plan(start_date=datetime(2000, 1, 1))) == 2
+
+
+def test_evaluate_phase_exists_once():
+    """It was triplicated byte-for-byte; only projection_service's was imported.
+
+    Three copies meant fixing the live one left two stale twins that read as correct.
+    """
+    import pathlib
+    import re
+
+    copies = [
+        path
+        for path in pathlib.Path("apps/masterplan").rglob("*.py")
+        if re.search(r"^def evaluate_phase\b", path.read_text(encoding="utf-8"), re.M)
+    ]
+    assert [p.name for p in copies] == ["projection_service.py"]

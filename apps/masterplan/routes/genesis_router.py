@@ -120,6 +120,32 @@ def _genesis_run_flow(flow_name: str, payload: dict, db, user_id: str):
     return _genesis_flow_envelope(result)
 
 
+def _dispatch_genesis_syscall(name: str, payload: dict, *, db: Session, user_id: str) -> dict:
+    """Dispatch a genesis syscall, surfacing handler ValueErrors to the caller."""
+    from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
+
+    ctx = make_syscall_ctx_from_tool(str(user_id), capabilities=["genesis.execute_llm"])
+    ctx.metadata["_db"] = db
+    result = get_dispatcher().dispatch(name, payload, ctx)
+    if result.get("status") != "success":
+        raise ValueError(str(result.get("error") or f"{name} failed"))
+    return result.get("data") or {}
+
+
+def _with_genesis_envelope(payload):
+    """Attach an execution envelope when the handler returned a bare dict."""
+    if isinstance(payload, dict):
+        payload = dict(payload)
+        payload.setdefault(
+            "execution_envelope",
+            to_envelope(
+                eu_id=None, trace_id=None, status="SUCCESS",
+                output=None, error=None, duration_ms=None, attempt_count=1,
+            ),
+        )
+    return payload
+
+
 def _get_owned_session(db: Session, session_id: int, user_id: str) -> GenesisSessionDB | None:
     from apps.masterplan.services.genesis_service import get_owned_session
     return get_owned_session(db, session_id, user_id)
@@ -174,6 +200,60 @@ def create_genesis_session(
 ):
     user_id = str(current_user["sub"])
     return _execute_genesis(request, "genesis.session.create", lambda _ctx: _genesis_run_flow("genesis_session_create", {}, db, user_id), db=db, user_id=user_id)
+
+
+class ImportPlanRequest(BaseModel):
+    content: str
+
+
+@router.post(
+    "/import",
+    summary="Import An Existing Plan",
+    description=(
+        "Seeds a Genesis session from a plan the user already wrote, in whatever form it "
+        "is in. The plan becomes the opening exchange of the conversation so it can be "
+        "discussed and refined before being synthesized and locked."
+    ),
+)
+@limiter.limit("5/minute")
+def import_existing_plan(
+    request: Request,
+    body: ImportPlanRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        # Validation inside the pipeline — see the note on lock_masterplan.
+        content = (body.content or "").strip()
+        if not content:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "content_required", "message": "content is required"},
+            )
+        try:
+            return _dispatch_genesis_syscall(
+                "sys.v1.genesis.import_plan",
+                {"content": content},
+                db=db,
+                user_id=user_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "import_rejected", "message": str(exc)},
+            ) from exc
+
+    result = _execute_genesis(
+        request,
+        "genesis.import",
+        handler,
+        db=db,
+        user_id=user_id,
+        input_payload={"content_length": len(body.content or "")},
+    )
+    return _with_genesis_envelope(result)
 
 
 @router.post(
