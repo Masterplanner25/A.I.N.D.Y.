@@ -4,11 +4,13 @@
 POLICIES = {
     "task_completed": {
         "significance": 0.5,
+        "default_significance": 0.5,
         "node_type": "outcome",
         "tags": ["task", "completion"],
     },
     "task_failed": {
         "significance": 0.8,
+        "default_significance": 0.8,
         "node_type": "outcome",
         "memory_type": "failure",
         "tags": ["task", "failure"],
