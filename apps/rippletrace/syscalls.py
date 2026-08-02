@@ -76,6 +76,39 @@ def _handle_log_ripple_event(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_ripple_performance_signals(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.rippletrace.services.ripple_performance_service import (
+        get_ripple_performance_signals,
+    )
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        signals = get_ripple_performance_signals(
+            db,
+            user_id=payload.get("user_id") or ctx.user_id or None,
+            limit=int(payload.get("limit", 3) or 3),
+        )
+        return {"signals": signals, "count": len(signals)}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_ripple_goal_metric(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.rippletrace.services.ripple_performance_service import get_goal_metric
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return get_goal_metric(
+            db,
+            unit=str(payload.get("unit") or ""),
+            user_id=payload.get("user_id") or ctx.user_id or None,
+        )
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_rippletrace_syscall_handlers() -> None:
     register_syscall(
         name="sys.v1.rippletrace.log_ripple_event",
@@ -89,5 +122,19 @@ def register_rippletrace_syscall_handlers() -> None:
         handler=_handle_rippletrace_list_pings,
         capability="rippletrace.read",
         description="List recent pings for a user.",
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.rippletrace.get_performance_signals",
+        handler=_handle_ripple_performance_signals,
+        capability="rippletrace.read",
+        description="Advisory signals about how published content is travelling (reach beyond your own audience).",
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.rippletrace.get_goal_metric",
+        handler=_handle_ripple_goal_metric,
+        capability="rippletrace.read",
+        description="Cumulative rippletrace counters for MasterPlan goal attainment (playbooks).",
         stable=False,
     )

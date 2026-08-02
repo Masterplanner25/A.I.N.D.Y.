@@ -45,6 +45,7 @@ class SupportState:
     support_metrics: dict = field(default_factory=dict)
     search_signals: list = field(default_factory=list)
     freelance_signals: list = field(default_factory=list)
+    ripple_signals: list = field(default_factory=list)
 
     @property
     def loop_context(self) -> dict[str, Any]:
@@ -60,6 +61,7 @@ class SupportState:
             "social_signals": self.social_signals,
             "search_signals": self.search_signals,
             "freelance_signals": self.freelance_signals,
+            "ripple_signals": self.ripple_signals,
             "support_metrics": self.support_metrics,
         }
 
@@ -76,6 +78,7 @@ class SupportState:
             "social_signal_count": len(self.social_signals or []),
             "search_signal_count": len(self.search_signals or []),
             "freelance_signal_count": len(self.freelance_signals or []),
+            "ripple_signal_count": len(self.ripple_signals or []),
             "has_metrics": self.metrics is not None,
             "platform_health_status": (
                 (self.support_metrics or {}).get("observability") or {}
@@ -134,6 +137,14 @@ def gather_support_state(db, user_id, trigger_event) -> SupportState:
         freelance_signals = []
 
     try:
+        ripple_signals = dependency_adapter.fetch_ripple_performance_signals(
+            user_id=str(user_id), db=db
+        )
+    except Exception as exc:
+        logger.warning("[SupportState] ripple signal lookup failed for %s: %s", user_id, exc)
+        ripple_signals = []
+
+    try:
         support_metrics = dependency_adapter.fetch_observability_support_metrics(
             user_id=str(user_id), db=db
         )
@@ -153,4 +164,5 @@ def gather_support_state(db, user_id, trigger_event) -> SupportState:
         support_metrics=support_metrics,
         search_signals=search_signals,
         freelance_signals=freelance_signals,
+        ripple_signals=ripple_signals,
     )

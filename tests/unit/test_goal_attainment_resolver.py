@@ -137,16 +137,53 @@ def test_attainment_is_clamped_but_raw_ratio_is_preserved(
 
 
 def test_supported_units_reports_what_resolves_today():
-    # Phase 1 adds usd (freelance) and the social counters. `books`/`playbooks` remain
-    # aliased but unresolvable — no domain can answer them yet.
-    assert ga.supported_units() == ["clicks", "impressions", "posts", "tasks", "usd"]
+    # Phase 1 added usd (freelance) and the social counters. `playbooks` joined once
+    # rippletrace gained a data supply and a get_goal_metric syscall — before that the
+    # unit was aliased but had nothing behind it. `books` is still unresolvable:
+    # authorship has only AuthorDB, with no publication concept to count.
+    assert ga.supported_units() == [
+        "clicks",
+        "impressions",
+        "playbooks",
+        "posts",
+        "tasks",
+        "usd",
+    ]
 
 
-@pytest.mark.parametrize("unit", ["books", "playbooks"])
+@pytest.mark.parametrize("unit", ["books"])
 def test_units_without_a_domain_stay_unsupported(unit):
+    """A unit nothing can answer reports *why*, so the caller can fall back cleanly."""
     result = _resolve(goal_unit=unit)
     assert result["supported"] is False
     assert result["reason"] == "unsupported_unit"
+
+
+def test_playbooks_resolves_through_rippletrace(monkeypatch):
+    monkeypatch.setitem(ga._RESOLVERS, "playbooks", lambda *_a, **_k: 3.0)
+    result = _resolve(goal_unit="playbooks", goal_value=4)
+
+    assert result["supported"] is True
+    assert result["unit"] == "playbooks"
+    assert result["value"] == 3.0
+    assert result["attainment_pct"] == pytest.approx(0.75)
+
+
+def test_playbooks_degrades_to_no_value_rather_than_zero():
+    """A registered unit whose domain cannot answer is *unresolved*, not zero attainment.
+
+    This is the live path in a bare unit-test database, where the `playbooks` table does
+    not exist: rippletrace catches the error, reports `supported: False`, and the
+    resolver turns that into `no_value`. Scoring against a phantom 0 would be worse than
+    not scoring — it would read as "you have built no playbooks" when the truth is "we
+    could not find out".
+    """
+    result = _resolve(goal_unit="playbooks", goal_value=4)
+
+    assert result["supported"] is False
+    assert result["reason"] == "no_value"
+    assert result["value"] is None
+    assert result["attainment_pct"] is None
 
 
 # ── the tasks resolver ────────────────────────────────────────────────────────

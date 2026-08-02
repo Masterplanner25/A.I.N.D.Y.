@@ -40,6 +40,7 @@ def _set_happy_fetchers(monkeypatch):
     monkeypatch.setattr(adapter, "fetch_social_performance_signals", lambda **k: [{"type": "success"}])
     monkeypatch.setattr(adapter, "fetch_search_performance_signals", lambda **k: [{"type": "success"}])
     monkeypatch.setattr(adapter, "fetch_freelance_performance_signals", lambda **k: [{"type": "success"}])
+    monkeypatch.setattr(adapter, "fetch_ripple_performance_signals", lambda **k: [{"type": "success"}])
     monkeypatch.setattr(adapter, "fetch_observability_support_metrics", lambda **k: dict(_SUPPORT_METRICS))
     monkeypatch.setattr(ss, "get_job", lambda name: (lambda db, uid, system_state=None: [{"id": "g1"}]))
 
@@ -58,6 +59,7 @@ def test_gather_support_state_assembles_snapshot(monkeypatch):
     assert state.social_signals == [{"type": "success"}]
     assert state.search_signals == [{"type": "success"}]
     assert state.freelance_signals == [{"type": "success"}]
+    assert state.ripple_signals == [{"type": "success"}]
     assert state.support_metrics == _SUPPORT_METRICS
 
 
@@ -67,7 +69,7 @@ def test_loop_context_shape_matches_orchestrator_contract(monkeypatch):
     assert set(lc) == {
         "user_id", "memory", "metrics", "memory_signals",
         "system_state", "goals", "task_graph", "social_signals", "support_metrics",
-        "search_signals", "freelance_signals",
+        "search_signals", "freelance_signals", "ripple_signals",
     }
     assert lc["user_id"] == "u1"
     assert lc["goals"] == [{"id": "g1"}]
@@ -85,6 +87,7 @@ def test_summary_counts(monkeypatch):
     assert summary["social_signal_count"] == 1
     assert summary["search_signal_count"] == 1
     assert summary["freelance_signal_count"] == 1
+    assert summary["ripple_signal_count"] == 1
     assert summary["health_status"] == "healthy"
     assert summary["has_metrics"] is True
     assert summary["platform_health_status"] == "degraded"
@@ -115,6 +118,28 @@ def test_optional_inputs_fall_back_to_defaults(monkeypatch):
     assert state.summary()["platform_health_status"] is None
     assert state.summary()["infinity_event_total"] is None
     assert state.loop_context["support_metrics"] == {}
+
+
+def test_ripple_signal_failure_does_not_break_the_loop(monkeypatch):
+    """RippleTrace is a degradable peripheral; a dead feeder must not stop an Infinity run.
+
+    Asserted separately from the other optional inputs because rippletrace is the only
+    feeder that reaches Postgres inside the syscall, so it has more ways to fail than the
+    Mongo-backed and HTTP-backed ones.
+    """
+    _set_happy_fetchers(monkeypatch)
+
+    def _boom(**kwargs):
+        raise RuntimeError("rippletrace down")
+
+    monkeypatch.setattr(adapter, "fetch_ripple_performance_signals", _boom)
+    state = ss.gather_support_state(object(), "u1", "manual")
+
+    assert state.ripple_signals == []
+    assert state.summary()["ripple_signal_count"] == 0
+    # Everything else still assembled.
+    assert state.social_signals == [{"type": "success"}]
+    assert state.goals == [{"id": "g1"}]
 
 
 def test_goal_ranking_failure_defaults_to_empty(monkeypatch):
