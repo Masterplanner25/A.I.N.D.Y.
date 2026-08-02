@@ -28,6 +28,20 @@ router = APIRouter(prefix="/freelance", tags=["Freelance"])
 logger = logging.getLogger(__name__)
 
 
+def _require_idempotency_key(key: str | None) -> str:
+    """Reject a mutating request that carries no Idempotency-Key.
+
+    **Call this from inside the pipeline handler, never above it.** The runtime's route
+    guard cannot distinguish a deliberate HTTPException from a route that bypassed the
+    pipeline, so anything raised before pipeline entry is re-raised as
+    RouteExecutionViolation — the client receives an opaque 500 rather than being told
+    the header is missing. Every one of these checks used to sit above the handler.
+    """
+    if not key:
+        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
+    return key
+
+
 def _trigger_delivery_confirmation_hooks(
     db: Session,
     *,
@@ -286,9 +300,8 @@ def create_freelance_order(
 ):
     user_id = str(current_user["sub"])
     idempotency_key = request.headers.get("Idempotency-Key")
-    if not idempotency_key:
-        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
     def handler(_ctx):
+        _require_idempotency_key(idempotency_key)
         return _do_create_freelance_order(db, order, user_id, idempotency_key)
     result = _execute_freelance(
         request,
@@ -529,9 +542,8 @@ def intake_from_lead(
 ):
     user_id = str(current_user["sub"])
     idempotency_key = request.headers.get("Idempotency-Key")
-    if not idempotency_key:
-        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
     def handler(_ctx):
+        _require_idempotency_key(idempotency_key)
         return _do_intake_from_lead(db, intake, user_id, idempotency_key)
     return _execute_freelance(
         request,
@@ -574,10 +586,9 @@ def intake_from_action(
     """Convert a Search-actioned lead into a client + order (completes lead -> order)."""
     user_id = str(current_user["sub"])
     idempotency_key = request.headers.get("Idempotency-Key")
-    if not idempotency_key:
-        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
 
     def handler(_ctx):
+        _require_idempotency_key(idempotency_key)
         from apps.freelance.services import intake_service
         try:
             result = intake_service.convert_actioned_lead(
@@ -635,10 +646,9 @@ def onboard_client(
     then dispatch delivery generation when requested — one multi-step, observable flow."""
     user_id = str(current_user["sub"])
     idempotency_key = request.headers.get("Idempotency-Key")
-    if not idempotency_key:
-        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
 
     def handler(_ctx):
+        _require_idempotency_key(idempotency_key)
         return _do_onboard_client(db, intake, user_id, idempotency_key)
 
     return _execute_freelance(
@@ -757,10 +767,9 @@ def refund_order(
     user_id = str(current_user["sub"])
     reason = body.reason if body else None
     idempotency_key = request.headers.get("Idempotency-Key")
-    if not idempotency_key:
-        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
 
     def handler(_ctx):
+        _require_idempotency_key(idempotency_key)
         return _do_issue_refund(db, order_id, reason, user_id, idempotency_key)
 
     result = _execute_freelance(
@@ -826,20 +835,35 @@ async def stripe_webhook(
     payload_bytes = await request.body()
 
     webhook_secret = settings.STRIPE_WEBHOOK_SECRET
-    if webhook_secret:
-        if not stripe_signature:
-            raise HTTPException(status_code=400, detail="stripe-signature header missing")
-        if not verify_stripe_signature(payload_bytes, stripe_signature, webhook_secret):
-            raise HTTPException(status_code=400, detail="stripe-signature verification failed")
 
+    # Best-effort peek, for the pipeline's input_payload only. The authoritative parse —
+    # and the 400 it can raise — happens inside the handler, so a malformed body is
+    # rejected with a reason rather than blowing up before the pipeline exists.
     try:
-        event = _json.loads(payload_bytes)
+        _preview = _json.loads(payload_bytes)
     except Exception:
-        raise HTTPException(status_code=400, detail="invalid JSON body")
+        _preview = {}
+    event_type = str((_preview or {}).get("type") or "")
+    stripe_event_id = str((_preview or {}).get("id") or "")
 
-    event_type = str(event.get("type") or "")
-    stripe_event_id = str(event.get("id") or "")
     def handler(ctx):
+        # Signature and body checks run inside the pipeline. Raised above it they were
+        # rewritten as RouteExecutionViolation, so Stripe saw a 500 for a rejected
+        # signature — which reads as "retry me" rather than "this delivery is invalid",
+        # and 500s are exactly what Stripe retries.
+        if webhook_secret:
+            if not stripe_signature:
+                raise HTTPException(status_code=400, detail="stripe-signature header missing")
+            if not verify_stripe_signature(payload_bytes, stripe_signature, webhook_secret):
+                raise HTTPException(
+                    status_code=400, detail="stripe-signature verification failed"
+                )
+
+        try:
+            event = _json.loads(payload_bytes)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid JSON body")
+
         if not stripe_event_id:
             return {"received": True, "processed": False}
 
