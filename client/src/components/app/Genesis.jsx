@@ -5,6 +5,7 @@ import {
   synthesizeGenesisDraft,
   lockMasterPlan,
   getGenesisSession,
+  importExistingPlan,
 } from "../../api/masterplan.js";
 import { Toast } from "../shared/Toast";
 import { safeMap } from "../../utils/safe";
@@ -78,6 +79,8 @@ export default function Genesis() {
   const [draft, setDraft] = useState(null);
   const [locking, setLocking] = useState(false);
   const [lockedPlan, setLockedPlan] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importText, setImportText] = useState("");
   const { toast, showToast, clearToast } = useToast();
 
   const bottomRef = useRef(null);
@@ -110,6 +113,28 @@ export default function Genesis() {
       mounted = false;
     };
   }, []);
+
+  // Import lands the user *in the conversation*, not on a finished plan: the whole point
+  // of accepting free text is that an existing plan can be discussed before it is locked.
+  const importPlan = async () => {
+    setLoading(true);
+    try {
+      const data = await importExistingPlan(importText.trim());
+      setSessionId(data.session_id);
+      writeStoredSessionId(data.session_id);
+      setSynthesisReady(Boolean(data.synthesis_ready));
+      setStarted(true);
+      setImporting(false);
+      setImportText("");
+      setMessages(restoreMessages(data));
+    } catch (err) {
+      showToast(
+        err?.data?.detail?.message || err?.message || "Could not read that plan."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const startGenesis = async () => {
     setLoading(true);
@@ -242,6 +267,46 @@ export default function Genesis() {
 
               {resuming ? "RESTORING SESSION..." : loading ? "ESTABLISHING LINK..." : "INITIALIZE"}
             </button>
+
+            <div className="pt-2">
+              {!importing ?
+              <button
+                type="button"
+                onClick={() => setImporting(true)}
+                disabled={loading || resuming}
+                className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-4 disabled:opacity-40">
+                  Already have a plan written? Import it
+                </button> :
+              <div className="space-y-3 text-left">
+                  <p className="text-xs text-zinc-500">
+                    Paste it in whatever form it is in. A.I.N.D.Y. will read it, tell you what it
+                    took from it and what is still missing, and you carry on from there.
+                  </p>
+                  <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  rows={8}
+                  placeholder="Paste your existing plan..."
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600" />
+
+                  <div className="flex gap-2">
+                    <button
+                    type="button"
+                    onClick={importPlan}
+                    disabled={loading || !importText.trim()}
+                    className="px-4 py-2 bg-white text-black text-sm font-bold rounded-lg hover:bg-[#00ffaa] transition-colors disabled:opacity-40">
+                      {loading ? "READING..." : "IMPORT"}
+                    </button>
+                    <button
+                    type="button"
+                    onClick={() => { setImporting(false); setImportText(""); }}
+                    className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
           </div> :
 
         <>

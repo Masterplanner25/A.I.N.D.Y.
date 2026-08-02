@@ -193,3 +193,50 @@ def test_genesis_endpoints_raise_http_errors_inside_the_pipeline_handler():
         f"{offenders} — the route guard will rewrite these as opaque 500s. "
         "Move the check inside the handler closure passed to _execute_genesis."
     )
+
+
+# ── importing an existing plan (defect #7) ────────────────────────────────────
+
+
+def test_import_prompt_extracts_rather_than_authors():
+    """Import must not invent a mechanism the source text does not contain.
+
+    The point of importing free text is to *discuss* it — an invented gap looks like
+    agreement and the user never gets asked about the thing that is actually missing.
+    """
+    prompt = genesis_ai.IMPORT_SYSTEM_PROMPT.lower()
+    assert "extraction, not authorship" in prompt
+    assert "do not invent" in prompt
+    # Must report the gap back, so the conversation has somewhere to start.
+    assert "missing or unclear" in prompt
+    # Same readiness bar as an ordinary turn, so import cannot shortcut the gate.
+    assert "0.6" in prompt
+
+
+def test_import_is_length_capped():
+    assert handlers.MAX_IMPORT_CHARS > 0
+
+
+def test_import_llm_failure_still_yields_a_usable_session(monkeypatch):
+    """Unparseable extraction must degrade to a valid structure, not raise.
+
+    An import that extracts nothing should still leave the user holding a session that
+    contains their text, so the conversation can recover what the parse could not.
+    """
+    class _Message:
+        content = "this is not json"
+
+    class _Choice:
+        message = _Message()
+
+    class _Response:
+        choices = [_Choice()]
+
+    monkeypatch.setattr(
+        genesis_ai, "perform_external_call", lambda **kwargs: _Response()
+    )
+    result = genesis_ai.call_genesis_import_llm("my plan", user_id="u-1", db=None)
+
+    assert result["synthesis_ready"] is False
+    assert result["state_update"] == {}
+    assert result["reply"]

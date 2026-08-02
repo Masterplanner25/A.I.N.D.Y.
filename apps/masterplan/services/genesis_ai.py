@@ -273,6 +273,85 @@ def call_genesis_llm(
     return llm_output
 
 
+IMPORT_SYSTEM_PROMPT = """
+You are A.I.N.D.Y., reading a long-term plan the user has already written elsewhere.
+
+Your job is extraction, not authorship. Pull out what the document actually says and
+leave the rest empty. Do not invent a mechanism, a horizon or an ambition the text does
+not support — an honest gap is what the follow-up conversation is for.
+
+Return a short `reply` (2-5 lines, calm, no hype, no emojis) that tells the user what you
+took from their plan and names the most important thing that is missing or unclear, so
+they know where to pick up.
+
+Set "synthesis_ready": true only if vision_summary, time_horizon and mechanism_summary
+are all present and coherent in the source text, and confidence is at least 0.6.
+
+You MUST return valid JSON in this exact format:
+
+{
+  "reply": "...",
+  "state_update": {
+    "vision_summary": null,
+    "time_horizon": null,
+    "mechanism_summary": null,
+    "assets_summary": null,
+    "inferred_domains": [],
+    "inferred_phases": [],
+    "confidence": 0.0
+  },
+  "synthesis_ready": false
+}
+"""
+
+
+def call_genesis_import_llm(content: str, user_id: str = None, db=None) -> dict:
+    """Structure a plan the user already wrote into Genesis's session state.
+
+    Deliberately produces *session state*, not a finished MasterPlan draft. The point of
+    importing is to keep talking — the user asked for this so an existing plan could be
+    discussed with Genesis rather than dropped straight into a locked plan — so the
+    result seeds a session and the normal conversation → synthesize → lock path takes
+    over from there.
+
+    Failure returns an empty-but-valid structure rather than raising: an import that
+    extracts nothing still leaves the user with a usable session containing their text.
+    """
+    response = perform_external_call(
+        service_name="openai",
+        db=db,
+        user_id=user_id,
+        endpoint="chat.completions.create",
+        model=MODEL,
+        method="openai.chat",
+        extra={"purpose": "genesis_import"},
+        operation=lambda: chat_completion(
+            get_openai_client(),
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": IMPORT_SYSTEM_PROMPT},
+                {"role": "user", "content": content},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
+        ),
+    )
+
+    try:
+        return json.loads(response.choices[0].message.content)
+    except Exception:
+        logger.warning("[Genesis] import extraction returned unparseable JSON")
+        return {
+            "reply": (
+                "I have saved your plan but could not extract structure from it. "
+                "Tell me the outcome you are aiming at and how you intend to get there."
+            ),
+            "state_update": {},
+            "synthesis_ready": False,
+        }
+
+
 SYNTHESIS_SYSTEM_PROMPT = """
 You are A.I.N.D.Y., a strategic synthesis engine. Given a structured session state, produce a
 complete, actionable MasterPlan draft.

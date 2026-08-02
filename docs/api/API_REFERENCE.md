@@ -1,6 +1,6 @@
 ---
 title: "App HTTP REST API Reference"
-last_verified: "2026-08-01"
+last_verified: "2026-08-02"
 api_version: "1.0"
 status: current
 owner: "apps-team"
@@ -735,6 +735,16 @@ Audit Genesis Draft
 Get Genesis Draft
 
 **Parameters:** session_id (path): integer
+
+**Response 200:** unspecified
+
+#### POST /apps/genesis/import
+Import An Existing Plan — seeds a Genesis session from a plan the user already wrote, in
+whatever form it is in. The plan becomes the opening exchange of the conversation so it
+can be discussed and refined before being synthesized and locked; it does not create a
+MasterPlan directly. Reuses the active session when one exists.
+
+**Body:** content: string (required)
 
 **Response 200:** unspecified
 
