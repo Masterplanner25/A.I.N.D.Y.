@@ -101,8 +101,22 @@ jobs:
               'site-packages' in path.lower() or 'dist-packages' in path.lower()
               for path in paths
           ), paths
-          assert runtime_version.startswith('1.'), runtime_version
-          print({'aindy_paths': paths, 'aindy_runtime_version': runtime_version})
+          # Derived from the pin, not hardcoded: a hardcoded major has to be found and
+          # changed on every runtime major bump, and it was the one place missed when
+          # moving 1.x -> 2.0.0.
+          from packaging.requirements import Requirement
+          try:
+              import tomllib
+          except ModuleNotFoundError:
+              import tomli as tomllib
+          with open('pyproject.toml', 'rb') as fh:
+              deps = tomllib.load(fh)['project']['dependencies']
+          pinned = next(Requirement(d) for d in deps if Requirement(d).name == 'aindy-runtime')
+          assert pinned.specifier.contains(runtime_version), (
+              f'installed {runtime_version} does not satisfy the pin {pinned.specifier}'
+          )
+          print({'aindy_paths': paths, 'aindy_runtime_version': runtime_version,
+                 'pin': str(pinned.specifier)})
           PY
 
       - name: Smoke app-profile version surface
