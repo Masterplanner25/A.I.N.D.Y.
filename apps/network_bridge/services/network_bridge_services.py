@@ -1,9 +1,13 @@
 # /services/network_bridge_services.py
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+import logging
 import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy.orm import Session
 
 from AINDY.kernel.syscall_dispatcher import dispatch_syscall
+
+logger = logging.getLogger(__name__)
 
 def register_author(db: Session, name: str, platform: str, notes: str | None = None, user_id: str | uuid.UUID | None = None):
     """
@@ -77,6 +81,62 @@ def connect_external_author(
         "platform": platform,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+SIGN_IN_PLATFORM = "AINDY"
+
+
+def handle_sign_in(context: dict):
+    """Record a sign-in: seed the author, log the ripple, count the event.
+
+    Runs on the runtime's ``auth.login.completed`` event. Three things come out of one
+    sign-in, which is what this domain was always for:
+
+    * **an author row** — the person entering the system, so ``authorship`` has a
+      registry with something in it rather than a table that has never held a row
+    * **a rippletrace ping** — a system-generated signal alongside the content echoes,
+      giving that domain a second, non-content supply
+    * **an analytics counter** (``UserEvent::AINDY``) — the countable "how many times
+      has this person actually used the app", which nothing produced before
+
+    **Owns its own session.** The internal event dispatcher passes only
+    ``{event_id, event_type, payload, user_id, trace_id, source}`` — there is no ``db``
+    on the event, unlike the registry-bus handlers that receive one. Reading
+    ``context["db"]`` here silently no-ops.
+
+    Best-effort by contract: a sign-in must never fail because a downstream domain is
+    degraded. Everything is swallowed — the user is already authenticated by the time
+    this runs, so raising here would break login for a bookkeeping write.
+    """
+    from AINDY.db.database import SessionLocal
+
+    user_id = context.get("user_id")
+    if not user_id:
+        logger.debug("[network_bridge] sign-in event without user_id; skipping")
+        return None
+
+    payload = context.get("payload") or {}
+    email = str(payload.get("email") or "").strip()
+    # The email is the only identifying field on the login event; fall back to the id so
+    # an author row is still created if it is ever absent.
+    name = email or f"user:{user_id}"
+
+    db = SessionLocal()
+    try:
+        return connect_external_author(
+            db,
+            author_name=name,
+            platform=SIGN_IN_PLATFORM,
+            connection_type="sign_in",
+            notes="Signed in",
+            user_id=user_id,
+        )
+    except Exception as exc:
+        db.rollback()
+        logger.warning("[network_bridge] sign-in capture failed for %s: %s", user_id, exc)
+        return None
+    finally:
+        db.close()
 
 
 def list_authors(db: Session, platform: str | None = None, limit: int = 100):
