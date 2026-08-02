@@ -124,3 +124,72 @@ def test_prompt_asks_for_partner_behaviour_not_form_filling():
     assert "push back" in prompt
     # The distinguishing instruction: probe the weak part, not the next empty field.
     assert "rather than the next empty field" in prompt
+
+
+# ── validation must run inside the pipeline (defect #3) ───────────────────────
+
+
+def _endpoint_functions(tree):
+    """Top-level functions carrying an @router.<verb> decorator."""
+    import ast
+
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for dec in node.decorator_list:
+            call = dec.func if isinstance(dec, ast.Call) else dec
+            if (
+                isinstance(call, ast.Attribute)
+                and isinstance(call.value, ast.Name)
+                and call.value.id == "router"
+                and call.attr in {"get", "post", "put", "patch", "delete"}
+            ):
+                yield node
+                break
+
+
+def test_genesis_endpoints_raise_http_errors_inside_the_pipeline_handler():
+    """A 4xx raised before pipeline entry reaches the caller as an opaque 500.
+
+    The runtime's route guard wraps every managed endpoint and cannot tell a deliberate
+    HTTPException from a route that bypassed the pipeline, so it re-raises anything
+    thrown before `request.state.execution_context` exists as RouteExecutionViolation.
+    Every validation error in this router used to be raised at endpoint top level, which
+    is why `POST /genesis/lock` failures were undiagnosable — verified live before the
+    fix: session_id_required, session_not_found and synthesis_not_ready all returned
+    `{"error": "internal_error"}` with status 500.
+
+    This is a structural assertion because the failure is structural: the code reads
+    correctly and only misbehaves through the wrapper.
+    """
+    import ast
+    import pathlib
+
+    source = pathlib.Path("apps/masterplan/routes/genesis_router.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+
+    offenders: list[str] = []
+    for func in _endpoint_functions(tree):
+        # Walk only the endpoint's own body, not nested defs — the nested `handler`
+        # closure is exactly where these raises belong.
+        nested = {
+            n
+            for child in ast.walk(func)
+            if isinstance(child, ast.FunctionDef) and child is not func
+            for n in ast.walk(child)
+        }
+        for node in ast.walk(func):
+            if node in nested or not isinstance(node, ast.Raise):
+                continue
+            exc = node.exc
+            name = exc.func if isinstance(exc, ast.Call) else exc
+            if isinstance(name, ast.Name) and name.id == "HTTPException":
+                offenders.append(f"{func.name}:{node.lineno}")
+
+    assert not offenders, (
+        "HTTPException raised outside the pipeline handler in "
+        f"{offenders} — the route guard will rewrite these as opaque 500s. "
+        "Move the check inside the handler closure passed to _execute_genesis."
+    )

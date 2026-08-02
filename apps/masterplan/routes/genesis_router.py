@@ -206,18 +206,29 @@ def genesis_message(
     session_id = payload.get("session_id")
     user_message = payload.get("message")
 
-    if not session_id:
-        raise HTTPException(status_code=400, detail={"error": "session_id_required", "message": "session_id is required"})
-    if not user_message:
-        raise HTTPException(status_code=400, detail={"error": "message_required", "message": "message is required"})
-
-    session = _get_owned_session(db, session_id, user_id)
-    if not session:
-        raise HTTPException(status_code=404, detail={"error": "session_not_found", "message": "Genesis session not found"})
-    existing_ready = bool(session.synthesis_ready)
-
     # Compatibility note: the genesis_message flow ultimately calls call_genesis_llm(user_id=str(user_id), db=db).
     def handler(_ctx):
+        # Validation inside the pipeline — see the note on lock_masterplan. Raised
+        # before pipeline entry these 4xx responses reach the caller as opaque 500s.
+        if not session_id:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "session_id_required", "message": "session_id is required"},
+            )
+        if not user_message:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "message_required", "message": "message is required"},
+            )
+
+        session = _get_owned_session(db, session_id, user_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "session_not_found", "message": "Genesis session not found"},
+            )
+        existing_ready = bool(session.synthesis_ready)
+
         result = run_flow("genesis_message", {"session_id": session_id, "message": user_message}, db=db, user_id=user_id)
         if result.get("status") != "SUCCESS":
             error = _extract_flow_error(result)
@@ -317,19 +328,26 @@ def synthesize_genesis(
     except Exception as _obs_exc:
         logger.warning("[genesis] observability start emit failed: %s", _obs_exc)
 
-    if not session_id:
-        raise HTTPException(status_code=400, detail={"error": "session_id_required", "message": "session_id required"})
-
-    session = _get_owned_session(db, session_id, user_id)
-    if not session:
-        raise HTTPException(status_code=404, detail={"error": "session_not_found", "message": "Genesis session not found"})
-    if not session.synthesis_ready:
-        raise HTTPException(
-            status_code=422,
-            detail={"error": "synthesis_not_ready", "message": "Session is not synthesis-ready"},
-        )
-
     def handler(_ctx):
+        # Validation inside the pipeline — see the note on lock_masterplan.
+        if not session_id:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "session_id_required", "message": "session_id required"},
+            )
+
+        session = _get_owned_session(db, session_id, user_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "session_not_found", "message": "Genesis session not found"},
+            )
+        if not session.synthesis_ready:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "synthesis_not_ready", "message": "Session is not synthesis-ready"},
+            )
+
         try:
             result = _genesis_run_flow("genesis_synthesize", {"session_id": session_id}, db, user_id)
         except HTTPException:
@@ -377,18 +395,21 @@ def audit_genesis_draft(
 ):
     """Run a strategic integrity audit on the persisted draft for a genesis session."""
     user_id = str(current_user["sub"])
-    session = _get_owned_session(db, body.session_id, user_id)
-    if not session:
-        raise HTTPException(
-            status_code=422,
-            detail={"error": "draft_not_available", "message": "No draft_json available for audit"},
-        )
-    if not session.draft_json:
-        raise HTTPException(
-            status_code=422,
-            detail={"error": "draft_not_available", "message": "No draft_json available for audit"},
-        )
+
     def _audit_handler(_ctx):
+        # Validation inside the pipeline — see the note on lock_masterplan.
+        session = _get_owned_session(db, body.session_id, user_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "session_not_found", "message": "Genesis session not found"},
+            )
+        if not session.draft_json:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "draft_not_available", "message": "No draft_json available for audit"},
+            )
+
         audit_result = validate_draft_integrity(session.draft_json, user_id=user_id, db=db)
         if not isinstance(audit_result, dict):
             audit_result = {"result": audit_result}
@@ -427,17 +448,60 @@ def lock_masterplan(
     except Exception as _obs_exc:
         logger.warning("[genesis] observability start emit failed: %s", _obs_exc)
 
-    if not session_id or not draft:
-        raise HTTPException(status_code=400, detail={"error": "missing_session_or_draft", "message": "Missing session or draft"})
+    def handler(_ctx):
+        # Everything below runs INSIDE the pipeline. Raised outside it, even a
+        # deliberate HTTPException is caught by the runtime's route guard — which
+        # cannot distinguish "this route validated its input" from "this route
+        # bypassed the pipeline" — and is re-raised as RouteExecutionViolation, so the
+        # caller receives an opaque 500 instead of the reason. The whole of this
+        # endpoint's work used to sit out here, which is why every lock failure was
+        # undiagnosable.
+        if not session_id:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "session_id_required", "message": "session_id is required"},
+            )
 
-    try:
-        _get_user_session(db, session_id, user_id)
-        plan = create_masterplan_from_genesis(
-            session_id=session_id,
-            draft=draft,
-            db=db,
-            user_id=user_id,
-        )
+        session = _get_user_session(db, session_id, user_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "session_not_found", "message": "Genesis session not found"},
+            )
+
+        # `draft` is optional. /genesis/synthesize persists the draft on the session,
+        # and create_masterplan_from_genesis reads `session.draft_json or draft` —
+        # preferring the stored one. Demanding a body draft contradicted the service
+        # and made the normal synthesize→lock path impossible to complete.
+        effective_draft = draft or getattr(session, "draft_json", None)
+        if not effective_draft:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "no_draft_available",
+                    "message": "No synthesized draft for this session — run /genesis/synthesize first.",
+                },
+            )
+
+        try:
+            plan = create_masterplan_from_genesis(
+                session_id=session_id,
+                draft=effective_draft,
+                db=db,
+                user_id=user_id,
+            )
+        except HTTPException:
+            raise
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            message = str(exc)
+            if "not found" in message.lower():
+                raise HTTPException(status_code=422, detail=message) from exc
+            if "already locked" in message.lower():
+                raise HTTPException(status_code=409, detail=message) from exc
+            raise
+
         try:
             from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
@@ -451,7 +515,18 @@ def lock_masterplan(
             )
         except Exception as exc:
             logger.warning("Genesis lock memory capture failed: %s", exc)
-        result = {
+
+        try:
+            emit_observability_event(
+                event_type=SystemEventTypes.GENESIS_LOCKED,
+                user_id=user_id,
+                payload={"operation": "lock", "session_id": session_id, "status": "complete"},
+                source="genesis",
+            )
+        except Exception as _obs_exc:
+            logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
+
+        return {
             "plan_id": plan.id,
             "status": getattr(plan, "status", "locked"),
             "posture": getattr(plan, "posture", None),
@@ -461,8 +536,17 @@ def lock_masterplan(
                 output=None, error=None, duration_ms=None, attempt_count=1,
             ),
         }
+
+    try:
+        return _execute_genesis(
+            request,
+            "genesis.lock",
+            handler,
+            db=db,
+            user_id=user_id,
+            input_payload={"session_id": session_id},
+        )
     except HTTPException:
-        # TERMINAL — failure
         try:
             emit_observability_event(
                 event_type=SystemEventTypes.GENESIS_LOCK_FAILED,
@@ -473,28 +557,6 @@ def lock_masterplan(
         except Exception as _obs_exc:
             logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
         raise
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception as exc:
-        message = str(exc)
-        if "not found" in message.lower():
-            raise HTTPException(status_code=422, detail=message) from exc
-        if "already locked" in message.lower():
-            raise HTTPException(status_code=409, detail=message) from exc
-        raise HTTPException(status_code=500, detail=message) from exc
-
-    # TERMINAL — success
-    try:
-        emit_observability_event(
-            event_type=SystemEventTypes.GENESIS_LOCKED,
-            user_id=user_id,
-            payload={"operation": "lock", "session_id": session_id, "status": "complete"},
-            source="genesis",
-        )
-    except Exception as _obs_exc:
-        logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
-
-    return _execute_genesis(request, "genesis.lock", lambda _ctx: result, db=db, user_id=user_id, input_payload={"session_id": session_id})
 
 
 @router.post(
