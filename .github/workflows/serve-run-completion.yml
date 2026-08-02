@@ -179,9 +179,14 @@ jobs:
 
           python - <<'PY'
           import urllib.request, json
+          # Derived from the bootstrap map so adding/removing a domain cannot leave a
+          # stale literal behind in CI.
+          from apps.bootstrap import APP_BOOTSTRAP_MODULES
+          expected = len(APP_BOOTSTRAP_MODULES)
           r = json.load(urllib.request.urlopen("http://127.0.0.1:8000/api/version", timeout=10)).get("runtime", {})
-          print("boot_profile", r.get("boot_profile"), "apps", r.get("app_plugin_count"))
-          assert r.get("app_plugins_loaded") and r.get("app_plugin_count") == 17, "app profile not loaded"
+          print("boot_profile", r.get("boot_profile"), "apps", r.get("app_plugin_count"), "expected", expected)
+          assert r.get("app_plugins_loaded"), "app plugins not loaded"
+          assert r.get("app_plugin_count") == expected, f"expected {expected} apps, got {r.get('app_plugin_count')}"
           PY
 
           python - <<'PY'

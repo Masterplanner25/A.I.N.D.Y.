@@ -5,7 +5,7 @@
 # pinned PyPI dependency (see pyproject.toml: aindy-runtime>=1.7.0,<2.0) and adds the
 # app-profile deployment inputs this repo owns: the plugin manifest (aindy_plugins.json),
 # the app bootstrap package (apps/), and the app-owned Alembic tree. At startup the runtime
-# discovers ./aindy_plugins.json -> apps.bootstrap, which registers the 17 domain apps into
+# discovers ./aindy_plugins.json -> apps.bootstrap, which registers the 16 domain apps into
 # the runtime via the plugin ABI.
 #
 # Shape follows the runtime's own `aindy-runtime init` scaffold (libpq-dev, AINDY_HOST=0.0.0.0,

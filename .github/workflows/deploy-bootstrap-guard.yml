@@ -182,10 +182,16 @@ jobs:
           if [ "$up" != yes ]; then echo "::error::serve did not become ready (schema guard may have rejected)"; tail -60 /tmp/serve.log; exit 1; fi
           python - <<'PY'
           import urllib.request, json
+          # Derived, not hardcoded: a literal count goes stale the next time a domain is
+          # added or removed, and this job only runs on migration-touching PRs — so the
+          # staleness surfaces on some unrelated change months later.
+          from apps.bootstrap import APP_BOOTSTRAP_MODULES
+          expected = len(APP_BOOTSTRAP_MODULES)
           r = json.load(urllib.request.urlopen("http://127.0.0.1:8000/api/version", timeout=10)).get("runtime", {})
-          print("boot_profile", r.get("boot_profile"), "apps", r.get("app_plugin_count"))
+          print("boot_profile", r.get("boot_profile"), "apps", r.get("app_plugin_count"), "expected", expected)
           assert r.get("boot_profile") == "default-apps", f"expected default-apps, got {r.get('boot_profile')}"
-          assert r.get("app_plugins_loaded") and r.get("app_plugin_count") == 17, "app profile not loaded"
+          assert r.get("app_plugins_loaded"), "app plugins not loaded"
+          assert r.get("app_plugin_count") == expected, f"expected {expected} apps, got {r.get('app_plugin_count')}"
           print("OK: serve booted app-profile on the bootstrapped schema — guard accepted it")
           PY
 

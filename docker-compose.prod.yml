@@ -27,7 +27,7 @@ services:
       MONGO_URL: "${MONGO_URL:-}"
       AINDY_HOST: "0.0.0.0"
       AINDY_PORT: "8000"
-      # REQUIRED for the 17 domain apps to load. `aindy-runtime serve` setdefaults
+      # REQUIRED for the 16 domain apps to load. `aindy-runtime serve` setdefaults
       # AINDY_BOOT_MODE=runtime-only (platform-only profile = ZERO apps), so without
       # this the image would boot the runtime with no domains, no /apps/* routes, and
       # no agent planner. app-profile selects ./aindy_plugins.json -> apps.bootstrap.
@@ -110,7 +110,7 @@ services:
       # writes; the default 10+20 exhausts under that load on slower hosts.
       DB_POOL_SIZE: "${DB_POOL_SIZE:-20}"
       DB_MAX_OVERFLOW: "${DB_MAX_OVERFLOW:-40}"
-      # Nodus per-execution budget. The worker cold-starts the app stack (~17 apps) per run;
+      # Nodus per-execution budget. The worker cold-starts the app stack (~16 apps) per run;
       # the runtime default (30s script + 15s boot allowance) is too tight for an app-profile
       # cold-start on a slower host, so executions fail with "worker exceeded 45000ms hard
       # limit". Widened + env-overridable. See docs/deployment/DEPLOYMENT.md.

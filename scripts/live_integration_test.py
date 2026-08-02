@@ -63,7 +63,11 @@ rt = r.json()["runtime"]
 assert rt["boot_mode"] == "app-profile", rt["boot_mode"]
 assert rt["boot_profile"] == "default-apps", rt["boot_profile"]
 assert rt["app_plugins_loaded"] is True
-assert rt["app_plugin_count"] == 17, rt["app_plugin_count"]
+# Derived from the bootstrap map — a literal here goes stale whenever a domain is
+# added or removed.
+from apps.bootstrap import APP_BOOTSTRAP_MODULES  # noqa: E402
+
+assert rt["app_plugin_count"] == len(APP_BOOTSTRAP_MODULES), rt["app_plugin_count"]
 print(f"  boot_mode={rt['boot_mode']}  boot_profile={rt['boot_profile']}")
 print(f"  app_plugin_count={rt['app_plugin_count']}  plugins_loaded={rt['app_plugins_loaded']}")
 results["boot"] = "PASS"
