@@ -123,7 +123,7 @@ def handle_sign_in(context: dict):
 
     db = SessionLocal()
     try:
-        return connect_external_author(
+        result = connect_external_author(
             db,
             author_name=name,
             platform=SIGN_IN_PLATFORM,
@@ -131,12 +131,46 @@ def handle_sign_in(context: dict):
             notes="Signed in",
             user_id=user_id,
         )
+        _record_bridge_user_event(db, name)
+        return result
     except Exception as exc:
         db.rollback()
         logger.warning("[network_bridge] sign-in capture failed for %s: %s", user_id, exc)
         return None
     finally:
         db.close()
+
+
+def _record_bridge_user_event(db: Session, name: str) -> None:
+    """Write the system-origin audit row the social feed surfaces.
+
+    ``bridge_user_events`` is owned by automation and read by
+    ``social/bridge_feed_service`` into the feed's ``events`` channel, gated to
+    system-origin rows. Its only writer used to be ``POST /apps/bridge/user_event`` —
+    an endpoint with no callers — so the table was empty and that channel was
+    structurally dead. A sign-in is precisely the system-origin event it was built to
+    carry.
+
+    Separately committed and never fatal: the author, ping and metric are already
+    persisted by this point, and an audit row is not worth losing them over.
+    """
+    from datetime import datetime as _dt
+
+    from apps.automation.public import create_bridge_user_event
+
+    occurred_at = _dt.now(timezone.utc)
+    try:
+        create_bridge_user_event(
+            db,
+            user=name,
+            origin="system",
+            raw_timestamp=occurred_at.isoformat(),
+            occurred_at=occurred_at,
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning("[network_bridge] bridge user event write failed: %s", exc)
 
 
 def list_authors(db: Session, platform: str | None = None, limit: int = 100):
