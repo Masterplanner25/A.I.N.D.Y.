@@ -36,6 +36,7 @@ const Feed = lazy(() => import("./components/app/Feed"));
 const ProfileView = lazy(() => import("./components/app/ProfileView"));
 const InfiniteNetwork = lazy(() => import("./components/app/InfiniteNetwork"));
 const RippleTrace = lazy(() => import("./components/app/RippleTrace"));
+const VerifyEmailPage = lazy(() => import("./pages/VerifyEmail"));
 const FreelanceDashboard = lazy(() => import("./components/app/FreelanceDashboard"));
 const ARMAnalyze = lazy(() => import("./components/app/ARMAnalyze"));
 const ARMConfig = lazy(() => import("./components/app/ARMConfig"));
@@ -229,6 +230,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
               <Route element={<ProtectedRoute />}>
                 <Route element={<BootGate />}>
                   <Route element={routeElement("Application Shell", <MasterplanProjectionProvider><AppShell /></MasterplanProjectionProvider>)}>

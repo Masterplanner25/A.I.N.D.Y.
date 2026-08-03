@@ -4,14 +4,12 @@
 POLICIES = {
     "genesis_message": {
         "significance": 0.3,
-        "default_significance": 0.3,
         "node_type": "insight",
         "tags": ["genesis", "conversation"],
         "shared_namespaces": ["genesis"],
     },
     "genesis_synthesized": {
         "significance": 0.9,
-        "default_significance": 0.9,
         "node_type": "decision",
         "memory_type": "decision",
         "tags": ["genesis", "synthesis"],
@@ -19,7 +17,6 @@ POLICIES = {
     },
     "masterplan_locked": {
         "significance": 1.0,
-        "default_significance": 1.0,
         "node_type": "decision",
         "memory_type": "decision",
         "tags": ["genesis", "masterplan"],
@@ -27,7 +24,6 @@ POLICIES = {
     },
     "masterplan_activated": {
         "significance": 1.0,
-        "default_significance": 1.0,
         "node_type": "decision",
         "memory_type": "decision",
         "tags": ["genesis", "activation"],

@@ -25,14 +25,45 @@ aindy-runtime>=1.0,<2.0
 The upper bound is required. The apps repo should not accept unbounded runtime
 upgrades.
 
-Validated on `2026-08-01`:
+Validated on `2026-08-02`:
 
-- installed runtime version: `1.11.0`
-- apps repo dependency (pinned in `pyproject.toml`): `aindy-runtime>=1.11.0,<2.0`
-- runtime `/api/version` recommendation: `>=1.0,<2.0`
-- app-profile boot smoke on 1.11.0: `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16`
+- installed runtime version: `2.0.0`
+- apps repo dependency (pinned in `pyproject.toml`): `aindy-runtime>=2.0.0,<3.0`
+- runtime `/api/version` recommendation: `>=2.0,<3.0`
+- app-profile boot smoke on 2.0.0: `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16`
 
-Floor raised to `1.11.0` to adopt v1.11.0 (minor, not patch — it adds a public endpoint):
+## 2.0.0 — a major bump, and the pin cannot move alone
+
+`>=2.0,<3.0` **must land in the same change as the register-flow rewrite.** Registration now
+returns `202` with no token; a client that auto-logs-in from the register response has
+nothing to read and signup visibly fails.
+
+Deploy notes, in the order they will bite:
+
+1. **Every session ends at upgrade.** Access tokens now require a `purpose` claim, so all
+   existing tokens are rejected and every user logs in again. Expected, not a fault.
+2. **Verification mail must be deliverable.** Registration emails a link and the access token
+   is only issued by `POST /auth/verify-email`. With neither an `email` connector nor
+   `AINDY_SMTP_*` configured, **a new signup cannot complete.** Existing accounts are
+   unaffected — the 2.0.0 migration backfills them to verified.
+3. **`AINDY_EMAIL_VERIFY_URL_TEMPLATE` must point at the client's `/verify-email` route**
+   (e.g. `https://<host>/verify-email?token={token}`). Unset, the mail carries a bare token
+   with nowhere to paste it. Compose pass-throughs are wired in `docker-compose.prod.yml`.
+4. **Leave `AINDY_REQUIRE_VERIFIED_LOGIN` off** unless every account is verified — it is a
+   lockout risk, and the enumeration fix does not depend on it.
+5. **Register enforces `MIN_PASSWORD_LENGTH` (8).** Seeding and smoke scripts using shorter
+   passwords will 400. Stored passwords and login are unchanged.
+
+**Security, pre-existing and fixed upstream in 2.0.0:** before this release `/auth/register`
+and `/auth/login` passed the whole request body as the pipeline's `input_payload`, so
+plaintext passwords could reach the execution record. Audited on this deployment across
+`execution_units.extra`, `system_events.payload`, `job_logs.payload`, `agent_events.payload`
+and `memory_nodes` — **no credential key and no credential value found**, and `input_payload`
+is not persisted in any of the 2,651 execution units (spanning 2026-07-19 to 2026-08-02).
+Anywhere execution records are exported outside the database is outside what that audit
+covers.
+
+Previously, the floor was raised to `1.11.0` to adopt v1.11.0 (minor, not patch — it adds a public endpoint):
 `POST /auth/password/change`, which closes FR-6 item 1. Nothing in the release is
 source-breaking for app code.
 

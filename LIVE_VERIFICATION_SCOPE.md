@@ -32,7 +32,7 @@ route bug, a flow bug, a syscall bug, or a runtime pipeline bug. All are in play
 | Component | Repo | Role |
 |---|---|---|
 | Runtime API | `aindy-runtime` | FastAPI server, syscall dispatcher, flow engine, scheduler |
-| 17 domain apps | `aindy-apps-monolith` | Routes, flows, models, bootstrap |
+| 16 domain apps | `aindy-apps-monolith` | Routes, flows, models, bootstrap |
 | Product UI | `aindy-apps-monolith/client/` | React SPA — the product surface |
 | Platform UI | `aindy-runtime/platform/` | React SPA — operator/platform view |
 | Postgres | docker-compose | Persistent state |
@@ -46,9 +46,10 @@ AINDY_APP_PLUGIN_MANIFEST=./aindy_plugins.json aindy-runtime serve
 ```
 
 Expected on boot: `boot_profile=default-apps`, `app_plugins_loaded=True`,
-`app_plugin_count=17`, all 3 core domains registered (`tasks`, `identity`, `analytics`).
+`app_plugin_count=16`, all 3 core domains registered (`tasks`, `identity`, `analytics`).
 
-Verified live 2026-07-22: `boot_profile=default-apps`, `boot_mode=app-profile`,
+Verified live 2026-07-22 (when `bridge` still existed, so the count read 17):
+`boot_profile=default-apps`, `boot_mode=app-profile`,
 `app_plugins_loaded=true`, `app_plugin_count=17`, `deployment_profile=single-instance`,
 `background_leadership_mode=in-process`.
 

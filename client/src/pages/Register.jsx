@@ -1,17 +1,18 @@
 import React, { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
-import { useSystem } from "../context/SystemContext";
 
 export default function RegisterPage() {
-  const navigate = useNavigate();
   const { isAuthenticated, register } = useAuth();
-  const { bootSystem, booting } = useSystem();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  // Mirrors the runtime's MIN_PASSWORD_LENGTH, which register enforces from 2.0.0.
+  const MIN_PASSWORD_LENGTH = 8;
 
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
@@ -23,19 +24,56 @@ export default function RegisterPage() {
       setError("Email and password are required.");
       return;
     }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Your password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
 
     setSubmitting(true);
     setError("");
     try {
-      const token = await register(email.trim(), password);
-      await bootSystem(token);
-      navigate("/dashboard", { replace: true });
+      // aindy-runtime >= 2.0.0 returns 202 with no token and emails a verification link.
+      // There is nothing to auto-login with, so this ends on "check your email".
+      await register(email.trim(), password);
+      setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed.");
     } finally {
       setSubmitting(false);
     }
   };
+
+  // Deliberately identical whether or not the address was already registered — the
+  // runtime returns the same 202 either way, and saying "already registered" here would
+  // reopen the account-enumeration oracle that change exists to close.
+  if (submitted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#09090b] px-6 text-[#fafafa]">
+        <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-950/90 p-8 shadow-2xl">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#00ffaa]">
+            Check Your Email
+          </p>
+          <h1 className="mt-3 text-2xl font-black tracking-tight text-white">
+            Confirm your address
+          </h1>
+          <p className="mt-3 text-sm text-zinc-400">
+            If <span className="text-zinc-200">{email.trim()}</span> can be registered, a
+            verification link is on its way. Open it to finish setting up your account and
+            sign in.
+          </p>
+          <p className="mt-3 text-xs text-zinc-600">
+            The link expires in 48 hours. You can close this page.
+          </p>
+          <Link
+            to="/login"
+            className="mt-6 inline-block rounded-2xl border border-zinc-700 px-4 py-3 text-sm text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
+          >
+            Back to sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#09090b] px-6 text-[#fafafa]">
@@ -48,7 +86,7 @@ export default function RegisterPage() {
             Create Your A.I.N.D.Y. Account
           </h1>
           <p className="mt-2 text-sm text-zinc-500">
-            Signup seeds memory, execution context, metrics, and immediate identity boot.
+            We will email you a link to confirm your address and finish setting up.
           </p>
         </div>
 
@@ -87,10 +125,10 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            disabled={submitting || booting}
+            disabled={submitting}
             className="w-full rounded-2xl bg-[#00ffaa] px-4 py-3 text-sm font-black uppercase tracking-[0.18em] text-black transition-colors hover:bg-[#00ffaa]/80 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
           >
-            {submitting || booting ? "Initializing..." : "Sign Up and Boot"}
+            {submitting ? "Sending..." : "Create Account"}
           </button>
         </form>
 

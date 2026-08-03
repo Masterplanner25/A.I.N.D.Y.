@@ -39,13 +39,17 @@ The client now boots the application in two stages:
 1. `POST /auth/login` returns a JWT
 2. the client immediately calls `GET /identity/boot`
 
-Signup uses the same activation path:
+Signup reaches that path only after email verification (aindy-runtime >= 2.0.0):
 
-1. `POST /auth/register` creates the user and seeds initial system state
-2. the returned JWT is stored immediately
-3. the client calls `GET /identity/boot`
+1. `POST /auth/register` returns **202 with no token** and emails a verification link.
+   The response is identical whether or not the address already exists — that uniformity
+   is what closes the account-enumeration oracle, so the UI must never infer from it.
+2. the user opens the link, which lands on `/verify-email?token=...`
+3. `POST /auth/verify-email` returns the JWT; it is stored and the client calls
+   `GET /identity/boot`
 
-The register page lives at `/register` and auto-boots into the authenticated app on success.
+The register page lives at `/register` and ends on a "check your email" screen — there is
+no token to auto-boot with. `/verify-email` is where the session actually begins.
 
 `/identity/boot` is the canonical hydration source for:
 

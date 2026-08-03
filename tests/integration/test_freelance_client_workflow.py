@@ -24,7 +24,7 @@ def _register_and_login(client) -> str:
     email = f"test-freelancecw-{uuid.uuid4().hex[:8]}@aindy.test"
     password = "IntegrationTest1!"
     r = client.post("/auth/register", json={"email": email, "password": password})
-    assert r.status_code in (200, 201), f"register: {r.status_code} {r.text[:200]}"
+    assert r.status_code in (200, 201, 202), f"register: {r.status_code} {r.text[:200]}"
     r = client.post("/auth/login", json={"email": email, "password": password})
     assert r.status_code == 200, f"login: {r.status_code} {r.text[:200]}"
     body = r.json()

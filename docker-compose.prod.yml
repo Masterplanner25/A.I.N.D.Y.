@@ -27,7 +27,7 @@ services:
       MONGO_URL: "${MONGO_URL:-}"
       AINDY_HOST: "0.0.0.0"
       AINDY_PORT: "8000"
-      # REQUIRED for the 17 domain apps to load. `aindy-runtime serve` setdefaults
+      # REQUIRED for the 16 domain apps to load. `aindy-runtime serve` setdefaults
       # AINDY_BOOT_MODE=runtime-only (platform-only profile = ZERO apps), so without
       # this the image would boot the runtime with no domains, no /apps/* routes, and
       # no agent planner. app-profile selects ./aindy_plugins.json -> apps.bootstrap.
@@ -39,6 +39,33 @@ services:
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      # ── Email verification + password recovery (aindy-runtime >= 2.0.0) ─────────
+      # Registration now returns 202 and emails a verification link; the access token
+      # comes from POST /auth/verify-email. The template MUST point at the client's
+      # /verify-email route or the mail ships a bare token with nowhere to paste it.
+      AINDY_EMAIL_VERIFY_URL_TEMPLATE: "${AINDY_EMAIL_VERIFY_URL_TEMPLATE:-}"
+      AINDY_EMAIL_VERIFY_TTL_HOURS: "${AINDY_EMAIL_VERIFY_TTL_HOURS:-48}"
+      # Leave OFF unless every account is verified — it refuses login for unverified
+      # addresses and is a lockout risk. Existing accounts were backfilled to verified
+      # by the 2.0.0 migration, so new signups are the only unverified ones.
+      AINDY_REQUIRE_VERIFIED_LOGIN: "${AINDY_REQUIRE_VERIFIED_LOGIN:-}"
+      # Password recovery. /auth/password/forgot always returns 200 (never discloses
+      # whether the address exists) but 503s when no email channel is configured.
+      # An empty URL template mails the bare token with nowhere to paste it.
+      AINDY_PASSWORD_RESET_TTL_MINUTES: "${AINDY_PASSWORD_RESET_TTL_MINUTES:-30}"
+      AINDY_PASSWORD_RESET_URL_TEMPLATE: "${AINDY_PASSWORD_RESET_URL_TEMPLATE:-}"
+      # Delivery is hybrid: a registered `email` connector wins, else runtime SMTP.
+      # HOST *and* FROM must both be set for SMTP to count as configured. With neither
+      # channel available, verification mail cannot be sent and a new signup cannot
+      # complete — the link never arrives.
+      # A registered connector that FAILS does not fall back to SMTP: the fallback is
+      # for absence, not failure, so a broken chosen route never silently reroutes mail.
+      AINDY_SMTP_HOST: "${AINDY_SMTP_HOST:-}"
+      AINDY_SMTP_PORT: "${AINDY_SMTP_PORT:-587}"
+      AINDY_SMTP_USER: "${AINDY_SMTP_USER:-}"
+      AINDY_SMTP_PASSWORD: "${AINDY_SMTP_PASSWORD:-}"
+      AINDY_SMTP_FROM: "${AINDY_SMTP_FROM:-}"
+      AINDY_SMTP_STARTTLS: "${AINDY_SMTP_STARTTLS:-true}"
       # Perplexity Search API — powers search/research and rippletrace mention detection.
       # Without it both degrade to "unavailable" rather than failing; nothing else needs it.
       PERPLEXITY_API_KEY: "${PERPLEXITY_API_KEY:-}"
@@ -58,6 +85,8 @@ services:
       # AINDY_INFINITY_LEARNED_SHADOW were set in .env and never arrived, which is
       # why no shadow data was ever recorded.
       #
+      # Root-cause fix for DB-NODUS-BUDGET-1, shipped default-off in 2.0.0 pending soak.
+      AINDY_MEMORY_RECALL_OWN_SESSION: "${AINDY_MEMORY_RECALL_OWN_SESSION:-}"
       # SHADOW flags compute and record without changing behaviour — safe to leave on.
       AINDY_INFINITY_THREE_AXIS_SHADOW: "${AINDY_INFINITY_THREE_AXIS_SHADOW:-}"
       AINDY_INFINITY_LEARNED_SHADOW: "${AINDY_INFINITY_LEARNED_SHADOW:-}"
@@ -91,7 +120,7 @@ services:
       # writes; the default 10+20 exhausts under that load on slower hosts.
       DB_POOL_SIZE: "${DB_POOL_SIZE:-20}"
       DB_MAX_OVERFLOW: "${DB_MAX_OVERFLOW:-40}"
-      # Nodus per-execution budget. The worker cold-starts the app stack (~17 apps) per run;
+      # Nodus per-execution budget. The worker cold-starts the app stack (~16 apps) per run;
       # the runtime default (30s script + 15s boot allowance) is too tight for an app-profile
       # cold-start on a slower host, so executions fail with "worker exceeded 45000ms hard
       # limit". Widened + env-overridable. See docs/deployment/DEPLOYMENT.md.
