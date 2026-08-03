@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Server image for aindy-apps-monolith — the app profile *consuming* the published
 # aindy-runtime framework.
 #
@@ -28,8 +29,16 @@ WORKDIR /app
 # rest of the dependency tree from PyPI). Layer-cached on source-only changes.
 COPY pyproject.toml README.md ./
 COPY apps ./apps
-RUN python -m pip install --upgrade pip \
- && python -m pip install .
+#
+# The pip cache is a BuildKit cache mount, NOT an image layer: wheels survive between
+# builds (so an interrupted or retried build resumes instead of re-downloading the whole
+# tree) while staying out of the shipped image, which is what PIP_NO_CACHE_DIR=1 above is
+# for. That env is overridden inline here — without the cache this single layer re-fetches
+# every dependency from PyPI on each attempt, which on a slow link is the difference
+# between a build that finishes and one that never does.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    PIP_NO_CACHE_DIR=0 python -m pip install --upgrade pip \
+ && PIP_NO_CACHE_DIR=0 python -m pip install .
 
 # App-profile deployment inputs owned by this repo. The working directory must be the repo
 # root so the runtime discovers aindy_plugins.json, and so Alembic finds alembic.ini
