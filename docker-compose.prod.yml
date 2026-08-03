@@ -48,7 +48,12 @@ services:
       # Leave OFF unless every account is verified — it refuses login for unverified
       # addresses and is a lockout risk. Existing accounts were backfilled to verified
       # by the 2.0.0 migration, so new signups are the only unverified ones.
-      AINDY_REQUIRE_VERIFIED_LOGIN: "${AINDY_REQUIRE_VERIFIED_LOGIN:-}"
+      #
+      # TYPED pydantic bool, exactly like AINDY_NEXT_ACTION_ACTING below: an empty
+      # string is not "off", it fails validation and the container crash-loops at
+      # `aindy-runtime bootstrap-schema` before it ever serves. The default must stay
+      # a parseable boolean, never "".
+      AINDY_REQUIRE_VERIFIED_LOGIN: "${AINDY_REQUIRE_VERIFIED_LOGIN:-false}"
       # Password recovery. /auth/password/forgot always returns 200 (never discloses
       # whether the address exists) but 503s when no email channel is configured — the
       # UI surfaces that one plainly, since it describes the deployment, not an account.
