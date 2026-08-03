@@ -50,8 +50,12 @@ services:
       # by the 2.0.0 migration, so new signups are the only unverified ones.
       AINDY_REQUIRE_VERIFIED_LOGIN: "${AINDY_REQUIRE_VERIFIED_LOGIN:-}"
       # Password recovery. /auth/password/forgot always returns 200 (never discloses
-      # whether the address exists) but 503s when no email channel is configured.
-      # An empty URL template mails the bare token with nowhere to paste it.
+      # whether the address exists) but 503s when no email channel is configured — the
+      # UI surfaces that one plainly, since it describes the deployment, not an account.
+      # The template MUST point at the client's /reset-password route, e.g.
+      #   https://<host>/reset-password?token={token}
+      # Left empty, the runtime mails a bare token; that page accepts a pasted token as
+      # a fallback, but the link is the intended path.
       AINDY_PASSWORD_RESET_TTL_MINUTES: "${AINDY_PASSWORD_RESET_TTL_MINUTES:-30}"
       AINDY_PASSWORD_RESET_URL_TEMPLATE: "${AINDY_PASSWORD_RESET_URL_TEMPLATE:-}"
       # Delivery is hybrid: a registered `email` connector wins, else runtime SMTP.
