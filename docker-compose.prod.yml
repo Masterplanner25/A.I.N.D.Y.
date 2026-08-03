@@ -166,6 +166,30 @@ services:
       timeout: 3s
       retries: 5
 
+  # Local mail catcher for exercising the 2.0.0 email flows (verification, password
+  # reset) without sending anything to a real inbox. SMTP on 1025, web inbox on 8025.
+  #
+  # PROFILE-GATED ON PURPOSE. This is a sink: it accepts every message and delivers
+  # none. Started by accident against a real deployment it would silently swallow all
+  # verification and recovery mail, and the failure would look like "email is broken"
+  # with no bounce to explain it. It only runs when you ask for it:
+  #
+  #   docker compose -f docker-compose.prod.yml --profile mail up -d
+  #   open http://localhost:8025
+  #
+  # Point the api at it with AINDY_SMTP_HOST=mailpit, AINDY_SMTP_PORT=1025,
+  # AINDY_SMTP_STARTTLS=false, and any AINDY_SMTP_FROM. No credentials needed.
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: ["mail"]
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "8025:8025"   # web inbox
+      - "1025:1025"   # SMTP (exposed so a non-compose `aindy-runtime serve` can reach it)
+
   # Social layer is Mongo-backed but degradable; enable if you need it and set MONGO_URL.
   # mongo:
   #   image: mongo:7
