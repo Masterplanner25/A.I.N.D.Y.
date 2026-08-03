@@ -37,6 +37,8 @@ const ProfileView = lazy(() => import("./components/app/ProfileView"));
 const InfiniteNetwork = lazy(() => import("./components/app/InfiniteNetwork"));
 const RippleTrace = lazy(() => import("./components/app/RippleTrace"));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmail"));
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPassword"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPassword"));
 const FreelanceDashboard = lazy(() => import("./components/app/FreelanceDashboard"));
 const ARMAnalyze = lazy(() => import("./components/app/ARMAnalyze"));
 const ARMConfig = lazy(() => import("./components/app/ARMConfig"));
@@ -231,6 +233,9 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/verify-email" element={<VerifyEmailPage />} />
+              {/* Recovery must sit outside ProtectedRoute — anyone who needs it cannot sign in. */}
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route element={<ProtectedRoute />}>
                 <Route element={<BootGate />}>
                   <Route element={routeElement("Application Shell", <MasterplanProjectionProvider><AppShell /></MasterplanProjectionProvider>)}>

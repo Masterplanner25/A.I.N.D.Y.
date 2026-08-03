@@ -51,6 +51,21 @@ Signup reaches that path only after email verification (aindy-runtime >= 2.0.0):
 The register page lives at `/register` and ends on a "check your email" screen — there is
 no token to auto-boot with. `/verify-email` is where the session actually begins.
 
+Password recovery sits outside the authenticated shell, since anyone who needs it cannot
+sign in:
+
+1. `/login` links to `/forgot-password`
+2. `POST /auth/password/forgot` **always** returns 200 — the confirmation must stay
+   neutral about whether the address exists. A 503 means the deployment has no email
+   channel; that is safe to show, as it describes the server rather than an account.
+3. the emailed link lands on `/reset-password?token=...`
+4. `POST /auth/password/reset` returns **no** token, so the user is sent to `/login` with
+   a notice rather than being logged in
+
+Both URL templates are runtime settings and must point at these routes:
+`AINDY_EMAIL_VERIFY_URL_TEMPLATE` → `/verify-email?token={token}`, and
+`AINDY_PASSWORD_RESET_URL_TEMPLATE` → `/reset-password?token={token}`.
+
 `/identity/boot` is the canonical hydration source for:
 
 - `user_id`

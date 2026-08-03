@@ -13,6 +13,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Set by /reset-password, which deliberately returns no session token.
+  const notice = location.state?.notice || "";
 
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
@@ -53,6 +55,12 @@ export default function LoginPage() {
             Sign in to restore memory, active runs, metrics, and execution state.
           </p>
         </div>
+
+        {notice ? (
+          <div className="mb-4 rounded-2xl border border-[#00ffaa]/30 bg-[#00ffaa]/10 px-4 py-3 text-sm text-[#7dffd2]">
+            {notice}
+          </div>
+        ) : null}
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="block">
@@ -96,7 +104,13 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-sm text-zinc-500">
+        <p className="mt-4 text-sm text-zinc-500">
+          <Link className="text-[#00ffaa] hover:text-[#7dffd2]" to="/forgot-password">
+            Forgot your password?
+          </Link>
+        </p>
+
+        <p className="mt-2 text-sm text-zinc-500">
           Don&apos;t have an account?{" "}
           <Link className="text-[#00ffaa] hover:text-[#7dffd2]" to="/register">
             Sign up
