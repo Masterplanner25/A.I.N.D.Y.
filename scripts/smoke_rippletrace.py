@@ -86,7 +86,12 @@ def step_auth(session, base, results):
     email = f"smoke-rt-{uuid.uuid4().hex[:8]}@aindy.local"
     pw = "SmokeTest1!"
 
-    _, ok = _post(session, base, "/auth/register", {"email": email, "password": pw}, "register")
+    # 202 from aindy-runtime >= 2.0.0: register no longer authenticates, it emails a
+    # verification link. The login below is what yields the token.
+    _, ok = _post(
+        session, base, "/auth/register", {"email": email, "password": pw}, "register",
+        expect=(200, 201, 202),
+    )
     if not ok:
         results["auth"] = "FAIL"
         return None

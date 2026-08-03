@@ -49,9 +49,17 @@ services:
       # addresses and is a lockout risk. Existing accounts were backfilled to verified
       # by the 2.0.0 migration, so new signups are the only unverified ones.
       AINDY_REQUIRE_VERIFIED_LOGIN: "${AINDY_REQUIRE_VERIFIED_LOGIN:-}"
+      # Password recovery. /auth/password/forgot always returns 200 (never discloses
+      # whether the address exists) but 503s when no email channel is configured.
+      # An empty URL template mails the bare token with nowhere to paste it.
+      AINDY_PASSWORD_RESET_TTL_MINUTES: "${AINDY_PASSWORD_RESET_TTL_MINUTES:-30}"
+      AINDY_PASSWORD_RESET_URL_TEMPLATE: "${AINDY_PASSWORD_RESET_URL_TEMPLATE:-}"
       # Delivery is hybrid: a registered `email` connector wins, else runtime SMTP.
-      # With neither configured, verification mail cannot be sent and a new signup
-      # cannot complete — the link never arrives.
+      # HOST *and* FROM must both be set for SMTP to count as configured. With neither
+      # channel available, verification mail cannot be sent and a new signup cannot
+      # complete — the link never arrives.
+      # A registered connector that FAILS does not fall back to SMTP: the fallback is
+      # for absence, not failure, so a broken chosen route never silently reroutes mail.
       AINDY_SMTP_HOST: "${AINDY_SMTP_HOST:-}"
       AINDY_SMTP_PORT: "${AINDY_SMTP_PORT:-587}"
       AINDY_SMTP_USER: "${AINDY_SMTP_USER:-}"
@@ -77,6 +85,8 @@ services:
       # AINDY_INFINITY_LEARNED_SHADOW were set in .env and never arrived, which is
       # why no shadow data was ever recorded.
       #
+      # Root-cause fix for DB-NODUS-BUDGET-1, shipped default-off in 2.0.0 pending soak.
+      AINDY_MEMORY_RECALL_OWN_SESSION: "${AINDY_MEMORY_RECALL_OWN_SESSION:-}"
       # SHADOW flags compute and record without changing behaviour — safe to leave on.
       AINDY_INFINITY_THREE_AXIS_SHADOW: "${AINDY_INFINITY_THREE_AXIS_SHADOW:-}"
       AINDY_INFINITY_LEARNED_SHADOW: "${AINDY_INFINITY_LEARNED_SHADOW:-}"

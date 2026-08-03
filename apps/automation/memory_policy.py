@@ -1,30 +1,31 @@
 """Automation-owned memory policies.
 
-**Two keys, deliberately.** ``validate_memory_policy`` *requires* ``significance``,
-but ``MemoryCaptureEngine`` reads ``default_significance`` when scoring
-(``capture_rule.get("default_significance", 0.4)``) and never looks at ``significance``.
-So a policy that declares only ``significance`` passes validation and then has no effect
-on the score — which is why every domain's declared significance has been inert. Both
-keys carry the same value until the runtime reconciles them; filed as MEM-POLICY-KEY-1
-in RUNTIME_FEATURE_REQUESTS.md.
+``significance`` is the declared base score. Under aindy-runtime >= 2.0.0 the capture
+engine reads it directly (``significance`` → ``base_score`` → ``default_significance``,
+first match wins), so declaring it once is enough. Earlier runtimes read only
+``default_significance``, which made every domain's declared significance inert; the
+duplicate key that worked around that (MEM-POLICY-KEY-1) is no longer needed.
+
+Significance also now **floors** the read-side ``impact_score``, so a domain that says a
+memory matters can actually cause it to be recalled. It is a floor, not a sum — a
+well-connected node still outranks a merely well-declared one.
 
 ``min_significance`` is the gate: the engine drops a capture whose scored significance
-falls below it (unless the caller passes ``force=True``, as runtime system-event capture
-does).
+falls below it. From 2.0.0 an *explicitly declared* ``min_significance`` is honoured even
+for ``force=True`` captures, which is what makes the suppression below effective against
+runtime system-event capture. A missing key still means force wins.
 """
 
 
 POLICIES = {
     "error_encountered": {
         "significance": 0.8,
-        "default_significance": 0.8,
         "node_type": "insight",
         "memory_type": "failure",
         "tags": ["error", "learning"],
     },
     "insight_detected": {
         "significance": 0.7,
-        "default_significance": 0.7,
         "node_type": "insight",
     },
     # Suppressed. Every flow completion — including read-only list views like
@@ -38,9 +39,13 @@ POLICIES = {
     # Flow completions score ~0.29-0.45 under the engine's formula, so 0.6 gates all of
     # them. Raising the bar rather than deleting the policy keeps node_type/tags intact
     # if a future per-workflow event type wants to opt back in.
+    #
+    # This had NO effect before 2.0.0: runtime system-event capture passes force=True,
+    # which skipped the gate entirely. That is why suppressing it left recall results
+    # byte-identical when we first tried. 2.0.0 honours an explicit min_significance for
+    # forced captures, so from this upgrade forward the suppression actually bites.
     "flow_completion": {
         "significance": 0.5,
-        "default_significance": 0.5,
         "min_significance": 0.6,
         "node_type": "outcome",
     },

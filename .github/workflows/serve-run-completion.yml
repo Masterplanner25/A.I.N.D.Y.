@@ -210,8 +210,15 @@ jobs:
           def status_of(d): return (inner(d) or {}).get("status")
 
           email = f"ci-{uuid.uuid4().hex[:8]}@example.com"
-          st, tok = req("POST", "/auth/register", body={"email": email, "password": "Ci-pass-123!", "username": "ci"})
-          token = tok.get("access_token"); print("register", st, "token", bool(token)); assert token, tok
+          password = "Ci-pass-123!"
+          # aindy-runtime >= 2.0.0: register returns 202 with NO token — it emails a
+          # verification link instead. Logging in is how CI gets a session. That works
+          # because AINDY_REQUIRE_VERIFIED_LOGIN defaults off; if this job ever turns it
+          # on, it needs the verification token from the mail channel instead.
+          st, body = req("POST", "/auth/register", body={"email": email, "password": password, "username": "ci"})
+          print("register", st); assert st in (200, 201, 202), body
+          st, tok = req("POST", "/auth/login", body={"email": email, "password": password})
+          token = tok.get("access_token"); print("login", st, "token", bool(token)); assert token, tok
 
           goal = os.environ.get("RUN_OBJECTIVE") or "Create three tasks for my launch"
           st, run = req("POST", "/apps/agent/run", token, {"goal": goal})

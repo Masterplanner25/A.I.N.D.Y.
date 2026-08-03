@@ -4,7 +4,6 @@
 POLICIES = {
     "leadgen_search": {
         "significance": 0.4,
-        "default_significance": 0.4,
         "node_type": "outcome",
         "tags": ["leadgen", "search"],
     },
