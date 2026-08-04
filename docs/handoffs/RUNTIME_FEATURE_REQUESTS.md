@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-08-02"
+last_verified: "2026-08-03"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -298,6 +298,238 @@ the existing `{data: recommendation}` envelope, then integration-test end-to-end
 
 ---
 
+## FR-8 — 2.0.0 upgrade: the verified-backfill does not ship in the wheel 🔴 net-new
+
+**apps-monolith ref:** found 2026-08-03 upgrading the live deployment to `aindy-runtime==2.0.0`.
+
+### The symptom
+
+On an existing database, the container crash-looped before serving:
+
+```
+error: runtime-owned schema is not ready: Runtime-owned schema requires an explicit
+additive reconcile: Runtime table 'users' is missing required column 'is_verified'.;
+Runtime table 'users' is missing required column 'verified_at'.
+Re-run with --reconcile for an additive column/index fix, or perform the required
+offline migration before retrying.
+```
+
+`aindy-runtime bootstrap-schema --reconcile` resolved it and stamped `0014`. But afterwards:
+
+```sql
+SELECT is_verified, count(*) FROM users GROUP BY 1;
+ is_verified | count
+-------------+-------
+ f           |    12
+```
+
+**Every pre-existing account came back unverified** — the exact outcome the model comment
+says the migration exists to prevent:
+
+```python
+# AINDY/db/models/user.py
+# migration, which backfills EXISTING rows to true: those accounts predate verification
+# and were never given a chance to confirm, so grandfathering them is the only option
+# that does not retroactively lock out every current user.
+is_verified = Column(Boolean, default=False, nullable=False, server_default="false")
+```
+
+### Why it happens
+
+The backfill lives in Alembic `0014`, and **`0014` is not distributed in the wheel.** Only the
+app's own Alembic tree is present in an app-profile image:
+
+```
+$ find / -path '*alembic*/versions' -type d
+/app/alembic/alembic/versions        # app-owned only — no runtime tree
+```
+
+So a wheel-based deployment never runs `0014`. It reconciles from packaged metadata instead,
+which applies `server_default="false"` and nothing else. The grandfathering step simply has no
+code path on this install shape.
+
+### Why this matters more than it looks
+
+It is not an immediate outage, because `AINDY_REQUIRE_VERIFIED_LOGIN` defaults off. It is a
+**latent lockout**: the v2.0.0 handoff invites operators to *"Turn on once your users are
+verified"*, and the docs state existing accounts were backfilled. An operator who believes
+both statements and flips that flag locks out every pre-existing account at once — including
+their own admin.
+
+The handoff's "Run migrations — Alembic 0014, existing accounts are backfilled to verified"
+is accurate for a source checkout and silently untrue for a wheel install. Nothing in the
+upgrade surfaces the difference.
+
+### The ask (runtime) — sliceable, cheapest first
+
+1. **Make `--reconcile` perform the same backfill `0014` does.** When it adds `is_verified` to
+   a table that already has rows, those rows predate verification by definition — set them
+   `true` with `verified_at` from `created_at`. This is the one change that makes the
+   documented guarantee true on every install shape.
+2. Or ship the runtime Alembic tree in the wheel so the documented migration path exists.
+3. Failing either, **state the difference in the upgrade notes**: wheel deployments must
+   backfill manually, with the SQL to do it, before enabling `AINDY_REQUIRE_VERIFIED_LOGIN`.
+4. Consider having `bootstrap-schema` refuse to add a `NOT NULL` column with a security-
+   relevant default to a populated table without an explicit acknowledgement — the current
+   guard correctly stops *schema* drift but is silent about the *data* consequence.
+
+### What we did app-side
+
+Snapshotted the 12 pre-existing user ids before touching the schema, ran the reconcile, then
+applied the grandfathering `0014` would have done, scoped to exactly those ids. Recorded as an
+operator note in PR #190.
+
+### References
+
+- Runtime: `AINDY/db/models/user.py` (`is_verified`), `AINDY/runtime_only.py`
+  (`_bootstrap_schema`), Alembic `0014`.
+- App: PR #190 operator note; `docs/apps/RUNTIME_DEPENDENCY.md`.
+
+---
+
+## FR-9 — Transactional mail is silently swallowed by any app-registered `email` connector 🔴 net-new
+
+**apps-monolith ref:** found 2026-08-03 running the 2.0.0 email flows end to end for the
+first time.
+
+### The symptom
+
+`POST /auth/register` returned a healthy `202`. No verification mail ever arrived. The only
+evidence anywhere:
+
+```
+WARNING [connector:email] handler failed: 'payload'
+WARNING [email] registered connector failed (no SMTP fallback by design): 'payload'
+```
+
+**No verification mail means no new account can complete signup.** Registration reports
+success, the user waits for an email that will never arrive, and the deployment looks
+healthy. We would not have found this without walking the flow on a live stack — no test,
+guard, or boot check surfaces it.
+
+### Why it happens
+
+Two unrelated senders share one connector type.
+
+`apps/automation` registers an outbound `email` connector for user-authored automations
+(FR-1). Its actions look like:
+
+```python
+{"payload": {...}, "config": {"recipient": ..., "smtp_host": ...}}
+```
+
+2.0.0 began routing runtime-owned transactional mail through that same registered type,
+with a different shape:
+
+```python
+# AINDY/platform_layer/email_channel.py
+action = {"type": "send", "to": to, "subject": subject, "body": body}
+result = dispatch_connector(CONNECTOR_TYPE, action, user_id=user_id, db=db)
+```
+
+Our handler opened with `action["payload"]` → `KeyError`. Combined with the deliberate
+no-fallback-on-failure rule, an app-side shape mismatch became *"signup is impossible"*.
+
+### The design tension
+
+The no-fallback rule is **right** and we are not asking for it to change — silently
+rerouting mail to a channel the operator did not choose, precisely when the chosen one is
+broken, is worse. The problem is that it is paired with a *shared, undocumented* action
+contract:
+
+- Registering an `email` connector for automations silently opts you into handling the
+  runtime's transactional mail too. Nothing at registration time says so.
+- The transactional action shape is not documented anywhere we could code against; we
+  learned it by reading `email_channel.py` in site-packages.
+- The consequence of getting it wrong is maximal (no signups) and the signal is minimal
+  (one WARNING line, no health-check degradation, no startup warning).
+
+### The ask (runtime) — any one of these closes it
+
+1. **Separate the type.** Route runtime transactional mail through its own connector type
+   (`transactional_email`), so an app connector for `email` cannot intercept it. Cleanest —
+   the two senders have nothing in common but the word "email".
+2. **Document and version the action contract.** If the type stays shared, publish the
+   transactional action shape as a stable contract, and ideally pass a discriminator app
+   handlers can branch on (`action["type"] == "send"` exists but is not documented as the
+   discriminator).
+3. **Make the failure loud.** A registered-connector failure on an *auth-critical* send
+   should degrade the health check or emit a startup/first-failure error, not a lone
+   WARNING. "Registration returns 202 but no mail can be sent" should not be a
+   log-grepping exercise.
+4. **Validate at registration.** Optionally, dispatch a dry-run/probe action at registration
+   so a shape-incompatible handler fails fast at boot rather than at the first real signup.
+
+### What we did app-side
+
+`_email_connector` now multiplexes on the action shape: the transactional shape is delivered
+over `AINDY_SMTP_*`, the automation path keeps its per-action config behaviour. Three
+regression tests cover both shapes and the not-configured error. PR #190.
+
+### References
+
+- Runtime: `AINDY/platform_layer/email_channel.py` (`send_email`, `_send_via_smtp`),
+  `AINDY/platform_layer/connector_service.py` (`dispatch_connector`).
+- App: `apps/automation/services/automation_execution_service.py`,
+  `tests/unit/test_automation_connectors.py`.
+
+---
+
+## FR-10 — Empty string on a typed bool setting crash-loops the container 🟡 boot fragility
+
+**apps-monolith ref:** found 2026-08-03 deploying 2.0.0.
+
+### The symptom
+
+```
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+AINDY_REQUIRE_VERIFIED_LOGIN
+  Input should be a valid boolean, unable to interpret input
+  [type=bool_parsing, input_value='', input_type=str]
+```
+
+The container restart-looped at `aindy-runtime bootstrap-schema`, before serving, before
+health checks — 27 restarts in our case.
+
+### Why it happens
+
+`AINDY_REQUIRE_VERIFIED_LOGIN` is a typed `bool` on `Settings`, and the idiomatic Compose
+default for an optional variable produces an **empty string**, not an absent one:
+
+```yaml
+AINDY_REQUIRE_VERIFIED_LOGIN: "${AINDY_REQUIRE_VERIFIED_LOGIN:-}"   # -> ""
+```
+
+To an operator, `""` reads as "not set" / "leave it off" — which is also what the
+documentation recommends for this flag. To pydantic it is an unparseable bool, and the
+process dies.
+
+**This is our bug and we fixed it** (`:-false`). We are filing it because the failure mode
+is disproportionate and generic, not because the validation is wrong. It is the second time
+this exact shape has bitten this deployment — `AINDY_NEXT_ACTION_ACTING` did the same thing
+earlier, and our compose file carries a warning comment about it three lines above where we
+reintroduced it.
+
+### The ask (runtime) — small, and it prevents a class of outage
+
+1. **Coerce empty string to "unset" for optional typed settings**, so `""` falls back to the
+   field default instead of killing the process. This is the fix — empty-means-default is
+   what every operator already assumes, and it is what `${VAR:-}` produces.
+2. If validation must stay strict, **fail with an actionable message**: name the variable,
+   the expected values, and that empty is not accepted — and ideally validate all settings
+   at once so an operator sees every bad variable in one restart rather than discovering
+   them one crash at a time.
+3. Note in the deployment docs which settings are typed `Settings` fields versus plain
+   `os.environ` reads. From outside the runtime these are indistinguishable, and only the
+   former are lethal. We maintain this distinction by hand in comments today.
+
+### References
+
+- Runtime: `AINDY/config.py` (`Settings`), the `AINDY_REQUIRE_VERIFIED_LOGIN` and
+  `AINDY_NEXT_ACTION_ACTING` fields.
+- App: `docker-compose.prod.yml`, `.env.example`; PR #190.
+
+---
 ## FR-7 — Memory: four defects that make recall return the wrong things 🔴 net-new
 
 **apps-monolith ref:** found 2026-08-02 while auditing what the system actually remembers.
