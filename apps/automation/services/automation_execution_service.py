@@ -231,73 +231,12 @@ def _crm_connector(action: dict[str, Any], ctx) -> dict[str, Any]:
     }
 
 
-def _transactional_email(action: dict[str, Any], ctx) -> dict[str, Any]:
-    """Deliver a runtime-originated transactional message over the configured SMTP server.
-
-    Uses ``AINDY_SMTP_*`` rather than per-action config: the runtime is the sender here,
-    not a user-authored automation, so there is no automation_config to read from.
-    """
-    from AINDY.config import settings
-
-    to = str(action.get("to") or "")
-    if not to:
-        raise ValueError("email_recipient_required")
-    host = str(getattr(settings, "AINDY_SMTP_HOST", "") or "")
-    sender = str(getattr(settings, "AINDY_SMTP_FROM", "") or "")
-    if not host or not sender:
-        # Same joint requirement the runtime enforces; without both there is no channel.
-        raise ValueError("email_smtp_not_configured")
-
-    port = int(getattr(settings, "AINDY_SMTP_PORT", 587) or 587)
-    username = str(getattr(settings, "AINDY_SMTP_USER", "") or "")
-    password = str(getattr(settings, "AINDY_SMTP_PASSWORD", "") or "")
-    starttls = bool(getattr(settings, "AINDY_SMTP_STARTTLS", True))
-    subject = str(action.get("subject") or "")
-    body = str(action.get("body") or "")
-
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = sender
-    message["To"] = to
-    message.set_content(body)
-
-    def _send():
-        with smtplib.SMTP(host, port, timeout=15) as smtp:
-            if starttls:
-                smtp.starttls()
-            if username:
-                smtp.login(username, password)
-            smtp.send_message(message)
-        return {"transport": "smtp", "host": host, "port": port}
-
-    response = ctx.call(
-        service_name="smtp",
-        endpoint=f"{host}:{port}",
-        method="smtp.send",
-        extra={"purpose": "transactional_email", "recipient": to},
-        operation=_send,
-    )
-    return {
-        "automation_type": "email",
-        "status": "completed",
-        "recipient": to,
-        "subject": subject,
-        "response": response,
-    }
-
-
 def _email_connector(action: dict[str, Any], ctx) -> dict[str, Any]:
-    # aindy-runtime >= 2.0.0 sends its OWN transactional mail — email verification and
-    # password reset — through this same registered `email` connector, with a different
-    # action shape: {"type": "send", "to", "subject", "body"} and no "payload"/"config".
-    #
-    # This used to raise KeyError('payload') on those. And because a registered connector
-    # that FAILS is deliberately never retried over SMTP ("the fallback is for absence,
-    # not failure"), the failure was terminal: no verification mail, so no new account
-    # could complete signup, with nothing but a warning in the log to say why.
-    if "payload" not in action and action.get("to"):
-        return _transactional_email(action, ctx)
-
+    # User-authored automations only. aindy-runtime 2.0.0 also routed its own transactional
+    # mail (verification, password reset) through this connector type, which forced a
+    # shape-multiplexing branch here (FR-9). 2.0.1 moved that to a reserved
+    # `transactional_email` type an app connector cannot intercept, so this is
+    # single-purpose again and the runtime delivers its own mail over AINDY_SMTP_*.
     payload = action["payload"]
     config = action["config"]
     subject = str(config.get("subject") or payload.get("task_name") or "A.I.N.D.Y. automated message")
