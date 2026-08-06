@@ -258,14 +258,14 @@ def test_capability_denial_raises_permission_error(monkeypatch, capture_http):
         )
 
 
-# ── Runtime transactional email (aindy-runtime >= 2.0.0) ──────────────────────────
-# The runtime sends its OWN mail — email verification and password reset — through this
-# same registered `email` connector, but with a different action shape:
-#   {"type": "send", "to": ..., "subject": ..., "body": ...}
-# with no "payload"/"config". The handler used to open with action["payload"], so every
-# one of those raised KeyError. Because a registered connector that FAILS is deliberately
-# never retried over SMTP, that was terminal: no verification mail could be sent, so no
-# new account could complete signup, with only a log warning to explain it.
+# ── The `email` connector is automation-only ──────────────────────────────────────
+# aindy-runtime 2.0.0 briefly routed its own transactional mail (verification, password
+# reset) through this same registered `email` type, with a different action shape and no
+# SMTP fallback on failure — so a shape mismatch here made signup impossible (FR-9).
+# 2.0.1 moved that to a reserved `transactional_email` type an app connector cannot
+# intercept. This test pins the remaining contract: the automation path is unchanged, and
+# reads action["payload"], so a regression that starts feeding it a different shape fails
+# here rather than in production.
 
 
 class _FakeSMTP:
@@ -298,8 +298,6 @@ class _FakeSMTP:
                 "to": message["To"],
                 "from": message["From"],
                 "subject": message["Subject"],
-                "starttls": self._started_tls,
-                "login": self._login,
             }
         )
 
@@ -311,67 +309,7 @@ def fake_smtp(monkeypatch):
     return _FakeSMTP
 
 
-@pytest.fixture
-def smtp_settings(monkeypatch):
-    from AINDY.config import settings
-
-    for key, value in {
-        "AINDY_SMTP_HOST": "mail.test",
-        "AINDY_SMTP_PORT": 2525,
-        "AINDY_SMTP_FROM": "noreply@test.local",
-        "AINDY_SMTP_USER": "",
-        "AINDY_SMTP_PASSWORD": "",
-        "AINDY_SMTP_STARTTLS": False,
-    }.items():
-        monkeypatch.setattr(settings, key, value, raising=False)
-    return settings
-
-
-def test_email_connector_handles_runtime_transactional_shape(
-    capture_http, fake_smtp, smtp_settings
-):
-    result = aes._email_connector(
-        {"type": "send", "to": "user@example.com", "subject": "Verify", "body": "link"},
-        _CtxShim(),
-    )
-
-    assert result["status"] == "completed"
-    assert result["recipient"] == "user@example.com"
-    assert fake_smtp.sent == [
-        {
-            "host": "mail.test",
-            "port": 2525,
-            "to": "user@example.com",
-            "from": "noreply@test.local",
-            "subject": "Verify",
-            "starttls": False,
-            "login": None,
-        }
-    ]
-    # Still routed through the capability boundary, not a raw socket.
-    assert capture_http["external"]
-    assert capture_http["external"][-1]["service_name"] == "smtp"
-
-
-def test_email_connector_reports_missing_smtp_rather_than_key_error(
-    capture_http, fake_smtp, monkeypatch
-):
-    from AINDY.config import settings
-
-    monkeypatch.setattr(settings, "AINDY_SMTP_HOST", "", raising=False)
-    monkeypatch.setattr(settings, "AINDY_SMTP_FROM", "", raising=False)
-
-    # A clear "not configured" error, never KeyError('payload').
-    with pytest.raises(ValueError, match="email_smtp_not_configured"):
-        aes._email_connector(
-            {"type": "send", "to": "user@example.com", "subject": "s", "body": "b"},
-            _CtxShim(),
-        )
-    assert fake_smtp.sent == []
-
-
-def test_email_connector_still_handles_the_automation_shape(capture_http, fake_smtp):
-    # The original app-authored automation path is unchanged: per-action SMTP config.
+def test_email_connector_sends_automation_mail_from_action_config(capture_http, fake_smtp):
     result = aes.execute_automation_action(
         {
             "automation_type": "email",
@@ -380,6 +318,7 @@ def test_email_connector_still_handles_the_automation_shape(capture_http, fake_s
                 "recipient": "lead@example.com",
                 "subject": "Hello",
                 "body": "Body",
+                "sender": "me@example.com",
                 "smtp_host": "smtp.example.com",
                 "smtp_port": 587,
                 "smtp_starttls": False,
@@ -390,18 +329,27 @@ def test_email_connector_still_handles_the_automation_shape(capture_http, fake_s
 
     assert result["status"] == "completed"
     assert result["recipient"] == "lead@example.com"
-    assert fake_smtp.sent[-1]["host"] == "smtp.example.com"
+    assert fake_smtp.sent == [
+        {
+            "host": "smtp.example.com",
+            "port": 587,
+            "to": "lead@example.com",
+            "from": "me@example.com",
+            "subject": "Hello",
+        }
+    ]
+    # Routed through the capability boundary, not a raw socket.
+    assert capture_http["external"][-1]["service_name"] == "smtp"
 
 
-class _CtxShim:
-    """Minimal stand-in for the connector ctx: runs the operation through ctx.call."""
-
-    def call(self, *, service_name, endpoint=None, method=None, extra=None, operation):
-        return ecs.authorized_external_call(
-            service_name=service_name,
-            capability=f"outbound.{service_name}",
-            operation=operation,
-            endpoint=endpoint,
-            method=method,
-            extra=extra,
+def test_email_connector_requires_a_recipient(capture_http, fake_smtp):
+    with pytest.raises(ValueError, match="email_recipient_required"):
+        aes.execute_automation_action(
+            {
+                "automation_type": "email",
+                "user_id": "u1",
+                "automation_config": {"body": "no recipient", "smtp_host": "smtp.example.com"},
+            },
+            None,
         )
+    assert fake_smtp.sent == []

@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-08-03"
+last_verified: "2026-08-05"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -298,7 +298,15 @@ the existing `{data: recommendation}` envelope, then integration-test end-to-end
 
 ---
 
-## FR-8 — 2.0.0 upgrade: the verified-backfill does not ship in the wheel 🔴 net-new
+## FR-8 — 2.0.0 upgrade: the verified-backfill does not ship in the wheel ✅ CLOSED in 2.0.1
+
+**Closed in `aindy-runtime==2.0.1` (2026-08-05).** `bootstrap-schema --reconcile` now
+grandfathers rows that predate a newly added column, so a fresh wheel deployment no longer
+strands pre-existing accounts. It does not retroactively repair a database already reconciled
+under 2.0.0 — ours was, and needed no repair: **0** accounts created before the upgrade are
+unverified (the 12 grandfathered by hand in PR #190 are all `true`). Verified on the live
+database 2026-08-05, not assumed.
+
 
 **apps-monolith ref:** found 2026-08-03 upgrading the live deployment to `aindy-runtime==2.0.0`.
 
@@ -387,7 +395,18 @@ operator note in PR #190.
 
 ---
 
-## FR-9 — Transactional mail is silently swallowed by any app-registered `email` connector 🔴 net-new
+## FR-9 — Transactional mail is silently swallowed by any app-registered `email` connector ✅ CLOSED in 2.0.1
+
+**Closed in `aindy-runtime==2.0.1` (2026-08-05)** — resolved as ask (1), the cleanest option:
+transactional mail moved to a reserved `transactional_email` type an app connector cannot
+intercept. A registered-connector failure on that path now logs at ERROR naming the type,
+instead of the single WARNING that made this so hard to find. The no-fallback rule is
+unchanged, which is correct.
+
+App-side: we chose to let runtime SMTP carry it (nothing registered under the new type), so
+the shape-multiplexing workaround was removed and `_email_connector` is automation-only
+again. Verified end to end on the live stack — signup mail and reset mail both deliver.
+
 
 **apps-monolith ref:** found 2026-08-03 running the 2.0.0 email flows end to end for the
 first time.
@@ -475,7 +494,14 @@ regression tests cover both shapes and the not-configured error. PR #190.
 
 ---
 
-## FR-10 — Empty string on a typed bool setting crash-loops the container 🟡 boot fragility
+## FR-10 — Empty string on a typed bool setting crash-loops the container ✅ CLOSED in 2.0.1
+
+**Closed in `aindy-runtime==2.0.1` (2026-08-05)** — resolved as ask (1): an empty value is
+treated as unset and falls back to the field default, across **28** typed bool settings
+rather than just the two that bit us. Our explicit `:-false` defaults stay as documentation
+of intent; reverting them would gain nothing. Verified: `restarts=0`, zero validation errors
+on the 2.0.1 container.
+
 
 **apps-monolith ref:** found 2026-08-03 deploying 2.0.0.
 
@@ -528,6 +554,96 @@ reintroduced it.
 - Runtime: `AINDY/config.py` (`Settings`), the `AINDY_REQUIRE_VERIFIED_LOGIN` and
   `AINDY_NEXT_ACTION_ACTING` fields.
 - App: `docker-compose.prod.yml`, `.env.example`; PR #190.
+
+---
+## FR-11 — `invoke_runtime_callback`: a 10s non-configurable budget around a full app bootstrap 🟢 hardening, not a defect
+
+**Filed 2026-08-05 while verifying the 2.0.1 upgrade. Read the framing before triaging: nothing
+is broken, and this cost us nothing. It is filed because the shape is fragile, not because it
+failed.**
+
+### What we saw
+
+Immediately after recreating the api container on 2.0.1, it went `unhealthy` and stopped
+answering, with this repeating roughly once a minute:
+
+```
+subprocess.TimeoutExpired: Command '['/usr/local/bin/python', '-m',
+  'AINDY.platform_layer.runtime_callback_worker']' timed out after 10.0 seconds
+RuntimeError: runtime callback command timed out
+```
+
+### Why it is not a defect
+
+It self-resolved and does not reproduce once the container is warm:
+
+- **0** callback timeouts in the following 6 minutes.
+- `scheduler.reminders` has recorded **19,370** autonomy decisions, latest during the same
+  window — the evaluator completes normally.
+- `/api/version` steady at 25–740ms across a 3-minute sample; health `healthy`.
+
+**Diagnosis: a cold-start artifact.** The container took ~285s to become responsive on this
+host. Scheduler ticks firing into that window each spawned a worker that had to cold-start the
+app stack, could not finish inside 10s, and was killed — adding load to precisely the
+contention that made them slow. Once warm, every call completes well inside the budget.
+
+We nearly shipped circuit breakers across three apps' scheduler jobs for this before checking
+whether it reproduced. It does not. Flagging that explicitly so nobody else spends the
+afternoon.
+
+### The shape that is worth changing anyway
+
+```python
+# AINDY/platform_layer/runtime_callback_host.py
+def invoke_runtime_callback(spec, *, argument=None, timeout_seconds: float = 10.0):
+```
+
+Three properties compound:
+
+1. **The budget is hardcoded** — `10.0` as a parameter default, and the caller in
+   `registry.py` does not pass one, so there is no env or settings override. A deployment on a
+   slower host has no lever.
+2. **The work inside it is not small.** The payload carries `bootstrap_register`, so the
+   subprocess re-runs app bootstrap — 16 apps here. That is a poor fit for a fixed 10s budget
+   under any load.
+3. **It is invoked from scheduled jobs**, so the failure repeats on an interval, and it repeats
+   *hardest* exactly when the host is slowest. The failure mode is self-amplifying: the load it
+   adds is the load that causes it.
+
+On a genuinely slow host — or a larger app profile, or a smaller container — the cold-start
+window widens and this stops being transient.
+
+### The ask (runtime) — small, none urgent
+
+1. **Make the timeout configurable** (`AINDY_RUNTIME_CALLBACK_TIMEOUT_MS` or similar), the way
+   `AINDY_NODUS_MAX_EXECUTION_MS` / `AINDY_NODUS_BOOT_ALLOWANCE_MS` already are for the same
+   class of problem — that precedent exists precisely because an app-profile cold start does
+   not fit a runtime default.
+2. **Avoid re-bootstrapping per call** if the callback does not need the full app graph — a
+   warm worker, or a narrower registration, removes the cost rather than budgeting for it.
+3. **Back off on repeated failure.** A callback that has timed out N times in a row could stop
+   being retried on the next tick, so a cold start cannot be amplified by the scheduler.
+4. Optionally, log the first occurrence at WARNING with the elapsed time and the fact that a
+   cold start is the likely cause. The current traceback per tick reads like a live incident;
+   ours was not one.
+
+### App-side
+
+**No change made, deliberately.** The four scheduled call sites
+(`apps/tasks/bootstrap.py` ×2, `apps/analytics/bootstrap.py`, `apps/masterplan/bootstrap.py`)
+call `evaluate_live_trigger` unguarded, which is fine while the callback completes when warm.
+If item 3 lands upstream we need nothing; if this ever reproduces on a warm container we will
+add a breaker at those sites and reopen this.
+
+### References
+
+- Runtime: `AINDY/platform_layer/runtime_callback_host.py` (`invoke_runtime_callback`),
+  `AINDY/platform_layer/registry.py` (the wrapped-evaluator call site, no timeout passed),
+  `AINDY/agents/autonomous_controller.py` (`evaluate_live_trigger`).
+- App: `apps/tasks/bootstrap.py` (`_scheduler_check_reminders`,
+  `_scheduler_check_task_recurrence`); `docker-compose.prod.yml` (the
+  `AINDY_NODUS_*_MS` precedent and its comment).
+- Context: `docs/handoffs/RUNTIME_2_0_1_UPGRADE.md`.
 
 ---
 ## FR-7 — Memory: four defects that make recall return the wrong things 🔴 net-new
