@@ -1,6 +1,6 @@
 ---
 title: "MasterPlan Domain Engine — Implementation Spec"
-last_verified: "2026-08-05"
+last_verified: "2026-08-06"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -208,8 +208,65 @@ goal-attainment): shadow → advisory → flip.
 4. **Phase 4 — flip.** Domain-driven phase becomes authoritative behind
    `AINDY_MASTERPLAN_DOMAIN_ENGINE`, default off, after a real soak. Composite metric_type lands
    here or later.
+5. **Phase 5 — emergent domain detection.** See §5a. Declared here so the earlier phases are
+   built with it in mind; not designed in detail yet.
 
 Phases 1–2 are safe to merge immediately; nothing observes them.
+
+---
+
+## 5a. Phase 5 — emergent domain detection (declared, not designed)
+
+**The evidence.** The owner's four real MasterPlan versions were read on 2026-08-05. Counting
+mentions across ~150,000 characters of planning:
+
+| | V1 | V2 | V3 | V4 |
+|---|---|---|---|---|
+| A.I.N.D.Y. | 0 | 50 | 76 | 19 |
+| Nodus | 0 | 0 | 0 | **2** |
+| runtime | 0 | 0 | 0 | **3** |
+| revenue / `$` | 51 | 75 | 38 | 12 |
+| horizon | 4–6 months | — | 5–10 yr | 5–10 yr |
+
+Nodus and the execution runtime — the two pieces that produced the most leverage in the period,
+and the reason the app being built today is buildable at all — appear **five times in total, only
+in the final version, and only as supporting nouns**. Meanwhile A.I.N.D.Y. peaks at V3 and falls
+by more than half in V4, because by then it is settled rather than being worked out. Reducing
+mention count is V4's explicit Phase II objective ("reduce conceptual surface area").
+
+**So mention-volume tracks uncertainty, not value, and the highest-leverage work is the
+least-planned.** A scoring system that only measures declared goals will systematically
+under-measure the work that mattered most. That is a structural blind spot, not a tuning problem.
+
+**What the phase does.** The system already knows where effort actually went — tasks with
+`duration`/`time_spent`, execution units, flow runs. It knows what the plan declared — the
+domains. It can therefore measure the gap and *ask*:
+
+> *"41% of your logged effort in the last 90 days maps to no declared domain, and it looks like
+> execution infrastructure. Name it as a domain, or record it as drift."*
+
+Neither answer is wrong. Naming it makes the plan honest about what is actually being built;
+recording it as drift makes the cost of the detour visible. Silence is the only bad outcome, and
+silence is what happens today.
+
+**Why it belongs here and not in a chat surface.** This is not a question an assistant can be
+prompted into asking well — it requires a persistent record of throughput measured against a
+declared plan, which is exactly what this engine is. It is also the clearest expression of the
+product thesis: the system tells you something true about your own execution that you did not
+tell it.
+
+**Design questions left open:**
+
+- What counts as "maps to no declared domain"? Tasks already carry `masterplan_id`; unattributed
+  effort is the obvious signal, but tasks attached to a plan yet matching no domain's `unit` are
+  the more interesting one.
+- Leverage is compression, not output. V4 records Phase I completing in ~12 months against a
+  3–5 year norm. The honest metric is **ETA moving in while scope holds** — projection and the
+  three-axis Trajectory already compute both halves, so this may need no new measurement.
+- What surface asks the question, and how often. A once-a-quarter prompt is a feature; a weekly
+  one is nagging.
+- Whether accepting the prompt creates the domain with `target_value = NULL` (declared, not
+  gating) — consistent with §4's rule for Genesis-created domains.
 
 ---
 
@@ -256,6 +313,9 @@ them is a separate decision to take after the flip, with real data behind it.
   `MASTERPLAN_GOAL_ATTAINMENT_SPEC.md` §7.
 - Does not give `books_published` a writer. Authorship still has no publication concept, so that
   domain stays manual until it does.
+- Does not build emergent domain detection (§5a). It is declared so phases 1–4 are built with it
+  in mind — plan-scoped domains and live `current_value` are its prerequisites — but it is not
+  designed yet.
 
 ---
 
