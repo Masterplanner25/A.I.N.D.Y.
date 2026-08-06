@@ -1,22 +1,11 @@
-from __future__ import annotations
+"""Social services package.
 
-from typing import Any
-from uuid import UUID
+This file used to hold a byte-identical copy of ``social_service.py`` (22 lines, including
+``get_user_scores``). Callers import the module — ``apps.social.services.social_service`` —
+so the copy was dead, but it stayed importable as ``apps.social.services.get_user_scores``
+and would have drifted silently from the real implementation.
 
-from sqlalchemy.orm import Session
-
-
-def get_user_scores(db: Session, user_ids: list[str | UUID]) -> dict[str, float]:
-    """
-    Return a mapping of user_id (str) → master_score for the given user_ids.
-
-    Accepts mixed str / UUID inputs and normalises them before querying.
-    Returns an empty dict when user_ids is empty.
-    """
-    from apps.analytics.public import get_user_scores as get_analytics_user_scores
-
-    if not user_ids:
-        return {}
-
-    rows = get_analytics_user_scores(db=db, user_ids=[str(uid) for uid in user_ids])
-    return {user_id: float(row.get("master_score") or 0.0) for user_id, row in rows.items()}
+Left intentionally empty: every consumer imports a submodule, so nothing needs re-exporting
+here. See the "dead-twin surfaces" note in ``docs/handoffs/FRONTEND_WALK_LOG.md`` — a working
+implementation shadowed by a stale duplicate is this repo's most repeated defect shape.
+"""

@@ -27,12 +27,13 @@ from fastapi import HTTPException
 pytestmark = pytest.mark.app_profile
 
 
-# Imported lazily, NOT at module scope. A module-level `import apps.arm...` runs at pytest
-# COLLECTION time — before any test executes — which pulls the `apps.arm` chain in ahead of
-# the plugin bootstrap. Doing that here made `test_reasoning_nodus_apply` fail: its Nodus
-# workflow was no longer registered by the time it ran, so the VM path silently fell back
-# and returned `{'data': {}}`. The failure surfaced in a different file, with nothing in it
-# changed — worth knowing before adding another `apps.*` import to a test module header.
+# Imported lazily rather than at module scope. Keeping app imports out of a test module's
+# header keeps collection cheap and avoids importing an app chain before it is needed; other
+# modules here do the same.
+#
+# (An earlier revision of this file blamed a module-level import for a
+# `test_reasoning_nodus_apply` failure. That was wrong — the real cause is the Nodus worker
+# exceeding its cold-start budget under full-suite load. See CLAUDE.md.)
 @pytest.fixture
 def SecurityValidator():
     from apps.arm.services.deepseek.security_deepseek import SecurityValidator as _SV
