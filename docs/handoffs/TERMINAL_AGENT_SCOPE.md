@@ -223,16 +223,32 @@ normal pipeline, so it lands in execution records like any other call. `sys.v1.t
 over MCP is a real completion: it recalculates the plan's ETA and WCU and cascade-activates,
 identically to a click in the web UI. **No work needed.**
 
-**2. `sys.v1.watcher.ingest` → Infinity, already wired.** `watcher_signals` carries
-`app_name`, `activity_type`, `session_id`, `duration_seconds`, `focus_score` and a
-`signal_metadata` JSONB — an activity-ingestion surface. `infinity_service` already computes
-**`focus_quality`** from it, reading `session_ended`, `distraction_detected` and `focus_achieved`
-via `sys.v1.watcher.query`.
+**2. The Watcher — a shipped, contract-stable activity pipeline.** This is the important one,
+and it is more complete than a syscall.
 
-The table has **0 rows**. It was built for a desktop activity watcher that never shipped, and
-the path from ingestion to Infinity has been complete and unused ever since. A terminal agent
-emitting a `session_ended` signal with its duration would feed `focus_quality` on the first run,
-with no new plumbing.
+| Layer | Where | State |
+|---|---|---|
+| Client | **`aindy-sdk`** — `aindy_sdk/watcher/` (`watcher.py`, `classifier.py`, `session_tracker.py`, `signal_emitter.py`, `config.py`) | ✅ shipped |
+| Transport | `POST /watcher/signals`, `GET /watcher/signals`, API-key auth | ✅ shipped, **contract-stable** |
+| Storage | `watcher_signals` — `app_name`, `window_title`, `activity_type`, `session_id`, `duration_seconds`, `focus_score`, `signal_metadata` | ✅ |
+| Scoring | `infinity_service` computes **`focus_quality`** from `session_ended` / `distraction_detected` / `focus_achieved` | ✅ wired |
+
+The runtime's own `CROSS_REPO_COMPATIBILITY.md` lists both endpoints as **stable** with a
+compatibility test (`test_watcher_endpoint_registered`), naming `aindy-sdk`'s watcher client as
+the consumer. So this is not a loose end — it is a maintained cross-repo contract.
+
+The client is a real activity tracker: a `classifier` mapping `(app_name, window_title)` →
+activity type, a `session_tracker` state machine (`IDLE → WORKING → DISTRACTED`), and a
+`signal_emitter` that batches over a background thread and never blocks its caller.
+
+**What this means for the terminal agent: the reporting convention does not need inventing.**
+A terminal client emits the same six signal types over the same stable endpoint, and
+`focus_quality` receives it. Better still, `aindy_sdk.watcher.signal_emitter` is a
+non-blocking batched emitter that can be reused directly rather than reimplemented.
+
+`watcher_signals` currently has **0 rows on this deployment**, which says the watcher is not
+running against this stack right now — not that the capability is missing. (Test data was
+cleared earlier in this stack's life, so the count is not evidence either way.)
 
 **3. `sys.v1.event.emit`** is already in the runtime's default MCP write set, so an external
 agent can raise domain events into A.I.N.D.Y. directly.
@@ -245,9 +261,12 @@ agent can raise domain events into A.I.N.D.Y. directly.
 - **Artifact ingestion.** Commits, PRs and releases are proof-of-work the agent produces but does
   not report. RippleTrace already ingests *external* artifacts for published content — the same
   shape applied to work artifacts is the obvious reuse, not a new subsystem.
-- **A reporting convention.** Whether the agent is *asked* to report (prompt/preset) or
-  *required* to (a wrapper that emits `session_ended` on exit). The second is reliable; the first
-  is honest about what an external agent will actually do.
+- **A reporting convention.** The *contract* exists (six signal types, stable endpoint, a
+  reusable emitter); what is undecided is whether the agent is *asked* to report
+  (prompt/preset) or *required* to (a wrapper emitting `session_started`/`session_ended` around
+  the session). The second is reliable; the first is honest about what an external agent will
+  actually do. `context_switch` and `heartbeat` already exist as types and map cleanly onto
+  repo/branch changes and long-running sessions.
 
 **Sequencing note:** channel 1 is free, channel 2 is a signal emission, and both should exist
 before tier 3 of the allowlist. Otherwise the agent gains the ability to change state before the
@@ -277,8 +296,9 @@ system gains the ability to see it.
    `AINDY_MCP_SERVER_TOOLS`; document in `.env.example` and compose. Ship here.
 3. **Tier 2–3, deliberately.** Add authoring, then acting, one capability at a time with a reason
    recorded for each.
-4. **Report back.** Emit `session_ended` from the terminal client so `focus_quality` starts
-   receiving real signals; decide the attribution convention (§8).
+4. **Report back.** Reuse `aindy_sdk.watcher.signal_emitter` to emit `session_started` /
+   `session_ended` (and `context_switch` on repo change) from the terminal client, so
+   `focus_quality` receives real signals; decide the attribution convention (§8).
 5. **"Nodus mode" preset.** Language, CLI, docs, examples and the allowlist bundled so an
    existing coding agent can be pointed at a repository in one step.
 
