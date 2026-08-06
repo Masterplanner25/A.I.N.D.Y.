@@ -128,14 +128,18 @@ function AnalyticsCard({ label, value }) {
 function PostCard({ item, onInteraction, showToast }) {
   const { post, reason } = item;
 
+  // Labels track the canonical tiers from the Social Layer build doc — "inner circle,
+  // collab circle, outer ring". Two had drifted: "COLLABORATOR" and "PUBLIC SIGNAL".
+  // The first also collided with the agent face's name, which describes a relationship
+  // with the AI, not a trust tier between people.
   const getTierMeta = (tier) => {
     switch (tier) {
       case "inner":
         return { color: "#ff7a18", label: "INNER CIRCLE" };
       case "collab":
-        return { color: "#3fd0b8", label: "COLLABORATOR" };
+        return { color: "#3fd0b8", label: "COLLAB CIRCLE" };
       default:
-        return { color: "#9ae66e", label: "PUBLIC SIGNAL" };
+        return { color: "#9ae66e", label: "OUTER RING" };
     }
   };
 

@@ -247,8 +247,18 @@ export default function App() {
                         bounced back to /dashboard — i.e. the Graph tab landed on Overview. */}
                     <Route path="/dashboard/graph" element={<AppProfileRoute element={routeElement("Dashboard", <Dashboard />)} />} />
                     <Route path="/tasks" element={<AppProfileRoute element={routeElement("Tasks", <TaskDashboard />)} />} />
-                    <Route path="/genesis" element={<AppProfileRoute element={routeElement("Genesis", <Genesis />)} />} />
-                    <Route path="/assistant" element={<AppProfileRoute element={routeElement("Assistant", <Assistant />)} />} />
+                    {/* The agent face. "Assistant" named it after the generic chat-box
+                        category; what it does is goal -> plan -> approve -> execute, with a
+                        human gate. Collaborator comes from the plan's own subtitle,
+                        "A Unified Ecosystem for AI-Human Collaboration".
+
+                        Both old entry points redirect rather than 404: /assistant was the
+                        nav link, and /genesis reached the same component from outside the
+                        unified face (it had no nav entry of its own). Genesis remains a
+                        mode, not a route. */}
+                    <Route path="/collaborator" element={<AppProfileRoute element={routeElement("Collaborator", <Assistant />)} />} />
+                    <Route path="/assistant" element={<Navigate to="/collaborator" replace />} />
+                    <Route path="/genesis" element={<Navigate to="/collaborator?mode=genesis" replace />} />
                     <Route path="/masterplan" element={<AppProfileRoute element={routeElement("MasterPlan", <MasterPlanDashboard />)} />} />
                     <Route path="/analytics" element={<AppProfileRoute element={routeElement("Analytics", <SocialAnalytics />)} />} />
                     <Route path="/kpi" element={<AppProfileRoute element={routeElement("KPI Snapshot", <KPIDashboard />)} />} />

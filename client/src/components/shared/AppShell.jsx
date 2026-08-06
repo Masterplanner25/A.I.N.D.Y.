@@ -31,7 +31,7 @@ const NAV_GROUPS = [
     title: "WORKSPACE",
     runtimeOnlySafe: false,
     links: [
-      { to: "/assistant", label: "Assistant" },
+      { to: "/collaborator", label: "Collaborator" },
       { to: "/dashboard", label: "Dashboard" },
       { to: "/tasks", label: "Tasks" },
       { to: "/masterplan", label: "MasterPlan" },
