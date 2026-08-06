@@ -300,7 +300,7 @@ export default function MasterPlanDashboard() {
           </p>
         </div>
         <button
-          onClick={() => navigate("/assistant?mode=genesis")}
+          onClick={() => navigate("/collaborator?mode=genesis")}
           style={{
             padding: "12px 24px",
             backgroundColor: "#00ffaa",

@@ -58,13 +58,71 @@ Splitting them into four top-level routes severed the thing that made them one p
 - Plan import shipped (#183).
 
 **What remains:** fold Tasks and MasterPlan in as two more modes — the same pattern, applied
-twice — and retire `/genesis` as a standalone route, which today reaches the same component from
-outside the unified face.
+twice. (`/genesis` and `/assistant` now redirect into the face; Genesis is a mode, not a route.)
 
-**The naming is the real defect.** "Assistant" is the generic word for a chat box. What this
-surface does is goal → plan → **approve** → execute: an execution agent with a human gate. The
-name is what makes it read as "another chatbot", which is precisely the category the product is
-trying not to be in.
+### The suggestion surface is built and pointed at the wrong screen
+
+The clearest example of "exposed workflow" being one wire short:
+
+| Layer | State |
+|---|---|
+| Runtime | `suggest_tools()` + `register_tool_suggestion_provider()` — shipped in 2.0.1 |
+| App | `suggest_tools_for_kpi` — derives suggestions from the **live KPI snapshot**, falling back to the latest analytics adjustment |
+| Client API | `getAgentSuggestions()` — exists |
+| Consumer | **`AgentConsole.jsx` only — the operator surface** |
+
+So the system already computes *"given your current state, reach for this module"* and shows it
+to an admin instead of to the user. Surfacing it on the Collaborator face is a wiring change,
+not a feature build, and it is the most direct answer to "what does the agent actually do?"
+
+### What the agent can actually do — 16 tools, audited 2026-08-06
+
+| Module | Tools |
+|---|---|
+| LeadGen | `leadgen.search`, `leadgen.act` *(drafts outreach, never sends)* |
+| Search / SEO / research | `search.query` *(unified over leadgen, research, SEO, memory)*, `research.query` |
+| ARM | `arm.analyze`, `arm.generate`, `arm.autotune` |
+| Freelance | `freelance.optimize_pricing` *(gated, revertible)*, `freelance.performance` |
+| Tasks | `task.create`, `task.complete` |
+| Memory | `memory.recall`, `memory.write` |
+| Genesis | `genesis.message` |
+| Reasoning | `reasoning.evaluate` |
+| Diagnostics | `runtime.selftest` |
+
+Each carries a **risk level** (low/medium/high) — that is what drives the approval gate. These
+are the modules already exposed as capabilities; what is missing is affordance, not ability.
+
+### Named: **Collaborator** (decided 2026-08-06)
+
+"Assistant" is the generic word for a chat box, applied to something that does goal → plan →
+**approve** → execute. The name is what made it read as "another chatbot" — the category the
+product is trying not to be in.
+
+**Collaborator** comes from the plan's own subtitle — *"A Unified Ecosystem for AI–Human
+Collaboration"* — and from primary goal #3, *"position AI as a thinking partner and execution
+amplifier, not a replacement for human agency."* It names the **relationship**, not the entity,
+so it does not lock in one agent type.
+
+Two candidates were rejected on evidence rather than taste:
+
+- **SYLVA** — already taken. `AGENT_SYLVA` is one of the runtime's system agent identities
+  (`AGENT_ARM`, `AGENT_GENESIS`, `AGENT_NODUS`, `AGENT_SYLVA`, `AGENT_PLATFORM`,
+  `AGENT_RUNTIME`, `AGENT_MEMORY`), and the ARM blueprint casts it in a specific role:
+  *"SYLVA asks questions, ARM answers with code logic."* Using it would collide with a live
+  memory namespace and lock in exactly the agent type the name was meant to avoid.
+- **Exodus** — would make Genesis/Nodus/Exodus read as a biblical set. Nodus is Latin for
+  *knot*, which is native to Infinite Weave; the theme would be accidental.
+
+**The decisive detail:** one line below `AGENT_SYLVA` sits `AGENT_USER = "user"`, deliberately
+**excluded** from `SYSTEM_AGENTS`. The runtime already models *the user's own agent* as distinct
+from the system agents. The system agents are characters with roles, so they get persona names.
+This one is yours — so it gets a relationship name, and its memory namespace is already `user`.
+
+**Tier collision, resolved by returning to canon.** `Feed.jsx` rendered the `collab` trust tier
+as "COLLABORATOR", which would have meant two different things in the two faces. The Social
+Layer doc's actual wording is *"inner circle, collab circle, outer ring"* — so the colliding
+label was itself a drift. Labels are now `INNER CIRCLE` / `COLLAB CIRCLE` / `OUTER RING`, which
+fixes the drift and frees the name.
 
 ### This also settles "what is an agent?"
 
@@ -236,4 +294,19 @@ underneath.
 - **Weight calibration** — `MASTERPLAN_GOAL_ATTAINMENT_SPEC.md` §7.
 - **The Nodus coding agent** — precedent exists (ARM began as a coding dev tool); not scoped.
 - **Tier 3 social** — needs population and the Moltbook review.
-- **What the agent face is called.** Not "Assistant".
+- **Filesystem / CLI access to the user's own files.** Raised 2026-08-06. The agent has **no
+  access to user files at all** — none of the 16 tools touch them, there is no upload and no repo
+  connection, and ARM reads only the server's own source (now confined to the project root by
+  #194). For an agent meant to help you *execute*, and whose user's work products are files, this
+  is a real capability gap — organising and working over your actual files, not only writing code.
+
+  The blocker is deployment shape, not appetite: a hosted multi-tenant app cannot read a local
+  disk. The mechanism has to be one of upload, a sync client, or a local runner. Two assets
+  already exist — the sandbox (`sandbox_runner.py`, the escape-audit gate) for governed
+  execution, and #194's pattern of a configurable root plus a containment check, which
+  generalises to a per-user root. Nodus is the natural home, and this overlaps the unscoped
+  Nodus coding agent.
+
+- **The `/tools` page vs. suggestions.** Manual Tools already exists at `/tools`; if suggestions
+  land on the Collaborator face, decide whether that page stays, folds in, or becomes the
+  full catalogue behind the suggestions.
