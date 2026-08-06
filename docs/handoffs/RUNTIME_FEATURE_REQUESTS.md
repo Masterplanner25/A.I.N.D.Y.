@@ -681,7 +681,7 @@ reintroduced it.
 - App: `docker-compose.prod.yml`, `.env.example`; PR #190.
 
 ---
-## FR-11 — `invoke_runtime_callback`: a 10s non-configurable budget around a full app bootstrap 🟢 hardening, not a defect
+## FR-11 — `invoke_runtime_callback`: a 10s non-configurable budget around a cold subprocess import 🟢 hardening, not a defect
 
 **Filed 2026-08-05 while verifying the 2.0.1 upgrade. Read the framing before triaging: nothing
 is broken, and this cost us nothing. It is filed because the shape is fragile, not because it
@@ -728,9 +728,14 @@ Three properties compound:
 1. **The budget is hardcoded** — `10.0` as a parameter default, and the caller in
    `registry.py` does not pass one, so there is no env or settings override. A deployment on a
    slower host has no lever.
-2. **The work inside it is not small.** The payload carries `bootstrap_register`, so the
-   subprocess re-runs app bootstrap — 16 apps here. That is a poor fit for a fixed 10s budget
-   under any load.
+2. **The work inside it is not small.** ~~The payload carries `bootstrap_register`, so the
+   subprocess re-runs app bootstrap — 16 apps here.~~ **Corrected 2026-08-06 by the runtime team,
+   and re-verified app-side.** `registry.py:410` sets that flag only for
+   `AINDY.platform_layer.runtime_agent_defaults`, and the worker uses it to call that one
+   module's `register()` — it is not a 16-app bootstrap. The real per-call cost is a fresh
+   subprocess running `importlib.import_module` on an app module and pulling its transitive
+   import graph. Expensive for the same reason by a different route, so the ask is unchanged —
+   but anyone building the fix should work from the right cause.
 3. **It is invoked from scheduled jobs**, so the failure repeats on an interval, and it repeats
    *hardest* exactly when the host is slowest. The failure mode is self-amplifying: the load it
    adds is the load that causes it.
@@ -771,7 +776,32 @@ add a breaker at those sites and reopen this.
 - Context: `docs/handoffs/RUNTIME_2_0_1_UPGRADE.md`.
 
 ---
-## FR-7 — Memory: four defects that make recall return the wrong things 🔴 net-new
+## FR-7 — Memory: four defects that make recall return the wrong things ✅ CLOSED in 2.0.0
+
+**Closed in `aindy-runtime==2.0.0`; flagged by the runtime team 2026-08-06 as stale here, and
+verified app-side the same day.** All four fixes are present in the installed 2.0.1 wheel, in
+`AINDY/memory/memory_capture_engine.py`:
+
+| Defect | Fix in source |
+|---|---|
+| MEM-POLICY-KEY-1 | `_policy_base_significance` (line 100) — reads `significance` → `base_score` → `default_significance` |
+| MEM-DEDUP-TRACEID-1 | `normalize_for_dedup` (line 130) |
+| MEM-FORCE-UNGATED-1 | `_forced_capture_suppressed` (line 150) — an explicit `min_significance` is honoured even for forced captures |
+| MEM-IMPACT-IGNORES-SIGNIFICANCE-1 | `blend_impact_with_significance` (line 203) — declared significance floors the read-side score |
+
+**Adoption already happened, ahead of this doc.** PR #192 removed the duplicate
+`default_significance` key from all five policy modules once 2.0.0 read `significance` first,
+and `apps/automation/memory_policy.py` records why suppressing `flow_completion` previously did
+nothing — `force=True` skipped the gate until `_forced_capture_suppressed` landed. So the code
+was current and only the status line was behind.
+
+**Consequence worth acting on:** per-domain memory policy work was parked "until FR-7's
+impact_score fix ships". It has shipped, and is running in this deployment. That work is
+unblocked.
+
+---
+
+### Original filing (2026-08-02) — retained for context
 
 **apps-monolith ref:** found 2026-08-02 while auditing what the system actually remembers.
 Measured on a live corpus of 1,799 memory nodes.
