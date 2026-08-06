@@ -107,6 +107,65 @@ registered app flow — so flipping `AINDY_MCP_SERVER_ALLOW_WRITES=true` grants 
 tasks, your memory graph and your scores — while holding your actual files — is the product
 thesis working, with no state-changing risk at all.
 
+### 4a. Scope the allowlist to an *agent*, not to a connection
+
+A flat `AINDY_MCP_SERVER_TOOLS` answers "what may any MCP client call". The better question is
+"what may **this agent** call" — and the platform already models agents.
+
+Audited 2026-08-06:
+
+| Piece | State |
+|---|---|
+| `agents` table — `id` (varchar), `owner_user_id`, `memory_namespace`, `agent_type`, `is_active` | ✅ exists |
+| Seven live agents, each with its own memory namespace (arm, genesis, nodus, sylva, platform, runtime, memory) | ✅ running |
+| `agent_capability_mappings` — capabilities bound to an `agent_type` or an `agent_run_id` | ✅ 15 rows |
+
+So agent-scoped memory and per-agent-type capability scoping are not concepts to invent.
+
+**The durable identity should be the role, not the vendor.** Register
+`development.main-runtime` (type `terminal`), and treat the client as swappable metadata —
+`provider: codex` today, `provider: claude_code` tomorrow. The agent keeps its id, its memory
+namespace and its history across the switch. The intelligence implementation is replaceable;
+the platform identity persists — which is the substrate thesis applied to identity.
+
+```
+Claude Code / Codex / other client
+        ↓  authenticates as
+agent: development.main-runtime   (type=terminal, provider=codex, workspace=aindy-runtime)
+        ↓
+agent-scoped memory namespace · capability mapping · events · approvals
+        ↓
+MCP syscalls · watcher signals · task completions
+```
+
+**What this buys beyond a flat allowlist:**
+
+- **Attribution.** Commits, completions, watcher sessions, memory writes and syscall calls all
+  belong to a real platform actor rather than to "some MCP client" — which is exactly what
+  emergent domain detection (`MASTERPLAN_DOMAIN_ENGINE_SPEC.md` §5a) needs to attribute effort.
+- **Memory hygiene.** Repo context lands in the terminal agent's namespace instead of polluting
+  the Collaborator's working memory, and the existing federated model decides what is private,
+  shared, or promoted.
+- **Delegation becomes possible.** The Collaborator delegates a scoped goal to
+  `development.main-runtime`; you open whichever client; it authenticates as that agent,
+  inherits the namespace and the goal, works locally, reports back. Every step maps onto
+  something that already exists.
+
+**Caution — capabilities bind to `agent_type`, not to agent id.** So all agents of type
+`terminal` share one capability set. That is probably right (policy per class, not per
+instance), but it means `development.main-runtime` and `development.client-work` cannot differ
+without differing types. Decide deliberately rather than discovering it later.
+
+**Two gaps, both runtime-owned** — filed as FR-12 and FR-13 in
+`RUNTIME_FEATURE_REQUESTS.md`: there is no agent *registration* surface (the seven are a
+hardcoded list in the runtime's `startup.py`), and `agents` has no metadata field for
+provider/workspace/branch. Until those land, the flat allowlist in §4 is the shipping path and
+this section is the target.
+
+**Also worth noting:** `AGENT_USER = "user"` exists as a constant but has no `agents` row, so
+the Collaborator itself is not a registered agent either. Registering both makes the model
+symmetric instead of special-casing the terminal.
+
 ---
 
 ## 5. Deployment — local now, hosted later, both already supported
@@ -137,6 +196,10 @@ so the posture should be stated rather than inherited:
   and already trust with them.
 - **Identity is real, not asserted.** stdio pins one configured user; SSE resolves a token. There
   is no "trust the caller's claimed user_id" path.
+- **Identity-scoped beats connection-scoped.** The end state (§4a) is not "an MCP client
+  connected, therefore 77 syscalls" but "this is agent `development.main-runtime`, type
+  `terminal`, and its capability mapping says these". That is the same move as #194 one layer
+  up: authorise the actor, not the channel. The flat allowlist is the interim.
 - **Audit already exists.** Syscalls dispatch through the same pipeline as everything else, so
   terminal-originated calls land in execution records like any other.
 

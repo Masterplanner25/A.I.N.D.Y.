@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-08-05"
+last_verified: "2026-08-06"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -298,6 +298,131 @@ the existing `{data: recommendation}` envelope, then integration-test end-to-end
 
 ---
 
+## FR-12 — No way to register an agent; the roster is hardcoded in the runtime 🔴 net-new
+
+**apps-monolith ref:** found 2026-08-06 while designing the terminal-agent surface
+(`docs/handoffs/TERMINAL_AGENT_SCOPE.md` §4a).
+
+### Today
+
+The `agents` table is well shaped for a general agent registry:
+
+```
+id (varchar) · name · agent_type · description
+owner_user_id (uuid) · is_active · memory_namespace · created_at
+```
+
+`owner_user_id` implies per-user agents; `memory_namespace` gives each agent its own memory
+space; `agent_capability_mappings` scopes capabilities by `agent_type`. All of that works — seven
+agents are live, each with a namespace, and the mapping table has rows.
+
+**But there is no way to add one.** The roster comes from `_bootstrap_system_agents()` — a
+hardcoded list of seven specs inside the runtime's `startup.py`, upserted by
+`memory_namespace`:
+
+```python
+_SYSTEM_AGENTS = [
+    {"name": "ARM", "namespace": "arm", "agent_type": "system", ...},
+    {"name": "Genesis", ...}, {"name": "Nodus", ...}, {"name": "SYLVA", ...},
+    {"name": "Platform", ...}, {"name": "Runtime", ...}, {"name": "Memory", ...},
+]
+```
+
+`register_agent_tool()` exists on the platform registry, but that registers **tools**, not agent
+identities. There is no `register_agent`, no route, and no syscall. Every live row is
+`agent_type='system'` with `owner_user_id` NULL — the per-user half of the schema has never been
+exercised.
+
+### Why we need it
+
+We want to register a **terminal agent** — an identity a local MCP client (Claude Code, Codex,
+whatever comes next) authenticates as, so that:
+
+- capability scoping is per-agent-type rather than "an MCP client connected, here are 77
+  syscalls";
+- repo/session context lands in the agent's own memory namespace instead of the user's
+  Collaborator memory;
+- commits, task completions, watcher sessions and syscall calls attribute to a real platform
+  actor, which is what effort attribution needs.
+
+The durable identity should be the **role** (`development.main-runtime`), with the vendor client
+as swappable metadata — see FR-13.
+
+Today the only ways to create that row are a runtime code change or a raw `INSERT`. Neither is
+something an app should do.
+
+### The ask (runtime) — sliceable
+
+1. **A registration surface for non-system agents.** Either a platform-layer
+   `register_agent(...)` an app can call at bootstrap (consistent with the other
+   `register_*` hooks), or an authenticated route/syscall for user-owned agents. App bootstrap
+   is enough for our case; a route is what a product eventually needs.
+2. **Honour `owner_user_id`.** Registration should be able to scope an agent to a user, and
+   reads should filter by owner so one user cannot enumerate another's agents.
+3. **Keep the idempotent-upsert semantics** `_bootstrap_system_agents` already uses — re-running
+   registration must not duplicate.
+4. **Reserve the system namespaces.** An app-registered agent should not be able to claim `arm`,
+   `genesis`, `nodus`, `sylva`, `platform`, `runtime` or `memory`.
+
+### Related observation, not a request
+
+`AGENT_USER = "user"` exists in `AINDY/db/models/agent.py` and is deliberately excluded from
+`SYSTEM_AGENTS`, but no `agents` row is ever created for it. So the user's own agent — the thing
+the product surface represents — has no identity or memory namespace today. If FR-12 lands,
+registering it becomes possible and the model stops special-casing the terminal.
+
+### References
+
+- Runtime: `AINDY/startup.py` (`_bootstrap_system_agents`), `AINDY/db/models/agent.py`,
+  `AINDY/platform_layer/registry.py` (`register_agent_tool` — the near-miss).
+- App: `docs/handoffs/TERMINAL_AGENT_SCOPE.md` §4a, `docs/handoffs/SURFACE_IDENTITY_BRIEF.md` §1.
+
+---
+
+## FR-13 — `agents` has no metadata field, so identity cannot outlive the vendor 🟡 small
+
+**apps-monolith ref:** found 2026-08-06 alongside FR-12.
+
+### Today
+
+`agents` carries `id`, `name`, `agent_type`, `description`, `owner_user_id`, `is_active`,
+`memory_namespace`, `created_at`. There is no JSONB, and no `updated_at`.
+
+### Why that blocks the useful shape
+
+The point of registering a terminal agent is that **the identity is the role, and the client is
+an implementation detail**:
+
+```
+agent:      development.main-runtime      (durable — id, namespace, history)
+provider:   codex  ->  claude_code        (swappable)
+workspace:  aindy-runtime
+branch:     feature/foo
+```
+
+If the provider switches next month, the platform should not think a brand-new agent with no
+history appeared. The durable half already works — `id` and `memory_namespace` are
+provider-independent. The swappable half has nowhere structured to live: `description` is free
+text, and encoding `provider=codex;workspace=...` into it is the kind of thing that looks fine
+until something needs to query it.
+
+### The ask (runtime)
+
+1. **Add `metadata JSONB` to `agents`** (nullable, additive). Provider, workspace, branch,
+   client version, last-seen — whatever the registrant wants, without further schema changes.
+2. **Add `updated_at`**, so "last seen / last re-registered" is answerable. Every other table in
+   this schema has one.
+3. Optionally expose it on whatever FR-12's registration surface becomes, so re-registering with
+   a new provider updates metadata rather than creating a second identity.
+
+Additive and nullable, so nothing existing changes.
+
+### References
+
+- Runtime: `AINDY/db/models/agent.py`.
+- App: `docs/handoffs/TERMINAL_AGENT_SCOPE.md` §4a.
+
+---
 ## FR-8 — 2.0.0 upgrade: the verified-backfill does not ship in the wheel ✅ CLOSED in 2.0.1
 
 **Closed in `aindy-runtime==2.0.1` (2026-08-05).** `bootstrap-schema --reconcile` now
