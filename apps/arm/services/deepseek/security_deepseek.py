@@ -11,10 +11,27 @@ Validation layers:
 4. Size and token threshold checks
 5. Content policy (no malicious code patterns)
 """
+import os
 import re
 from pathlib import Path
 from typing import Optional
 from fastapi import HTTPException
+
+
+def resolve_project_root(explicit: Optional[str] = None) -> Path:
+    """The one directory tree ARM is allowed to read from.
+
+    ARM analyzes files on the **server's** filesystem — there is no upload and no repo
+    connection — resolved relative to the API process's working directory (``/app`` in the
+    deployed image). So the analyzable tree is the application's own source, and the
+    process CWD is the correct default.
+
+    Override with ``AINDY_ARM_PROJECT_ROOT`` when the deployment lays the source out
+    somewhere else. Resolved with ``strict=False`` so a missing directory yields a root
+    nothing can be relative to (deny-all) rather than raising at import time.
+    """
+    raw = (explicit or os.environ.get("AINDY_ARM_PROJECT_ROOT") or "").strip()
+    return Path(raw).resolve() if raw else Path.cwd().resolve()
 
 
 class SecurityValidator:
@@ -62,15 +79,26 @@ class SecurityValidator:
         self.config = config or {}
         self.max_file_size_bytes = self.config.get("max_file_size_bytes", 100_000)
         self.max_chunk_tokens = self.config.get("max_chunk_tokens", 4000)
+        self.project_root = resolve_project_root(self.config.get("project_root"))
 
     # ── Path validation ──────────────────────────────────────────────────────
+
+    def _within_project_root(self, resolved: Path) -> bool:
+        """Whether an already-resolved path lies inside the configured root."""
+        try:
+            return resolved.is_relative_to(self.project_root)
+        except (AttributeError, ValueError):
+            # AttributeError: Python < 3.9. ValueError: comparison across drives on
+            # Windows. Either way the answer is "cannot prove it is inside" — deny.
+            return False
 
     def validate_file_path(self, file_path: str) -> Path:
         """
         Validate that the file path is safe and accessible.
 
-        Checks:
-        - No blocked directory segments (prevents traversal to .env, .git, etc.)
+        Checks, in order:
+        - Resolves inside the project root (containment — the primary guarantee)
+        - No blocked directory segments (.env, .git, secrets, …)
         - Extension is in the allowed set
         - File exists on disk
 
@@ -78,6 +106,26 @@ class SecurityValidator:
         Raises HTTPException 403 (forbidden) or 422 (unsupported) or 404 (not found).
         """
         path = Path(file_path).resolve()
+
+        # Containment first, because it is the only check that reasons about *where* the
+        # file is. Previously the guard was a blocked-segment list plus an extension
+        # allowlist, which meant `/etc/passwd` was refused for having no allowed suffix
+        # and `/usr/local/lib/python3.11/this.py` was allowed outright — any authenticated
+        # user could read any .py/.json/.yaml/.md on the host, and the contents were then
+        # sent to an external LLM. The allowlist guesses at what is sensitive; this
+        # answers whether the file is ours to read at all.
+        #
+        # `.resolve()` above collapses `..` and follows symlinks, so a traversal string or
+        # a symlink inside the root that points outside it both land here.
+        if not self._within_project_root(path):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Path is outside the analyzable project root. ARM can only analyze "
+                    "files belonging to this application."
+                ),
+            )
+
         path_str_lower = str(path).lower().replace("\\", "/")
 
         # Block path traversal into sensitive directories
