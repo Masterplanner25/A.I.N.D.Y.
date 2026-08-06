@@ -142,22 +142,120 @@ so the posture should be stated rather than inherited:
 
 ---
 
-## 7. This is also the Nodus coding agent
+## 7. Do not build a coding agent — be what coding agents connect to
 
-Decided 2026-08-06: **one piece of work, not two.**
+**Revised 2026-08-06.** An earlier draft of this section said the terminal agent *is* the Nodus
+coding agent, and that they are one piece of work. That was the right instinct applied one step
+too short. The better answer is not to build one at all.
 
-A terminal client with filesystem access, shell access and A.I.N.D.Y.'s capability surface *is*
-a coding agent when pointed at a repository. Nodus is the execution substrate and the natural
-home, and ARM's tools (`arm.analyze`, `arm.generate`, `arm.autotune`) become its hands rather
-than a separate product surface — which is also what §2 of `SURFACE_IDENTITY_BRIEF.md` concluded
-for independent reasons.
+The principle is the one already applied twice in this codebase — ARM is an organ rather than a
+surface, and A.I.N.D.Y. gets no filesystem — stated generally:
 
-The corollary: **ARM's six product routes can retire without losing the capability**, because
-the terminal is where code analysis actually wants to happen.
+> **Do not own a layer merely because you can build it.**
+
+Mature coding agents exist and are improving fast. The differentiated asset is not the
+intelligence operating the terminal; it is **what that intelligence can be given access to**.
+So instead of
+
+```
+A.I.N.D.Y.  ->  builds a Nodus coding agent  ->  competes with Codex / Claude Code
+```
+
+the shape is
+
+```
+Claude Code ─┐
+Codex ───────┤
+             ├──  MCP  ──>  A.I.N.D.Y.   (MasterPlan · Infinity · memory ·
+other agent ─┤                            workflows · RippleTrace · governance)
+your agent ──┘
+```
+
+**Nodus does not need to be an agent — it is a language.** Existing coding agents already learn
+unfamiliar languages, CLIs, conventions and test procedures from a repository. So ship what they
+learn *from*: the language, the CLI, docs, examples, the MCP tools and the runtime execution
+contract. Everything learned building Nodus becomes context and tooling for coding agents rather
+than another coding-agent implementation.
+
+**Why this is strategically better, not just cheaper:** you stop betting that your agent beats
+Codex. Anthropic improves Claude Code and A.I.N.D.Y. gets better; OpenAI improves Codex and
+A.I.N.D.Y. gets better; an open-source agent leapfrogs both and A.I.N.D.Y. gets better. You end
+up **downstream of intelligence commoditization instead of competing with it** — which is where a
+substrate wants to be.
+
+### What is still worth owning
+
+- **The Collaborator** (`SURFACE_IDENTITY_BRIEF.md` §1) stays. It is the native face for working
+  with the *system* — planning, reasoning over the MasterPlan, deciding what to do. And it has
+  something external agents structurally will not: 16 curated tools carrying risk levels and a
+  human approval gate. External agents get syscalls; the Collaborator gets judgment.
+- **The bridge itself.** The commercial boundary is not "access to Nodus" — it is *your execution
+  environment follows you into the terminal*, maintained as the ecosystem moves: MCP/auth changes
+  in Codex, behaviour changes in Claude Code, syscall-contract evolution, new Collaborator
+  capabilities, permissions found to be too broad. That is ongoing product work with real
+  operational cost, which is a legitimate thing to charge for. The open pieces stay open; anyone
+  sufficiently technical can wire their own.
+- **A "Nodus mode" preset** — enabling it in Codex/Claude Code supplies the Nodus language, docs,
+  CLI, examples and the A.I.N.D.Y. MCP allowlist in one step. That is configuration and
+  curation, not a new agent.
+
+**The cost this creates, stated plainly:** selling a maintained bridge means selling **contract
+stability**. `SyscallEntry` already carries `stable`, `deprecated`, `deprecated_since` and
+`replacement`, so the machinery exists — but syscalls have so far been added and changed freely
+because nothing external consumed them. The moment external agents bind to them, that freedom
+ends. The commercial promise *is* the constraint.
 
 ---
 
-## 8. What this does not do
+## 8. Observability — how A.I.N.D.Y. knows what the coding agent did
+
+**This is the prerequisite for the commercial story, not a nice-to-have.** "Your execution
+environment follows you into the terminal" is only half true if context flows *out* and results
+never flow *back*. If an external agent does the most valuable work of the week and A.I.N.D.Y.
+cannot see it, the most productive surface becomes the one the system is blind to — the exact
+blind spot `MASTERPLAN_DOMAIN_ENGINE_SPEC.md` §5a exists to close — and the differentiator
+quietly inverts.
+
+Audited 2026-08-06, and **three channels already exist**. Two of them close the loop today.
+
+**1. Syscalls self-report.** Anything the agent does *through* A.I.N.D.Y. dispatches on the
+normal pipeline, so it lands in execution records like any other call. `sys.v1.task.complete`
+over MCP is a real completion: it recalculates the plan's ETA and WCU and cascade-activates,
+identically to a click in the web UI. **No work needed.**
+
+**2. `sys.v1.watcher.ingest` → Infinity, already wired.** `watcher_signals` carries
+`app_name`, `activity_type`, `session_id`, `duration_seconds`, `focus_score` and a
+`signal_metadata` JSONB — an activity-ingestion surface. `infinity_service` already computes
+**`focus_quality`** from it, reading `session_ended`, `distraction_detected` and `focus_achieved`
+via `sys.v1.watcher.query`.
+
+The table has **0 rows**. It was built for a desktop activity watcher that never shipped, and
+the path from ingestion to Infinity has been complete and unused ever since. A terminal agent
+emitting a `session_ended` signal with its duration would feed `focus_quality` on the first run,
+with no new plumbing.
+
+**3. `sys.v1.event.emit`** is already in the runtime's default MCP write set, so an external
+agent can raise domain events into A.I.N.D.Y. directly.
+
+### What is genuinely missing
+
+- **Attribution.** §5a needs effort mapped to a domain, or explicitly mapped to none. Watcher
+  `signal_metadata` is the natural carrier (repo, branch, files touched), but nothing populates
+  or reads it that way yet.
+- **Artifact ingestion.** Commits, PRs and releases are proof-of-work the agent produces but does
+  not report. RippleTrace already ingests *external* artifacts for published content — the same
+  shape applied to work artifacts is the obvious reuse, not a new subsystem.
+- **A reporting convention.** Whether the agent is *asked* to report (prompt/preset) or
+  *required* to (a wrapper that emits `session_ended` on exit). The second is reliable; the first
+  is honest about what an external agent will actually do.
+
+**Sequencing note:** channel 1 is free, channel 2 is a signal emission, and both should exist
+before tier 3 of the allowlist. Otherwise the agent gains the ability to change state before the
+system gains the ability to see it.
+
+---
+
+## 9. What this does not do
 
 - Does not build a bespoke A.I.N.D.Y. CLI. MCP clients already exist; building a competing one is
   work with no payoff until the protocol is insufficient.
@@ -171,7 +269,7 @@ the terminal is where code analysis actually wants to happen.
 
 ---
 
-## 9. Phases
+## 10. Phases
 
 1. **Dependency + smoke.** Add the `[mcp]` extra; run `aindy-runtime mcp-server --transport
    stdio` against the local stack; confirm the nine default tools appear in a real MCP client.
@@ -179,14 +277,18 @@ the terminal is where code analysis actually wants to happen.
    `AINDY_MCP_SERVER_TOOLS`; document in `.env.example` and compose. Ship here.
 3. **Tier 2–3, deliberately.** Add authoring, then acting, one capability at a time with a reason
    recorded for each.
-4. **Nodus coding agent.** Point it at a repository, with ARM's tools as its hands.
+4. **Report back.** Emit `session_ended` from the terminal client so `focus_quality` starts
+   receiving real signals; decide the attribution convention (§8).
+5. **"Nodus mode" preset.** Language, CLI, docs, examples and the allowlist bundled so an
+   existing coding agent can be pointed at a repository in one step.
 
-Phase 1–2 are a day's work and carry no state-changing risk. Phases 3–4 are where the design
-questions below have to be answered.
+Phases 1–2 are a day's work and carry no state-changing risk. **Phase 4 should not trail phase
+3** — see §8: the agent should not gain the ability to change state before the system gains the
+ability to see it. Phase 5 is packaging.
 
 ---
 
-## 10. Open questions
+## 11. Open questions
 
 - **Syscalls or agent tools?** MCP exposes syscalls. The 16 agent tools are curated, carry risk
   levels, and drive the approval gate. A terminal client seeing raw syscalls bypasses that
@@ -194,8 +296,4 @@ questions below have to be answered.
   agent tools as MCP tools separately.
 - **Where does approval live for terminal-initiated work?** Today the human gate is in the agent
   run path. An MCP call has no equivalent. Tier 1 sidesteps this; tier 3 cannot.
-- **Does terminal work feed the loop?** If the agent completes tasks from a shell, that effort
-  should reach Infinity, the MasterPlan's WCU and emergent domain detection
-  (`MASTERPLAN_DOMAIN_ENGINE_SPEC.md` §5a) — otherwise the most productive surface is the one the
-  system cannot see, which is the exact blind spot §5a exists to close.
 - **One identity or many?** stdio pins a single user. Fine for the owner's machine; not a product.
