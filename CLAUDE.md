@@ -214,21 +214,27 @@ message = result.get("message", "")
 
 `cleanup_committed_test_state` guards against this by querying `pg_catalog.pg_tables` before building the `TRUNCATE` list — only truncating tables that actually exist in the DB. **Do not simplify this back to iterating `Base.metadata.sorted_tables` directly.** Tables like `freelance_refund_records` (imported late via a freelance module reload) will raise `UndefinedTable`, which rolls back the cleanup transaction, leaves data in the DB, and cascades into isolation assertion failures and `InFailedSqlTransaction` errors across the rest of the session.
 
-### Don't import `apps.*` at test-module scope — collection runs before bootstrap
+### `test_real_vm_run_routes_through_nodus` fails under load, not because of your change
 
-A module-level `from apps.<domain>... import X` in a test file executes at pytest **collection**
-time, ahead of every test, pulling that app's import chain in before the plugin bootstrap runs.
-Registration-dependent state can then be missing for tests that expected bootstrap to establish
-it — and the failure lands in a **different file that you did not touch**.
+The Nodus VM worker cold-starts the whole app stack (~16 apps) per execution. The runtime
+default budget is **30s script + 15s boot**, which a full-suite run on a busy machine can
+exceed:
 
-Observed: adding `tests/unit/test_arm_path_confinement.py` with a module-level
-`apps.arm.services.deepseek` import made `test_reasoning_nodus_apply.py` fail. Its Nodus
-workflow was no longer registered when it ran, so the VM path fell back and returned
-`{'data': {}}`. Both files pass alone and in a pair; only the full suite shows it.
+```
+[nodus.execute] FAILURE error=Nodus worker exceeded 45000ms hard limit
+  (30000ms script budget + 15000ms boot allowance) — worker or plugin cold-start hung
+```
 
-Import inside a fixture or inside the test instead. If a suite-wide failure appears in a file
-your change never touched, check for a new `apps.*` import at another test module's top level
-before hunting in the failing file.
+The VM then falls back and `run_reasoning_apply` returns `{'data': {}}` with no `_via`, so the
+assertion reads as a logic failure rather than a timeout. It passes when the file is run alone.
+
+`pytest.ini` now sets `AINDY_NODUS_MAX_EXECUTION_MS=120000` and
+`AINDY_NODUS_BOOT_ALLOWANCE_MS=60000`, matching what `docker-compose.prod.yml` already does
+for the container and for the same documented reason.
+
+**Do not attribute this failure to whatever you just changed until you have re-run it.** It is
+load-dependent, so two consecutive failures are not proof of causation — check the log for the
+`45000ms hard limit` line first.
 
 ### `AINDY_AGENT_PLANNER_BACKEND` in integration tests
 
