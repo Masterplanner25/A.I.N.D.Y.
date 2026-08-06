@@ -1,6 +1,7 @@
 # MasterPlan Goal Attainment — Implementation Spec
 
-**Status:** spec, not started. Written 2026-08-01.
+**Status:** Phases 0 and 1 **shipped** (#173, #174, #178). Phases 2–3 not started.
+Written 2026-08-01, status refreshed 2026-08-05 against the code.
 **Problem:** nothing moves the MasterPlan except activity and elapsed time.
 **Approach:** resolve declared goals against real domain signals, on read, via syscalls.
 **Scope:** deliberately the *star* model — feed the plan better. Not the hub rewrite.
@@ -106,8 +107,8 @@ Rules:
 | `tasks` | tasks | completed tasks for the plan | ✅ **Phase 0** — `sys.v1.task.list_for_masterplan` |
 | `USD`, `revenue`, `$` | freelance | delivered-order prices, summed live | ✅ **Phase 1** — `sys.v1.freelance.get_goal_metric` |
 | `impressions`, `clicks`, `posts` | social | `summarize_social_performance()["overview"]` | ✅ **Phase 1** — `sys.v1.social.get_goal_metric` |
-| `playbooks` | rippletrace | `PlaybookDB` count | ❌ needs syscall — **and the table is empty** |
-| `books` | authorship | — | ❌ **no publication concept exists**; the domain has one route (`/reclaim`) |
+| `playbooks` | rippletrace | `PlaybookDB` count | ✅ **shipped** (#178) — `sys.v1.rippletrace.get_goal_metric`, wired as `_rippletrace_metric`. Reports `scope: "global"`; the table is empty until rippletrace has ingested content |
+| `books` | authorship | — | ❌ **no publication concept exists**; the domain has one route (`/reclaim`). The only unit family still unresolvable |
 
 **Scope decisions made in Phase 1:**
 
@@ -161,15 +162,23 @@ visible in the projection payload, not the score.
 Matches how this repo has shipped every other scoring change (three-axis shadow → advisory →
 default):
 
-1. **Phase 0 — resolver + registry.** `goal_attainment.py`, `tasks` unit only. Not wired to
-   scoring. Exposed read-only on the projection payload so it is inspectable.
-2. **Phase 1 — new syscalls.** `freelance` and `social` `get_goal_metric`. Still unwired.
+1. ✅ **Phase 0 — resolver + registry.** `goal_attainment.py`, `tasks` unit only. Not wired to
+   scoring. Exposed read-only on the projection payload so it is inspectable. Shipped #173.
+2. ✅ **Phase 1 — new syscalls.** `freelance` and `social` `get_goal_metric`, plus `rippletrace`
+   (#178). Still unwired. Four of the five unit families now resolve.
 3. **Phase 2 — shadow.** Compute the blended score alongside the live one, record both, change
    nothing. Flag `AINDY_MASTERPLAN_GOAL_ATTAINMENT_SHADOW`.
 4. **Phase 3 — flip.** Blend becomes live behind
    `AINDY_MASTERPLAN_GOAL_ATTAINMENT`, default off, after a real soak.
 
-Phases 0–1 are safe to merge immediately; nothing observes them.
+Phases 0–1 were safe to merge immediately because nothing observes them — and nothing does
+today, which is why the resolvers exist but no plan is measured by them yet.
+
+**Superseded in part.** `MASTERPLAN_DOMAIN_ENGINE_SPEC.md` (the structural path, chosen
+2026-08-05) is where these resolvers get consumed: they become the `current_value` writers for
+plan-scoped domains. Phases 2–3 below describe blending attainment into the *existing* six-column
+gate; the Domain Engine replaces that gate instead. Treat this document as the **unit-resolution
+contract** — which is live and still correct — rather than as the remaining rollout plan.
 
 ---
 

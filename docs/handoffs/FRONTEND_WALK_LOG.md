@@ -1,6 +1,6 @@
 ---
 title: "Frontend Walk Log — live user-path walkthrough"
-last_verified: "2026-07-22"
+last_verified: "2026-08-05"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -905,9 +905,20 @@ YAML, and application config that isn't shaped like a key all pass through.
 an extension guess. Cheap to add, and it makes the existing allowlist a second layer instead of
 the only one.
 
-**Status:** hardening recommended, not applied — the right root depends on the item 19 decision
-about what ARM is for. Worth doing before any deployment where the API host holds anything the
-signed-in user shouldn't read.
+**Status: ✅ FIXED (#194, 2026-08-05).** `resolve_project_root()` (CWD by default — `/app` in
+the image, which is already where ARM resolves relative paths from — overridable with
+`AINDY_ARM_PROJECT_ROOT`), checked **before** the segment and suffix guards, which stay as a
+second layer. `.resolve()` collapses `..` and follows symlinks, so traversal and escaping links
+are both caught; containment is checked before existence so the validator is not an existence
+oracle. Re-probed on the live container: `/usr/local/lib/python3.11/this.py` now 403
+containment, `/app/apps/arm/models.py` still resolves, `/etc/*` refused for the right reason.
+
+The fix also removed a byte-identical `SecurityValidator` copy in
+`apps/arm/services/deepseek/__init__.py` — importable as a *different class object*, so the fix
+would have been bypassable by importing the package instead of the module.
+
+The item 19 question (what ARM is *for*) remains open; it turned out not to block the root
+choice, because ARM already resolves relative paths from the process CWD.
 
 ---
 
@@ -1267,7 +1278,11 @@ missing (making this a runtime feature request), or the client should stop prete
 and the call should be removed. Silently 404-ing on every crash is the one option that helps
 nobody.
 
-**Status:** diagnosed, unfixed.
+**Status: ✅ RESOLVED upstream.** The runtime now serves the route — re-probed 2026-08-05,
+`POST /client/error` returns **204** where it previously 404'd, and the client already posts
+there (`ROUTES.OPERATOR.CLIENT_ERROR` → `/client/error`). Client-side crashes are reported
+rather than swallowed. No app change was needed; the first of the two possible reads turned out
+to be right.
 
 ---
 
@@ -1584,3 +1599,48 @@ addition, and it is the single piece that would make Health a real operator surf
 **Upstream:** the `/apps` mount omission belongs in `@aindy/ui-kit`; corrected app-side in
 `client/src/api/_routes.js` and logged against `UIKIT-ROUTE-DRIFT-1`. The 401-logs-out-everything
 behavior (open item 8) is also a `@aindy/ui-kit` request-core concern.
+
+---
+
+## Closed after the walk (2026-07-23 → 2026-08-05)
+
+The table above stops at #163, which was the last PR of the walk itself. These closed
+afterwards, verified against the code and the live stack on 2026-08-05 rather than taken from
+the PR titles.
+
+| Item | Resolution | PR |
+|---|---|---|
+| 31 — Agent Console crashed on wrapped agent reads | envelope unwrapped | #164 |
+| 18 — Analytics/KPI showed dead manual formulas | `/kpi` rewired onto the live Infinity score engine; Manual Tools moved to `/tools`; collider panels deleted | #168 |
+| 29 — the platform UI is a record, not a control plane | DLQ actions, run-flow, admin promotion, webhooks CRUD. Agent/node/nodus control deliberately deferred as design decisions | #169, #170, #171 |
+| 34 — `/apps/compute/create_masterplan` could never succeed | repaired, with the analytics rewire | #172 |
+| 16 — the only non-Genesis MasterPlan create route 500s | same fix | #172 |
+| 3 — a 4xx raised before pipeline entry became an opaque 500 | swept every managed route and **guarded it in CI** (`scripts/check_route_pipeline_contract.py`) | #182 |
+| 6 — no import/upload path for an existing plan | free-text import, structured by the LLM, seeded as the opening Genesis exchange | #183 |
+| 20 — ARM has no project-root confinement | containment check; see the item above | #194 |
+| 28 — client error telemetry has never worked | runtime now serves `/client/error`; no app change needed | upstream |
+
+Also closed in the same window, outside the walk's numbering: the `bridge` domain retired into
+`apps/memory` (#185), `network_bridge` finally wired to the sign-in event it was built for
+(#184), rippletrace given a real data supply (#177, #178), runtime 2.0.0 and 2.0.1 adopted
+(#188, #190, #192) with password recovery UI (#189), and four dead-twin duplicates removed
+(#195).
+
+## Still open
+
+**Decisions, not defects** — these need the owner, not a fix:
+
+- **17** — MasterPlan / Genesis / Assistant / Tasks want to be one section.
+- **19** — what ARM Analyze is *for*: an internal dev tool pointed at A.I.N.D.Y.'s own source,
+  or a product surface that would need upload or a repo connection.
+- **23** — the five Identity decisions (rename, feed the inference engine, surface the verdicts,
+  fold into the assistant, and "memory needs no rework — judge other surfaces against it").
+- **10** — the social feed reads bare on first look.
+
+**Diagnosed, unfixed, runtime-owned:**
+
+- **8** — a 401 on any request logs the whole session out. Confirmed still present in the
+  `@aindy/ui-kit` 1.0.6 request core, which dispatches `aindy:session-expired` on every 401.
+- **33** — every response carries two trace ids resolving to different graphs. The fix is
+  naming (`pipeline_trace_id`), and the envelope is runtime-built.
+- **34** — scheduler status reports health but lists no jobs.
