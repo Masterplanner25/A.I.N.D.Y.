@@ -172,3 +172,9 @@ is the spine everything else scores, and **conversing with it is a coin-flip bet
 
 **Fixing this is a prerequisite for the "just use it" remedy** the audit recommends. You cannot ask
 someone to use a product daily when its primary authoring surface intermittently hangs.
+
+**It is also an explicit gate on other work.** The owner's real MasterPlan is blocked on this fix —
+`POST /apps/genesis/import` (wired at `Genesis.jsx:119`) is the intended path for the four existing
+plan documents, and a large import is precisely the input most likely to hit the bad tail.
+[`STARTING_POSITION_SPEC.md`](./STARTING_POSITION_SPEC.md) is gated on the same fix for the same
+reason.
