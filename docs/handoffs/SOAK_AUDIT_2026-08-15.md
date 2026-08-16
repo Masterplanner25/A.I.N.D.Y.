@@ -247,3 +247,17 @@ The honest shapes, unresolved:
 That third option is a real position, not a cop-out, and it is the fork worth deciding first:
 **is Worth measuring your economic reality, or the value attributable to the plan?** The answer
 determines whether external income belongs in the model at all.
+
+> **Partly resolved 2026-08-16.** The owner's answer was "both" — economic reality matters to the
+> plan *and* can give value to it — with the qualifier that **what happens to the money is the
+> variable**: a paycheck spent by Monday and one saved for a month are the same income and a
+> different situation.
+>
+> That separates cleanly. Attribution (did the plan produce value?) is a **flow** and belongs to
+> Worth. Capacity (can I afford to run the plan?) is a **stock** and belongs to feasibility, not
+> to any score. A paycheck does not make the plan more valuable; it makes it more affordable.
+>
+> Specced as **runway** in
+> [`CAPACITY_AND_RUNWAY_SPEC.md`](./CAPACITY_AND_RUNWAY_SPEC.md), routed to the risk-posture
+> input that `BUILD_PLAN.md` records as "sensed, not actuated". **Worth stays attribution-only**,
+> which keeps this §8 gap open but makes it much less pressing.
