@@ -75,6 +75,22 @@ existing database before release.*
 Auto-applying DDL by default. Whether *our* entrypoint passes `--reconcile` is our call
 (`RUNTIME_2_1_0_UPGRADE.md` §7) and does not need a runtime change either way.
 
+### Our own CI has the identical blind spot — app-side follow-up
+
+Worth stating plainly rather than only pointing upstream. `.github/workflows/deploy-bootstrap-guard.yml`
+exercises `bootstrap-schema -> deploy_bootstrap -> serve` **on a fresh database**, and it passed
+on this very PR while the live stack was crash-looping.
+
+It passes *because* the database is fresh: `create_all` builds `agents` from the new packaged
+metadata, so the columns are present and there is nothing to reconcile. The guard can never see
+this class of failure, because the failure only exists when a database predates the schema change
+— which is the case for every real deployment and no CI run.
+
+**The missing guard is an upgrade-path one:** boot the *previous* runtime against a fresh DB,
+then bring up the *new* one against that now-existing DB. That is the shape that would have
+caught FR-8 and FR-14 before either reached a running stack. Not built here; the adoption PR is
+not the place for it.
+
 ### Verified
 
 Reconcile succeeded (`ok: reconciled runtime-owned tables to packaged metadata.` /
