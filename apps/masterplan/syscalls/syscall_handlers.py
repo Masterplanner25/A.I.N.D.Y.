@@ -148,7 +148,25 @@ def _trim_transcript(entries: list[dict]) -> list[dict]:
     return entries[-MAX_TRANSCRIPT_ENTRIES_STORED:]
 
 
-MAX_IMPORT_CHARS = 20000
+# Upper bound on an imported plan, sized against the model that reads it rather than
+# guessed. `call_genesis_import_llm` uses gpt-4o-mini (128k-token context); 80,000
+# characters is roughly 20k tokens, comfortably inside it while still refusing a
+# pathological paste.
+#
+# Was 20,000, which was below the size of a real plan and therefore not a safety limit
+# but a wall. Measured 2026-08-16 against the owner's own corpus:
+#
+#   V1   8,184 chars   V2  65,671   V3  50,900   V4  22,749
+#
+# V4 — the version anyone would actually import — missed the old cap by 2,749
+# characters and was rejected outright. The limit was never protecting the model: V4 is
+# ~6k tokens and even V2 is only ~17k. It was protecting nothing and blocking the
+# feature's primary use case.
+#
+# Keep a cap: input to an LLM call should always be bounded, and an unbounded paste is
+# a cost and latency hazard on a path that already has one (FR-15). Just bound it where
+# the real constraint is.
+MAX_IMPORT_CHARS = 80000
 
 
 def _handle_genesis_import_plan(payload: dict, ctx: SyscallContext) -> dict:
