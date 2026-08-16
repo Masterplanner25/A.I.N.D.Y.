@@ -8,6 +8,66 @@ owner: "app-team"
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
 
+## FR-15 — a request can wait ~3 minutes to enter the execution pipeline, with no events emitted 🔴 defect
+
+**apps-monolith ref:** found 2026-08-16 driving a Genesis session to lock. Full writeup and
+reproduction: [`DEFECT_GENESIS_MESSAGE_LATENCY.md`](./DEFECT_GENESIS_MESSAGE_LATENCY.md).
+
+### What we measured
+
+On `aindy-runtime==2.1.0`, single user, no other traffic. Event timeline from `system_events` for
+one Genesis message request (total wall time 184s):
+
+```
+external.call.completed   06:00:43.180   ← 4 LLM calls, 3.7s total
+execution.started         06:03:40.561   ← 177.4s gap, ZERO events recorded
+flow.node.* … execution.completed        ← the entire flow: ~0.9s
+embedding.started         06:04:09.472   ← a further 26.3s gap
+```
+
+**The work is fast. The waiting is the whole cost.** 177 seconds elapse between the app handing
+off and `execution.started`, and nothing is emitted in that window — so from the outside the
+process looks hung rather than queued.
+
+Across five identically-shaped calls latency was 5.4s / 18.2s / 48.8s / 22.3s / **184.1s** —
+unbounded and non-monotonic. In a first episode the API pegged ~2.7 cores for **13 minutes** with
+`/health` itself timing out, and needed a manual restart.
+
+Throughout, APScheduler logged continuously:
+
+```
+Execution of job "Scheduler heartbeat tick (trigger: interval[0:00:01], …)"
+  skipped: maximum number of running instances reached (1)
+```
+
+### The ask
+
+1. **Is there a single-slot serialisation on the path into the execution pipeline?** We infer one
+   from the queueing behaviour and the starved 1s heartbeat, but we cannot see inside the executor
+   and are explicitly not claiming the mechanism.
+2. **Emit something while a request is queued.** A `execution.queued` event, or a periodic
+   "waiting on executor" log, would have turned a three-hour investigation into a one-line answer.
+   Right now a queued request and a hung process are indistinguishable from the outside — which is
+   the same observability shape as FR-14, where a crash loop could only be diagnosed from the
+   container log.
+3. **Consider a bound.** An unbounded wait with no timeout means one slow path can exhaust the
+   API's ability to serve anything, including health checks.
+
+### Our half, already identified
+
+The app amplifies this by calling `sys.v1.analytics.execute_infinity` **synchronously on every
+Genesis chat message** (`apps/automation/flows/flow_definitions.py:254`). That is ours to fix and
+we will, but it only removes an amplifier — a 177s queue for one user's second chat message is not
+explained by one extra syscall.
+
+### Not attributable to 2.1.0 without further evidence
+
+The heartbeat warnings begin during an unrelated image build on a loaded machine, ~1.5h before any
+Genesis traffic. We have a documented history of misattributing load-dependent failures and are
+not repeating it here.
+
+---
+
 ## Response to v2.1.0 §6 — which scopes the UI actually needs
 
 **Not a feature request — an answer to a question the runtime team asked**, in
