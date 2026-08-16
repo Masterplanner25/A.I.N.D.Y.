@@ -191,5 +191,9 @@ asked for, because a silent narrowing reads as scattered 403s and looks like a f
   **our 21 `register_scheduled_job` sites**. Latent by construction, not implicated in any
   incident. Relevant to us because adding a scheduled job is cheap and adding a *slow* one is not.
 - **`TOOL-SEAM-ISOLATION-1`**, **`EXEC-ENV-BIND-1`**, **`HTTP-SCOPE-GAP-1`** — unchanged.
+- **`FR-16`** (filed by us, same day) — 2.2.0 pins `nodus-lang==4.1.0` **exactly**, and
+  `nodus-lang==4.2.0` published 2026-08-16. We have no direct dependency on it, so there is no
+  app-side route to 4.2.0. Wanted because #376 fixes resume-path correctness bugs on a path we
+  run, including a Windows-only store failure and a 200ms resume budget raised to 30s.
 
-**Next available FR number: `FR-16`.**
+**Next available FR number: `FR-17`.**

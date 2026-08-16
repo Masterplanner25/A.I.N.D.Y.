@@ -8,6 +8,60 @@ owner: "app-team"
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
 
+## FR-16 — `nodus-lang==4.1.0` is an exact pin, so we cannot take 4.2.0 🟡 dependency
+
+**apps-monolith ref:** found 2026-08-16, the day `nodus-lang==4.2.0` was published.
+
+### The block
+
+`aindy-runtime==2.2.0` declares:
+
+```
+Requires-Dist: nodus-lang==4.1.0
+```
+
+An **exact** pin, not a range. We do not depend on `nodus-lang` directly — it reaches us only
+through the runtime — so there is no app-side change that can adopt 4.2.0. `pip install
+nodus-lang==4.2.0` succeeds and leaves the environment inconsistent with the runtime's own
+declared requirement, which is worse than a clean refusal.
+
+### Why we want it — this release fixes things on a path we run
+
+We execute `apps/analytics/nodus/reasoning_apply_v1.nd` through `run_nodus_workflow`
+(`AINDY_REASONING_NODUS_NATIVE`, still soak-gated). 4.2.0's **#376** is four causes behind one
+intermittent failure on exactly that path:
+
+- a `RuntimeService` sweeper **adopted every non-terminal run in the store** every 500ms,
+  including runs it never created, rebinding the graph to its own throwaway VM
+- `LocalWorkflowStore.list_runs()` scanned **without the store lock**, and on Windows
+  `os.replace` onto an open path fails with `[WinError 5]` and the record is lost — POSIX
+  permits it, which is why it never showed in CI
+- **resume ran under a 200ms wall-clock budget** sized for running a script, while a resume first
+  reads state, reads checkpoint and recompiles the stored source. New `RESUME_TIMEOUT_MS` (30s)
+
+> **The signature is one we have seen.** #376 presents as *"a resume returning `ok: true` with the
+> result keys missing."* `CLAUDE.md` documents `run_reasoning_apply` returning `{'data': {}}` with
+> no `_via`, which we attributed to the Nodus 45s hard limit under load. That attribution may be
+> right and may be incomplete — **we are not claiming #376 explains it**, only that the signatures
+> match and both are load-dependent. Worth re-running the nodus tests once 4.2.0 is reachable,
+> before assuming the 45s note is the whole story.
+
+### The ask
+
+Bump the pin to `nodus-lang==4.2.0`, or relax it to a compatible range (`>=4.2,<5`) if the
+language's own compatibility policy allows. Either unblocks us; the range is preferable only if
+upstream is confident about it, since an exact pin is a defensible choice for a language runtime.
+
+### What is NOT a problem
+
+4.2.0's breaking change — *"every error now reports the resolved absolute path"* — **does not
+affect this repo.** Nothing here parses Nodus stderr or matches on error-location strings
+(grepped 2026-08-16). The two known issues shipped with 4.2.0 (`try/finally` without `catch`, and
+closures capturing a top-level loop body) are compile-time failures, and our one `.nd` uses
+neither construct.
+
+---
+
 ## FR-15 — a request can wait ~3 minutes to enter the execution pipeline 🟡 (b) and (c) SHIPPED in 2.2.0; (a) is ours
 
 **Mechanism found and confirmed — it is not a hypothesis any more.** From
