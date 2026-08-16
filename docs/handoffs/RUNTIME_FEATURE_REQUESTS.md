@@ -8,6 +8,31 @@ owner: "app-team"
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
 
+## FR-16 — `nodus-lang==4.1.0` is an exact pin, so we cannot take 4.2.0 ✅ CLOSED in 2.3.0
+
+**Shipped the same day it was filed.** `aindy-runtime==2.3.0` declares
+`Requires-Dist: nodus-lang==4.2.0`. Verified locally: upgrading the runtime pulled
+`nodus-lang-4.2.0` in the same transaction.
+
+The pin stays **exact** — defensible for a language runtime, and the runtime team's position is
+that this makes prompt bumping their obligation rather than our problem. They reproduced our block
+first (an editable install *downgraded* 4.2.0 back to 4.1.0) rather than taking the report on
+faith.
+
+They also ran a check we did not think to ask for: `GUEST-CONFINE-1` makes guest confinement
+depend on **VM constructor arguments**, so a silently renamed argument during a language bump
+would leave the guest unconfined while every VM-mocking test still passed. Verified against the
+real VM — all three flags present, all 31 gated builtins still refused.
+
+**Our `#376` question stands open, and they explicitly declined to answer it** rather than guess.
+The resume-path fixes present as *"`ok: true` with the result keys missing"*, matching
+`run_reasoning_apply` returning `{'data': {}}` — which `CLAUDE.md` attributes to the Nodus 45s
+hard limit. **Now re-testable, and worth doing before treating that note as the whole story.**
+
+---
+
+### Original filing (2026-08-16) — retained for context
+
 ## FR-16 — `nodus-lang==4.1.0` is an exact pin, so we cannot take 4.2.0 🟡 dependency
 
 **apps-monolith ref:** found 2026-08-16, the day `nodus-lang==4.2.0` was published.
@@ -226,7 +251,39 @@ release that enforces them.**
 
 ---
 
-## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🔴 STILL OPEN after 2.2.0
+## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🟡 HALF CLOSED in 2.3.0
+
+**Both things we asked for shipped**, and one arrived better than requested.
+
+**Branchable exit codes.** `bootstrap-schema` now exits `0` success, `1` config error, `2` db-layer
+import failure, **`3` additive reconcile required (safe to automate)**, `4` offline migration
+required, `5` manual repair required. When a report indicates both, **`4` wins over `3`**, so an
+entrypoint never auto-reconciles a database that needs a person. `--help` now states plainly that
+a bare call under `set -e` in a container is a crash loop.
+
+**`docker/entrypoint.sh` now branches on the code.** `AINDY_BOOTSTRAP_RECONCILE` still gates
+whether exit 3 is applied automatically; the refusal path is now precise rather than opaque, and
+4/5 no longer masquerade as something a flag could fix.
+
+**The recurrence guard shipped too — the half we said was missing.** A CI job installs the
+*previous* released wheel, builds its schema, installs the new build over that database, and
+requires success or exit 3. That is exactly the state our own `deploy-bootstrap-guard.yml`
+structurally cannot reach, for the reason recorded in this entry.
+
+> **And they avoided the trap we fell into.** That guard passes trivially on a release with no
+> schema change — where a broken guard and a clean release are indistinguishable — so it ships
+> with a **negative-control job** that injects synthetic drift and requires detection, verified
+> from logs rather than a green tick. That is precisely the discipline `SOAK_AUDIT_2026-08-15.md`
+> concluded we lacked: a passing check on degenerate input proves nothing.
+
+**Still open: the entrypoint-pattern half.** The runtime's own `init` scaffold still recommends
+the bare form, which is what led us here originally.
+
+---
+
+### Original filing (2026-08-15) — retained for context
+
+## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🔴 upgrade-path (as filed)
 
 > **The 2.2.0 upgrade will not crash-loop, and that is not a fix.** Flagged explicitly by the
 > runtime team in `APP_HANDOFF_v2.2.0.md` §6, and worth repeating here because *"the upgrade

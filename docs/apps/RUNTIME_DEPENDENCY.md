@@ -19,7 +19,7 @@ published contracts.
 Recommended dependency range:
 
 ```toml
-aindy-runtime>=2.2.0,<3.0
+aindy-runtime>=2.3.0,<3.0
 ```
 
 The upper bound is required. The apps repo should not accept unbounded runtime
@@ -28,7 +28,7 @@ upgrades.
 Validated on `2026-08-15`:
 
 - installed runtime version: `2.1.0`
-- apps repo dependency (pinned in `pyproject.toml`): `aindy-runtime>=2.2.0,<3.0`
+- apps repo dependency (pinned in `pyproject.toml`): `aindy-runtime>=2.3.0,<3.0`
 - runtime `/api/version` recommendation: `>=2.0,<3.0`
 - app-profile boot smoke on 2.1.0: `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16`
 
@@ -133,7 +133,7 @@ live, published dependency contract — not a pre-publication staging arrangemen
 
 `aindy-runtime` is installed from PyPI as a normal pinned dependency:
 
-- the declared dependency in `pyproject.toml` is `aindy-runtime>=2.2.0,<3.0`
+- the declared dependency in `pyproject.toml` is `aindy-runtime>=2.3.0,<3.0`
 - CI installs it via `pip install -e .[test]` (no runtime-repo checkout, no source
   install)
 - CI verifies the installed runtime version and that `/api/version` reports the
