@@ -28,7 +28,7 @@ database — on 2026-08-15. Where something needs no action, that is a measured 
 |---|---|
 | Version pin | **Moved deliberately** — `>=2.1.0,<3.0`, so a rebuild can't silently change the minor under us |
 | Database / migrations | **None app-side.** Runtime head `0016`, self-migrated at boot, `alembic_version_runtime` |
-| `memory_agents_list` owner-scoping | **None.** Registered but unconsumed — one reference in the repo |
+| `memory_agents_list` owner-scoping | **None now**, but `AgentRegistry.jsx` consumes it via a runtime-owned route — see §2a before building on FR-12b |
 | `/health/deep` bus string | **None.** We don't read that field anywhere |
 | Admin agent route status codes | **None.** Referenced only in a walk log, never called |
 | `capability_scope` now a tuple | **None.** Zero references in `apps/` or `client/` |
@@ -76,15 +76,35 @@ The handoff flags this as landing directly on us, and it is right that we wire i
 | Before | every active agent, to every caller |
 | After | `owner_user_id IS NULL OR owner_user_id = <caller>` |
 
-**It changes nothing today, for two independent reasons.** Every agent row is un-owned
-(`owner_user_id` NULL on all 7), so the filter is a no-op; and that registration is the **only
-reference to `memory_agents_list` in the entire repo** — no route, no client call, no other
-service consumes it.
+**It changes nothing today** — every agent row is un-owned (`owner_user_id` NULL on all 7), so
+`owner_user_id IS NULL OR owner_user_id = <caller>` matches every row for every caller.
 
-**But note where the trap is.** It diverges the moment anything writes `owner_user_id`, and
-FR-12b is what makes that possible for the first time. So the sequence to avoid is: build the
-user-owned agent surface, then later wire a roster UI that quietly assumes it sees everything.
-Whoever surfaces agents should read this section first.
+**But it is consumed, and there is a live UI on the other end of it.** Grepping this repo for
+`memory_agents_list` returns exactly one hit — the registration above — which makes it look
+unconsumed. It is not. The consuming route is **runtime-owned**, which is why an app-repo grep
+misses it:
+
+```
+client/src/components/platform/AgentRegistry.jsx:459   getAgents()
+client/src/api/agent.js:11                             GET /apps/memory/agents
+AINDY/routes/memory_router.py:525                      @router.get("/agents")
+  -> _mem_run_flow("memory_agents_list", {}, db, str(current_user["sub"]))
+```
+
+So the trap is **not** hypothetical future work — the roster UI already exists and already calls
+the newly scoped flow. It renders identically today and will **silently narrow** the moment any
+agent gets an `owner_user_id`, which is exactly what FR-12b makes possible for the first time.
+
+The failure mode is quiet: no error, no empty state, just a roster that stops showing agents
+belonging to other users. **Whoever builds on FR-12b owns deciding what `AgentRegistry` should
+show** — every agent visible to an admin, or only the caller's. That is a product decision the
+scoping change forces, not a bug to fix.
+
+> **Method note.** The first pass of this section claimed nothing consumed the flow, on the
+> strength of a single-repo grep. That is the same inference error recorded in
+> `SESSION_HANDOFF_2026-08-06.md` §3 and §11 — concluding absence from a search that could not
+> have found the thing. In a two-repo split, "no reference in `apps/`" does not mean "no
+> caller"; the runtime owns routes mounted under `/apps/*`.
 
 ### 2b. `/health/deep` reports the bus `degraded`, not `disabled`
 
