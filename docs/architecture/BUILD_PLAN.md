@@ -1,6 +1,6 @@
 ---
 title: "Build Plan — Shipping the Woken Decision Engine"
-last_verified: "2026-07-19"
+last_verified: "2026-08-15"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -13,9 +13,10 @@ owner: "app-team"
 This is the forward plan that follows the architecture review + validation pass
 (2026-07-09 → 2026-07-15). Related material:
 
-- **Strategic diagnosis** — the reconciled architecture map (artifact, v3): the
-  built-vs-asleep ledger, the two re-tether frames, the agency ladder, and the
-  validation band. It is the "why."
+- **Strategic diagnosis** — the reconciled architecture map. Originally an external artifact
+  (last revision v6, re-audited 2026-07-19); **folded into this document 2026-08-15 and the
+  artifact retired**, so the "why" is no longer held outside the repo. See
+  [§ Strategic diagnosis, folded in](#strategic-diagnosis-folded-in-from-the-architecture-map).
 - **Code-structure reference** — [ARCHITECTURE_MAP.md](./ARCHITECTURE_MAP.md) (layers,
   boundaries, module list). It is the "what exists."
 - This document is the "what we build next, in what order."
@@ -68,7 +69,7 @@ literal Claude-planned `completed` run on real hardware:**
 |---|---|---|
 | **1** | The face — user-facing Assistant (`/assistant`) | ✅ **done** — merged |
 | **2** | Reasoner first-class (Claude planner default) | ✅ **done** — proven end-to-end (literal Claude-planned `completed` run on a native-Linux host) |
-| **3** | Re-tether Search/Freelance yield → Infinity + `analytics` core | ✅ **done** (3b-lite: observability tether; 3b-full weighting soak-gated — a values decision) |
+| **3** | Re-tether Search/Freelance yield → Infinity + `analytics` core | ✅ **done** (3b-lite: observability tether; 3b-full weighting **usage-blocked** — see the soak audit) |
 | **4** | Wire orphaned UI (`InfiniteNetwork`, `ProfileView`, `GenesisDraftPreview`) | ✅ **done** — merged |
 | **5** | Fold Genesis behind the face (`?mode=genesis`) | ✅ **done** — merged |
 
@@ -77,8 +78,15 @@ Assistant face (`/assistant`) with an **Agent | Plan** toggle routing to the age
 the Genesis plan-authoring engine, and the agent engine now reasons with Claude by default in a
 suitably-provisioned deployment. **The remaining open item is not a track** — it's **3b-full**
 (which pillar signal moves the canonical Infinity score, and at what weight), a deliberate
-values decision now framed as the Worth axis of the three-axis model and gated on a shadow soak,
-not on build. See [INFINITY_SCORE_MODEL.md](./INFINITY_SCORE_MODEL.md).
+values decision now framed as the Worth axis of the three-axis model. See
+[INFINITY_SCORE_MODEL.md](./INFINITY_SCORE_MODEL.md).
+
+> **Superseded 2026-08-15.** This item was recorded as "gated on a shadow soak, not on build."
+> The soak ran and produced nothing usable — across 294 records Worth is constant and Trajectory
+> is entirely NULL. It is **usage-blocked**, not soak-gated. Note the blocker is *not* revenue:
+> Worth is computed from **declared** worth (`intent_value_declarations`, 0 rows — the API exists
+> with no UI) and Trajectory from estimate-vs-actual pace on completed tasks. See
+> [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md).
 
 ## Tracks
 
@@ -173,12 +181,20 @@ Track 2 proven on a provisioned native-Linux host. **All five tracks are shipped
 - **Egress env for Track 2** *(resolved)* — a native-Linux Docker engine with Anthropic egress
   (`docker.io` in a WSL2 Ubuntu distro was used to prove the literal loop; a cloud Linux box works
   equally). Docker Desktop's VM is NOT suitable (slow pg → pool exhaustion).
-- **3b-full weighting** *(open — soak-gated)* — which pillar signal is promoted to move the
-  canonical Infinity score, and at what weight. A values decision, framed as the **Worth axis** of
-  the three-axis model in [INFINITY_SCORE_MODEL.md](./INFINITY_SCORE_MODEL.md). Phases A/B/C
-  (measure → shadow → advisory) are **shipped**; the flip to *drive* the score needs the Phase-B
-  shadow soak's divergence data, not more build. Unifies with the learned-recursion work below —
-  the two resolve to one decision.
+- **3b-full weighting** *(open — **usage-blocked**, not soak-gated)* — which pillar signal is
+  promoted to move the canonical Infinity score, and at what weight. A values decision, framed as
+  the **Worth axis** of the three-axis model in
+  [INFINITY_SCORE_MODEL.md](./INFINITY_SCORE_MODEL.md). Phases A/B/C (measure → shadow → advisory)
+  are **shipped**. Unifies with the learned-recursion work below — the two resolve to one decision.
+
+  > **Restated 2026-08-15.** This was recorded as needing *"the Phase-B shadow soak's divergence
+  > data, not more build."* The soak has run for weeks and produced no usable divergence data:
+  > across 294 shadow records, `worth_score` has **1** distinct value and `trajectory_score` is
+  > **entirely NULL**. The blocker is that nothing is generating varied state to measure — elapsed
+  > time cannot fix it. It is *not* a revenue blocker: Worth reads **declared** worth
+  > (`intent_value_declarations`, 0 rows, API routed but no UI) and `realized_revenue` is
+  > observability-only, never folded into the score. Full evidence in
+  > [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md). **Do not flip.**
 - **Learned recursion (REFLECT calibration)** *(shipped through advisory)* — the learned
   expected-score calibrator: Phase 0 (shadow) and Phase 1 (advisory) are **merged**; Phase 2
   (driving the score) re-opens 3b-full and is soak-gated. Scoped in
@@ -225,9 +241,88 @@ this path.
 it, watches steps run, and sees the result — without touching `/platform`. Works today with
 `runtime_local`; flip to Claude (Track 2) in an egress env and it *reasons*.
 
+## Strategic diagnosis, folded in from the architecture map
+
+**Folded 2026-08-15**, when the external artifact (v6, re-audited 2026-07-19) was retired. Every
+verdict below was **re-verified against the code on 2026-08-15**, so this is the current state,
+not a transcription of the July snapshot.
+
+### The inversion — resolved
+
+The **Infinity Algorithm** is the product: a recursive loop
+(`State → Evaluate → Adjust → Act → New State`) that everything else exists to feed or execute.
+It lives in `analytics`, which was once flagged `IS_CORE_DOMAIN = False` — one flag containing the
+whole drift. It is now `True`. The core is marked core.
+
+### The two re-tether frames
+
+Structure and function, the two ways everything wires back to the core:
+
+- **Node Stack (pillars, under MasterPlan's intent):** Intelligence `infinity` · Memory `bridge` ·
+  Visibility `social` · Revenue `freelance`
+- **Cognition Stack (the loop, memory as continuity throughout):**
+  Perceive `search` → Reason `arm` → Act `leadgen`/`freelance` → Reflect `infinity` ↻
+
+### The agency ladder
+
+From `AGENTICS.md`: *"agency = intent bound to execution with continuity, memory, and time."*
+
+| | | |
+|---|---|---|
+| **L0** | Assistant | Thinks, suggests. No action |
+| **L1** | Tool-using assistant | Optimistic tool calls, no guarantees |
+| **L2** | **Operator — where A.I.N.D.Y. is** | Decision separated from execution; state, retries, determinism, observability |
+| **L3** | Autonomous system | Self-triggering, self-correcting, "knows when not to act" |
+
+The body was built to L2 and the reasoning half was dormant. That half is now awake: Claude is the
+default planner, drove a live run `plan → approve → execute → completed` with three real tasks
+written to Postgres, and is user-facing. **The remaining distance to L3 is self-triggering.**
+
+### The genesis flattening — partly recovered
+
+The creation docs specify a nested structure: `REFLECT→EVOLVE` recursion, over a **TWR apex
+ranker**, over the weighted composite `P(t) = Σwᵢfᵢ(t)`, over the metric modules. The port
+flattened it to a parallel list of KPIs.
+
+Recovered since: the composite and its per-user learned weights (`infinity_service`,
+`adapt_kpi_weights`), plus a learned expectation calibrator through shadow + advisory.
+**Still missing: the Elo apex ranker** — TWR is a demoted peer route and there is no rating system
+(`grep -w Elo` across `apps/` and `client/src` returns nothing, confirmed 2026-08-15). The concept
+is reframed, not abandoned, in
+[`../handoffs/SELF_TRUST_CALIBRATION_SPEC.md`](../handoffs/SELF_TRUST_CALIBRATION_SPEC.md).
+
+### Two knots, untangled
+
+- **`network_bridge` is an on-ramp, not a domain.** `/user_event` → the identity spine;
+  `/connect` → a thin external gateway. Payoff: "bridge" then means only the Memory Bridge, and
+  the two-bridge name collision disappears. The sign-in hook shipped in #184.
+- **Memory = engine + router + lens.** Engine → runtime (`AINDY.memory`); router → `bridge` (the
+  real Memory Bridge); lens → `memory` (a viewer). The v0.1 core header reads
+  *"Continuity > Content"* — the symbolic core survived the split intact.
+
+### What the map still had open — status on 2026-08-15
+
+| Map item | Now |
+|---|---|
+| Close the learning loops (ARM / Freelance / Search) | ✅ **Done** — #122, #126, #127 |
+| **Autonomous self-triggering** | ❌ **Open.** No `register_scheduler_jobs` anywhere in `apps/`; the mechanism is FR-3 Next-Action acting, `AINDY_NEXT_ACTION_ACTING` default false |
+| **Search's real send** | ❌ **Open** — `apps/search/services/lead_execution_service.py:394`, still *"a real provider send would happen here — intentionally not wired"* |
+| **Soak-gated score-drive** (Phase D / Phase 2) | ❌ **Blocked, and not by soak** — see the soak audit |
+| Typed `Domain`s → Composite Master Index | Scoped as the Domain Engine, not built |
+| Elo apex ranker | Absent; reframed as self-trust calibration |
+| Framework Forge · AI Mirror | Absent; reframed as the Creator Dashboard in `SURFACE_IDENTITY_BRIEF.md` |
+| **Risk posture & ETA drift** | ❌ **Still sensed, not actuated.** `posture` is read as identity evidence and displayed in flows, but nothing consumes it to re-sequence or steer the plan |
+
+**The July closing line — "what's left = autonomous triggering + closing the learning loops
+(+ the soak-gated score-drive)" — still describes the open list**, minus the learning loops. Four
+weeks of security, adoption, diagnosis and specs moved everything except those two.
+
 ## References
 
-- Reconciled architecture map (artifact, v3) — the strategic diagnosis + validation.
+- Reconciled architecture map — **retired as an external artifact 2026-08-15**; its content is
+  folded into this document (see the strategic-diagnosis section).
+- [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md) — why the
+  soak-gated flags cannot be validated on current data.
 - [ARCHITECTURE_MAP.md](./ARCHITECTURE_MAP.md) — code-structure reference.
 - [PLUGIN_REGISTRY_PATTERN.md](./PLUGIN_REGISTRY_PATTERN.md) — how apps extend the runtime.
 - `TECH_DEBT.md` — APP-DEPLOY-1 (closed), RTR-1-NODUS-APPTOOL-500 (egress), NODUS-WARMPOOL-1.

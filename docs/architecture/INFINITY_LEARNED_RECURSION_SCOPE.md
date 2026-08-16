@@ -162,7 +162,12 @@ single migration head.
 ## References
 
 - [INFINITY_SCORE_MODEL.md](./INFINITY_SCORE_MODEL.md) — the three-axis (Volume/Worth/Trajectory) score model this loop serves.
-- Reconciled architecture map (artifact v4) — the built-vs-asleep re-audit.
+- Reconciled architecture map — **retired as an external artifact 2026-08-15**; the
+  built-vs-asleep re-audit is folded into [BUILD_PLAN.md](./BUILD_PLAN.md).
+- [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md) — **Phase 2 must
+  not flip.** The learned calibrator's apparent win (holdout MAE 0.0000 on two decision types) is
+  a memorised constant: `create_new_task` and `reprioritize_tasks` have **one** distinct
+  `actual_score` across all rows. Not a soak result — an idle-stack artifact.
 - [BUILD_PLAN.md](./BUILD_PLAN.md) — forward roadmap (3b-full open decision).
 - `apps/analytics/services/orchestration/infinity_loop.py` — `evaluate_pending_adjustment` (the target).
 - `apps/analytics/services/scoring/{kpi_weight_service,policy_adaptation_service}.py` — the other three heuristics.
