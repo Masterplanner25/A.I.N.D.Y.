@@ -298,7 +298,52 @@ the existing `{data: recommendation}` envelope, then integration-test end-to-end
 
 ---
 
-## FR-12 — No way to register an agent; the roster is hardcoded in the runtime 🔴 net-new
+## FR-12 — No way to register an agent; the roster is hardcoded in the runtime ✅ CLOSED in 2.1.0 (+ FR-12b)
+
+**Shipped in `aindy-runtime==2.1.0` (2026-08-15)**, in two halves:
+
+- **FR-12 — `registry.register_agent`.** Declarative: records a spec, touches no database
+  (plugin load happens long before a session exists). `startup._apply_registered_agents()` upserts
+  by `memory_namespace` at boot and *updates* an existing row, so renaming an agent between boots
+  needs no manual edit.
+- **FR-12b — user-owned agents**, which we did not ask for and is the more useful half:
+  `GET|POST /platform/agents`, `PATCH|DELETE /platform/agents/{slug}`,
+  `POST /platform/agents/{slug}/restore`.
+
+**Contract details that will bite if assumed otherwise:**
+
+| | |
+|---|---|
+| `memory_namespace` | **derived, not accepted** — `u:<user_id>:<slug>`. You supply `slug` matching `^[a-z0-9][a-z0-9._-]{0,63}$` |
+| `agent_type` | forced to `custom`, not caller-settable |
+| `POST` | **not idempotent** (unlike the admin route) — repeated slug is `409`; use `PATCH` |
+| Another user's agent | `404`, never `403` |
+| `slug` | **immutable on `PATCH`** — it is the tag already written onto that agent's memory nodes |
+
+**Our filed premise was partly wrong.** We wrote that "the only ways to add a row are a runtime
+code change or a raw INSERT" — but `POST /platform/admin/agents/register` already existed and was
+mounted. The real gaps were narrower: no hook, no path ever wrote `owner_user_id`, and reads were
+unscoped.
+
+**The security finding this surfaced is the part worth reading.** The seven platform system
+namespaces were **unreserved**: registering with `memory_namespace: "runtime"` took the route's
+idempotent-update branch and silently rewrote the platform's own Runtime agent row — for anyone
+with admin on the deployment — and the next boot did not repair it, because the seed only
+inserted when the row was absent. 2.1.0 reserves all seven in both the hook and the route, repairs
+a drifted system row at boot, and adds
+`POST /platform/admin/agents/{namespace}/restore`.
+
+**Checked on this deployment 2026-08-15: no drift.** All 7 rows present, `agent_type='system'`,
+`is_active=true`, `owner_user_id` NULL, names matching the platform spec (ARM, Genesis, Memory,
+Nodus, Platform, Runtime, SYLVA).
+
+**App-side adoption: not done, deliberately.** This unblocks
+`docs/handoffs/TERMINAL_AGENT_SCOPE.md` §4a and the registry half of the Collaborator face, but
+building that surface is its own piece of work, not part of a version adoption.
+
+---
+
+### Original filing (2026-08-06) — retained for context
 
 **apps-monolith ref:** found 2026-08-06 while designing the terminal-agent surface
 (`docs/handoffs/TERMINAL_AGENT_SCOPE.md` §4a).
@@ -379,7 +424,22 @@ registering it becomes possible and the model stops special-casing the terminal.
 
 ---
 
-## FR-13 — `agents` has no metadata field, so identity cannot outlive the vendor 🟡 small
+## FR-13 — `agents` has no metadata field, so identity cannot outlive the vendor ✅ CLOSED in 2.1.0
+
+**Shipped in `aindy-runtime==2.1.0` (2026-08-15).** `agents.metadata` (JSONB) and
+`agents.updated_at`, both nullable, purely additive, no backfill.
+
+> **★ The ORM attribute is `Agent.agent_metadata`; the COLUMN is `metadata`.** `metadata` is
+> reserved on a SQLAlchemy declarative class (`Base.metadata`), so the attribute had to differ.
+> Raw SQL and JSONB queries see the real column name — `WHERE metadata->>'workspace' = 'w1'`
+> works as written. Anything going through the ORM must say `agent_metadata`.
+
+Schema arrives via runtime Alembic head **`0016`** (`alembic_version_runtime`), which the runtime
+self-migrates at boot. Nothing for the app-owned `alembic_version` tree.
+
+---
+
+### Original filing (2026-08-06) — retained for context
 
 **apps-monolith ref:** found 2026-08-06 alongside FR-12.
 
@@ -681,7 +741,24 @@ reintroduced it.
 - App: `docker-compose.prod.yml`, `.env.example`; PR #190.
 
 ---
-## FR-11 — `invoke_runtime_callback`: a 10s non-configurable budget around a cold subprocess import 🟢 hardening, not a defect
+## FR-11 — `invoke_runtime_callback`: a 10s non-configurable budget around a cold subprocess import ✅ CLOSED in 2.1.0
+
+**Shipped in `aindy-runtime==2.1.0` (2026-08-15).** `AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS`,
+default **30s**, resolved at call time — so it can be changed without a restart. We take the
+default; nothing app-side to wire.
+
+Two things from the runtime team's response worth keeping:
+
+- **Our filed mechanism was wrong**, as already recorded below in strikethrough:
+  `bootstrap_register` fires only for `runtime_agent_defaults`, not a 16-app bootstrap. The real
+  cost is a fresh subprocess `import_module` pulling an app's transitive graph.
+- **It was also the cause of `FLAKY-1`**, a ~50% runtime-side test failure that had been blocking
+  their merges at random. The fragile-shape argument turned out to be understated — it *was*
+  failing, just not visibly to us.
+
+---
+
+### Original filing (2026-08-05) — retained for context
 
 **Filed 2026-08-05 while verifying the 2.0.1 upgrade. Read the framing before triaging: nothing
 is broken, and this cost us nothing. It is filed because the shape is fragile, not because it

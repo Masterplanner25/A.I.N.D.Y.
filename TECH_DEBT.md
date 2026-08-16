@@ -12,6 +12,32 @@
 > **FR-1 (connectors) is the net-new runtime work.** Still open app-side: Search v4, identity
 > inference, SYLVA, frontend lint residuals, Freelance agent-tools (Phase 2).
 
+## RUNTIME-GUEST-CONFINE-1: Nodus guest scripts run unconfined (runtime-owned, P0)
+
+**Status:** Open upstream, recorded here 2026-08-15 because **we run Nodus scripts** and the
+mitigation until it ships is an app-side posture, not a code change.
+
+Reported by the runtime team in `APP_HANDOFF_v2.1.0.md` §7. A guest script executed through the
+runtime reaches `subprocess`, network and the host environment **without passing the syscall
+dispatcher, the capability token, the effect ledger or the egress guard**. Demonstrated, not
+inferred: a guest script created a file on the host filesystem.
+
+**Do not read the sandbox-escape gate as covering this.** That suite (17/17 PASS) certifies the
+Tier-2 extension sandbox reached through `plugin_host.py`. The guest VM is a different seam and
+has never been in its scope, so "17/17 PASS" and "the guest runs unconfined" are both true.
+
+**Mitigation until the fix ships: treat Nodus script content as trusted input.** Scripts arrive
+through an authenticated route, but they are *data*, not deployed code — the same distinction that
+made the ARM file-path issue (#194) a real exposure rather than a theoretical one. Concretely:
+do not add a surface that accepts `.nd` content from an untrusted party, and keep
+`AINDY_REASONING_NODUS_NATIVE` soak-gated as it already is.
+
+The runtime team reports the fix is three keyword arguments and that no first-party script in
+either repository uses the affected modules, so adoption should be a version bump with no app
+change. **Revisit on the release that closes it.**
+
+---
+
 ## APP-DEPLOY-1: server deploy artifact (app-consuming-the-framework image)
 
 **Status:** Resolved (2026-07-13). App-owned. Scaffold + a real Linux build/boot test done; the
