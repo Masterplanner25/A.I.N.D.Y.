@@ -50,11 +50,37 @@ scope at all, and the three they require are all in the ordinary set, so every s
 passes every enforcing route. A test upstream fails if anyone adds an enforcement an ordinary
 session cannot satisfy.
 
-> **Verify rather than assume.** The reasoning is sound and it is our own scope list, but this is
-> the one change in the release that can produce scattered 403s across unrelated screens — the
-> exact failure shape we warned about when answering §6. Escape hatch:
-> `AINDY_JWT_SCOPE_ENFORCEMENT=0`. Deliberately **not** set here; if it were needed, the right
-> response is to find out which route and why.
+### Verified live — no-op confirmed, for a stronger reason than expected
+
+Tested on the running 2.3.0 stack with a freshly registered **non-admin** user (since removed):
+
+| Route | Result |
+|---|---|
+| `/apps/tasks/list` | 200 |
+| `/apps/memory/agents` | 200 |
+| `/apps/identity/boot` | 200 |
+| `/api/version` | 200 |
+| `/platform/flows` · `/platform/flows/strategies` · `/platform/queue/health` | **403 — pre-existing admin guard, not scope** |
+
+**The 403s are not the scope change.** The whole `/platform` router carries
+`dependencies=[Depends(require_platform_admin_access)]`, which has always required `is_admin` for
+JWT callers — and the detail string is *"Admin privileges required for this endpoint"*, not the
+scope denial format (`API key scope 'X' required. Granted: [...]`).
+
+So the finding is stronger than "no-op": **all 7 scope-enforcing routes live under `/platform`**,
+which JWT non-admins could never reach anyway. For an ordinary session the scope layer is
+unreachable; for an admin session every required scope is granted. There is no configuration in
+which a signed-in user of this app meets a scope denial today.
+
+> **One false positive worth recording**, because it nearly became a reported regression. The
+> first run showed `/platform/flows/` returning **200** while `/platform/flows/strategies` returned
+> 403, which looked like inconsistent enforcement. The trailing slash was serving the runtime's
+> **admin SPA HTML** (static, shipped since 2.0.1), not the API route. Without slash it 403s like
+> the rest. **A 200 is not evidence of authorization when the body is a web page.**
+
+Escape hatch `AINDY_JWT_SCOPE_ENFORCEMENT=0` exists and is deliberately **not** set. Confirmed it
+toggles independently of the admin guard (`_jwt_scope_enforcement_enabled()` returns False/True
+with the flag at 0/1, while the 403s above are unaffected either way).
 
 ---
 
@@ -194,4 +220,4 @@ change whether a retry re-executes deserve real usage, not an idle stack.
   caller-constructible and absent identity *skips* the boundary rather than denying.
 - **`TOOL-SEAM-ISOLATION-1`**, **`EXEC-ENV-BIND-1`**, **`FR-6` items 2+3**.
 
-**Next available FR number: `FR-17`.**
+**Next available FR number: `FR-18`.**
