@@ -305,7 +305,7 @@ is reframed, not abandoned, in
 | Map item | Now |
 |---|---|
 | Close the learning loops (ARM / Freelance / Search) | ✅ **Done** — #122, #126, #127 |
-| **Autonomous self-triggering** | ❌ **Open.** No `register_scheduler_jobs` anywhere in `apps/`; the mechanism is FR-3 Next-Action acting, `AINDY_NEXT_ACTION_ACTING` default false |
+| **Autonomous self-triggering** | ⚠️ **Narrower than recorded.** *Corrected 2026-08-16:* scheduled jobs **do** exist — 21 `register_scheduled_job` sites registering 9 jobs across `analytics`, `masterplan`, `rippletrace` and `tasks`. The earlier "none anywhere" claim came from grepping the stale name `register_scheduler_jobs`. What is genuinely missing is narrower: **the act-on-insight loops** (ARM autotune, freelance pricing, search execution) have no self-firing trigger, and `AINDY_NEXT_ACTION_ACTING` is default false |
 | **Search's real send** | ❌ **Open** — `apps/search/services/lead_execution_service.py:394`, still *"a real provider send would happen here — intentionally not wired"* |
 | **Soak-gated score-drive** (Phase D / Phase 2) | ❌ **Blocked, and not by soak** — see the soak audit |
 | Typed `Domain`s → Composite Master Index | Scoped as the Domain Engine, not built |

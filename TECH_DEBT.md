@@ -14,6 +14,27 @@
 
 ## RUNTIME-GUEST-CONFINE-1: Nodus guest scripts run unconfined (runtime-owned, P0)
 
+**Status: ✅ CLOSED in `aindy-runtime==2.2.0` (2026-08-16).** The guest VM was being built with
+none of the confinement arguments it accepts. The fix denies all three classes — **31 builtins**
+now raise `SandboxError` naming the flag: 7 subprocess, 18 network (all `http_*` and `_async`
+variants), 6 host environment (including the writes `env_set` / `env_unset`).
+
+**Our exposure was zero, verified app-side rather than taken on trust.** Scanned every Nodus
+source in this repo — `apps/analytics/nodus/reasoning_apply_v1.nd` and the `.nodus/` tree — for
+any denied builtin: no matches. Also confirmed **nothing generates Nodus source at runtime**
+(`analytics/bootstrap.py:225` registers packaged `.nd` files from disk and nothing else), which
+was the runtime team's one caveat on their own measurement.
+
+**The app-side posture below is therefore retired.** If a future script needs one of the denied
+builtins, the mediated seams are `call_tool(...)` for outbound effects (enforces the run's scoped
+capability token) or bare `sys(...)` for runtime capabilities; configuration should arrive via
+flow state or `input_payload` rather than host env. There is deliberately **no env var to disable
+the confinement** — per-execution declaration is `EXEC-ENV-BIND-1`, still open upstream.
+
+---
+
+### Original entry (2026-08-15) — retained for context
+
 **Status:** Open upstream, recorded here 2026-08-15 because **we run Nodus scripts** and the
 mitigation until it ships is an app-side posture, not a code change.
 
