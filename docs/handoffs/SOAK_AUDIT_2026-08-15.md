@@ -77,6 +77,68 @@ docstring says *"realized revenue stays observability-only."* It is not in the W
 estimate-vs-actual, the same pair `SELF_TRUST_CALIBRATION_SPEC.md` §4 found 0 of. One input
 unblocks both.
 
+### 2a. Zero revenue is not zero value — and the model already knew that
+
+Raised by the owner 2026-08-16:
+
+> *"What does 0 money made / revenue mean in our system? It doesn't mean nothing, but it also
+> doesn't mean you're not doing anything. A flag that can't soak because no one's making money,
+> while the system itself is showing that it can have value, is odd."*
+
+Correct, and **the design already agrees** — `VALID_WORTH_KINDS = {monetary_potential, intrinsic,
+strategic}`. Only one of the three is monetary. Worth was never specified as money; it reads that
+way in practice solely because nothing surfaces the other two, so the only visible number is
+`realized_revenue`.
+
+**`0.00` is a claim rendered where an absence exists.** Four distinct states collapse into it:
+
+| Actual state | Displayed |
+|---|---|
+| Measured, genuinely nothing earned | `0.00` |
+| No revenue mechanism engaged at all | `0.00` |
+| Not applicable — this work was never going to be monetised | `0.00` |
+| Real value created, deliberately unmonetised | `0.00` |
+
+Only the first is a fact about performance. The rest are absences dressed as a measurement, and
+the display cannot tell them apart. This is a null-vs-zero defect, not a business result.
+
+**The sharpest instance is this repo.** The highest-leverage work the owner has done — building
+the runtime, Nodus, the whole system — reports `0.00`. `MASTERPLAN_DOMAIN_ENGINE_SPEC.md` §5a
+already found the mirror image from the planning side: *"Nodus and the runtime appear 5 times in
+~150k characters of planning — the highest-leverage work is the least-planned."* It is also the
+least-measured. A value model that reports zero for the thing that created the value is
+mis-specified, and the fix is not more revenue.
+
+### 2b. …but the Worth aggregation is broken, so do not collect declarations yet
+
+Found while checking 2a. `declared_worth_summary` sums **every kind into one total**
+(`value_declaration_service.py:109`, `total += v`), and that total is fed through
+`provisional = 100·(1 − e^(−declared_total / WORTH_DECLARED_SCALE))` with
+`WORTH_DECLARED_SCALE = 100.0`.
+
+The three kinds are incommensurable, so the sum is meaningless, and the saturation constant makes
+it worse:
+
+| Declaration | `declared_total` | Worth score |
+|---|---|---|
+| `monetary_potential: 5000` (a modest contract) | 5000 | **100.0** — saturated, permanently |
+| `strategic: 8` (a 0–10 rating) | 8 | **7.7** |
+| Both together | 5008 | **100.0** — the strategic one is invisible |
+
+**One ordinary money figure pins Worth to its ceiling forever and drowns every non-monetary
+declaration.** Which means the surface, if built as-is, would make 2a *worse*: it would offer
+three kinds and then silently let the monetary one win.
+
+`WORTH_DECLARED_SCALE`'s comment — *"declared-units → provisional"* — assumes a single shared unit
+across all kinds. There isn't one. This is the same class as the `time_spent` seconds/hours trap
+in `SELF_TRUST_CALIBRATION_SPEC.md` §5: a derived number that looks plausible while being
+nonsense.
+
+**Consequence for §7:** "go declare some worth" is not yet safe advice. Per-kind normalisation
+must be decided first — separate sub-scores per kind, per-kind scales, or bounded non-monetary
+kinds — otherwise the first honest use of the feature generates exactly the plausible-but-empty
+data this audit exists to warn about.
+
 ---
 
 ## 3. The learned calibrator "wins" by memorising a constant
@@ -189,8 +251,10 @@ Mostly not a build. Use the system for real, on the loop it already measures:
   **three** things at once: it moves `actual_score` off its constant, fills **Trajectory**
   (estimate-vs-actual pace), and produces the first calibratable pairs for
   `SELF_TRUST_CALIBRATION_SPEC.md` §4. Needs no money and no new code.
-- **Value declarations.** Worth's only input. The API exists and is routed; **the one genuinely
-  missing piece is a UI to enter them** — a small, well-scoped build rather than a data problem.
+- **Value declarations.** Worth's only input. The API exists and is routed, but **§2b must be
+  fixed first** — the aggregation sums incommensurable kinds and one monetary figure saturates the
+  axis. Fix the normalisation, then build the entry surface, then declare. Declaring against the
+  current maths would produce a confidently wrong Worth score.
 - **A MasterPlan with a `goal_value`.** `master_plans` is empty.
 
 **None of this requires revenue.** An earlier draft of this document asserted Worth was defined
