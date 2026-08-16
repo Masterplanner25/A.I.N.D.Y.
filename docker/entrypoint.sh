@@ -27,37 +27,70 @@ fi
 # the extension is present). compose.prod provisions it via docker/init-pgvector.sql; this makes
 # the image self-sufficient where that init hook can't run. Checks-first (safe on managed PG).
 #
-# AINDY_BOOTSTRAP_RECONCILE (default off) — opt in to additive column/index reconciles.
+# Runtime schema, branching on bootstrap-schema's exit code (aindy-runtime>=2.3.0, FR-14).
 #
-# Bare `bootstrap-schema` REFUSES to alter an existing runtime table and exits non-zero. That is
-# correct for production (a deploy should not silently ALTER TABLE), but with `set -e` and
-# `restart: unless-stopped` the refusal becomes an infinite crash loop rather than a visible
-# failure — which is exactly what adopting aindy-runtime 2.1.0 did here on 2026-08-15, when
-# FR-13 added agents.metadata + agents.updated_at:
+#   0  success
+#   1  configuration error        — not automatable, fix the environment
+#   2  db layer import failure    — not automatable
+#   3  additive reconcile needed  — SAFE to automate; --reconcile adds, never drops
+#   4  offline migration required — needs a person (wins over 3 when both apply)
+#   5  manual repair required     — needs a person
 #
-#   error: runtime-owned schema is not ready: Runtime-owned schema requires an explicit additive
-#   reconcile: Runtime table 'agents' is missing required column 'metadata'. ...
+# Before 2.3.0 every one of these was exit 1, so an entrypoint could not tell "add two nullable
+# columns" from "your database is broken". Under `set -e` + `restart: unless-stopped` that became
+# an infinite crash loop, which is what adopting 2.1.0 did here on 2026-08-15 when FR-13 added
+# agents.metadata + agents.updated_at.
 #
-# Set this to 1/true where an unattended additive upgrade is preferable to a stopped stack (local
-# and dev). Leave it UNSET in production, so a schema change is a decision someone makes rather
-# than a side effect of a container restart. See docs/handoffs/RUNTIME_2_1_0_UPGRADE.md §1a/§7
-# and FR-14 in docs/handoffs/RUNTIME_FEATURE_REQUESTS.md.
+# AINDY_BOOTSTRAP_RECONCILE (default off) still gates whether exit 3 is applied automatically.
+# The runtime now certifies 3 as safe to automate, so defaulting it on would be defensible — we
+# keep it opt-in so a production schema change stays a decision someone makes rather than a side
+# effect of a container restart. What changed is that the *refusal* is now precise: an exit 3 says
+# exactly what to do, and 4/5 no longer masquerade as something a flag could fix.
+#
+# See docs/handoffs/RUNTIME_2_3_0_UPGRADE.md and FR-14 in RUNTIME_FEATURE_REQUESTS.md.
 echo "[entrypoint] ensure pgvector: python scripts/ensure_pgvector.py"
 python scripts/ensure_pgvector.py
+
+_reconcile_opt_in=false
 case "$(printf '%s' "${AINDY_BOOTSTRAP_RECONCILE:-}" | tr '[:upper:]' '[:lower:]')" in
-  1|true|yes|on)
-    echo "[entrypoint] runtime schema: aindy-runtime bootstrap-schema --reconcile (AINDY_BOOTSTRAP_RECONCILE set)"
-    aindy-runtime bootstrap-schema --reconcile
+  1|true|yes|on) _reconcile_opt_in=true ;;
+esac
+
+echo "[entrypoint] runtime schema: aindy-runtime bootstrap-schema"
+set +e
+aindy-runtime bootstrap-schema
+_schema_rc=$?
+set -e
+
+case "$_schema_rc" in
+  0)
+    ;;
+  3)
+    if [ "$_reconcile_opt_in" = true ]; then
+      echo "[entrypoint] exit 3 (additive reconcile required); AINDY_BOOTSTRAP_RECONCILE is set — applying"
+      aindy-runtime bootstrap-schema --reconcile
+    else
+      echo "[entrypoint] bootstrap-schema exit 3: an ADDITIVE reconcile is required." >&2
+      echo "[entrypoint] This is the safe-to-automate case — columns/indexes are added, never dropped." >&2
+      echo "[entrypoint] Either set AINDY_BOOTSTRAP_RECONCILE=1 and restart, or apply it out-of-band:" >&2
+      echo "[entrypoint]   docker compose run --rm --no-deps --entrypoint aindy-runtime api bootstrap-schema --reconcile" >&2
+      exit 3
+    fi
+    ;;
+  4)
+    echo "[entrypoint] bootstrap-schema exit 4: an OFFLINE MIGRATION is required." >&2
+    echo "[entrypoint] Not automatable, and AINDY_BOOTSTRAP_RECONCILE will not help — 4 wins over 3" >&2
+    echo "[entrypoint] precisely so an entrypoint never auto-reconciles a database that needs a person." >&2
+    exit 4
+    ;;
+  5)
+    echo "[entrypoint] bootstrap-schema exit 5: MANUAL REPAIR required. Not automatable." >&2
+    exit 5
     ;;
   *)
-    echo "[entrypoint] runtime schema: aindy-runtime bootstrap-schema"
-    if ! aindy-runtime bootstrap-schema; then
-      echo "[entrypoint] bootstrap-schema refused. If this is an additive runtime schema change," >&2
-      echo "[entrypoint] re-run once with AINDY_BOOTSTRAP_RECONCILE=1, or apply the reconcile" >&2
-      echo "[entrypoint] out-of-band:" >&2
-      echo "[entrypoint]   docker compose run --rm --no-deps --entrypoint aindy-runtime api bootstrap-schema --reconcile" >&2
-      exit 1
-    fi
+    echo "[entrypoint] bootstrap-schema failed with exit $_schema_rc (1=config, 2=db import)." >&2
+    echo "[entrypoint] Not a schema-drift case; fix the environment rather than reconciling." >&2
+    exit "$_schema_rc"
     ;;
 esac
 echo "[entrypoint] app schema: python scripts/deploy_bootstrap.py"
