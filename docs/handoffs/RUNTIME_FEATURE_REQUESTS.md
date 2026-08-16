@@ -8,6 +8,59 @@ owner: "app-team"
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
 
+## Response to v2.1.0 §6 — which scopes the UI actually needs
+
+**Not a feature request — an answer to a question the runtime team asked**, in
+`APP_HANDOFF_v2.1.0.md` §6: *"If you have a view on which scopes your UI actually needs, now is
+the useful time to say so."* Answered 2026-08-15, from the client's real call surface rather than
+from preference.
+
+### Context, restated so the ask is unambiguous
+
+Today `enforce_api_key_scope` gates API-key callers only — *"JWT users carry full trust and are
+never gated by this check"* — so **an interactive browser session is more privileged than any API
+key**. Scope enforcement currently reaches 8 call sites across 2 routers
+(`flow.read` ×4, `memory.read` ×3, `flow.execute` ×1), which is the `HTTP-SCOPE-GAP-1` the runtime
+team already tracks. This is close to greenfield, which is the good time to have an opinion.
+
+### The finding that shapes the answer: our UI is not one caller
+
+It is **two privilege classes sharing one JWT**, and the client already draws that line itself:
+`useAuth()` exposes `isAdmin`, and `AdminUsers.jsx`, `AgentConsole.jsx` and
+`AgentApprovalInbox.jsx` each bail to `<AdminAccessRequired />`. **That gate is frontend-only
+today** — the token behind it carries full trust either way.
+
+So deriving authority from the user row does not impose a new model on us. **It makes the server
+enforce the boundary the UI already draws.** That is the strongest argument for the approach the
+runtime team was already leaning toward.
+
+| Class | Representative calls | Scopes |
+|---|---|---|
+| **Ordinary session** — Tasks, MasterPlan, Genesis, memory, search, social, identity | recall, node create/update, feedback, share, run flows | `memory.read`, `memory.write`, `flow.read`, `flow.execute`, `agent.run`, `execution.read` |
+| **Admin session** — the operator console (`client/src/api/operator.js`) | `runFlow`, `resumeFlowRun`, `getFlowRegistry`, webhook CRUD, `promoteUser`, DLQ drain, execution graph | the above **+** `webhook.manage`, `platform.admin` |
+
+**Not needed by the UI at all:** `memory.delete` (no DELETE against memory anywhere in the
+client — the only client DELETEs are operator webhooks/DLQ, rippletrace sources and search
+history) and `event.emit` (nothing in the client emits directly).
+
+### Two caveats worth designing around
+
+1. **`execution.read` conflates two questions.** "May I read executions" is a scope; "may I read
+   *someone else's*" is data ownership. A scope alone will not answer the second. This is the
+   same distinction that `memory_agents_list`'s owner-scoping just ran into — see
+   `RUNTIME_2_1_0_UPGRADE.md` §2a.
+2. **Please tie the admin scopes to the existing user-row admin flag**, not a new concept. Two
+   sources of truth for "is this person an operator" is worse than none.
+
+### On the rollout posture
+
+Starting permissive and narrowing is right for us. The one thing that would hurt is a narrowing
+step that lands without a release note — the UI would fail as scattered 403s across unrelated
+screens, which reads as a frontend bug. **Name the scopes being enforced in the handoff for the
+release that enforces them.**
+
+---
+
 ## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🔴 upgrade-path
 
 **apps-monolith ref:** found 2026-08-15 adopting 2.1.0, by the api container failing to start.

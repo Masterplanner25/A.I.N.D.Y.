@@ -284,9 +284,30 @@ side; flagging so the note isn't repeated a third time.
 
 ---
 
-## 7. Open decision: should the entrypoint reconcile itself?
+## 7. Decided: the entrypoint reconciles only when told to
 
-Not decided here, because the options have genuinely different risk and it is an operator call.
+**Resolved 2026-08-15 — option C.** `docker/entrypoint.sh` now reads
+`AINDY_BOOTSTRAP_RECONCILE` (default **off**):
+
+- **unset/false** — bare `bootstrap-schema`, as before, but a refusal now prints the exact remedy
+  instead of scrolling the raw runtime error forever.
+- **1/true/yes/on** — `bootstrap-schema --reconcile`, so an additive upgrade applies unattended.
+
+Wired in `docker-compose.prod.yml` as `${AINDY_BOOTSTRAP_RECONCILE:-false}`, so it is settable
+from `.env` on a local or dev stack and stays off in production. The reasoning is the same as the
+Mailpit profile gate: **make the convenient behaviour available and non-default**, so nothing
+surprising happens where it matters.
+
+> **What we deliberately did NOT change: `restart: unless-stopped`.**
+> A bounded policy (`on-failure:5`) would surface a schema refusal in seconds instead of looping.
+> It would also stop the stack coming back after a host reboot — which is precisely what recovered
+> this deployment twice during the August power cuts. Unattended reboot recovery is worth more
+> than a faster failure signal, and with the reconcile flag available the crash loop has a remedy
+> that does not cost it.
+
+### The options, for the record
+
+Not obvious at the time, because the risks genuinely differ.
 
 `docker/entrypoint.sh:32` runs `aindy-runtime bootstrap-schema` bare. §1a is what that costs on an
 additive schema release.
@@ -297,11 +318,6 @@ additive schema release.
 | **B — always `--reconcile`** | Additive DDL applied automatically at boot | Never blocks a deploy. But it silently alters a production schema on container start, and it fires on *every* boot, not just upgrades |
 | **C — opt-in env var** | e.g. `AINDY_BOOTSTRAP_RECONCILE=1`, set in compose for dev, unset in prod | Keeps prod explicit while local/dev stops breaking. One more knob |
 
-**Leaning C**, on the same reasoning that shaped the Mailpit profile gate: make the convenient
-behaviour available and non-default, so nothing surprising happens where it matters. But B is
-defensible given the runtime *already* self-migrates its own schema during `serve` — the
-inconsistency is that `bootstrap-schema` is stricter than the thing that runs immediately after it.
-
-**Whichever is chosen, `restart: unless-stopped` turns a schema refusal into an infinite loop
-rather than a visible failure**, which is worth fixing independently — a bounded restart policy
-would surface this in seconds instead of scrolling the same error forever.
+B stayed defensible to the end, because the runtime *already* self-migrates its own schema during
+`serve` — the real inconsistency is that `bootstrap-schema` is stricter than the command running
+immediately after it. C wins on blast radius, not on elegance.
