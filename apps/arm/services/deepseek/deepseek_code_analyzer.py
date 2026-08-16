@@ -224,8 +224,10 @@ class DeepSeekCodeAnalyzer:
             # Step 1 — Security validation
             path, content = self.validator.full_file_validation(file_path)
 
-            # Step 2 — Chunk if needed
-            chunks = self.file_processor.chunk_content(content)
+            # Step 2 — Chunk if needed. Semantic where the language allows: only
+            # chunks[0] reaches the model (see the prompt below), so the boundary
+            # decides what the analysis actually sees.
+            chunks = self.file_processor.chunk_file(content, path.name)
 
             # Step 2b — Recall prior memory context for this file/user
             prior_memories = []

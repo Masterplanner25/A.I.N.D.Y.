@@ -78,63 +78,20 @@ class CodeGeneration(Base):
 
 
 # -------------------------------------------------------
-#  ARMRun — high-level record of each reasoning session
+#  Removed 2026-08-16: ARMRun, ARMLog, ARMConfig
 # -------------------------------------------------------
-class ARMRun(Base):
-    """
-    Tracks a single ARM reasoning or code-generation event.
-    Includes runtime metrics and short result summary.
-    """
-
-    __tablename__ = "arm_runs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    file_path = Column(String, nullable=False)
-    operation = Column(String, default="analysis")  # analysis | generation | audit
-    result_summary = Column(Text)
-    runtime = Column(Float)
-    created_at = Column(DateTime, default=func.now())
-
-    # Relationships
-    logs = relationship("ARMLog", back_populates="run", cascade="all, delete-orphan")
-
-
-# -------------------------------------------------------
-#  ARMLog — granular event & audit messages
-# -------------------------------------------------------
-class ARMLog(Base):
-    """
-    Low-level logs emitted by the ARM during reasoning.
-    Useful for debugging, audit trails, and traceability.
-    """
-
-    __tablename__ = "arm_logs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    run_id = Column(Integer, ForeignKey("arm_runs.id"))
-    timestamp = Column(DateTime, default=func.now())
-    level = Column(String, default="INFO")
-    message = Column(Text)
-
-    # Relationship back-reference
-    run = relationship("ARMRun", back_populates="logs")
-
-
-# -------------------------------------------------------
-#  ARMConfig — persistent configuration parameters
-# -------------------------------------------------------
-class ARMConfig(Base):
-    """
-    Stores adjustable DeepSeek ARM configuration parameters.
-    Each update is versioned so historical tuning is preserved.
-    """
-
-    __tablename__ = "arm_configs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    parameter = Column(String, nullable=False)
-    value = Column(String, nullable=False)
-    updated_at = Column(DateTime, default=func.now())
+# Three models inherited from the original DeepSeek Analyzer port and never
+# wired to anything: zero non-model references across apps/, zero rows in every
+# environment checked. ARMRun/ARMLog duplicated what `analysis_results` and the
+# runtime's own observability already record; ARMConfig (table `arm_configs`)
+# was a dead twin of ArmConfig (table `arm_config`) below — the live, per-user
+# one used by arm_config_dao and bootstrap. The near-identical class names are
+# exactly why the dead one survived this long.
+#
+# The TABLES are intentionally left in place. MIGRATION_POLICY.md is
+# additive-only ("removing a column requires coordinating model code, migration
+# and all query sites simultaneously — additive changes reduce blast radius"),
+# and three empty tables cost nothing. Drop them in a deliberate cleanup if ever.
 
 
 class ArmConfig(Base):
@@ -203,5 +160,5 @@ class ArmAutoTuneLog(Base):
 
 
 def register_models() -> None:
-    _ = (AnalysisResult, CodeGeneration, ARMRun, ARMLog, ARMConfig, ArmConfig, ArmAutoTuneLog)
+    _ = (AnalysisResult, CodeGeneration, ArmConfig, ArmAutoTuneLog)
     return None
