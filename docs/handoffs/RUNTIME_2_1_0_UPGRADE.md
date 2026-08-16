@@ -27,7 +27,7 @@ database — on 2026-08-15. Where something needs no action, that is a measured 
 | | Action |
 |---|---|
 | Version pin | **Moved deliberately** — `>=2.1.0,<3.0`, so a rebuild can't silently change the minor under us |
-| Database / migrations | **None app-side.** Runtime head `0016`, self-migrated at boot, `alembic_version_runtime` |
+| Database / migrations | **A required manual step on any existing DB** — `bootstrap-schema --reconcile`, or the container crash-loops. See §1a |
 | `memory_agents_list` owner-scoping | **None now**, but `AgentRegistry.jsx` consumes it via a runtime-owned route — see §2a before building on FR-12b |
 | `/health/deep` bus string | **None.** We don't read that field anywhere |
 | Admin agent route status codes | **None.** Referenced only in a walk log, never called |
@@ -37,11 +37,59 @@ database — on 2026-08-15. Where something needs no action, that is a measured 
 
 ```bash
 docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml build --no-cache api
+# REQUIRED on an existing database, before the api can start — see §1a:
+docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml \
+  run --rm --no-deps --entrypoint aindy-runtime api bootstrap-schema --reconcile
 docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile mail up -d api
 ```
 
 **Both compose files, every time** — a single-service `up` without the overlay recreates the api
 without `MONGO_URL` and silently degrades the social layer.
+
+---
+
+## 1a. The upgrade does not apply itself, and the failure mode is a crash loop
+
+**This contradicts the handoff and was found the hard way, on this stack.**
+
+`APP_HANDOFF_v2.1.0.md` §1 says migration `0016` *"only widens what is accepted … so there is
+nothing to backfill and no data to prepare"*, and FR-13 calls the new columns *"purely additive,
+no backfill"*. Both statements are true about **data**. Neither is true about **deployment**.
+
+Our entrypoint runs the runtime's own recommended command, bare, under `set -e`
+(`docker/entrypoint.sh:32`). On 2.1.0 against an existing database it exits non-zero:
+
+```
+[entrypoint] runtime schema: aindy-runtime bootstrap-schema
+error: runtime-owned schema is not ready: Runtime-owned schema requires an explicit additive reconcile:
+  Runtime table 'agents' is missing required column 'metadata'.
+  Runtime table 'agents' is missing required column 'updated_at'.
+Re-run with --reconcile for an additive column/index fix, or perform the required offline
+migration before retrying.
+```
+
+`set -e` turns that into an exit, `restart: unless-stopped` turns the exit into a **crash loop**,
+and the api never reaches `serve`. The stack was down until reconciled by hand.
+
+The refusal is *correct behaviour* — `bootstrap-schema` deliberately will not alter tables without
+an explicit opt-in, which is the right default for a command that might run against production.
+The gap is that **the runtime recommends `bootstrap-schema` as the deploy entrypoint command**,
+and that recommended entrypoint breaks on every additive runtime schema release. Filed as
+**FR-14**.
+
+The fix applied here:
+
+```
+ok: reconciled runtime-owned tables to packaged metadata.
+ok: stamped alembic_version_runtime to revision 0016.
+```
+
+`agents.metadata` (`jsonb`, nullable) and `agents.updated_at` (`timestamptz`, nullable) created;
+all 7 rows intact. **The agents table was CSV-snapshotted first** — additive-only was also the
+claim during the 2.0.0 upgrade, where the verified-flag backfill silently did not run (FR-8).
+Nothing was lost this time, but the snapshot cost nothing.
+
+**Whether our entrypoint should pass `--reconcile` itself is an open decision** — see §7.
 
 ---
 
@@ -193,7 +241,9 @@ question in our own auth walk.
 | Cross-app import boundaries | `scripts/check_app_imports.py` clean |
 | Live `agents` table | 7 system rows, no drift (§3) |
 | Image rebuild | `--no-cache`, `aindy-runtime==2.1.0` baked |
-| Post-recreate | healthy, 16 plugins, `MONGO_URL` present |
+| Schema reconcile | required (§1a) — reconciled, `alembic_version_runtime` = `0016` |
+| Post-recreate | healthy in ~25s, 16 plugins, `MONGO_URL` present, `aindy-runtime==2.1.0` |
+| Data after reconcile | users 25, tasks 8, agents 7 — unchanged |
 
 ---
 
@@ -230,4 +280,28 @@ The handoff says *"Your `FR-7` status is stale … only the document is behind"*
 wheel and line numbers recorded. And we were on **2.0.1** until this PR. No action needed on our
 side; flagging so the note isn't repeated a third time.
 
-**Next available FR number: `FR-14`.**
+**Next available FR number: `FR-15`** — FR-14 was filed from this upgrade (§1a).
+
+---
+
+## 7. Open decision: should the entrypoint reconcile itself?
+
+Not decided here, because the options have genuinely different risk and it is an operator call.
+
+`docker/entrypoint.sh:32` runs `aindy-runtime bootstrap-schema` bare. §1a is what that costs on an
+additive schema release.
+
+| | Behaviour | Cost |
+|---|---|---|
+| **A — leave it bare** | Every additive runtime release crash-loops the container until someone runs `--reconcile` by hand | Safe, loud, and exactly what just happened. Fine for one operator; bad for an unattended deploy |
+| **B — always `--reconcile`** | Additive DDL applied automatically at boot | Never blocks a deploy. But it silently alters a production schema on container start, and it fires on *every* boot, not just upgrades |
+| **C — opt-in env var** | e.g. `AINDY_BOOTSTRAP_RECONCILE=1`, set in compose for dev, unset in prod | Keeps prod explicit while local/dev stops breaking. One more knob |
+
+**Leaning C**, on the same reasoning that shaped the Mailpit profile gate: make the convenient
+behaviour available and non-default, so nothing surprising happens where it matters. But B is
+defensible given the runtime *already* self-migrates its own schema during `serve` — the
+inconsistency is that `bootstrap-schema` is stricter than the thing that runs immediately after it.
+
+**Whichever is chosen, `restart: unless-stopped` turns a schema refusal into an infinite loop
+rather than a visible failure**, which is worth fixing independently — a bounded restart policy
+would surface this in seconds instead of scrolling the same error forever.

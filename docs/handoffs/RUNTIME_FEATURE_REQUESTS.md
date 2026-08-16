@@ -8,6 +8,82 @@ owner: "app-team"
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
 
+## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🔴 upgrade-path
+
+**apps-monolith ref:** found 2026-08-15 adopting 2.1.0, by the api container failing to start.
+**Severity: this takes a deployment down**, and it will recur on every runtime release that adds
+a column.
+
+### What happened
+
+`docker/entrypoint.sh` runs the runtime's own documented deploy command, bare, under `set -e`:
+
+```sh
+aindy-runtime bootstrap-schema        # entrypoint.sh:32
+python scripts/deploy_bootstrap.py
+exec "$@"                             # aindy-runtime serve
+```
+
+On 2.1.0 against an existing database it exits non-zero:
+
+```
+error: runtime-owned schema is not ready: Runtime-owned schema requires an explicit additive reconcile:
+  Runtime table 'agents' is missing required column 'metadata'.
+  Runtime table 'agents' is missing required column 'updated_at'.
+Re-run with --reconcile for an additive column/index fix, or perform the required offline
+migration before retrying.
+```
+
+`set -e` → exit; `restart: unless-stopped` → **crash loop**; `serve` is never reached. The stack
+stayed down until we ran `bootstrap-schema --reconcile` by hand.
+
+### Why this is a real gap rather than us holding it wrong
+
+**The refusal itself is right.** A command that may run against production should not silently
+`ALTER TABLE`. We are not asking for that default to change.
+
+The gap is the combination:
+
+1. `bootstrap-schema` is what the runtime **recommends as the deploy entrypoint command** (its
+   own `--help`: *"Intended for a deploy entrypoint that splits schema ownership"*), and our
+   entrypoint follows that recommendation, shaped against the runtime's `init` scaffold.
+2. `APP_HANDOFF_v2.1.0.md` §1 said *"nothing to backfill and no data to prepare"* and FR-13 said
+   *"purely additive, no backfill"*. Both are true **about data** and both read, to a deployer,
+   as "nothing to do". The required step was not mentioned in the handoff at all.
+3. So the documented upgrade path for an existing deployment is: rebuild, restart, watch it crash
+   loop, read the container log to discover the missing step.
+
+**This is the FR-8 shape again.** In 2.0.0 the verified-flag backfill did not run on a wheel
+install and every user silently became unverified; here an additive DDL does not run and the
+container will not boot. Different symptom, same root: *the upgrade path is not exercised on an
+existing database before release.*
+
+### The ask (runtime) — any one of these is sufficient
+
+- **Say it in the handoff.** Cheapest fix: when a release changes runtime-owned schema, the
+  handoff states "existing deployments must run `bootstrap-schema --reconcile`". A one-line
+  addition to a doc we already read carefully.
+- **Make it discoverable from the release, not the crash.** Have `bootstrap-schema` exit with a
+  distinct, greppable code for "additive reconcile required" so an entrypoint can branch on it
+  instead of dying.
+- **Ship the recommended entrypoint pattern.** If the intended deploy shape is
+  `bootstrap-schema --reconcile` in a container and bare `bootstrap-schema` interactively, say so
+  in the scaffold — our entrypoint was modelled on `aindy-runtime init` and inherited the bare form.
+
+### What we are NOT asking for
+
+Auto-applying DDL by default. Whether *our* entrypoint passes `--reconcile` is our call
+(`RUNTIME_2_1_0_UPGRADE.md` §7) and does not need a runtime change either way.
+
+### Verified
+
+Reconcile succeeded (`ok: reconciled runtime-owned tables to packaged metadata.` /
+`ok: stamped alembic_version_runtime to revision 0016.`), `agents.metadata` (jsonb, nullable) and
+`agents.updated_at` (timestamptz, nullable) created, all 7 rows intact, api healthy in ~25s on
+`aindy-runtime==2.1.0`.
+
+---
+
 ## ✅ CLOSED in aindy-runtime 1.10.2 — RT-MEMTXN-LEAK-1 (verified app-side on the real wheel)
 
 **Filed 2026-07-19; closed 2026-07-19 on `aindy-runtime==1.10.2`.** Verified against the
@@ -434,8 +510,13 @@ registering it becomes possible and the model stops special-casing the terminal.
 > Raw SQL and JSONB queries see the real column name — `WHERE metadata->>'workspace' = 'w1'`
 > works as written. Anything going through the ORM must say `agent_metadata`.
 
-Schema arrives via runtime Alembic head **`0016`** (`alembic_version_runtime`), which the runtime
-self-migrates at boot. Nothing for the app-owned `alembic_version` tree.
+Schema arrives via runtime Alembic head **`0016`** (`alembic_version_runtime`). Nothing for the
+app-owned `alembic_version` tree.
+
+> **It does not self-migrate, despite "purely additive".** On an existing database the deploy
+> entrypoint's bare `aindy-runtime bootstrap-schema` **refuses and exits non-zero**, demanding
+> `--reconcile`, which under `set -e` + `restart: unless-stopped` is a crash loop. Verified on
+> this stack 2026-08-15. See `RUNTIME_2_1_0_UPGRADE.md` §1a and **FR-14**.
 
 ---
 
