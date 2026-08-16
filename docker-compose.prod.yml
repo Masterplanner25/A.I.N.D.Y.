@@ -62,6 +62,21 @@ services:
       # infinite loop. Read by docker/entrypoint.sh, NOT by the runtime.
       # See docs/handoffs/RUNTIME_2_1_0_UPGRADE.md §1a/§7 (adopting 2.1.0 hit exactly this).
       AINDY_BOOTSTRAP_RECONCILE: "${AINDY_BOOTSTRAP_RECONCILE:-false}"
+      # FR-15(a) — the remaining half of the Genesis-latency defect, and it is ours to trial.
+      #
+      # The scheduler queue is drained by a single 1s tick with max_instances=1, and
+      # `_decide_mode()` returns INLINE for everything while this is false — so the whole
+      # async path (flow/agent/nodus/job -> threads) is unreachable by default and work
+      # serialises behind one tick. That is what produced 22s / 48s / 184s waits and a
+      # 13-minute unresponsive API. Setting this to 1 makes Rules 4/5 live as designed.
+      #
+      # Default OFF to match the runtime and keep the flip a deliberate, observable act.
+      # 2.2.0 shipped `scheduler.queued` (with queue_depth) and the
+      # aindy_scheduler_queue_wait_seconds histogram, so the first occurrence after
+      # flipping is diagnosable — which was the precondition for trialling it at all.
+      # Plain os.getenv upstream, so an empty value is safely false (unlike the TYPED
+      # pydantic bools above — see AINDY_REQUIRE_VERIFIED_LOGIN).
+      AINDY_ASYNC_HEAVY_EXECUTION: "${AINDY_ASYNC_HEAVY_EXECUTION:-false}"
       # Password recovery. /auth/password/forgot always returns 200 (never discloses
       # whether the address exists) but 503s when no email channel is configured — the
       # UI surfaces that one plainly, since it describes the deployment, not an account.

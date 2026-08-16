@@ -167,10 +167,25 @@ This covers the common case (the user is in the app) at near-zero cost and canno
 `register_scheduled_job(job_id, handler, *, trigger="interval", trigger_kwargs=...)` is a real,
 exported runtime hook (`registry.py:744`, backed by APScheduler).
 
-> **No app in this repo calls it.** Zero occurrences across `apps/`. This is the same hook whose
-> absence makes "autonomous self-triggering" a standing open item in `BUILD_PLAN.md` — so a
-> reminder job would be **the first scheduled job this repo has ever registered**, and should be
-> treated as proving the pattern, not just shipping a reminder.
+> **Corrected 2026-08-16.** An earlier draft of this section claimed no app in this repo calls it
+> and that a reminder job would be the first scheduled job ever registered here. **That was
+> wrong** — the error was grepping for `register_scheduler_job(s)`, the stale name in `CLAUDE.md`,
+> rather than the real one. There are **21 call sites registering 9 jobs** across four domains:
+>
+> | Domain | Jobs |
+> |---|---|
+> | `analytics` | `daily_infinity_score_recalculation` |
+> | `masterplan` | `daily_eta_recalculation` |
+> | `rippletrace` | `rippletrace_poll_content_sources`, `rippletrace_detect_mentions` |
+> | `tasks` | `task_reminder_check`, `task_recurrence_check`, `background_lease_heartbeat`, `wait_recovery_poll`, `resume_watchdog` |
+
+**This changes the plan for the better.** `task_reminder_check` already exists and already runs on
+a schedule, so §6.2 is not a new capability — it is **extending an existing reminder job with a
+second check**. Phase 4 shrinks accordingly.
+
+It also means scheduled work here is not free: `SYSMAX-5` (runtime, open) notes ~33 jobs sharing a
+10-worker pool once these 21 sites are counted alongside the runtime's 12. Adding a job is cheap;
+adding a *slow* one is not.
 
 Delivery: transactional email works as of runtime 2.0.1 (`AINDY_SMTP_*`, verified end-to-end
 against Mailpit). Reserve it for genuinely time-based prompts — payday, month-end — and keep

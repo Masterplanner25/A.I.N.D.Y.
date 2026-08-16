@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.1.0,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.2.0,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -100,10 +100,15 @@ IS_CORE_DOMAIN: bool = False
 def register() -> None:
     from AINDY.platform_layer.registry import (
         register_router, register_models, register_flow_definitions,
-        register_scheduler_jobs, register_syscalls, register_agent_tools,
-        register_event_handlers,
+        register_scheduled_job, register_syscall, register_agent_tool,
+        register_event_handler,
         # ...18 registration categories total
     )
+    # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
+    # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
+    # `register_syscalls` — which do not exist. Grepping for them returns nothing, which
+    # reads as "no app uses this hook" rather than "wrong name", and that misreading was
+    # written into two specs before it was caught. Verify against the registry, not here.
     register_router(router, prefix="/api/myapp")
     register_models([MyModel])
     register_flow_definitions([my_flow_def])
@@ -171,7 +176,7 @@ merge rules): `docs/deployment/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime>=2.1.0,<3.0
+aindy-runtime>=2.2.0,<3.0
 ```
 
 The upper bound is required. Never widen to an unbounded range.
@@ -185,7 +190,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.1.0,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.2.0,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.

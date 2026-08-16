@@ -8,6 +8,57 @@ owner: "app-team"
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
 
+## FR-15 — a request can wait ~3 minutes to enter the execution pipeline 🟡 (b) and (c) SHIPPED in 2.2.0; (a) is ours
+
+**Mechanism found and confirmed — it is not a hypothesis any more.** From
+`APP_HANDOFF_v2.2.0.md` §2:
+
+`_scheduler_heartbeat_tick` is the only thing that drains the scheduler queue. It runs on a
+**1-second APScheduler job with `max_instances=1`** and dispatched each item **synchronously**,
+because `_decide_mode()` returns `INLINE` for everything: Rule 2 short-circuits Rules 4 and 5
+when `AINDY_ASYNC_HEAVY_EXECUTION` is false, which is the default. **The entire async path —
+including "high-priority work should never block a request thread" — was unreachable by
+default.** Demonstrated across all eight type × priority combinations.
+
+Our `maximum number of running instances reached (1)` log was not a side-symptom; it was the
+queue being blocked, printing once per starved second. **And it predates 2.1.0** — the caution
+about not attributing this to the upgrade was correct.
+
+| Ask | Status |
+|---|---|
+| **(a)** confirm a single-slot serialisation | ✅ Confirmed, and it is default-on |
+| **(b)** emit something while queued | ✅ **Shipped** — `scheduler.queued` SystemEvent with `queue_depth`, plus `aindy_scheduler_queue_wait_seconds` bucketed to 300s |
+| **(c)** bound the wait | 🟡 **Partial** — not bounded, but wait firing moved to its own job and thread |
+
+**Why it is `scheduler.queued` and not the `execution.queued` we asked for:** the execution-contract
+gate raises for any `execution.*` event emitted outside a pipeline, and the two hottest enqueue
+callers have no pipeline active. Our requested name would have raised in exactly the paths that
+matter. Good catch on their side.
+
+**(c) also fixed a correctness bug we had not noticed.** `tick_time_waits()` lived inside
+`schedule()`, so a slow execution skipped the next tick and **no time-based wait fired** — a flow
+parked on a timer stayed parked because an *unrelated* flow was busy. That shared tick is also why
+`/health` died at 2.7 cores for 13 minutes.
+
+### What remains is ours: `AINDY_ASYNC_HEAVY_EXECUTION`
+
+Dispatch still runs INLINE by default, so work still queues behind a single 1s tick. 2.2.0 makes
+that wait **visible** and stops it starving timers and health; it does not remove it. The
+remaining step is flipping `AINDY_ASYNC_HEAVY_EXECUTION=1`, which routes
+`flow`/`agent`/`nodus`/`job` to threads. Per the standing split, **soak happens here, not
+upstream** — a deliberate handoff, not an omission.
+
+### Their correction to our write-up — verified, they are right
+
+We cited `apps/automation/flows/flow_definitions.py:254` for the synchronous
+`sys.v1.analytics.execute_infinity` amplifier. **254 is the decorator line; the syscall appears at
+258, 375 and 554 — three call sites, not one.** Confirmed by grep 2026-08-16. Removing one by
+line number would have left two.
+
+---
+
+### Original filing (2026-08-16) — retained for context
+
 ## FR-15 — a request can wait ~3 minutes to enter the execution pipeline, with no events emitted 🔴 defect
 
 **apps-monolith ref:** found 2026-08-16 driving a Genesis session to lock. Full writeup and
@@ -118,6 +169,24 @@ Starting permissive and narrowing is right for us. The one thing that would hurt
 step that lands without a release note — the UI would fail as scattered 403s across unrelated
 screens, which reads as a frontend bug. **Name the scopes being enforced in the handoff for the
 release that enforces them.**
+
+---
+
+## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🔴 STILL OPEN after 2.2.0
+
+> **The 2.2.0 upgrade will not crash-loop, and that is not a fix.** Flagged explicitly by the
+> runtime team in `APP_HANDOFF_v2.2.0.md` §6, and worth repeating here because *"the upgrade
+> worked"* is the observation most likely to be mistaken for *"the defect is gone."*
+>
+> 2.2.0 contains **no schema change** — nothing under `AINDY/db/models/`, no migration, schema
+> contract stays `2026-08-15.1`, Alembic head stays `0016`. So `bootstrap-schema` has no additive
+> drift to refuse and the bare entrypoint succeeds. **The next release that adds a runtime column
+> reproduces exactly what we hit on 2.1.0.** Both gates still default off upstream and the README
+> still recommends the bare form.
+>
+> Our own mitigation is in place and unaffected: `AINDY_BOOTSTRAP_RECONCILE` (`entrypoint.sh`,
+> default off) turns the crash loop into an opt-in unattended reconcile, and a refusal now prints
+> the remedy. That is a local guard, not a resolution of the upstream gap.
 
 ---
 
