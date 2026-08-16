@@ -49,12 +49,33 @@ produces here.
 | `realized_revenue` | total **0.00** |
 
 Phase D flips a blend of Volume, Worth and Trajectory into the canonical score. **Worth is a
-constant, Trajectory does not exist, and total realized revenue across the entire soak is zero.**
-Flipping would not be adopting a validated model; it would be blending two constants and a null
-into the number the whole product is judged by.
+constant and Trajectory does not exist.** Flipping would not be adopting a validated model; it
+would be blending two constants and a null into the number the whole product is judged by.
 
-The Worth axis is defined over realized revenue. There has been no revenue. No quantity of
-elapsed time changes that.
+### What each axis is actually gated on — and it is not money
+
+Corrected 2026-08-16 after reading the composition code rather than inferring from the column
+names. **No axis is defined over revenue**, so "we have no revenue" is not the blocker:
+
+| Axis | Actually computed from | Why it is empty | Needs funds? |
+|---|---|---|---|
+| **Volume** | completed task count / effort | 8 tasks, 2 completed | No |
+| **Worth** | **declared** worth only — `compute_worth` → `100·(1−e^(−declared_total/scale))` | **`intent_value_declarations` has 0 rows** | **No** |
+| **Trajectory** | estimate-vs-actual pace over tasks with **both** `duration` and `time_spent` | no completed task has both | No |
+
+`realized_revenue` is carried in the snapshot but is **explicitly observability-only** —
+`three_axis_service.py:184` says *"raw \$, NOT folded into score in Phase A"*, and the module
+docstring says *"realized revenue stays observability-only."* It is not in the Worth score at all.
+
+**The Worth blocker is a missing surface, not missing money.** `record_value_declaration` and
+`list_value_declarations` are implemented and routed (`analytics_router.py:315`, `:345`), accept
+`kind ∈ {monetary_potential, intrinsic, strategic}` against
+`target_type ∈ {task, masterplan, project, other}` — and **have no client caller at all**
+(`grep` across `client/src` returns nothing). The dead-twin shape again: working engine, no face.
+
+**Trajectory is the self-trust declaration gap seen from the other side** — it is literally
+estimate-vs-actual, the same pair `SELF_TRUST_CALIBRATION_SPEC.md` §4 found 0 of. One input
+unblocks both.
 
 ---
 
@@ -162,20 +183,67 @@ that cannot teach them anything.
 
 ## 7. What would actually open the gate
 
-Not a build. Use the system for real, on the loop it already measures:
+Mostly not a build. Use the system for real, on the loop it already measures:
 
-- **Tasks with estimates, run start → complete.** This is the single highest-leverage input: it
-  moves `actual_score` off its constant, produces the first calibratable declaration pairs
-  (`SELF_TRUST_CALIBRATION_SPEC.md` §4), and feeds Volume.
-- **Any realized revenue** — one order, one payment. Worth is defined over it and has literally
-  never been non-zero.
-- **A MasterPlan with a `goal_value`.** `master_plans` is empty; Trajectory is NULL because
-  nothing declares a target to have a trajectory toward.
+- **Tasks with estimates, run start → complete.** The single highest-leverage input, and it feeds
+  **three** things at once: it moves `actual_score` off its constant, fills **Trajectory**
+  (estimate-vs-actual pace), and produces the first calibratable pairs for
+  `SELF_TRUST_CALIBRATION_SPEC.md` §4. Needs no money and no new code.
+- **Value declarations.** Worth's only input. The API exists and is routed; **the one genuinely
+  missing piece is a UI to enter them** — a small, well-scoped build rather than a data problem.
+- **A MasterPlan with a `goal_value`.** `master_plans` is empty.
 
-Rough sufficiency, to be treated as a floor rather than a target: **≥30 distinct `actual_score`
-values per decision type** before a learned model is allowed to drive anything, and **Worth
-non-constant with Trajectory non-null** before Phase D is considered.
+**None of this requires revenue.** An earlier draft of this document asserted Worth was defined
+over realized revenue and therefore blocked on income; that was wrong, and it pointed the remedy
+at the one input the owner cannot manufacture honestly.
 
-**The cheapest path to unblocking four flagged features is a fortnight of genuinely using the
-product** — which is also the thing the Domain Engine, self-trust calibration and cognitive
-operations specs each independently need.
+Rough sufficiency, a floor rather than a target: **≥30 distinct `actual_score` values per decision
+type** before a learned model drives anything, and **Worth non-constant with Trajectory non-null**
+before Phase D is considered.
+
+### Do not fabricate the inputs
+
+Worth accepts a declared number and Volume counts completed tasks, so both are trivially
+forgeable, and forging them would look exactly like progress — the same failure mode as §3, where
+a memorised constant reads as a 0.0000 MAE. A calibration system fed invented declarations does
+not become uncalibrated; it becomes **confidently wrong**, and nothing downstream can detect it.
+Declared worth in particular is a statement about intent, which is the one thing here that is only
+worth recording if it is true.
+
+**The cheapest path to unblocking the flagged features is a fortnight of genuinely using the
+product**, plus one small UI for declarations — which is also what the Domain Engine, self-trust
+calibration and cognitive operations specs each independently need.
+
+---
+
+## 8. Adjacent gap: income that is not freelance revenue
+
+Raised by the owner 2026-08-16 and confirmed in code. `realized_revenue` is sourced **only** from
+`fetch_freelance_performance_signals` — the freelance pillar's syscall
+(`three_axis_service.py:189-197`). There is no representation anywhere for income arriving from
+outside the freelance domain: employment, retainers, royalties, grants.
+
+**This does not currently block any score** — realized revenue is observability-only (§2) — so it
+is a product gap, not a soak blocker, and should not be conflated with one.
+
+But it is a real gap, because the observability is then wrong rather than merely absent: a user
+with substantial external income shows `realized_revenue = 0.00`, which reads as "earning nothing"
+rather than "earning outside the modelled domain."
+
+**Recording external income as freelance orders would be data fabrication** — inventing clients,
+orders and payments that do not exist, corrupting the freelance pricing loop (#126 learns from
+realized outcomes) along the way. Not an option.
+
+The honest shapes, unresolved:
+
+- **A distinct income source concept** owned by a domain that is not `freelance`, feeding the same
+  Worth observability seam.
+- **A `monetary_potential` value declaration** — already a valid `kind`, already accepts a number.
+  Semantically it is a *declared prior*, not realized income, so this understates what actually
+  happened.
+- **Leave it out deliberately**, on the argument that Worth should measure value *the system
+  helped create*, and exogenous salary is not that.
+
+That third option is a real position, not a cop-out, and it is the fork worth deciding first:
+**is Worth measuring your economic reality, or the value attributable to the plan?** The answer
+determines whether external income belongs in the model at all.

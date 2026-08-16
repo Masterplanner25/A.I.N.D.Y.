@@ -82,9 +82,11 @@ values decision now framed as the Worth axis of the three-axis model. See
 [INFINITY_SCORE_MODEL.md](./INFINITY_SCORE_MODEL.md).
 
 > **Superseded 2026-08-15.** This item was recorded as "gated on a shadow soak, not on build."
-> The soak ran and produced nothing usable — Worth is constant, Trajectory is entirely NULL, and
-> realized revenue is 0.00 across all 294 records. It is **usage-blocked**, not soak-gated.
-> See [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md).
+> The soak ran and produced nothing usable — across 294 records Worth is constant and Trajectory
+> is entirely NULL. It is **usage-blocked**, not soak-gated. Note the blocker is *not* revenue:
+> Worth is computed from **declared** worth (`intent_value_declarations`, 0 rows — the API exists
+> with no UI) and Trajectory from estimate-vs-actual pace on completed tasks. See
+> [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md).
 
 ## Tracks
 
@@ -187,9 +189,11 @@ Track 2 proven on a provisioned native-Linux host. **All five tracks are shipped
 
   > **Restated 2026-08-15.** This was recorded as needing *"the Phase-B shadow soak's divergence
   > data, not more build."* The soak has run for weeks and produced no usable divergence data:
-  > across 294 shadow records, `worth_score` has **1** distinct value, `trajectory_score` is
-  > **entirely NULL**, and total realized revenue is **0.00**. The blocker is that nothing is
-  > generating varied state to measure — elapsed time cannot fix it. Full evidence in
+  > across 294 shadow records, `worth_score` has **1** distinct value and `trajectory_score` is
+  > **entirely NULL**. The blocker is that nothing is generating varied state to measure — elapsed
+  > time cannot fix it. It is *not* a revenue blocker: Worth reads **declared** worth
+  > (`intent_value_declarations`, 0 rows, API routed but no UI) and `realized_revenue` is
+  > observability-only, never folded into the score. Full evidence in
   > [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md). **Do not flip.**
 - **Learned recursion (REFLECT calibration)** *(shipped through advisory)* — the learned
   expected-score calibrator: Phase 0 (shadow) and Phase 1 (advisory) are **merged**; Phase 2
