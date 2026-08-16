@@ -6,6 +6,18 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+# How often to scan for due task reminders.
+#
+# Was 1 minute. A reminder arriving up to five minutes late costs nothing; a job that
+# runs 1,440 times a day is the most expensive schedule in the app to get wrong, and
+# this one was wrong twice over — see `_scheduler_check_reminders` for the autonomy
+# gate that used to sit in front of it and cold-imported the app graph per run.
+#
+# Kept as a named constant rather than an inline literal so the cost of changing it is
+# visible: at 1 minute this job alone accounts for more scheduled executions than every
+# other job in the repo combined.
+REMINDER_CHECK_INTERVAL_MINUTES = 5
+
 BOOTSTRAP_DEPENDS_ON: list[str] = []
 IS_CORE_DOMAIN: bool = True
 APP_DEPENDS_ON: list[str] = []
@@ -176,7 +188,7 @@ def _register_scheduled_jobs() -> None:
         _scheduler_check_reminders,
         name="Task reminder check",
         trigger="interval",
-        trigger_kwargs={"minutes": 1},
+        trigger_kwargs={"minutes": REMINDER_CHECK_INTERVAL_MINUTES},
     )
     register_scheduled_job(
         "task_recurrence_check",
@@ -430,7 +442,28 @@ def _job_resume_watchdog() -> None:
 
 
 def _scheduler_check_reminders() -> None:
-    from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
+    """Fire due task reminders.
+
+    **No autonomy gate here, deliberately** — see REMINDER_CHECK_INTERVAL_MINUTES.
+
+    This used to call ``evaluate_live_trigger`` + ``record_decision`` first, like its
+    6-hourly and daily siblings still do. On those the cost is irrelevant; on a
+    per-minute job it was not. ``evaluate_live_trigger`` dispatches to the registered
+    trigger evaluator (``apps/agent/agents/triggers.py:185``), and the runtime wraps
+    that surface in a runtime callback — a **fresh subprocess that cold-imports the
+    whole 16-app graph**. Once a minute, forever.
+
+    Observed 2026-08-16: the callback exceeded even the raised 30s budget
+    (``RuntimeError: runtime callback command timed out after 30s``), failing every
+    60s while burning a core and starving the scheduler's 1s heartbeat. That is the
+    same "repeating roughly once a minute" symptom this repo filed as **FR-11** on
+    2026-08-05 — raising the budget 10s → 30s deferred it rather than fixing it.
+
+    Firing a reminder is a notification, not an autonomous act: there is nothing here
+    for an autonomy controller to arbitrate, and gating it meant asking a subprocess
+    for permission to run a cheap DB scan. The gate stays on the jobs that actually
+    take actions.
+    """
     from AINDY.db.database import SessionLocal
     from apps.tasks.services.task_service import check_reminders
 
@@ -440,12 +473,7 @@ def _scheduler_check_reminders() -> None:
         logger.warning("[Task Scheduler] DB unavailable: %s", exc)
         return
     try:
-        trigger = {"trigger_type": "schedule", "source": "scheduler.reminders", "goal": "task_reminder_check"}
-        context = {"goal": "task_reminder_check", "importance": 0.45}
-        decision = evaluate_live_trigger(db=db, trigger=trigger, context=context)
-        record_decision(db=db, trigger=trigger, evaluation=decision, trace_id=str(uuid.uuid4()), context=context)
-        if decision["decision"] == "execute":
-            check_reminders()
+        check_reminders()
     finally:
         db.close()
 
