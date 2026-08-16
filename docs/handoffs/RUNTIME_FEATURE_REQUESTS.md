@@ -8,6 +8,53 @@ owner: "app-team"
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
 
+## FR-17 — `async_job_service` emits `execution.started` outside a pipeline, so the gate eats it 🟢 observability
+
+**apps-monolith ref:** found 2026-08-16 while verifying the 2.3.0 upgrade on a live stack. Small,
+non-fatal, and adjacent to something you just fixed for the same reason.
+
+### What we see
+
+```
+WARNING [AsyncJob] Emitting execution.started trace=af07e912-… encountered unexpected error:
+        ExecutionContract violation: execution event 'execution.started' emitted outside …
+```
+
+Source: `AINDY/platform_layer/async_job_service.py:421`. Caught and logged, never raised — so
+nothing breaks. But the event **is not recorded**, which means an async job execution has no
+`execution.started` row in `system_events`.
+
+### Why it is worth a line
+
+This is the *same* constraint you described in `APP_HANDOFF_v2.2.0.md` §2 when explaining why the
+new event is `scheduler.queued` and not the `execution.queued` we asked for:
+
+> *"The execution-contract gate raises for any `execution.*` event emitted outside a pipeline, and
+> the two hottest enqueue callers … have no pipeline active."*
+
+You named the event-bus subscriber thread and wait expiry. **`async_job_service` looks like a
+third caller in the same position**, still emitting an `execution.*` name from outside a pipeline
+— so the gate discards it exactly as designed.
+
+The cost is observability, and it is the specific kind that cost us three hours on FR-15: a trace
+timeline with a silent gap where the work actually started. `apps/*/bootstrap.py` registers async
+jobs in four domains (`agent`, `arm`, `masterplan`, and others via `register_async_job`), so this
+path is live here.
+
+### The ask
+
+Either give the async-job path a pipeline context before it emits, or rename to a
+non-`execution.*` event the way `scheduler.queued` was named — whichever matches the intent. If
+the event is genuinely not a pipeline execution, the second is presumably right.
+
+### What we are NOT claiming
+
+**We cannot date it.** Observed on a fresh 2.3.0 container with only 2 occurrences; the 2.1.0
+container it would be compared against is gone. **This is not offered as a 2.3.0 regression** —
+only as something visible now, on a path your §2 explanation predicts.
+
+---
+
 ## FR-16 — `nodus-lang==4.1.0` is an exact pin, so we cannot take 4.2.0 ✅ CLOSED in 2.3.0
 
 **Shipped the same day it was filed.** `aindy-runtime==2.3.0` declares
