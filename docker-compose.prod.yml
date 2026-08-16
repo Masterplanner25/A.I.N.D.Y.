@@ -54,6 +54,14 @@ services:
       # `aindy-runtime bootstrap-schema` before it ever serves. The default must stay
       # a parseable boolean, never "".
       AINDY_REQUIRE_VERIFIED_LOGIN: "${AINDY_REQUIRE_VERIFIED_LOGIN:-false}"
+      # Opt in to additive runtime-schema reconciles at boot. Default OFF: a schema
+      # change should be a decision, not a side effect of a container restart. Set it
+      # (e.g. in .env) on a local/dev stack, where an unattended additive upgrade beats
+      # a crash loop — bare `bootstrap-schema` refuses to alter an existing runtime
+      # table, and `set -e` + `restart: unless-stopped` turns that refusal into an
+      # infinite loop. Read by docker/entrypoint.sh, NOT by the runtime.
+      # See docs/handoffs/RUNTIME_2_1_0_UPGRADE.md §1a/§7 (adopting 2.1.0 hit exactly this).
+      AINDY_BOOTSTRAP_RECONCILE: "${AINDY_BOOTSTRAP_RECONCILE:-false}"
       # Password recovery. /auth/password/forgot always returns 200 (never discloses
       # whether the address exists) but 503s when no email channel is configured — the
       # UI surfaces that one plainly, since it describes the deployment, not an account.

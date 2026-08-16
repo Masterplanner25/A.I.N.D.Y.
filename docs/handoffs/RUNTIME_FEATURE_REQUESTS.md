@@ -8,6 +8,151 @@ owner: "app-team"
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
 
+## Response to v2.1.0 §6 — which scopes the UI actually needs
+
+**Not a feature request — an answer to a question the runtime team asked**, in
+`APP_HANDOFF_v2.1.0.md` §6: *"If you have a view on which scopes your UI actually needs, now is
+the useful time to say so."* Answered 2026-08-15, from the client's real call surface rather than
+from preference.
+
+### Context, restated so the ask is unambiguous
+
+Today `enforce_api_key_scope` gates API-key callers only — *"JWT users carry full trust and are
+never gated by this check"* — so **an interactive browser session is more privileged than any API
+key**. Scope enforcement currently reaches 8 call sites across 2 routers
+(`flow.read` ×4, `memory.read` ×3, `flow.execute` ×1), which is the `HTTP-SCOPE-GAP-1` the runtime
+team already tracks. This is close to greenfield, which is the good time to have an opinion.
+
+### The finding that shapes the answer: our UI is not one caller
+
+It is **two privilege classes sharing one JWT**, and the client already draws that line itself:
+`useAuth()` exposes `isAdmin`, and `AdminUsers.jsx`, `AgentConsole.jsx` and
+`AgentApprovalInbox.jsx` each bail to `<AdminAccessRequired />`. **That gate is frontend-only
+today** — the token behind it carries full trust either way.
+
+So deriving authority from the user row does not impose a new model on us. **It makes the server
+enforce the boundary the UI already draws.** That is the strongest argument for the approach the
+runtime team was already leaning toward.
+
+| Class | Representative calls | Scopes |
+|---|---|---|
+| **Ordinary session** — Tasks, MasterPlan, Genesis, memory, search, social, identity | recall, node create/update, feedback, share, run flows | `memory.read`, `memory.write`, `flow.read`, `flow.execute`, `agent.run`, `execution.read` |
+| **Admin session** — the operator console (`client/src/api/operator.js`) | `runFlow`, `resumeFlowRun`, `getFlowRegistry`, webhook CRUD, `promoteUser`, DLQ drain, execution graph | the above **+** `webhook.manage`, `platform.admin` |
+
+**Not needed by the UI at all:** `memory.delete` (no DELETE against memory anywhere in the
+client — the only client DELETEs are operator webhooks/DLQ, rippletrace sources and search
+history) and `event.emit` (nothing in the client emits directly).
+
+### Two caveats worth designing around
+
+1. **`execution.read` conflates two questions.** "May I read executions" is a scope; "may I read
+   *someone else's*" is data ownership. A scope alone will not answer the second. This is the
+   same distinction that `memory_agents_list`'s owner-scoping just ran into — see
+   `RUNTIME_2_1_0_UPGRADE.md` §2a.
+2. **Please tie the admin scopes to the existing user-row admin flag**, not a new concept. Two
+   sources of truth for "is this person an operator" is worse than none.
+
+### On the rollout posture
+
+Starting permissive and narrowing is right for us. The one thing that would hurt is a narrowing
+step that lands without a release note — the UI would fail as scattered 403s across unrelated
+screens, which reads as a frontend bug. **Name the scopes being enforced in the handoff for the
+release that enforces them.**
+
+---
+
+## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🔴 upgrade-path
+
+**apps-monolith ref:** found 2026-08-15 adopting 2.1.0, by the api container failing to start.
+**Severity: this takes a deployment down**, and it will recur on every runtime release that adds
+a column.
+
+### What happened
+
+`docker/entrypoint.sh` runs the runtime's own documented deploy command, bare, under `set -e`:
+
+```sh
+aindy-runtime bootstrap-schema        # entrypoint.sh:32
+python scripts/deploy_bootstrap.py
+exec "$@"                             # aindy-runtime serve
+```
+
+On 2.1.0 against an existing database it exits non-zero:
+
+```
+error: runtime-owned schema is not ready: Runtime-owned schema requires an explicit additive reconcile:
+  Runtime table 'agents' is missing required column 'metadata'.
+  Runtime table 'agents' is missing required column 'updated_at'.
+Re-run with --reconcile for an additive column/index fix, or perform the required offline
+migration before retrying.
+```
+
+`set -e` → exit; `restart: unless-stopped` → **crash loop**; `serve` is never reached. The stack
+stayed down until we ran `bootstrap-schema --reconcile` by hand.
+
+### Why this is a real gap rather than us holding it wrong
+
+**The refusal itself is right.** A command that may run against production should not silently
+`ALTER TABLE`. We are not asking for that default to change.
+
+The gap is the combination:
+
+1. `bootstrap-schema` is what the runtime **recommends as the deploy entrypoint command** (its
+   own `--help`: *"Intended for a deploy entrypoint that splits schema ownership"*), and our
+   entrypoint follows that recommendation, shaped against the runtime's `init` scaffold.
+2. `APP_HANDOFF_v2.1.0.md` §1 said *"nothing to backfill and no data to prepare"* and FR-13 said
+   *"purely additive, no backfill"*. Both are true **about data** and both read, to a deployer,
+   as "nothing to do". The required step was not mentioned in the handoff at all.
+3. So the documented upgrade path for an existing deployment is: rebuild, restart, watch it crash
+   loop, read the container log to discover the missing step.
+
+**This is the FR-8 shape again.** In 2.0.0 the verified-flag backfill did not run on a wheel
+install and every user silently became unverified; here an additive DDL does not run and the
+container will not boot. Different symptom, same root: *the upgrade path is not exercised on an
+existing database before release.*
+
+### The ask (runtime) — any one of these is sufficient
+
+- **Say it in the handoff.** Cheapest fix: when a release changes runtime-owned schema, the
+  handoff states "existing deployments must run `bootstrap-schema --reconcile`". A one-line
+  addition to a doc we already read carefully.
+- **Make it discoverable from the release, not the crash.** Have `bootstrap-schema` exit with a
+  distinct, greppable code for "additive reconcile required" so an entrypoint can branch on it
+  instead of dying.
+- **Ship the recommended entrypoint pattern.** If the intended deploy shape is
+  `bootstrap-schema --reconcile` in a container and bare `bootstrap-schema` interactively, say so
+  in the scaffold — our entrypoint was modelled on `aindy-runtime init` and inherited the bare form.
+
+### What we are NOT asking for
+
+Auto-applying DDL by default. Whether *our* entrypoint passes `--reconcile` is our call
+(`RUNTIME_2_1_0_UPGRADE.md` §7) and does not need a runtime change either way.
+
+### Our own CI has the identical blind spot — app-side follow-up
+
+Worth stating plainly rather than only pointing upstream. `.github/workflows/deploy-bootstrap-guard.yml`
+exercises `bootstrap-schema -> deploy_bootstrap -> serve` **on a fresh database**, and it passed
+on this very PR while the live stack was crash-looping.
+
+It passes *because* the database is fresh: `create_all` builds `agents` from the new packaged
+metadata, so the columns are present and there is nothing to reconcile. The guard can never see
+this class of failure, because the failure only exists when a database predates the schema change
+— which is the case for every real deployment and no CI run.
+
+**The missing guard is an upgrade-path one:** boot the *previous* runtime against a fresh DB,
+then bring up the *new* one against that now-existing DB. That is the shape that would have
+caught FR-8 and FR-14 before either reached a running stack. Not built here; the adoption PR is
+not the place for it.
+
+### Verified
+
+Reconcile succeeded (`ok: reconciled runtime-owned tables to packaged metadata.` /
+`ok: stamped alembic_version_runtime to revision 0016.`), `agents.metadata` (jsonb, nullable) and
+`agents.updated_at` (timestamptz, nullable) created, all 7 rows intact, api healthy in ~25s on
+`aindy-runtime==2.1.0`.
+
+---
+
 ## ✅ CLOSED in aindy-runtime 1.10.2 — RT-MEMTXN-LEAK-1 (verified app-side on the real wheel)
 
 **Filed 2026-07-19; closed 2026-07-19 on `aindy-runtime==1.10.2`.** Verified against the
@@ -298,7 +443,52 @@ the existing `{data: recommendation}` envelope, then integration-test end-to-end
 
 ---
 
-## FR-12 — No way to register an agent; the roster is hardcoded in the runtime 🔴 net-new
+## FR-12 — No way to register an agent; the roster is hardcoded in the runtime ✅ CLOSED in 2.1.0 (+ FR-12b)
+
+**Shipped in `aindy-runtime==2.1.0` (2026-08-15)**, in two halves:
+
+- **FR-12 — `registry.register_agent`.** Declarative: records a spec, touches no database
+  (plugin load happens long before a session exists). `startup._apply_registered_agents()` upserts
+  by `memory_namespace` at boot and *updates* an existing row, so renaming an agent between boots
+  needs no manual edit.
+- **FR-12b — user-owned agents**, which we did not ask for and is the more useful half:
+  `GET|POST /platform/agents`, `PATCH|DELETE /platform/agents/{slug}`,
+  `POST /platform/agents/{slug}/restore`.
+
+**Contract details that will bite if assumed otherwise:**
+
+| | |
+|---|---|
+| `memory_namespace` | **derived, not accepted** — `u:<user_id>:<slug>`. You supply `slug` matching `^[a-z0-9][a-z0-9._-]{0,63}$` |
+| `agent_type` | forced to `custom`, not caller-settable |
+| `POST` | **not idempotent** (unlike the admin route) — repeated slug is `409`; use `PATCH` |
+| Another user's agent | `404`, never `403` |
+| `slug` | **immutable on `PATCH`** — it is the tag already written onto that agent's memory nodes |
+
+**Our filed premise was partly wrong.** We wrote that "the only ways to add a row are a runtime
+code change or a raw INSERT" — but `POST /platform/admin/agents/register` already existed and was
+mounted. The real gaps were narrower: no hook, no path ever wrote `owner_user_id`, and reads were
+unscoped.
+
+**The security finding this surfaced is the part worth reading.** The seven platform system
+namespaces were **unreserved**: registering with `memory_namespace: "runtime"` took the route's
+idempotent-update branch and silently rewrote the platform's own Runtime agent row — for anyone
+with admin on the deployment — and the next boot did not repair it, because the seed only
+inserted when the row was absent. 2.1.0 reserves all seven in both the hook and the route, repairs
+a drifted system row at boot, and adds
+`POST /platform/admin/agents/{namespace}/restore`.
+
+**Checked on this deployment 2026-08-15: no drift.** All 7 rows present, `agent_type='system'`,
+`is_active=true`, `owner_user_id` NULL, names matching the platform spec (ARM, Genesis, Memory,
+Nodus, Platform, Runtime, SYLVA).
+
+**App-side adoption: not done, deliberately.** This unblocks
+`docs/handoffs/TERMINAL_AGENT_SCOPE.md` §4a and the registry half of the Collaborator face, but
+building that surface is its own piece of work, not part of a version adoption.
+
+---
+
+### Original filing (2026-08-06) — retained for context
 
 **apps-monolith ref:** found 2026-08-06 while designing the terminal-agent surface
 (`docs/handoffs/TERMINAL_AGENT_SCOPE.md` §4a).
@@ -379,7 +569,27 @@ registering it becomes possible and the model stops special-casing the terminal.
 
 ---
 
-## FR-13 — `agents` has no metadata field, so identity cannot outlive the vendor 🟡 small
+## FR-13 — `agents` has no metadata field, so identity cannot outlive the vendor ✅ CLOSED in 2.1.0
+
+**Shipped in `aindy-runtime==2.1.0` (2026-08-15).** `agents.metadata` (JSONB) and
+`agents.updated_at`, both nullable, purely additive, no backfill.
+
+> **★ The ORM attribute is `Agent.agent_metadata`; the COLUMN is `metadata`.** `metadata` is
+> reserved on a SQLAlchemy declarative class (`Base.metadata`), so the attribute had to differ.
+> Raw SQL and JSONB queries see the real column name — `WHERE metadata->>'workspace' = 'w1'`
+> works as written. Anything going through the ORM must say `agent_metadata`.
+
+Schema arrives via runtime Alembic head **`0016`** (`alembic_version_runtime`). Nothing for the
+app-owned `alembic_version` tree.
+
+> **It does not self-migrate, despite "purely additive".** On an existing database the deploy
+> entrypoint's bare `aindy-runtime bootstrap-schema` **refuses and exits non-zero**, demanding
+> `--reconcile`, which under `set -e` + `restart: unless-stopped` is a crash loop. Verified on
+> this stack 2026-08-15. See `RUNTIME_2_1_0_UPGRADE.md` §1a and **FR-14**.
+
+---
+
+### Original filing (2026-08-06) — retained for context
 
 **apps-monolith ref:** found 2026-08-06 alongside FR-12.
 
@@ -681,7 +891,24 @@ reintroduced it.
 - App: `docker-compose.prod.yml`, `.env.example`; PR #190.
 
 ---
-## FR-11 — `invoke_runtime_callback`: a 10s non-configurable budget around a cold subprocess import 🟢 hardening, not a defect
+## FR-11 — `invoke_runtime_callback`: a 10s non-configurable budget around a cold subprocess import ✅ CLOSED in 2.1.0
+
+**Shipped in `aindy-runtime==2.1.0` (2026-08-15).** `AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS`,
+default **30s**, resolved at call time — so it can be changed without a restart. We take the
+default; nothing app-side to wire.
+
+Two things from the runtime team's response worth keeping:
+
+- **Our filed mechanism was wrong**, as already recorded below in strikethrough:
+  `bootstrap_register` fires only for `runtime_agent_defaults`, not a 16-app bootstrap. The real
+  cost is a fresh subprocess `import_module` pulling an app's transitive graph.
+- **It was also the cause of `FLAKY-1`**, a ~50% runtime-side test failure that had been blocking
+  their merges at random. The fragile-shape argument turned out to be understated — it *was*
+  failing, just not visibly to us.
+
+---
+
+### Original filing (2026-08-05) — retained for context
 
 **Filed 2026-08-05 while verifying the 2.0.1 upgrade. Read the framing before triaging: nothing
 is broken, and this cost us nothing. It is filed because the shape is fragile, not because it

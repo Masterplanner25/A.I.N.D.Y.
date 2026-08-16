@@ -26,10 +26,40 @@ fi
 # pgvector must exist before bootstrap-schema (it builds a Vector embedding column and assumes
 # the extension is present). compose.prod provisions it via docker/init-pgvector.sql; this makes
 # the image self-sufficient where that init hook can't run. Checks-first (safe on managed PG).
+#
+# AINDY_BOOTSTRAP_RECONCILE (default off) — opt in to additive column/index reconciles.
+#
+# Bare `bootstrap-schema` REFUSES to alter an existing runtime table and exits non-zero. That is
+# correct for production (a deploy should not silently ALTER TABLE), but with `set -e` and
+# `restart: unless-stopped` the refusal becomes an infinite crash loop rather than a visible
+# failure — which is exactly what adopting aindy-runtime 2.1.0 did here on 2026-08-15, when
+# FR-13 added agents.metadata + agents.updated_at:
+#
+#   error: runtime-owned schema is not ready: Runtime-owned schema requires an explicit additive
+#   reconcile: Runtime table 'agents' is missing required column 'metadata'. ...
+#
+# Set this to 1/true where an unattended additive upgrade is preferable to a stopped stack (local
+# and dev). Leave it UNSET in production, so a schema change is a decision someone makes rather
+# than a side effect of a container restart. See docs/handoffs/RUNTIME_2_1_0_UPGRADE.md §1a/§7
+# and FR-14 in docs/handoffs/RUNTIME_FEATURE_REQUESTS.md.
 echo "[entrypoint] ensure pgvector: python scripts/ensure_pgvector.py"
 python scripts/ensure_pgvector.py
-echo "[entrypoint] runtime schema: aindy-runtime bootstrap-schema"
-aindy-runtime bootstrap-schema
+case "$(printf '%s' "${AINDY_BOOTSTRAP_RECONCILE:-}" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on)
+    echo "[entrypoint] runtime schema: aindy-runtime bootstrap-schema --reconcile (AINDY_BOOTSTRAP_RECONCILE set)"
+    aindy-runtime bootstrap-schema --reconcile
+    ;;
+  *)
+    echo "[entrypoint] runtime schema: aindy-runtime bootstrap-schema"
+    if ! aindy-runtime bootstrap-schema; then
+      echo "[entrypoint] bootstrap-schema refused. If this is an additive runtime schema change," >&2
+      echo "[entrypoint] re-run once with AINDY_BOOTSTRAP_RECONCILE=1, or apply the reconcile" >&2
+      echo "[entrypoint] out-of-band:" >&2
+      echo "[entrypoint]   docker compose run --rm --no-deps --entrypoint aindy-runtime api bootstrap-schema --reconcile" >&2
+      exit 1
+    fi
+    ;;
+esac
 echo "[entrypoint] app schema: python scripts/deploy_bootstrap.py"
 python scripts/deploy_bootstrap.py
 
