@@ -1,0 +1,105 @@
+name: Security Audit
+
+# Dependency vulnerability scanning for both halves of the repo.
+#
+# Added 2026-08-17. Before this, CI checked correctness thoroughly — lint, contracts,
+# import boundaries, a fresh-DB boot, an upgrade-path guard — and checked security not
+# at all. The first `npm audit` ever run against this repo found 6 vulnerabilities in
+# the client's PRODUCTION dependencies (1 moderate, 5 high), and nothing had ever
+# scanned the 106 installed Python packages.
+#
+# Runs on PRs, on main, and weekly — the weekly matters most, because a dependency
+# becomes vulnerable while you are not touching it. A repo that only scans on push
+# learns about a CVE the next time someone happens to open a PR.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Monday 07:00 UTC, ahead of Dependabot's Monday run so the audit reflects the
+    # state Dependabot is about to propose PRs against.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-audit:
+    name: Python Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11"
+
+      # setuptools is upgraded alongside pip because the runner ships an older one
+      # (79.0.1 as of 2026-08-17, carrying PYSEC-2026-3447) that we do not declare and
+      # cannot pin from pyproject. Upgrading is honest; ignoring a fixable advisory
+      # because it came preinstalled is how an exception list starts growing.
+      - name: Install project and pip-audit
+        run: |
+          python -m pip install --upgrade pip setuptools
+          python -m pip install -e .
+          python -m pip install pip-audit==2.9.0
+
+      # Audits the resolved environment rather than a requirements file, so it sees the
+      # full transitive tree — including aindy-runtime's own dependencies, which is
+      # where a CVE would be least visible to us.
+      #
+      # NOT --strict, deliberately. `--strict` also fails when any dependency cannot be
+      # audited, and `aindy-apps-monolith` is not on PyPI, so the gate would fail on
+      # every run for a reason that has nothing to do with security. A check that always
+      # fails is a check everyone learns to ignore.
+      #
+      # PYSEC-2026-1325 (ecdsa, Minerva timing attack on P-256) is ignored because
+      # **there is no fix and none is planned** — the python-ecdsa project considers
+      # side-channel attacks out of scope. Leaving it unignored would permanently red
+      # the job and hide every future finding behind it.
+      #
+      # Assessed rather than waved through: `ecdsa` is here transitively via
+      # `python-jose`, and this deployment signs JWTs with **HS256** (verified from a
+      # live token header: {"alg":"HS256"}), which is HMAC and does not touch ECDSA
+      # signing at all. If a future change adopts an EC algorithm (ES256 and friends),
+      # this exception must be revisited — that is the condition under which it stops
+      # being safe.
+      - name: Audit installed Python dependencies
+        run: pip-audit --desc --ignore-vuln PYSEC-2026-1325
+
+  client-audit:
+    name: Client Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Production dependencies only, and the audit FAILS the job on high or above.
+      # Dev-tooling advisories are real but they do not ship to a user, and failing on
+      # them is how a security gate gets muted. `audit-level=high` is a deliberate
+      # threshold, not a default — moderates are reported in the next step without
+      # blocking.
+      - name: Audit production dependencies (fail on high+)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Report all advisories including moderate (non-blocking)
+        if: always()
+        run: npm audit --omit=dev || true
