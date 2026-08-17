@@ -1,0 +1,64 @@
+# Dependency update automation.
+#
+# Added 2026-08-17 after an `npm audit` — the first ever run against this repo — found
+# 6 vulnerabilities in the client's *production* dependencies (1 moderate, 5 high),
+# including a CRLF injection in `form-data` and an auth-header leak in
+# `follow-redirects`. Nothing in CI was watching for any of it, and the Python side
+# (106 installed packages, none scanned) was the larger blind spot.
+#
+# Grouping is deliberate: ungrouped Dependabot on a repo this size produces a PR per
+# package per week, which is how teams learn to ignore it. Patch and minor updates for
+# the same ecosystem arrive as one PR; majors come separately because they need reading.
+version: 2
+
+updates:
+  # ── Python (runtime + apps) ───────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      python-patch-minor:
+        patterns: ["*"]
+        update-types: ["patch", "minor"]
+    ignore:
+      # aindy-runtime is adopted deliberately, with a handoff doc and a floor bump each
+      # time (see docs/handoffs/RUNTIME_*_UPGRADE.md). A bot PR would race that process
+      # and land a pin move without the behaviour review that has caught a real defect
+      # on every release so far.
+      - dependency-name: "aindy-runtime"
+      # nodus-lang is pinned exactly BY aindy-runtime; we have no direct dependency and
+      # cannot move it independently (FR-16).
+      - dependency-name: "nodus-lang"
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── Client (React/Vite) ───────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/client"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      npm-patch-minor:
+        patterns: ["*"]
+        update-types: ["patch", "minor"]
+    labels: ["dependencies", "client"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── GitHub Actions ────────────────────────────────────────────────────────
+  # Action versions are a supply-chain surface too, and they are the ones nobody
+  # remembers to update.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"
