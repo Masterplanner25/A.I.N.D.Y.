@@ -39,9 +39,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      # setuptools is upgraded alongside pip because the runner ships an older one
+      # (79.0.1 as of 2026-08-17, carrying PYSEC-2026-3447) that we do not declare and
+      # cannot pin from pyproject. Upgrading is honest; ignoring a fixable advisory
+      # because it came preinstalled is how an exception list starts growing.
       - name: Install project and pip-audit
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools
           python -m pip install -e .
           python -m pip install pip-audit==2.9.0
 
