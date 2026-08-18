@@ -1,0 +1,66 @@
+name: CodeQL
+
+# Static analysis of the source itself, as opposed to its dependencies.
+#
+# `security-audit.yml` answers "is a package we depend on known-vulnerable?".
+# This answers "did we write something exploitable?" — the two do not overlap, and this
+# repo has a live example of the second: #194, where ARM's file-path validator checked a
+# blocked-segment list and an extension allowlist but never containment, so any
+# authenticated user could read any .py/.js/.json/.yaml/.md on the host and have it sent
+# to an external LLM. No dependency scanner would ever have found that.
+#
+# Worth knowing about that defect: it was INHERITED. The validator came from the original
+# DeepSeek Analyzer (see CONTRIBUTORS.md), where it was correct — a local CLI run by its
+# author against their own files needs no containment check. The code survived the port;
+# the threat model it depended on did not. That is exactly the class of thing a static
+# analyser is placed to notice and a human reviewer reads straight past.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Sunday 06:00 UTC — off the weekday CI path, and ahead of the Monday audit run.
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      # Required for CodeQL to upload results to the Security tab.
+      security-events: write
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python", "javascript-typescript"]
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v3.30.9
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended adds rules beyond the default set. The default query pack
+          # optimises for a low false-positive rate on any codebase; this repo would
+          # rather read a few extra findings than miss one.
+          queries: security-extended
+
+      # No build step: both languages here are interpreted, and CodeQL's autobuild would
+      # attempt a pip install that adds minutes without improving the analysis.
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v3.30.9
+        with:
+          category: "/language:${{ matrix.language }}"
