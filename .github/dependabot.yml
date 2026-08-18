@@ -44,6 +44,18 @@ updates:
       day: "monday"
     open-pull-requests-limit: 5
     groups:
+      # Packages whose versions are COUPLED by a peer range, grouped across all
+      # update-types including majors. Both of these were learned from failures:
+      #
+      #   vite 8 alone      -> ERESOLVE, @vitejs/plugin-react@5 peers on vite ^7 (#222)
+      #   react-router 7    -> ERESOLVE, @aindy/ui-kit@1.0.6 peers on ^6.0.0  (#223)
+      #
+      # A lone bump of either is unmergeable by construction, so raising it as its own
+      # PR just produces red CI and a decision nobody can act on.
+      vite-toolchain:
+        patterns: ["vite", "@vitejs/*"]
+      router-and-ui-kit:
+        patterns: ["react-router", "react-router-dom", "@remix-run/*", "@aindy/ui-kit"]
       npm-patch-minor:
         patterns: ["*"]
         update-types: ["patch", "minor"]
@@ -54,11 +66,21 @@ updates:
   # ── GitHub Actions ────────────────────────────────────────────────────────
   # Action versions are a supply-chain surface too, and they are the ones nobody
   # remembers to update.
+  #
+  # Grouped into ONE pull request, including majors. Ungrouped, Dependabot raised
+  # `github/codeql-action/init` and `github/codeql-action/analyze` as two separate PRs
+  # (#219, #220) and BOTH FAILED: a run then downloads two different SHAs of the same
+  # action, and CodeQL requires init and analyze to be the same version. Splitting a
+  # package that must move atomically produces two PRs that are each individually
+  # unmergeable — the grouping is not tidiness, it is correctness.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns: ["*"]
     labels: ["dependencies", "ci"]
     commit-message:
       prefix: "chore(ci)"
