@@ -1,5 +1,11 @@
 # Epistemic Reclaimer — Step 6 of the Scribalicious Pipeline
 
+> **Original author: Drew Brown.** This guide and the tool it describes are his work,
+> shared directly and used with permission. The A.I.N.D.Y. adaptation lives at
+> `apps/authorship/services/authorship.py`, which retains the `epistemic_reclaim`
+> concept and name, the zero-width watermark sequence, and the entropy-disruption
+> approach described below.
+
 This tool helps you reclaim authorship over AI-assisted or AI-suspected text by disrupting common AI fingerprinting patterns and embedding a **custom authorship watermark**. It's designed for anyone who wants to retain creative sovereignty, prevent invisible tagging, or declare epistemic responsibility over their words.
 
 ---
