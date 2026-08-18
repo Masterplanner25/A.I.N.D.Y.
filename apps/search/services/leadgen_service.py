@@ -6,6 +6,7 @@ Purpose: Executes AI Search queries, evaluates leads with Infinity Algorithm log
 and logs symbolic results into the A.I.N.D.Y. Memory Bridge.
 """
 
+import os
 import uuid
 import logging
 import json
@@ -26,6 +27,55 @@ from AINDY.config import settings
 
 logger = logging.getLogger(__name__)
 
+_FIXTURES_ENABLED_VALUES = {"1", "true", "yes", "on"}
+
+
+class LeadSearchUnavailable(RuntimeError):
+    """External lead retrieval failed. Distinct from 'retrieval found nothing'."""
+
+
+def _fixtures_enabled() -> bool:
+    """Whether the hardcoded demo leads may substitute for real retrieval.
+
+    Default **off**, matching ``AINDY_SEARCH_OUTREACH_SEND`` — the other flag on this
+    path that guards a real-world consequence.
+    """
+    return os.getenv("AINDY_LEADGEN_ALLOW_FIXTURES", "").strip().lower() in _FIXTURES_ENABLED_VALUES
+
+
+# Three hardcoded companies that do not exist. Kept for local development only, and
+# reachable exclusively via AINDY_LEADGEN_ALLOW_FIXTURES.
+#
+# These previously substituted for real results on ANY empty retrieval, and everything
+# downstream then ran for real: a genuine GPT scoring call, a persisted `leadgen_results`
+# row, and a memory node recalled as prior context on later runs. The action gate
+# (`evaluate_lead_action_gate`) is correct and would have drafted outreach naming a
+# company that does not exist — a correct gate over fabricated input still produces a
+# confident wrong decision.
+#
+# Worth recording how this surfaced: a preserved run log reading
+# "[LeadGen] Found 3 potential leads / 200 OK / Logged Acme AI Solutions (85)" was read
+# during an archive audit as evidence the system had run in production. It had not —
+# that is the fixture path, and "3 leads" is the fixture count. The failure mode
+# produces artifacts indistinguishable from success, including a real upstream 200.
+_DEV_FIXTURE_LEADS = [
+    {
+        "company": "Acme AI Solutions",
+        "url": "https://acmeai.com",
+        "context": "Acme AI is hiring ML engineers and seeking automation partners."
+    },
+    {
+        "company": "Finovate Labs",
+        "url": "https://finovatelabs.io",
+        "context": "Finovate is implementing AI-driven fintech automation tools."
+    },
+    {
+        "company": "HealthEdge Analytics",
+        "url": "https://healthedge.ai",
+        "context": "HealthEdge announced plans to adopt AI workflow automation."
+    },
+]
+
 
 # --------------------------------------------------------
 # 🧩 CORE FUNCTIONS
@@ -33,12 +83,21 @@ logger = logging.getLogger(__name__)
 
 def run_ai_search(query: str, user_id: str = None, db=None):
     """
-    Executes an AI-optimized search query.
-    This is a placeholder function for the web_search logic.
-    In production, integrate with A.I.N.D.Y.’s Codex or API-based web agent.
+    Execute an AI-optimised lead search.
 
-    Recalls past leadgen searches before querying and writes an outcome
-    memory node after results are returned.
+    Real retrieval runs through ``search_leads``; the hardcoded demo companies are
+    development-only and reachable solely via ``AINDY_LEADGEN_ALLOW_FIXTURES``.
+
+    Recalls past leadgen searches before querying and writes an outcome memory node
+    after results are returned.
+
+    Raises:
+        LeadSearchUnavailable: retrieval failed and fixtures are disabled. Callers must
+            not treat this as "no leads" — nothing should be scored, persisted or
+            remembered from a failed search.
+
+    Returns an empty list when retrieval succeeded and matched nothing, which is a
+    genuine result and safe to persist as such.
     """
     import logging
     logger.info("[LeadGen] Running AI search for query: %s", query)
@@ -70,33 +129,48 @@ def run_ai_search(query: str, user_id: str = None, db=None):
         except Exception as e:
             logger.warning("LeadGen memory recall failed: %s", e)
 
-    # Step 2: External retrieval (best-effort)
+    # Step 2: External retrieval.
+    #
+    # Three outcomes, deliberately kept distinct — collapsing them is what made the old
+    # behaviour dangerous:
+    #
+    #   retrieval raised      -> LeadSearchUnavailable. A failure is not a result.
+    #   retrieval returned []  -> return []. Genuinely no leads is a true answer.
+    #   fixtures enabled       -> the demo leads, and only then.
+    #
+    # The old code mapped both of the first two onto the fixtures, so "the search backend
+    # is down" and "no companies matched" both produced three fabricated leads that were
+    # then scored, persisted and remembered. Reporting a failure as an empty result would
+    # be the same category error one step smaller — the null-vs-zero problem this
+    # codebase has already met in `realized_revenue = 0.00`.
+    retrieval_failed = None
     example_results = []
     try:
         payload = search_leads(query, db=db, user_id=user_id, max_results=3)
         example_results = payload.get("results") or []
     except Exception as e:
-        logger.warning("[LeadGen] External search failed, using fallback: %s", e)
+        retrieval_failed = e
+        logger.warning("[LeadGen] External search failed: %s", e)
 
-    # Fallback mocked results if external search fails
     if not example_results:
-        example_results = [
-            {
-                "company": "Acme AI Solutions",
-                "url": "https://acmeai.com",
-                "context": "Acme AI is hiring ML engineers and seeking automation partners."
-            },
-            {
-                "company": "Finovate Labs",
-                "url": "https://finovatelabs.io",
-                "context": "Finovate is implementing AI-driven fintech automation tools."
-            },
-            {
-                "company": "HealthEdge Analytics",
-                "url": "https://healthedge.ai",
-                "context": "HealthEdge announced plans to adopt AI workflow automation."
-            }
-        ]
+        if _fixtures_enabled():
+            logger.warning(
+                "[LeadGen] Using DEV FIXTURES — AINDY_LEADGEN_ALLOW_FIXTURES is set. "
+                "These %s leads are fabricated and must not be treated as real "
+                "(reason: %s).",
+                len(_DEV_FIXTURE_LEADS),
+                "retrieval raised" if retrieval_failed else "retrieval returned no results",
+            )
+            example_results = list(_DEV_FIXTURE_LEADS)
+        elif retrieval_failed is not None:
+            raise LeadSearchUnavailable(
+                f"Lead retrieval failed and fixtures are disabled: {retrieval_failed}"
+            ) from retrieval_failed
+        else:
+            # The previously silent branch: retrieval succeeded and matched nothing. Only
+            # the exception path used to log at all, so an empty result set reached the
+            # fixtures with no signal whatsoever.
+            logger.info("[LeadGen] Retrieval returned no leads for query: %s", query)
 
     # Step 3: Write outcome memory node after results are gathered.
     # MemoryCaptureEngine-backed queue_memory_capture persists the search outcome.
