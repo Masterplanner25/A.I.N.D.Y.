@@ -141,3 +141,31 @@ def test_fixture_use_is_logged_as_a_warning(monkeypatch, caplog):
 
     warnings = " ".join(r.message.lower() for r in caplog.records)
     assert "fixture" in warnings and "fabricated" in warnings
+
+
+# ── Boot-time posture warning (monitoring check 1) ───────────────────────────
+# The flag being set in a real deployment is the condition that matters, and a
+# per-call warning only reaches whoever happens to be reading logs at that moment.
+
+
+def test_bootstrap_warns_when_fixtures_are_enabled(monkeypatch, caplog):
+    from apps.search import bootstrap
+
+    monkeypatch.setenv("AINDY_LEADGEN_ALLOW_FIXTURES", "1")
+    with caplog.at_level("WARNING", logger=bootstrap.logger.name):
+        bootstrap._warn_if_leadgen_fixtures_enabled()
+
+    # getMessage() applies the lazy %-args; `record.message` is the unformatted template.
+    text = " ".join(r.getMessage().lower() for r in caplog.records)
+    assert "fabricated" in text
+    assert "aindy_leadgen_allow_fixtures" in text
+
+
+def test_bootstrap_is_silent_when_fixtures_are_disabled(monkeypatch, caplog):
+    from apps.search import bootstrap
+
+    monkeypatch.delenv("AINDY_LEADGEN_ALLOW_FIXTURES", raising=False)
+    with caplog.at_level("WARNING", logger=bootstrap.logger.name):
+        bootstrap._warn_if_leadgen_fixtures_enabled()
+
+    assert not caplog.records, "must not warn when the flag is unset"

@@ -1,11 +1,42 @@
 """Search domain bootstrap."""
 from __future__ import annotations
 
+import logging
+
 BOOTSTRAP_DEPENDS_ON: list[str] = ["analytics"]
 APP_DEPENDS_ON: list[str] = ["analytics"]
 
+logger = logging.getLogger(__name__)
+
+
+def _warn_if_leadgen_fixtures_enabled() -> None:
+    """Announce at boot when leadgen may return fabricated companies.
+
+    `AINDY_LEADGEN_ALLOW_FIXTURES` lets `run_ai_search` substitute three hardcoded
+    companies that do not exist. That is fine locally and must never be true in a real
+    deployment: the fabricated leads are scored, persisted to `leadgen_results`, written
+    to memory, and **recalled as prior context on later searches**.
+
+    Boot is the right place for this rather than the call site. A per-call warning only
+    reaches whoever is reading logs at that moment; a boot warning states the
+    deployment's posture once, where it is read alongside the other configuration
+    warnings — and an operator who sees it has time to act before any data is written.
+    """
+    import os
+
+    raw = os.getenv("AINDY_LEADGEN_ALLOW_FIXTURES", "").strip()
+    if raw.lower() in {"1", "true", "yes", "on"}:
+        logger.warning(
+            "[search] AINDY_LEADGEN_ALLOW_FIXTURES=%s - leadgen will return THREE "
+            "FABRICATED COMPANIES when retrieval finds nothing, and they will be scored, "
+            "persisted and remembered. Development only. Unset this in any real "
+            "deployment. See scripts/audit_leadgen_fixtures.py to find rows already written.",
+            raw,
+        )
+
 
 def register() -> None:
+    _warn_if_leadgen_fixtures_enabled()
     _register_models()
     _register_routers()
     _register_route_prefixes()
