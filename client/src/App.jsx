@@ -227,7 +227,11 @@ export default function App() {
         />
       ) : null}
       <TooltipProvider>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        {/* The v7_startTransition / v7_relativeSplatPath opt-ins that used to live here
+            were v6 future flags selecting behaviour that is unconditional in v7. With
+            react-router-dom on v7 they are inert at best and an unknown-prop warning at
+            worst, so they are gone; the router already behaves the way they asked for. */}
+        <BrowserRouter>
           <ErrorBoundary layer="platform">
             <Routes>
               <Route path="/login" element={<LoginPage />} />
