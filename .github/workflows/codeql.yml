@@ -61,6 +61,6 @@ jobs:
       # attempt a pip install that adds minutes without improving the analysis.
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v3.30.9
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v3.30.9
         with:
           category: "/language:${{ matrix.language }}"
