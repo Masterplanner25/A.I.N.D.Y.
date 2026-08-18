@@ -73,9 +73,20 @@ def test_run_ai_search_uses_external_results(monkeypatch):
     assert leads == [{"company": "Beta", "url": "https://beta.io", "context": "ctx"}]
 
 
-def test_run_ai_search_falls_back_when_external_fails(monkeypatch):
+def test_run_ai_search_raises_when_external_fails(monkeypatch):
+    """Retrieval failure must not become three fabricated leads.
+
+    This test previously asserted the opposite — that a failed search returns the
+    hardcoded demo companies — and so pinned the defect in place. Everything downstream
+    of that substitution was real: a genuine scoring call, a persisted `leadgen_results`
+    row, and a memory node recalled as prior context on later runs.
+
+    Fixtures are now development-only behind `AINDY_LEADGEN_ALLOW_FIXTURES`; the gate and
+    the failure/empty distinction are covered in `test_leadgen_fixture_gate.py`.
+    """
     from apps.search.services import leadgen_service
 
+    monkeypatch.delenv("AINDY_LEADGEN_ALLOW_FIXTURES", raising=False)
     monkeypatch.setattr(leadgen_service, "is_pipeline_active", lambda: True)
 
     def boom(*a, **k):
@@ -83,9 +94,8 @@ def test_run_ai_search_falls_back_when_external_fails(monkeypatch):
 
     monkeypatch.setattr(leadgen_service, "search_leads", boom)
 
-    leads = leadgen_service.run_ai_search("ai consultants", user_id="u", db=object())
-    assert len(leads) == 3
-    assert leads[0]["company"] == "Acme AI Solutions"
+    with pytest.raises(leadgen_service.LeadSearchUnavailable):
+        leadgen_service.run_ai_search("ai consultants", user_id="u", db=object())
 
 
 def test_create_lead_results_persists_and_sorts(monkeypatch, db_session, user_id):
