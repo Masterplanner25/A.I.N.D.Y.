@@ -2,6 +2,20 @@
 Authorship Module — Epistemic Reclaimer
 Part of the A.I.N.D.Y. framework
 
+Origin and attribution:
+    Derived from the **Epistemic Reclaimer** by **Drew Brown**, originally
+    Step 6 of his Scribalicious Pipeline. Drew shared the project directly
+    and gave permission for its use.
+
+    Retained from the original: the `epistemic_reclaim` concept and name, the
+    `INVISIBLE_WATERMARK` zero-width sequence, the entropy-disruption approach,
+    the Unicode fingerprint embedding, and the visible signature block.
+    His original guide is kept at
+    `apps/authorship/docs/Collaborative Use Guide - Epistemic Reclaimer.md`.
+
+    Adapted here for A.I.N.D.Y.: service wrapping, Memory Bridge integration,
+    SHA-256 signing, and per-originator parameterisation.
+
 Purpose:
     - Counteracts invisible AI fingerprinting
     - Restores creative sovereignty through semantic watermark embedding
