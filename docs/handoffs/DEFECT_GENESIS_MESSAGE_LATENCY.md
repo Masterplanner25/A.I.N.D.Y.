@@ -178,3 +178,143 @@ someone to use a product daily when its primary authoring surface intermittently
 plan documents, and a large import is precisely the input most likely to hit the bad tail.
 [`STARTING_POSITION_SPEC.md`](./STARTING_POSITION_SPEC.md) is gated on the same fix for the same
 reason.
+
+---
+
+## 8. Update 2026-08-19 — three amendments
+
+Added after an unrelated outage produced this defect's exact fingerprint. **The sections above are
+left as written**; this section says which of their claims survive and which do not.
+
+### 8.1 The fingerprint was reproduced with zero Genesis traffic — a negative result
+
+An API wedge on 2026-08-19 matched §1 and §3 on every marker:
+
+| Marker | This defect (08-16) | 08-19 outage |
+|---|---|---|
+| `/health` unresponsive | 13 min | 120s+, never answered |
+| Container restarts | 0 | 0 |
+| Log output during | almost none | **none at all** |
+| CPU | 274% | 112% |
+| `max_instances` heartbeat starvation | yes | yes |
+
+**There was no Genesis traffic during the 08-19 wedge.** No session, no message; the user was
+trying to log in. The cause was established elsewhere: the host was committing 26.7 GB against
+7.7 GB physical and taking ~56,000 hard page faults per second, and separately a `mongosh`
+healthcheck was driving the Docker VM into global OOM and killing PostgreSQL backends (155 cluster
+reinitialisations; fixed in PR #234).
+
+**What this changes:** §3 hedged that heartbeat starvation "is a *symptom* of a saturated executor
+and does not by itself prove the mechanism." That hedge was correct and is now demonstrated. The
+whole fingerprint — dead `/health`, silent logs, burning CPU, starved 1-second heartbeat — is
+reproducible from host starvation alone. **It is a signature of the saturated slot, not of what
+filled it.**
+
+§3 already noted the original heartbeat warnings began "during an unrelated image build on a loaded
+machine, ~1.5h before any Genesis traffic." That confounder was present in the original
+investigation too. Treat any future sighting of this fingerprint as *insufficient* to identify a
+cause, and check host paging and PostgreSQL restarts before the application.
+
+The 177-second pre-execution gap in §2 is **unaffected** — it comes from the `system_events`
+timeline of one request, not from the fingerprint, and remains the strongest evidence here.
+
+### 8.2 The single slot is documented upstream, not merely inferred
+
+§3 lists as inferred: *"something on this path serialises through a single slot."* The runtime's own
+`APP_HANDOFF_v2.4.0.md` §7 states it as design, in the soak-flag table:
+
+> `AINDY_ASYNC_HEAVY_EXECUTION` — *"Dispatch is still serialised through one scheduler slot until
+> this is on."*
+
+The hypothesis is corroborated by the component's owner. The flag is still default-off, so the
+serialisation described in §3 is the current, intended behaviour of the runtime — not an app bug to
+be found. FR-15 remains the right place for it.
+
+### 8.3 §4's premise was half wrong: the computation lands correctly, the *response field* does not
+
+§4 asserts *"a conversational turn is not a scoring event"* and offers, in §6.1, "async job **or
+move to lock**." **The first claim is wrong and it makes the second remedy harmful.**
+
+What was verified in the code:
+
+- `calculate_infinity_score` — the function the orchestrator reaches — **persists to `user_scores`
+  (upsert) and `score_history` (append)** (`apps/analytics/services/scoring/infinity_service.py`).
+- `score_history` is append-only per execution and already carries **`trigger_event`** and
+  **`score_delta`** alongside all five sub-scores (`apps/analytics/user_score.py:68`). That is
+  precisely the schema for *"this turn moved the number by X"*.
+
+So a turn-level score already has a correct, purpose-shaped home. The architecture made this
+decision before the defect was written up. **Moving the recalculation "to lock" would discard real
+per-turn signal that the schema is built to hold** — on a product whose thesis is Infinity.
+
+What genuinely has nowhere to go is narrower, and it is the response field:
+
+```python
+response["orchestration"] = orchestration          # flow_definitions.py:262
+```
+
+```js
+const data = await sendGenesisMessage(sessionId, userMessage.content);   // Genesis.jsx:185
+if (data.synthesis_ready && !synthesisReady) { setSynthesisReady(true); }
+setMessages((prev) => [...prev, { role: "ai", content: data.reply }]);
+```
+
+`Genesis.jsx` reads `data.reply` and `data.synthesis_ready`. **It contains no reference to
+`orchestration` at all.** The only client consumer of that key is
+`MasterplanProjectionContext.jsx`, and its own comment scopes it to the `task_completion` flow.
+
+The defect therefore decomposes into two faults, not one:
+
+- **Placement** — synchronous, on the request path, inside the single serialised slot.
+- **Destination** — the *response* copy has no reader. The *persisted* copy is fine.
+
+Fixing placement alone leaves the app computing and discarding the response field; the request just
+gets fast. Both are worth fixing and neither requires a product decision.
+
+### 8.4 Corrected remedy, replacing §6.1
+
+**First, a correction to §4 of this document.** §4 recommends `register_async_job` and cites
+"already used by this domain (`apps/masterplan/bootstrap.py:127`)". That citation is real but
+misleading in two ways, and both were checked:
+
+- **Analytics — which owns the recalculation — registers no async job at all.** The full
+  `register_async_job` inventory is 11 jobs across 8 apps (`agent`, `arm`, `automation`,
+  `freelance`, `masterplan`, `memory`, `tasks`); `apps/analytics/bootstrap.py` is not among them.
+  What analytics registers is `register_job("analytics.infinity_execute", ...)` (line 116) — a
+  **synchronous callable lookup**, retrieved via `get_job(...)` at
+  `apps/agent/agents/runtime_extensions.py:231`. Registering a job is not making it async.
+- **`register_async_job("genesis.message")` is the wrong vehicle.** It exists
+  (`apps/masterplan/bootstrap.py:127`) and its handler runs
+  `execute_intent(workflow_type="genesis_message")` — **the entire workflow, LLM call included**.
+  Dispatching a chat turn through it would make the reply itself async, and `Genesis.jsx:185`
+  awaits `data.reply` to render the conversation. The interactive message must stay synchronous.
+
+The route is `run_flow("genesis_message", ...)` inside `execute_with_pipeline_sync`
+(`genesis_router.py:159, 312`). `_execute_genesis` takes `"genesis.message"` as a `route_name`,
+which is a **pipeline label, not a dispatch key** — there is no existing sync/async switch to flip.
+
+**So the remedy is:**
+
+1. **Add an async job for the recalculation** — `register_async_job` in
+   `apps/analytics/bootstrap.py`, wrapping the existing `_execute_infinity_orchestrator`. This is
+   new code, not a wiring change. Analytics has the pattern available but has never used it.
+2. **Have `genesis_message_orchestrate` enqueue rather than compute**, keeping
+   `trigger_event="genesis_message"` — the turn is a scoring event and `score_history` is where it
+   belongs (§8.3).
+3. **Delete `response["orchestration"]`** at `flow_definitions.py:264`. Nothing reads it. **Note
+   the same key is set at line 380 by `memory_execution_orchestrate`, a different node on a
+   different flow, and *that* one is live** — `MasterplanProjectionContext.jsx` consumes it. Remove
+   only the Genesis assignment.
+4. **Do not "recalculate on lock" instead.** That is the one option here that loses information.
+
+§6.2 (request timeout), §6.3 (FR-15) and §6.4 (embedding stall) are unchanged.
+
+### 8.5 A separate defect was found on the way
+
+The guards around `execute()` — a 1-second debounce and a per-trigger lease — are both keyed on
+`trigger_event`, which `user_scores` stores only for the *most recent* run. In alternating traffic
+neither engages. Written up separately, because its blast radius is every trigger and not just
+Genesis: [`DEFECT_INFINITY_RECALC_DEBOUNCE.md`](./DEFECT_INFINITY_RECALC_DEBOUNCE.md).
+
+It matters here because it is the throttle that *should* absorb remedy 1: making the recalculation
+async removes it from the request path but does not reduce how often it runs.
