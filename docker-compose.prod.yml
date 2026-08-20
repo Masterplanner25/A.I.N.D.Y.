@@ -165,7 +165,17 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 40s
+      # 40s was shorter than this image's cold start, so the API reported `unhealthy`
+      # while it was booting normally and only recovered minutes later. Boot imports the
+      # 16-app graph twice — once for `bootstrap-schema`, once for `aindy-runtime serve` —
+      # which is ~60s on an idle host and was measured at ~6min on a memory-pressured one.
+      # At 40s + 5x15s the verdict landed at ~115s, well inside a healthy boot.
+      #
+      # A false `unhealthy` is not cosmetic: it is indistinguishable from a crashed API at
+      # a glance, and it is what made a healthy boot look like a failure while diagnosing
+      # the mongo/OOM outage. Failures during start_period still run, they just do not
+      # count toward the verdict, so a container that genuinely dies still exits on its own.
+      start_period: 240s
 
   postgres:
     image: pgvector/pgvector:pg16
