@@ -17,6 +17,21 @@ This is deliberately broader than a bug list. It captures three kinds of finding
 - **Design** — the app behaves as built, but the behavior is worth a decision.
 - **Papercut** — small friction that isn't wrong, just costs the user something.
 
+**Every entry must also carry an Owner** — `app`, `runtime`, `both`, `undecided`, or `env`.
+
+This field was added 2026-08-22, retroactively, after an audit asked why a phase whose stated
+purpose was *proving the runtime* produced almost entirely app-side fixes. The answer was that
+ownership was never asked as a question: findings arrive wearing app clothes because the walk is
+driven from the UI, and the cheapest fix is always the one in front of you. The dominant defect
+class of the whole phase — response-shape mismatch, five defects and ~40 `safeMap` crashes — was
+fixed eleven times in client code and raised with the runtime zero times, until it became
+**FR-19**.
+
+`undecided` is a real, legitimate state and must not be left blank instead. Item 28 sat undecided
+for a month precisely because nobody wrote the word down: it explicitly poses the runtime-or-app
+question and was never answered. A blank reads as "app" by default, which is the bias this column
+exists to break.
+
 Entries stay here until they are fixed, filed upstream, or explicitly declined.
 
 **Environment:** `aindy-runtime==1.10.2` · native `docker.io` in WSL2 Ubuntu · pgvector/pg16 ·
@@ -26,42 +41,42 @@ client on Vite dev server at `localhost:5173` proxying to the API at `localhost:
 
 ## Open
 
-| # | Kind | Area | Item | Status |
-|---|---|---|---|---|
-| 1 | Design | Genesis | AI interrogates but never contributes ideas | decision needed |
-| 2 | Papercut | Genesis chat | Enter inserts a newline instead of sending | ready to fix |
-| 3 | Defect | masterplan / memory | A 404 surfaces to the user as "Internal Server Error" | diagnosed, unfixed |
-| 4 | Defect | network | `InfiniteNetwork` calls `/api/users`, which no route serves; also no member-list endpoint exists and signup never provisions a social profile | confirmed live; 4 consolidation options logged, decision deferred |
-| 5 | Defect | Genesis | Leaving the page abandons the session; transcript is never stored | diagnosed, decision needed |
-| 6 | Gap | auth | No password recovery — a forgotten password locks the account out permanently | runtime feature request |
-| 7 | Defect | search / research | Research web-search provider (Perplexity) is an unwired stub — no key sent, wrong endpoint | decided: wire Perplexity (opt 1), not built |
-| 8 | Design | auth / client | A 401 on ANY request logs the whole session out — a stray widget 401 bounces the user to sign-in | decision needed |
-| 9 | Question | search / SEO | Who saves an SEO analysis? (answered: the system, automatically) | answered |
-| 10 | Design | social | The social feed reads very bare on first look — presentation, and "social feed" vs "trust feed" identity | design note |
-| 11 | Defect | social | Posts don't appear after posting — Mongo not enabled + a 500 on the created post + a false-success degrade | fixed (needs Mongo) |
-| 12 | Defect | social / client api | The feed renders nothing and analytics shows all zeros — `social.js` never unwrapped the execution envelope | fixed |
-| 13 | Defect | client api (systemic) | `unwrapEnvelope` coverage is inconsistent across `client/src/api/` — 8 modules have none | diagnosed, watch while walking |
-| 14 | Defect | tasks | Created tasks never appear — `/apps/tasks/list` nests the array one level deeper than the unwrap handles | fixed |
-| 15 | Question | tasks | Is a task tracked, or executed by the AI? (answered: tracked; AI execution is opt-in and has no UI) | answered, decision needed |
-| 16 | Defect | masterplan | The only non-Genesis MasterPlan create route 500s — Genesis is the sole working way to get a plan | confirmed live, unfixed |
-| 17 | Design | masterplan / genesis / tasks | The three surfaces were one section and are now disconnected tabs; no UI links a task to a plan. Includes an import-an-external-plan proposal | design decision |
-| 18 | Design | analytics / kpi | Analytics is LinkedIn-specific and owner-specific; KPI Snapshot is a manual-entry calculator that wants to be a dashboard | owner verdict: redesign or remove |
-| 19 | Defect | arm | ARM Analyze reads files from the **server**, the prefilled default cannot exist, and a failed analysis renders a blank screen | fixed (client); default path decision open |
-| 20 | Security | arm | ARM has no project-root confinement — any allowlisted-extension file anywhere on the server is readable and gets sent to an external LLM | hardening recommended |
-| 21 | Analysis | arm (whole surface) | What the six ARM screens actually do — the reasoning engine is real, but its entire input corpus is code-analysis telemetry | analysis, decisions listed |
-| 22 | Defect | identity | Every dimension card renders blank — `identity.js` never unwrapped the envelope | fixed |
-| 23 | Analysis | identity / memory | What both surfaces actually do — Identity is an AI personalization model (naming mismatch confirmed); Memory is a runtime-owned engine with a thin app wrapper | analysis, decisions listed |
-| 24 | Environment | dev stack | Two API instances answered `localhost:8000`; a stale `wslrelay` shadowed the container for hours | resolved |
-| 25 | Defect | platform / dev proxy | The dev proxy swallowed **every** `/platform` API call — no platform panel could load data | fixed (#158) |
-| 26 | Defect | platform / registry | Registry read `registry.flows`; the route returns `flow_definitions`. Its unit test encoded the bug | fixed (#159) |
-| 27 | Defect | platform / strategies | `ScoreBar` calls `score.toFixed(2)` on a null score — both live strategies have `score: null` | fixed |
-| 28 | Defect | client telemetry | `reportClientError` POSTs to `/client/error`, which no route serves — every boundary trip 404s silently | diagnosed, unfixed |
-| 29 | Design | platform UI | The operator surface is a **record**, not a control plane — the API exposes 24 write routes, the UI wires 5 | design decision |
-| 30 | Defect | platform UI | The platform SPA had **no navigation at all** — 8 registered routes, 7 reachable only by typing a URL | fixed |
-| 31 | Defect | platform / agent console | `agent.js` never unwrapped `{data: […]}` — `runs.filter is not a function` blanked the console | fixed |
-| 32 | Defect | platform / executions | The Executions tab is 13 app-domain Infinity calculators on the operator surface — it shows no executions, and strands 7 panels behind admin | diagnosed, decision needed |
-| 33 | Defect | runtime / tracing | Every response carries **two** trace ids — the envelope's and the header's — resolving to different graphs, unlabelled | diagnosed, unfixed |
-| 34 | Gap | platform / scheduler | Scheduler status reports health but lists **no jobs** — the 5 registered jobs can't be verified from the operator surface | diagnosed, unfixed |
+| # | Kind | Owner | Area | Item | Status |
+|---|---|---|---|---|---|
+| 1 | Design | app | Genesis | AI interrogates but never contributes ideas | decision needed |
+| 2 | Papercut | app | Genesis chat | Enter inserts a newline instead of sending | ready to fix |
+| 3 | Defect | both | masterplan / memory | A 404 surfaces to the user as "Internal Server Error" | diagnosed, unfixed |
+| 4 | Defect | app | network | `InfiniteNetwork` calls `/api/users`, which no route serves; also no member-list endpoint exists and signup never provisions a social profile | confirmed live; 4 consolidation options logged, decision deferred |
+| 5 | Defect | app | Genesis | Leaving the page abandons the session; transcript is never stored | diagnosed, decision needed |
+| 6 | Gap | runtime | auth | No password recovery — a forgotten password locks the account out permanently | runtime feature request |
+| 7 | Defect | app | search / research | Research web-search provider (Perplexity) is an unwired stub — no key sent, wrong endpoint | decided: wire Perplexity (opt 1), not built |
+| 8 | Design | app | auth / client | A 401 on ANY request logs the whole session out — a stray widget 401 bounces the user to sign-in | decision needed |
+| 9 | Question | app | search / SEO | Who saves an SEO analysis? (answered: the system, automatically) | answered |
+| 10 | Design | app | social | The social feed reads very bare on first look — presentation, and "social feed" vs "trust feed" identity | design note |
+| 11 | Defect | app | social | Posts don't appear after posting — Mongo not enabled + a 500 on the created post + a false-success degrade | fixed (needs Mongo) |
+| 12 | Defect | app | social / client api | The feed renders nothing and analytics shows all zeros — `social.js` never unwrapped the execution envelope | fixed |
+| 13 | Defect | both | client api (systemic) | `unwrapEnvelope` coverage is inconsistent across `client/src/api/` — 8 modules have none | diagnosed, watch while walking |
+| 14 | Defect | app | tasks | Created tasks never appear — `/apps/tasks/list` nests the array one level deeper than the unwrap handles | fixed |
+| 15 | Question | app | tasks | Is a task tracked, or executed by the AI? (answered: tracked; AI execution is opt-in and has no UI) | answered, decision needed |
+| 16 | Defect | app | masterplan | The only non-Genesis MasterPlan create route 500s — Genesis is the sole working way to get a plan | confirmed live, unfixed |
+| 17 | Design | app | masterplan / genesis / tasks | The three surfaces were one section and are now disconnected tabs; no UI links a task to a plan. Includes an import-an-external-plan proposal | design decision |
+| 18 | Design | app | analytics / kpi | Analytics is LinkedIn-specific and owner-specific; KPI Snapshot is a manual-entry calculator that wants to be a dashboard | owner verdict: redesign or remove |
+| 19 | Defect | app | arm | ARM Analyze reads files from the **server**, the prefilled default cannot exist, and a failed analysis renders a blank screen | fixed (client); default path decision open |
+| 20 | Security | app | arm | ARM has no project-root confinement — any allowlisted-extension file anywhere on the server is readable and gets sent to an external LLM | hardening recommended |
+| 21 | Analysis | app | arm (whole surface) | What the six ARM screens actually do — the reasoning engine is real, but its entire input corpus is code-analysis telemetry | analysis, decisions listed |
+| 22 | Defect | app | identity | Every dimension card renders blank — `identity.js` never unwrapped the envelope | fixed |
+| 23 | Analysis | app | identity / memory | What both surfaces actually do — Identity is an AI personalization model (naming mismatch confirmed); Memory is a runtime-owned engine with a thin app wrapper | analysis, decisions listed |
+| 24 | Environment | env | dev stack | Two API instances answered `localhost:8000`; a stale `wslrelay` shadowed the container for hours | resolved |
+| 25 | Defect | app | platform / dev proxy | The dev proxy swallowed **every** `/platform` API call — no platform panel could load data | fixed (#158) |
+| 26 | Defect | app | platform / registry | Registry read `registry.flows`; the route returns `flow_definitions`. Its unit test encoded the bug | fixed (#159) |
+| 27 | Defect | app | platform / strategies | `ScoreBar` calls `score.toFixed(2)` on a null score — both live strategies have `score: null` | fixed |
+| 28 | Defect | undecided | client telemetry | `reportClientError` POSTs to `/client/error`, which no route serves — every boundary trip 404s silently | diagnosed, unfixed |
+| 29 | Design | runtime | platform UI | The operator surface is a **record**, not a control plane — the API exposes 24 write routes, the UI wires 5 | design decision |
+| 30 | Defect | runtime | platform UI | The platform SPA had **no navigation at all** — 8 registered routes, 7 reachable only by typing a URL | fixed |
+| 31 | Defect | app | platform / agent console | `agent.js` never unwrapped `{data: […]}` — `runs.filter is not a function` blanked the console | fixed |
+| 32 | Defect | runtime | platform / executions | The Executions tab is 13 app-domain Infinity calculators on the operator surface — it shows no executions, and strands 7 panels behind admin | diagnosed, decision needed |
+| 33 | Defect | runtime | runtime / tracing | Every response carries **two** trace ids — the envelope's and the header's — resolving to different graphs, unlabelled | diagnosed, unfixed |
+| 34 | Gap | runtime | platform / scheduler | Scheduler status reports health but lists **no jobs** — the 5 registered jobs can't be verified from the operator surface | diagnosed, unfixed |
 
 ---
 

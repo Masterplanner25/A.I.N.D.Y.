@@ -7,6 +7,136 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-21 — the operator surface has been rebuilt app-side, next to yours; we would like to retire ours 🔴 ownership
+
+**apps-monolith ref:** found 2026-08-22 while auditing why a runtime-verification phase produced
+almost entirely app-side fixes. This is the largest single instance, and it is offered as a
+handover, not a complaint.
+
+### What exists
+
+The runtime ships and serves an operator SPA: `GET /platform/` returns 200 from
+`AINDY/platform/dist`, titled *"A.I.N.D.Y. Platform"*.
+
+This repo independently grew a second one — `client/platform.html` → `client/src/PlatformApp.tsx`,
+titled *"AINDY Platform"*: **5,949 lines across 13 components and 12 routes.**
+
+| Panel | Lines | Shipped |
+|---|---|---|
+| `FlowEngineConsole` | 1678 | flows/runs |
+| `AgentConsole` | 862 | #164 (envelope fixes) |
+| `RippleTraceViewer` | 767 | |
+| `AgentRegistry` | 659 | #159 |
+| `ObservabilityDashboard` | 454 | |
+| `AgentApprovalInbox` | 286 | |
+| `ExecutionConsole` | 269 | #168 — execution-graph traces |
+| `DeadLetterQueuePanel` | 202 | #169 — Replay / Delete / Drain |
+| `WebhooksPanel` | 180 | #170 — full CRUD |
+| `AdminUsers` | 129 | #169 — admin promotion |
+| `PlatformNav` | 83 | #163 — 7 of 8 panels had no navigation before this |
+
+Every write action is confirm-gated, and the frontend suite covers the DLQ and webhook panels.
+
+### Why we are raising it rather than continuing
+
+Checked against your served bundle (332 KB) on 2026-08-22: **zero occurrences of `webhook`,
+`dlq`, `dead-letter`, or `drain`.** So these are not duplicated implementations of panels you
+already have — they are operator capabilities the runtime's own surface does not currently expose,
+built in the wrong repo because that is where the walk happened to be standing.
+
+The surfaces they drive are **runtime-owned**: the dead-letter queue, the flow engine, webhooks,
+the agent registry, admin promotion. An app repo should not be the place an operator goes to drain
+a runtime DLQ.
+
+### The ask
+
+**Adopt whichever of these belong to you, and we will retire ours.** We are explicitly volunteering
+to delete `client/src/components/platform/` and the `/platform/*` routes from this repo once the
+equivalent lands in the runtime's SPA — that is the outcome we want, not dual maintenance.
+
+Take them panel by panel; there is no need for a single cutover. We can supply the components, the
+API shapes each was built against (every one was verified against live `curl` output, not fixtures
+— see FR-17's neighbour note), and the test suites.
+
+### What we are NOT claiming
+
+- **Not that your SPA is wrong.** We never established which surface is canonical, and that
+  ambiguity is the actual defect. This request is to settle it.
+- **Not that all 13 belong to you.** `RippleTraceViewer` reads an app domain and probably stays
+  here. The DLQ, flow engine, webhooks, registry and admin panels are the clear runtime ones.
+- **Not urgent for correctness.** Both surfaces work. The cost is duplication, drift, and an
+  operator who has to know which URL is the real one.
+
+---
+
+## FR-20 — `route_execution_guard` replaces a deliberately raised 4xx with an opaque 500 🟡 diagnostics
+
+**apps-monolith ref:** observed 2026-07-22 (frontend walk item 3), filed 2026-08-22 after noticing
+we had built a CI guard against it instead of asking.
+
+A route that raises `fastapi.HTTPException` **before** entering the execution pipeline has its
+status replaced: the guard catches every exception — including `HTTPException`, which is legitimate
+control flow — and converts it to a `RouteExecutionViolation` (500). Your own log names the
+condition exactly: `endpoint raised HTTPException before pipeline entry`.
+
+**The violation is ours and we accept that.** `masterplan_router.py` disagreed with itself —
+`lock_from_genesis` entered the pipeline, `get_masterplan` did not. We now enforce it in CI
+(`scripts/check_route_pipeline_contract.py`).
+
+**The ask is narrow: preserve the raised status while still recording the violation.** A stale
+masterplan link should 404. Today it 500s, so the user-visible symptom of an app contract slip is
+an *incorrect status code* rather than a logged violation — and the empirical sweep is the only
+reliable detector, because file-level static analysis cannot find it (every file that raises also
+uses the pipeline; the violation is per route).
+
+**What we are NOT claiming:** not that the contract is wrong, and not that the guard should stop
+firing. Only that a caught `HTTPException` already carries an intended status, and discarding it
+loses information nobody gains from losing.
+
+---
+
+## FR-19 — an enveloped and a bare response share one URL space, with nothing to tell them apart 🔴 contract
+
+**apps-monolith ref:** filed 2026-08-22. This was **the dominant defect class of the entire live
+verification phase** and — the reason it is worth your time — it was never raised with you. Five
+separate defects on five surfaces, ~40 `safeMap prevented crash` lines inside `@aindy/ui-kit`, and
+56 references across our walk log. We fixed it eleven times in client code and asked you zero
+times.
+
+### The contract as it stands
+
+Only routes that go through the execution pipeline return the `{status, data, ...}` envelope.
+Everything else returns a bare body. Both live under the same `/apps/*` URL space, and **nothing
+in the response distinguishes them**.
+
+So every consumer must carry per-route knowledge of whether that route happened to enter a
+pipeline. Our client did not: 3 of 11 API modules unwrapped, 8 did not. The failure signature is
+brutal to debug — an object has no `.length`, so the empty-state branch does not fire either, and
+the surface renders blank with no error at all.
+
+A blanket unwrap is not available as a workaround: applying it indiscriminately corrupts any plain
+response that legitimately carries a `data` key.
+
+### The ask, in preference order
+
+1. **Envelope everything under `/apps/*`** — one shape, no per-route knowledge required.
+2. **Failing that, make it detectable** — a header or a stable envelope marker a generic client
+   helper can branch on, so the knowledge lives in one function instead of in every module.
+
+Either removes an entire defect class rather than another instance of it.
+
+### What we are NOT claiming
+
+**The inconsistency is substantially ours.** Whether a route enters the pipeline is an *app*
+decision, and ours were inconsistent — the same root as FR-20. Making every `/apps/*` route enter
+the pipeline is work we can do, and should.
+
+But the *consequence* is a contract question only you can settle: two response shapes sharing a URL
+space with no discriminator. Even with our side perfectly consistent, a client still has to know
+which routes are enveloped, and there is no way to find out except by trying.
+
+---
+
 ## FR-18 — every liveness probe persists a full health snapshot, and it is now 99.6% of the database 🔴 storage
 
 **apps-monolith ref:** found 2026-08-22 while taking a routine `pg_dump` before a runtime upgrade.
