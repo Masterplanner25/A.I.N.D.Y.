@@ -12,6 +12,50 @@
 > **FR-1 (connectors) is the net-new runtime work.** Still open app-side: Search v4, identity
 > inference, SYLVA, frontend lint residuals, Freelance agent-tools (Phase 2).
 
+## RUNTIME-PIN-FLOAT-1: an image rebuild no longer reproduces the adopted runtime (app-owned, P2)
+
+**Status: OPEN (found 2026-08-22).** `pyproject.toml` pins `aindy-runtime>=2.4.1,<3.0`. PyPI
+published **2.5.0 on 2026-08-20T12:38:14**, so every build since — local *and* CI — resolves to
+2.5.0 while the repo's docs, upgrade notes and `RUNTIME_2_4_1_UPGRADE.md` all describe 2.4.1.
+Rebuilding the api image on 2026-08-22 installed 2.5.0 unasked; there is no
+`RUNTIME_2_5_0_UPGRADE.md`, and every prior minor (2.0.1, 2.1.0, 2.2.0, 2.3.0, 2.4.1) has one.
+
+**Undocumented is not untested here:** CI runs at 13:14 (`main`) and 13:43 on 2026-08-20 both
+post-date the publish and both passed. What is missing is the adoption pass, not evidence.
+
+Two consequences: *"matches `main`"* and *"matches what `main` was adopted against"* have
+diverged; and trying a new minor is **not** a free experiment, because `docker/entrypoint.sh:99`
+has `aindy-runtime serve` **self-migrate the runtime schema at boot** — recreating onto a newer
+image migrates the database with no clean path back. (2.3.0 -> 2.4.1 happened to need no
+migration; `alembic_version_runtime` stayed at `0016`. That is luck, not a guarantee.)
+
+**Resolve by either:** running the 2.5.0 adoption pass and moving the floor, or making builds
+reproducible (constraints file / build arg) so an image stops depending on the date it was built.
+The 2.5.0 image is kept locally as `aindy-apps-monolith-api:runtime-2.5.0` so the adoption pass
+does not have to rebuild it.
+
+---
+
+## POSTGRES-CRASH-RESIDUAL-1: the cluster still crash-restarts after PR #234 (undiagnosed, P2)
+
+**Status: OPEN (found 2026-08-22).** PR #234 fixed mongo's `mongosh` healthcheck, which was
+driving the Docker VM into OOM and taking postgres with it. It helped a great deal — cluster
+reinitialisations fell from **76/day** to roughly **11/day** — but it did **not** end them, and
+the claim that it did should not be relied on. Reinits per day with the fix demonstrably live:
+08-20 **10 after** the 03:40 fix, 08-21 **1**, 08-22 **11**.
+
+**The OOM mechanism is not visible in the evidence.** Across the postgres container's whole life
+its log holds **185 `exited with exit code 2`, 4 `terminated by signal 13`, and zero
+`terminated by signal 9`.** A kernel OOM-kill is reported as signal 9; exit code 2 is a backend
+`_exit(2)` from its `SIGQUIT` handler. The Docker VM's `dmesg` has no OOM records either — but it
+resets when the VM restarts, so that is absence of evidence only. Carry the OOM story as
+**plausible, not established**, and the residual killer as **unknown**.
+
+Next step is observation, not a fix: catch a burst (they cluster in the morning) with `dmesg`
+retained and host paging counters sampled, before theorising.
+
+---
+
 ## RUNTIME-GUEST-CONFINE-1: Nodus guest scripts run unconfined (runtime-owned, P0)
 
 **Status: ✅ CLOSED in `aindy-runtime==2.2.0` (2026-08-16).** The guest VM was being built with

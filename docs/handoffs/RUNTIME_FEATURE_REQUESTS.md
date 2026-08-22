@@ -7,6 +7,96 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-18 — every liveness probe persists a full health snapshot, and it is now 99.6% of the database 🔴 storage
+
+**apps-monolith ref:** found 2026-08-22 while taking a routine `pg_dump` before a runtime upgrade.
+The dump would not finish; the reason turned out to be worth a report on its own.
+
+### What we measured
+
+On a **local dev stack with four user accounts and no real traffic**, `system_events` is
+**3653 MB across 183,604 rows** — against a total database size of 3795 MB. One event type
+accounts for nearly all of it:
+
+| type | rows | payload total | first | last |
+|---|---|---|---|---|
+| `health.liveness.completed` | **120,444** | **3317 MB** | 2026-07-19 | 2026-08-22 (still writing) |
+| `autonomy.decision` | 25,377 | 6320 kB | | |
+| `watchdog.scan.completed` | 16,648 | 2471 kB | | |
+
+3528 MB of the table is TOAST, and `n_dead_tup` is **0** — this is not bloat and not a missing
+autovacuum. It is live, intended data.
+
+### The mechanism
+
+`AINDY/routes/health_router.py:157`:
+
+```python
+def _emit_health_event(payload: dict) -> None:
+    event_db = SessionLocal()
+    try:
+        emit_system_event(db=event_db, event_type="health.liveness.completed",
+                          payload=payload, required=False)
+    finally:
+        event_db.close()
+```
+
+The `payload` persisted is the **entire health response** — 26 top-level keys including
+`trusted_python_execution`, `deployment_contract`, `plugin_sandbox_attestation`,
+`extension_execution_posture`, and the full plugin inventory. A row stores ~28 kB compressed;
+`trusted_python_execution` alone is ~52 kB uncompressed.
+
+The driver is the **container healthcheck**, which is simply `curl --fail --silent
+http://localhost:8000/health` on a **15s interval** — the interval the runtime's own recommended
+compose shape uses. That is 5,760 writes/day, each opening its own `SessionLocal`. Measured growth
+over the 34 days above is **~98 MB/day, ~3 GB/month**, unbounded, with no retention policy.
+
+### Why this is filed as a defect rather than a preference
+
+The content is near-constant. Sandbox posture, deployment contract and plugin inventory do not
+change between two probes 15 seconds apart, so effectively the same 28 kB is rewritten 5,760 times
+a day. Three concrete costs:
+
+1. **It swamps the signal.** `system_events` is where FR-15 and FR-17 are investigated. 65% of its
+   rows are liveness snapshots.
+2. **It makes backup and restore impractical.** A plain `pg_dump` passed 4.3 GB and was still
+   running; `--exclude-table-data=system_events` produces **17 MB**. The real data is 0.4% of it.
+3. **It is a continuous write load on the one thing that must stay up.** A 28 kB insert every 15s
+   is WAL, checkpoint work, and page cache on every deployment, including small hosts.
+
+### The ask
+
+Stop persisting a full snapshot per probe. Any of these would resolve it, in our order of
+preference:
+
+1. **Emit on change only** — persist when health state or posture actually changes, not per probe.
+2. **Make persistence opt-in** (env flag, default off), so a liveness probe is a read by default.
+3. **Persist a digest** — status, degraded domains, and a hash of the posture blob, with the full
+   snapshot available from the endpoint on demand.
+
+A retention/prune policy for `system_events` would be welcome regardless, but it is a mitigation,
+not a fix: the write rate is the problem.
+
+### What we are NOT claiming
+
+- **Not proven to have caused anything.** This stack has a separate, undiagnosed postgres
+  crash-restart pattern — 11 cluster reinitialisations on 2026-08-22 alone, every one reported as
+  `exited with exit code 2` and never `signal 9`, so the kernel OOM-killer is not the visible
+  cause. The liveness writes are a plausible contributor to IO and checkpoint pressure —
+  checkpoints on this host have measured 21s — but we have **not** established a causal link and
+  are not asserting one.
+- **Not a regression.** Present since at least 2026-07-19, across several runtime minors.
+- **Not necessarily wrong to emit the event at all** — only to persist the whole snapshot every
+  15 seconds.
+
+### What we are doing app-side meanwhile
+
+Raising the api healthcheck interval in our compose, and pruning historical
+`health.liveness.completed` rows. Both are mitigations of write *rate* and accumulated volume; the
+per-probe snapshot itself is runtime-owned.
+
+---
+
 
 ## FR-17 — `async_job_service` emits `execution.started` outside a pipeline, so the gate eats it 🟢 observability
 
