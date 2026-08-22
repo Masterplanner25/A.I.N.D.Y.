@@ -12,6 +12,35 @@
 > **FR-1 (connectors) is the net-new runtime work.** Still open app-side: Search v4, identity
 > inference, SYLVA, frontend lint residuals, Freelance agent-tools (Phase 2).
 
+> **Reconciliation note (2026-08-22).** Audited the whole register. **Seven items were marked
+> RESOLVED in their body while their heading said nothing** — scanning headings suggested 13 open
+> items where there were about 6. Markers are now on the headings, so the contents page tells the
+> truth: `RUNTIME-GUEST-CONFINE-1`, `APP-DEPLOY-1`, `RIPPLETRACE-CONTENT-LLM-1`,
+> `TASK-COMPLETE-IDEMPOTENCY-1`, `INFINITY-RUNTIME-HANDOFF-1`, `LINT-VERSION-GAP-1`,
+> `DOCS-MIGRATION-1`. Two of those resolutions were re-verified in code rather than taken on trust
+> (the `complete_task` status guard, and rippletrace's restored LLM path with its `source` field).
+>
+> **Six deferred items were being tracked nowhere.** Three came from the frontend walk log — a
+> *log*, not this register — including a **security** item (`ARM-PATH-CONFINE-1`), which
+> `docs/GOVERNANCE_INDEX.md:98` says belongs here. Two had full defect write-ups but no register
+> entry (`GENESIS-TURN-LATENCY-1`, `INFINITY-RECALC-DEBOUNCE-1`), and one was found the same day
+> (`HEALTH-EVENT-VOLUME-1`). This gap matters more now that session handoffs are no longer tracked
+> documentation: anything parked only in a handoff is invisible to everyone else.
+>
+> **One accepted item had drifted:** `LINT-WARNINGS-RESIDUAL-1` said 68 warnings; a live count
+> returned **78**. Accepted debt means *held at this level*, not unbounded.
+>
+> **`APP-DEBT-MIGRATED-1` was audited too** (it had been carried as an unexamined bundle). Of its
+> eleven domain rows: four are closed, two are built and waiting only on a flag flip, one is closed
+> app-side with external gates, one was never app debt, and **three are genuinely open** —
+> RippleTrace depth, Infinity loop autonomy Phase 2, and Infinity support-system depth. Four
+> closure claims were re-verified in code and all held.
+>
+> That audit surfaced a cross-cutting item now tracked as **`SOAK-THEN-FLIP-1`**: five features are
+> built, default-off, and waiting on a soak that `SOAK_AUDIT_2026-08-15` found cannot produce
+> evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
+> audit and are superseded.
+
 ## RUNTIME-PIN-FLOAT-1: an image rebuild no longer reproduces the adopted runtime (app-owned, P2)
 
 **Status: OPEN (found 2026-08-22).** `pyproject.toml` pins `aindy-runtime>=2.4.1,<3.0`. PyPI
@@ -56,7 +85,177 @@ retained and host paging counters sampled, before theorising.
 
 ---
 
-## RUNTIME-GUEST-CONFINE-1: Nodus guest scripts run unconfined (runtime-owned, P0)
+## SOAK-THEN-FLIP-1: five features are built, default-off, and waiting on a soak that cannot produce evidence (P1)
+
+**Status: OPEN, and it is the single largest block of built-but-not-on work in the repo.**
+Registered 2026-08-22; the underlying audit is `docs/handoffs/SOAK_AUDIT_2026-08-15.md`.
+
+Five features shipped behind default-off flags with the same plan attached — *ship shadow → ship
+advisory → soak → flip*:
+
+| Flag | Feature |
+|---|---|
+| `AINDY_INFINITY_THREE_AXIS_SHADOW` / `_ADVISORY` | Volume/Worth/Trajectory blend (Phase D) |
+| `AINDY_INFINITY_LEARNED_ADVISORY` | Learned REFLECT calibrator (Phase 2) |
+| `AINDY_SEARCH_OUTCOME_WEIGHTING` | Outcome-weighted search ranking |
+| `AINDY_REASONING_NODUS_NATIVE` | Reasoning via the Nodus VM (behaviour-neutral) |
+| `AINDY_NEXT_ACTION_ACTING` | Bounded autonomous dispatch (FR-3) |
+
+All five flags were verified present in `apps/` on 2026-08-22, read from the environment and
+default-off when absent.
+
+**Why this is one item and not five.** Each was tracked separately, inside domain rows, with the
+same one-line remedy — "soak, then flip". The 2026-08-15 audit examined the accumulated data and
+found the remedy unreachable: **294 three-axis records, 269 expectation predictions and 285 loop
+decisions were almost entirely the same measurement repeated.** The soak had been accumulating
+rows, not evidence. Its verdict — *do not flip any of them, not because the data says no, but
+because there is no data* — applies to all five at once, which is what makes it one problem.
+
+**So the blocker is not time, and running the soak longer does not help.** It is real, varied usage
+by real users; the gate opens on that or not at all. Any plan that reads "wait for the soak" is
+mis-specified.
+
+**Do not treat the individual domain rows as authoritative on this.** Several rows in
+`APP-DEBT-MIGRATED-1` predate the audit and still read "soak, then flip the flag" as though it were
+an ops chore. This item supersedes them.
+
+---
+
+## ARM-PATH-CONFINE-1: ARM has no project-root confinement (app-owned, P1 security)
+
+**Status: OPEN.** Found 2026-07-22 (walk log item 20); registered here 2026-08-22 because a
+deferred *security* risk belongs in this register, not only in a walk log
+(`docs/GOVERNANCE_INDEX.md:98`).
+
+`validate_file_path` guards with a blocked-segment list, an extension allowlist
+(`.py .js .jsx .ts .tsx .json .md .txt .yaml .yml`), and a post-read secret-pattern scan.
+**None of them check that the resolved path stays inside the project root.** Verified against the
+validator in the running container: `/usr/local/lib/python3.11/this.py` was ALLOWED.
+`/etc/passwd` and `../../etc/hosts` are rejected only for lacking an allowlisted extension — not
+by confinement.
+
+**Impact:** any authenticated user can read any allowlisted-extension file anywhere on the server
+filesystem, and the contents are then sent to an external LLM provider. The content scan runs
+*after* the read and only matches known patterns.
+
+**Fix shape:** resolve the path and assert it is under the project root before reading. Write-up:
+`docs/handoffs/FRONTEND_WALK_LOG.md` item 20.
+
+---
+
+## GENESIS-TURN-LATENCY-1: a conversational turn blocks on the serialised dispatch slot (app-owned, P1)
+
+**Status: OPEN, fully specified, writable now.** Blocks the MasterPlan V4 import.
+
+The defect is **placement plus destination**, not a product decision: the scoring work runs
+synchronously on the one serialised dispatch slot, and the orchestration result is written to the
+response copy rather than the persisted one (`Genesis.jsx:185` reads `data.reply` /
+`data.synthesis_ready` and never references `orchestration`).
+
+**Two corrections are already baked into the write-up and must survive any re-reading of it:**
+a conversational turn *is* a scoring event — `score_history` is append-only and already carries
+`trigger_event` and `score_delta`, so "recalculate on lock" would delete real signal. And the
+remedy is **new code, not wiring**: `analytics` registers no async jobs at all,
+`analytics.infinity_execute` is `register_job` (a synchronous callable lookup), and
+`register_async_job("genesis.message")` would run the whole workflow including the LLM call, so it
+cannot serve a turn whose reply the client awaits.
+
+Write-up: `docs/handoffs/DEFECT_GENESIS_MESSAGE_LATENCY.md` (see §8).
+
+---
+
+## INFINITY-RECALC-DEBOUNCE-1: both recalc guards are keyed on `trigger_event` (app-owned, P2)
+
+**Status: OPEN. Grounded in code, not reproduced.** Low severity today, high at real usage — which
+is the point, since every measurement gate is currently usage-blocked.
+
+`user_scores` stores `trigger_event` only for the **most recent** run, so in alternating traffic the
+debounce cannot fire: scheduled stamps `scheduled`, a chat turn mismatches and recalculates, stamps
+`genesis_message`, and the next scheduled run mismatches again. Raising the window would not help —
+`_ANALYTICS_DUPLICATE_DEBOUNCE_SECONDS = 1` is a double-submit guard, and the mismatch
+short-circuits first. Separately, the **lease embeds the trigger**, so two different-trigger recalcs
+for one user take different leases and may overlap, both upserting one row.
+
+Write-up: `docs/handoffs/DEFECT_INFINITY_RECALC_DEBOUNCE.md`.
+
+---
+
+## HEALTH-EVENT-VOLUME-1: liveness telemetry regrows ~98 MB/day (app-side mitigation only, P2)
+
+**Status: OPEN app-side; the fix is runtime-owned (FR-18).**
+
+The runtime persists the entire `/health` response on every liveness probe, and the container
+healthcheck probes every 15s. On 2026-08-22 this was **3653 MB of a 3796 MB database** —
+120,444 `health.liveness.completed` rows. Pruned to 182 MB the same day (stop the api, delete the
+rows, `VACUUM (FULL, ANALYZE) system_events` — VACUUM FULL takes ACCESS EXCLUSIVE, so the api must
+be down).
+
+**Pruning is the mitigation, not the fix: it regrows at ~98 MB/day.** Until FR-18 lands, this needs
+periodic re-pruning, and a `pg_dump` of this stack will be dominated by that one table (a plain
+dump exceeded 4.3 GB; `--exclude-table-data=system_events` produced 17 MB).
+
+Runtime request: `docs/handoffs/RUNTIME_FEATURE_REQUESTS.md` FR-18. The app-side lever not taken is
+raising the healthcheck interval, which trades write volume for slower failure detection.
+
+---
+
+## TEST-INFRA-GAPS-1: coverage is never measured, migrations are never replayed, no E2E (P2)
+
+**Status: OPEN.** Registered 2026-08-22 from an audit of the 2026-05-25 gap report
+(`docs/archive/2026-05-25-missing-tests-gap-report.md`, archived the same day). Eleven of that
+report's fourteen recommendations are done and one was superseded; these three are what is left.
+
+**1. Coverage is inert.** `pytest-cov` is in the test extras and has never been invoked: zero
+`--cov` flags across every workflow, and no `.coveragerc` exists. The repo has 95 test files and no
+idea what they cover. Starting point is a floor (say 40%) ratcheted upward, not a target.
+
+**2. `alembic upgrade head` is never run in CI — found during this audit, and the narrowest of the
+three.** There are **154 app-owned revisions** and nothing replays them. `deploy-bootstrap-guard.yml`
+does exercise a real pgvector service on any PR touching `alembic/**`, but it mirrors
+`docker/entrypoint.sh`: bootstrap-schema, then `deploy_bootstrap.py`, then a `serve` boot — a
+**stamp** path on a *fresh* database. That is the correct guard for a fresh deploy, and deliberately
+so: a bare `upgrade head` on a fresh DB replays the pre-split revisions and drifts the runtime-owned
+tables, which is the exact failure `APP-DEPLOY-1` fixed.
+
+The gap is the *other* path. Upgrading an **existing** database is what a real deployment does, and
+it is the one path CI never takes. A revision that breaks only on replay against populated tables
+would reach production unchallenged. Any fix must respect `docs/deployment/MIGRATION_POLICY.md` and
+the runtime/app split of `alembic_version_runtime` vs `alembic_version`.
+
+**3. No E2E job.** No Playwright anywhere in CI. Unit tests catch component failures and the build
+smoke catches compile failures; neither catches a broken user flow. `README.md` already records this
+as a deliberate deferral pending a stable CI auth/backend fixture story, so this is the least urgent
+of the three — but it should be a decision that gets revisited, not one that silently sticks.
+
+---
+
+## CLIENT-ERROR-TELEMETRY-1: client error reporting has never worked (P2)
+
+**Status: OPEN, needs a decision before code.** Found 2026-07-22 (walk log item 28).
+
+`reportClientError` (`client/src/api/operator.js`) POSTs to `ROUTES.OPERATOR.CLIENT_ERROR`, which no
+backend route serves — every call 404s. It is wrapped in `.catch(() => {})`, so it can never break
+the page and equally can never report; every client-side crash during the entire frontend walk was
+swallowed.
+
+**The decision, not the patch, is the blocker:** either the route belongs in the runtime and is
+missing (making this a runtime feature request), or the client should stop pretending to report and
+the call should be removed. Silently 404-ing on every crash is the only option that helps nobody.
+
+---
+
+## TRACE-ID-DUAL-1: every response carries two different trace ids (P2)
+
+**Status: OPEN.** Found 2026-07-22 (walk log item 33) during the Phase 2b trace-continuity check.
+
+A single `POST /apps/tasks/create` returns an `X-Trace-ID` header and a `data.trace_id` that agree,
+plus an **envelope `trace_id` that differs** — and both resolve to *different* execution graphs
+(12 entries vs 2). Anyone debugging from a trace id gets a different picture depending on which of
+the two they picked up, with nothing indicating there was a choice.
+
+---
+
+## RUNTIME-GUEST-CONFINE-1: Nodus guest scripts run unconfined (runtime-owned, P0) — CLOSED in aindy-runtime 2.2.0
 
 **Status: ✅ CLOSED in `aindy-runtime==2.2.0` (2026-08-16).** The guest VM was being built with
 none of the confinement arguments it accepts. The fix denies all three classes — **31 builtins**
@@ -103,7 +302,7 @@ change. **Revisit on the release that closes it.**
 
 ---
 
-## APP-DEPLOY-1: server deploy artifact (app-consuming-the-framework image)
+## APP-DEPLOY-1: server deploy artifact (app-consuming-the-framework image) — RESOLVED (2026-07-13)
 
 **Status:** Resolved (2026-07-13). App-owned. Scaffold + a real Linux build/boot test done; the
 fresh-DB schema-guard bug found and fixed; the clean-ownership split is now wired to the runtime's
@@ -231,7 +430,7 @@ record-first Next-Action to autonomous pre-dispatch action.
 
 ---
 
-## RIPPLETRACE-CONTENT-LLM-1: rippletrace content generation is template-only (LLM path dropped in the port)
+## RIPPLETRACE-CONTENT-LLM-1: rippletrace content generation is template-only (LLM path dropped in the port) — RESOLVED (2026-07-17)
 
 **Status:** RESOLVED (2026-07-17). App-owned. Found comparing the standalone RippleTrace MVP
 (`C:\dev\Rippletrace`) against this app's port; the LLM path was restored 2026-07-17 (Resolution below).
@@ -270,7 +469,7 @@ adding an agent-invocable content tool.
 
 ---
 
-## TASK-COMPLETE-IDEMPOTENCY-1: `complete_task` has no prior-status guard — repeated completion re-fires side effects
+## TASK-COMPLETE-IDEMPOTENCY-1: `complete_task` has no prior-status guard — repeated completion re-fires side effects — RESOLVED (2026-07-17)
 
 **Status:** RESOLVED (2026-07-17). App-owned correctness issue in `apps/tasks`; guard added
 2026-07-17 (Resolution below). Flagged during the Infinity docset review.
@@ -303,7 +502,7 @@ completion path that bypasses `complete_task`.
 
 ---
 
-## INFINITY-RUNTIME-HANDOFF-1: runtime-side Infinity loop closure + cross-doc linkage (handoff to aindy-runtime)
+## INFINITY-RUNTIME-HANDOFF-1: runtime-side Infinity loop closure + cross-doc linkage (handoff to aindy-runtime) — RESOLVED (2026-07-08)
 
 **Status:** **RESOLVED (2026-07-08).** Items 1 & 2 were runtime-side done (PR #160);
 item 3's runtime half shipped in **aindy-runtime 1.6.0** (`sys.v1.observability.support_metrics`,
@@ -743,7 +942,7 @@ merge is needed there; revisit only if a split-data environment surfaces.
 
 ---
 
-## LINT-VERSION-GAP-1: eslint trails @aindy/ui-kit by one major version
+## LINT-VERSION-GAP-1: eslint trails @aindy/ui-kit by one major version — RESOLVED (2026-06-27, PR #4)
 
 **Status:** RESOLVED (2026-06-27, PR #4). `eslint` ^9.36 → ^10.4, `@eslint/js` → ^10.0.1,
 `eslint-plugin-react-hooks` ^5.2 → ^7.1.1 (required for eslint 10 — 5.x peers cap at eslint 9),
@@ -783,9 +982,16 @@ Original context retained below for history.
 
 ---
 
-## LINT-WARNINGS-RESIDUAL-1: frontend lint passes with 68 deferred warnings
+## LINT-WARNINGS-RESIDUAL-1: frontend lint passes with deferred warnings (78 as of 2026-08-22)
 
 **Status:** Tracked, accepted. Address opportunistically; no single forcing event.
+
+> **Count drift, measured 2026-08-22: 68 -> 78.** The breakdown below is the 2026-06-27
+> snapshot and no longer sums to the live count. Ten warnings were added since the item was
+> accepted, which is the failure mode an "accepted" debt item is supposed to prevent: accepted
+> means *held at this level*, not *unbounded*. Re-count with `npx eslint . -f json` before
+> quoting a number from this entry, and treat a rising count as the forcing event this item
+> says it lacks.
 
 **Context:** The eslint 10 upgrade (LINT-VERSION-GAP-1) drove lint errors to zero, but three
 rule categories were set to `warn` rather than fixed wholesale, leaving `npm run lint` green
@@ -919,7 +1125,7 @@ per-pass caching, flag-gated provider selection, and embedding-driven reordering
 
 ---
 
-## DOCS-MIGRATION-1: app-owned docs recovered from pre-split archive
+## DOCS-MIGRATION-1: app-owned docs recovered from pre-split archive — RESOLVED (2026-06-27)
 
 **Status:** RESOLVED (2026-06-27). 18 docs moved + path-fixup sweep complete. Residuals noted below.
 
@@ -1033,14 +1239,41 @@ shared-doc split.
 
 ---
 
-## APP-DEBT-MIGRATED-1: domain debt recovered from the pre-split register (2026-06-27)
+## APP-DEBT-MIGRATED-1: domain debt recovered from the pre-split register (2026-06-27) — AUDITED 2026-08-22, 3 of 11 rows still open
 
-**Status:** Tracked. Migrated from the pre-split `docs/platform/engineering/TECH_DEBT.md`
-(triaged 2026-04-25) under DOCS-MIGRATION-2 Bucket C. These app-domain items were never carried into
-this repo's register — a genuine tracking gap. Runtime/infrastructure items from the same source stay
-with `aindy-runtime`. Verify each against current code before acting; the source triage is ~2 months old.
+**Status:** Audited 2026-08-22 — **mostly closed; three threads genuinely open.** Migrated from the
+pre-split `docs/platform/engineering/TECH_DEBT.md` (triaged 2026-04-25) under DOCS-MIGRATION-2
+Bucket C. Runtime/infrastructure items from the same source stay with `aindy-runtime`. The source
+triage is now **four months old**, so verify against current code before acting.
 
-### APP-DEBT-MIGRATED-1a: Genesis session locking enforced only in application logic (production-blocking)
+### Audit, 2026-08-22
+
+The "Deferred app-domain items" table below is eleven rows of prose that were edited in place over
+several months. Most now say *RESOLVED*, *DONE* or *closed* **inside a table titled "Deferred"** —
+the status is real, but it is unreadable without reading every cell end to end. Actual state:
+
+| Row | Domain | Real status |
+|---|---|---|
+| Masterplan dependency cascade | masterplan | **Closed** |
+| ARM self-tuning | arm | **Closed** (#80) — `arm_autotune_service.py` verified present |
+| Identity inference | identity | **Closed** — `IdentitySignal` + inference service verified present |
+| SYLVA reserved agent | agent | **Closed** — removed; zero references remain in `apps/` |
+| Search orchestration unified | search | Built; **blocked on a flag flip** → `SOAK-THEN-FLIP-1` |
+| Nodus-native reasoning execution | analytics | Built, behaviour-neutral; **blocked on a flag flip** → `SOAK-THEN-FLIP-1` |
+| Freelance commercial workflow | freelance | Closed app-side; residual is runtime-gated (native `.nd`) or product-risk-gated (agent-exposing order-lifecycle side effects) |
+| Agentics completion | runtime/agent | **Not app debt** — runtime-owned; the registerable app lever (ranking) is done |
+| **RippleTrace productization** | rippletrace | **OPEN** — deeper insight generation and broader scenario coverage still do not exist |
+| **Infinity loop autonomy** | analytics | **OPEN** — Phase 2 (learned model drives canonical scoring) plus the 3b-full weighting decision |
+| **Infinity support-system depth** | analytics | **OPEN** — KPI-formula feedback (deliberately deferred), the DB-backed loop E2E, folding `identity_boot_service` into the snapshot, and observability/agent aggregates (runtime-gated) |
+
+Four closure claims were re-verified in code rather than taken from the prose, and all four held.
+
+**The correction that matters:** four rows below prescribe *"soak, then flip the flag"* as if it
+were a routine ops step. `docs/handoffs/SOAK_AUDIT_2026-08-15.md` — written after those rows —
+concluded the opposite, and its title is the finding: **"the gate that could never open."** Read
+`SOAK-THEN-FLIP-1` before acting on any "soak, then flip" instruction in this section.
+
+### APP-DEBT-MIGRATED-1a: Genesis session locking enforced only in application logic (production-blocking) — RESOLVED (verified 2026-06-27)
 
 **Status:** RESOLVED — already fixed in this repo before migration; verified 2026-06-27.
 **Severity:** High  **Effort:** M  **Files:** `apps/masterplan/services/masterplan_factory.py`,
