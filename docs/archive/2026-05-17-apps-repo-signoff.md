@@ -1,3 +1,51 @@
+---
+title: "Archived — apps repo split signoff (2026-05-17)"
+last_verified: "2026-08-22"
+api_version: "1.0"
+status: outdated
+owner: "app-team"
+---
+
+# Archived: apps repo split signoff
+
+**Signed off 2026-05-17 against aindy-runtime 1.0.0. Archived 2026-08-22 — historical record of
+the repo cut, not a description of the repo today.**
+
+This is the app-side signoff for the split from `aindy-runtime`. Its verdict — *"Go with caution"* —
+was discharged long ago; the split held. It is kept as the provenance record for validated
+extraction commit `7565ce937f56c59e57b331ae1a50ca9f50faa668`.
+
+## What has moved since (checked 2026-08-22)
+
+| Recorded at signoff | Today |
+|---|---|
+| runtime `1.0.0`, pin `>=1.0,<2.0` | runtime `2.4.1`, pin `>=2.4.1,<3.0` |
+| `33 declared, 0 undeclared` cross-app imports | `37 declared, 0 undeclared` |
+| 55 tests passed in the representative subset | 95 test files in the repo |
+| root listing had no compose files, `TECH_DEBT.md`, or `Dockerfile` | all present |
+
+`app_plugin_count: 16`, `boot_profile: default-apps` and `boot_mode: app-profile` still hold —
+re-verified on this date.
+
+## Its "Remaining Cautions", re-checked
+
+Archiving a document buries whatever it was still warning about, so all three were re-run against
+the current stack before filing:
+
+- **`APP_DEPENDS_ON` ordering-gap warnings** (`analytics -> identity`, `masterplan -> identity`) —
+  **gone.** Zero occurrences in a full app-profile boot.
+- **`NodusFlowRequest.register` shadows a `BaseModel` attribute** — **gone.** A runtime-side warning,
+  fixed somewhere between 1.0.0 and 2.4.1.
+- **`apps.freelance.bootstrap` warns when `STRIPE_WEBHOOK_SECRET` is unset** — **still present**, and
+  it is now the *only* warning emitted during the entire boot. Config-dependent and benign by
+  design; it is not tracked as debt.
+
+Nothing in this document requires action. Read it as history.
+
+---
+
+## Original signoff, verbatim
+
 # Apps Repo Signoff
 
 ## Summary

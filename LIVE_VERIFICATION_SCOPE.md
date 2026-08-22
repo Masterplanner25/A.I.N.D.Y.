@@ -4,7 +4,7 @@
 
 This document defines the scope of the live stack verification phase. Work happens
 in `aindy-apps-monolith`, but the primary objective is confirming that
-**`aindy-runtime` works correctly end-to-end** — by activating it with the 17 domain
+**`aindy-runtime` works correctly end-to-end** — by activating it with the 16 domain
 apps it was designed to serve, from a real user's perspective.
 
 > **Status (2026-07-22): live verification is COMPLETE.** Both halves have been walked
@@ -17,6 +17,43 @@ apps it was designed to serve, from a real user's perspective.
 >
 > **Historical note (product-UI half):** completed first, 23 findings and ~19 fixes
 > across PRs #131–#154. The platform half followed in #158–#165.
+
+> **Update (2026-08-22) — the phase verdict stands; two of its load-bearing claims do not.**
+>
+> **The decision list is closed.** Walk-log items 18 / 29 / 32 — called "the largest cluster"
+> above — all closed 2026-07-31 via PRs #168–#171. What remains of item 18 is its other half:
+> `/analytics` is still owner-specific, and the owner leaned toward removal.
+>
+> **2c was blocked on the wrong thing.** The numbers below (`three_axis_shadow_records` = 2,
+> `infinity_expectation_predictions` = 1, "~20+ days to reach the fitting floor") are stale: the
+> live counts are **58** and **320**, and the floor was crossed long ago.
+> `docs/handoffs/SOAK_AUDIT_2026-08-15.md` then measured 294 / 269 / 285 and concluded the
+> opposite of what this section assumes — **"the gate that could never open."** Not for want of
+> rows, but because they are the same measurement repeated. **The blocker is variety, not volume,
+> and not time.** The reasoning below about synthetic traffic was right; what it missed is that
+> real traffic from one account has the same defect. Tracked as `SOAK-THEN-FLIP-1` in
+> `TECH_DEBT.md`.
+>
+> **The soak ledger was then reset and nothing said so.** 294 records across 25 users on
+> 2026-08-15; **58 across 4 users** now — consistent with the account purge to 4 accounts on
+> 2026-08-16. (`infinity_expectation_predictions` was spared: it keys off `loop_adjustment_id`,
+> not `user_id`, which is why it grew while three-axis fell.) 2c calls "surface the soak readout"
+> *optional, not required* — and that judgement is what made an 80% loss invisible. It should now
+> be read as required.
+>
+> **The ownership question this phase never asked.** Its stated purpose is proving the *runtime*,
+> yet it produced ~25 app-side fixes. An audit on 2026-08-22 tagged all 34 findings by owner:
+> **24 app, 6 runtime, 2 both, 1 undecided, 1 environment** — and of the 8 with runtime ownership,
+> only one (item 6) became a feature request at the time. The dominant class of the whole phase,
+> response-shape mismatch, was fixed **eleven times in client code and raised with the runtime
+> zero times**. Three requests were filed retroactively: **FR-19** (envelope contract), **FR-20**
+> (the guard replacing a raised 4xx with a 500), **FR-21** (5,949 lines of operator surface built
+> app-side next to a runtime-owned one — offered back, with our copy retired on adoption).
+>
+> **The process fix:** the walk log's finding format now carries a required **Owner** field
+> (`app` / `runtime` / `both` / `undecided` / `env`). Findings arrive wearing app clothes because
+> the walk is driven from the UI, and the cheapest fix is always the one in front of you. Asking
+> ownership per finding is the step that was missing — not a rule anyone broke.
 
 Integration tests proved API contracts. This phase proves the runtime behaves correctly
 when a human navigates the product, not when a test harness calls an endpoint.
@@ -34,7 +71,7 @@ route bug, a flow bug, a syscall bug, or a runtime pipeline bug. All are in play
 | Runtime API | `aindy-runtime` | FastAPI server, syscall dispatcher, flow engine, scheduler |
 | 16 domain apps | `aindy-apps-monolith` | Routes, flows, models, bootstrap |
 | Product UI | `aindy-apps-monolith/client/` | React SPA — the product surface |
-| Platform UI | `aindy-runtime/platform/` | React SPA — operator/platform view |
+| Platform UI | **both — unresolved** | `aindy-runtime` serves one at `/platform/`; this repo also builds `client/platform.html`. See the 2026-08-22 status entry and FR-21. |
 | Postgres | docker-compose | Persistent state |
 | Redis | docker-compose | Pub/sub, rate limiter |
 | MongoDB | docker-compose | Memory/search backend |
@@ -190,6 +227,12 @@ data, and that is downstream of the redesign.
   runs the orchestrator, then (gated on the learned-shadow flag) calls `train()` and
   `evaluate()` and logs the comparison:
   `[Infinity Scheduler] Expectation shadow: trained=… overall=…`
+
+> **SUPERSEDED 2026-08-22 — do not act on the numbers in this paragraph.** The floor was crossed;
+> live counts are 58 and 320. `SOAK_AUDIT_2026-08-15` found the gate cannot open on volume at all
+> ("the same measurement repeated"), and the ledger was later reset by the account purge. See the
+> status entry at the top and `SOAK-THEN-FLIP-1` in `TECH_DEBT.md`. Retained below because the
+> reasoning about synthetic traffic is still correct and still worth reading.
 
 **The blocking number:** `MIN_TRAIN_SAMPLES = 20` per `decision_type`. Below it `train()`
 abstains with `insufficient samples`. Current rows: `three_axis_shadow_records` = 2,
