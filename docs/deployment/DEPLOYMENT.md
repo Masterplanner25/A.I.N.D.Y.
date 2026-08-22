@@ -8,7 +8,7 @@ owner: "apps-team"
 # Server Deployment
 
 How to deploy the app-profile server (this repo's apps running on top of the
-installed `aindy-runtime`). This document belongs to `aindy-apps-monolith`.
+installed `aindy-runtime`). This document belongs to A.I.N.D.Y..
 
 ## The deploy artifact
 

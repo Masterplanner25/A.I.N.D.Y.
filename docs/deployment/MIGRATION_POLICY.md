@@ -9,7 +9,7 @@ owner: "apps-team"
 
 Repository ownership:
 
-- this document belongs to `aindy-apps-monolith`
+- this document belongs to A.I.N.D.Y.
 - this repo owns `alembic/`, `alembic.ini`, and deployment-time schema
   migration execution
 - runtime-owned models are consumed from the installed `aindy-runtime`
@@ -31,7 +31,7 @@ the runtime repo's Repo Compatibility Policy.
 - Alembic is the sole mechanism for schema changes in production. SQLAlchemy models alone do not alter the live database.
 - In the current monolith, `alembic/alembic/env.py` loads runtime-owned models through `AINDY.db.model_registry` and then loads app-owned models through `apps.bootstrap.bootstrap_models()`.
 - App migrations run against the standard `alembic_version` table (the runtime's own migrations use `alembic_version_runtime`).
-- After the repo split, the expected steady state is still one migration authority per deployed database, owned by `aindy-apps-monolith`, even though runtime-owned models come from the installed `aindy-runtime` dependency.
+- After the repo split, the expected steady state is still one migration authority per deployed database, owned by A.I.N.D.Y., even though runtime-owned models come from the installed `aindy-runtime` dependency.
 
 ### Verification Commands
 ```bash

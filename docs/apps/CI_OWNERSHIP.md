@@ -8,7 +8,7 @@ owner: "platform-team"
 # Apps CI Ownership
 
 This document defines which GitHub Actions checks are authoritative for
-`aindy-apps-monolith`.
+A.I.N.D.Y..
 
 ## Authoritative Apps Checks
 
@@ -16,7 +16,7 @@ Primary workflow:
 
 - `.github/workflows/app-ci.yml`
 
-These checks are app-owned and should live in `aindy-apps-monolith`:
+These checks are app-owned and should live in A.I.N.D.Y.:
 
 - explicit runtime dependency installation for CI
 - app-profile `/api/version` smoke validation on top of installed runtime
@@ -43,7 +43,7 @@ no longer used; `PYPI-PUBLISH-1` is closed.)
 
 ## Checks That Do Not Belong Here
 
-These are not app-owned and should not move back into `aindy-apps-monolith` CI:
+These are not app-owned and should not move back into A.I.N.D.Y. CI:
 
 - runtime-only import-boundary guards against `apps.*`
 - runtime package build and `twine check`
