@@ -102,13 +102,25 @@ def register() -> None:
         register_router, register_models, register_flow_definitions,
         register_scheduled_job, register_syscall, register_agent_tool,
         register_event_handler,
-        # ...18 registration categories total
+        # ...40 `register_*` functions in total (counted 2026-08-20)
     )
     # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
     # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
     # `register_syscalls` — which do not exist. Grepping for them returns nothing, which
     # reads as "no app uses this hook" rather than "wrong name", and that misreading was
     # written into two specs before it was caught. Verify against the registry, not here.
+    #
+    # THREE DIFFERENT JOB MECHANISMS. Confusing them produced a wrong remedy in a shipped
+    # defect doc on 2026-08-19, so check which one you actually mean:
+    #   register_scheduled_job  - registry            - APScheduler, runs on an interval
+    #   register_job            - registry            - a SYNCHRONOUS callable, looked up
+    #                                                   later via get_job("name"). Registering
+    #                                                   a job does NOT make it async.
+    #   register_async_job      - NOT in the registry - background dispatch. It lives in
+    #                             AINDY.platform_layer.async_job_service, so the import block
+    #                             above is the wrong place to look for it, and "this domain
+    #                             already uses register_async_job" can be true of the app while
+    #                             false of the module doing the slow work. Check the domain.
     register_router(router, prefix="/api/myapp")
     register_models([MyModel])
     register_flow_definitions([my_flow_def])
@@ -248,6 +260,43 @@ Use `disabled` (set in `pytest.integration.ini`), **not** `stub`. The `stub` bac
 ### ARM config — per-user scoping
 
 `arm_config.id` is a `String(36)` primary key. All rows are keyed by user UUID. All `arm_config_dao` calls must pass `user_id=str(current_user["sub"])`. A missing `user_id` falls back to the key `"default"` — the system default singleton, not per-user storage. The `String(36)` length is required to hold a UUID; `String(32)` is too short.
+
+---
+
+## When the API hangs: the scheduler saturation trap
+
+A wedged API logs this, once a second, loudly:
+
+```
+[Scheduler] job 'scheduler_wait_tick' skipped a run (max_instances) — the scheduler is saturated
+```
+
+**It is almost always a consequence, not the cause, and it is the wrong place to start.** Dispatch
+is serialised through one scheduler slot by design until `AINDY_ASYNC_HEAVY_EXECUTION` is on
+(runtime `APP_HANDOFF_v2.4.0` §7), so *anything* that occupies that slot produces this line. The
+message names the victim, never the culprit.
+
+The full fingerprint — dead `/health`, **zero container restarts**, no log output at all, high CPU,
+starved 1-second heartbeat — has now been produced by at least two unrelated causes: a slow Genesis
+request, and pure host memory starvation with no app traffic whatsoever. Seeing the fingerprint
+tells you the slot is full. It does not tell you what filled it.
+
+**Check in this order, cheapest first:**
+
+1. `docker logs <postgres> | grep "terminating any other active server processes"` — a non-zero
+   count means PostgreSQL has been reinitialising its whole cluster and every app symptom is
+   downstream. This was 155 occurrences on 2026-08-19.
+2. Host paging. On Windows use `Get-Counter '\Memory\Available MBytes'` and `'\Memory\Pages/sec'`
+   — **not** `Win32_OperatingSystem.FreePhysicalMemory`, which excludes standby and reads
+   catastrophically low when things are fine. Tens of thousands of hard faults/sec means the
+   container is starved, not broken.
+3. Whether the last log line is `[entrypoint] starting: aindy-runtime serve` — boot imports the
+   16-app graph **twice** and takes minutes on a loaded host. `unhealthy` during that window is
+   the healthcheck being impatient, not a crash.
+
+Only after those three should you look at application code. Full write-ups:
+`docs/handoffs/DEFECT_GENESIS_MESSAGE_LATENCY.md` §8.1 and
+`docs/handoffs/DEFECT_INFINITY_RECALC_DEBOUNCE.md`.
 
 ---
 

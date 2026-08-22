@@ -34,6 +34,12 @@ services:
       # smaller risk than a healthcheck that periodically destroys the database cluster it
       # shares a host with. If richer semantics are ever needed, add a cheap non-Node probe —
       # do not restore the mongosh ping without also raising the VM's memory.
+      #
+      # 2026-08-22: this helped a lot but did NOT end the cluster reinitialisations —
+      # 76/day before, ~11/day after, with the fix demonstrably live. Do not read the
+      # 155 figure above as "solved". A residual, undiagnosed cause remains; see
+      # TECH_DEBT.md POSTGRES-CRASH-RESIDUAL-1 before concluding that a crash you are
+      # looking at was caused by mongo.
       # `bash` explicitly, not CMD-SHELL: /bin/sh in mongo:7 is dash, and /dev/tcp is a bash
       # builtin, so CMD-SHELL fails with "Directory nonexistent" — which reads like a broken
       # container rather than a broken probe. bash is present in this image; nc and curl are not.
