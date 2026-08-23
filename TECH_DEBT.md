@@ -92,6 +92,35 @@ retained and host paging counters sampled, before theorising.
 
 ---
 
+## IDEMPOTENCY-CONTENTION-UNVERIFIED-1: the effect gate is on, and unmeasured under load (P2)
+
+**Status: OPEN — unverified, which is not the same as clean.** Registered 2026-08-23 with the
+runtime 2.6.0 adoption.
+
+`AINDY_SYSCALL_IDEMPOTENCY` defaulted **on** in runtime 2.5.0 and now dedups 8 syscalls —
+`memory.write`, `memory.link`, `event.emit`, `flow.run`, `flow.execute_intent`, `nodus.execute`,
+`job.submit`, `agent.undo` — scoped to the execution unit id.
+
+**The runtime is explicit that this is not exactly-once under contention.** A call that loses the
+insert race against a live pending row degrades to `AT_LEAST_ONCE` and logs a warning; the runtime
+measured 8 concurrent identical calls running the handler twice. Strict at-most-once needs advisory
+locking, which has not landed.
+
+**We have measured nothing.** `aindy_effect_gate_outcomes_total` produced no samples after the
+upgrade, because an idle stack dispatches nothing under contention. So the guarantee we actually
+have is unknown, not verified.
+
+**What would close it:** watch `outcome="degraded"` against `reserved` once there is real traffic.
+If degraded is a meaningful fraction, the guarantee is weaker than the flag's name suggests, and for
+a genuinely non-idempotent effect `AINDY_SYSCALL_IDEMPOTENCY=0` is the documented lever until
+advisory locking ships.
+
+**This is the same shape as `SOAK-THEN-FLIP-1`** — a behaviour that only real, varied usage can
+evaluate. Filed separately because this one is **on by default**, so the exposure exists now rather
+than waiting behind a flag.
+
+---
+
 ## SOAK-THEN-FLIP-1: five features are built, default-off, and waiting on a soak that cannot produce evidence (P1)
 
 **Status: OPEN, and it is the single largest block of built-but-not-on work in the repo.**
