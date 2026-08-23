@@ -24,7 +24,7 @@
 // ui-kit emits correct `/apps/...` paths (the correct upstream end-state) nothing double-
 // prefixes and this quietly becomes dead weight rather than breaking.
 //
-// See docs/handoffs/UIKIT_ROUTE_FIXES.md and TECH_DEBT UIKIT-ROUTE-DRIFT-1.
+// See docs/archive/UIKIT_ROUTE_FIXES.md and TECH_DEBT UIKIT-ROUTE-DRIFT-1.
 
 import { ROUTES as UIKIT_ROUTES } from "@aindy/ui-kit";
 

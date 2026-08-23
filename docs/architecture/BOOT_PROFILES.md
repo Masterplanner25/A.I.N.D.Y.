@@ -14,7 +14,7 @@ Ownership note:
   app-owned boot semantics
 - runtime-only operating details now live in the separate `aindy-runtime` repo
 - the apps-side dependency boundary is documented in
-  [Runtime Dependency](../apps/RUNTIME_DEPENDENCY.md)
+  [Runtime Dependency](../runtime/RUNTIME_DEPENDENCY.md)
 
 Boot configuration is now split by ownership:
 
@@ -85,7 +85,7 @@ Ownership boundary:
   - the apps repo should carry its own `aindy_plugins.json` (or supply `AINDY_APP_PLUGIN_MANIFEST`)
   - runtime-only boot must not depend on the apps manifest existing at all
 - the concrete apps-repo landing zone is documented in
-  [Apps Monolith Repo Shape](../apps/APPS_MONOLITH_REPO_SHAPE.md)
+  [Apps Monolith Repo Shape](../archive/APPS_MONOLITH_REPO_SHAPE.md)
 
 Platform-only behavior:
 
@@ -103,7 +103,7 @@ For the exact supported runtime-only surface, use the runtime repo's
 `RUNTIME_ONLY_DEPLOYMENT.md` as the authoritative contract.
 
 For the future app-profile repo shape, use
-[Apps Monolith Repo Shape](../apps/APPS_MONOLITH_REPO_SHAPE.md) as the
+[Apps Monolith Repo Shape](../archive/APPS_MONOLITH_REPO_SHAPE.md) as the
 authoritative planning document.
 
 `apps/agent` classification:

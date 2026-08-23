@@ -7,7 +7,7 @@ owner: "apps-team"
 ---
 # API Reference
 
-> **Related:** [`API_CONTRACTS.md`](../platform/interfaces/API_CONTRACTS.md) is the
+> **Related:** [`API_CONTRACTS.md`](./API_CONTRACTS.md) is the
 > repo's router-file → URL inventory and mount/ownership map (runtime + app routes),
 > validated by `scripts/check_api_contracts.py`. This reference documents the
 > app-owned endpoint request/response shapes, and its `/apps/*` coverage is guarded

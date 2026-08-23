@@ -7,7 +7,7 @@ records the three axes next to `master_score` here. Drives nothing — it is the
 observability that lets a soak show whether the three-axis model diverges from (or improves
 on) the behavioral score before any decision to let it drive scoring (Phase C+). Each row is
 a complete example, so the ledger is self-sufficient. See
-`docs/architecture/INFINITY_SCORE_MODEL.md`.
+`docs/infinity/INFINITY_SCORE_MODEL.md`.
 """
 
 import uuid

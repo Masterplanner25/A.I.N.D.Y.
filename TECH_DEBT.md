@@ -7,7 +7,7 @@
 > task-completion idempotency (#91), ARM analysis-quality signal → Infinity (#92), social
 > metrics read-through (#93). The learned REFLECT recursion shipped **shadow + advisory**
 > (#85/#86), default-off (Phase 2 gated on the 3b-full decision + a soak). Runtime feature
-> requests filed + triaged (#87/#89, `docs/handoffs/RUNTIME_FEATURE_REQUESTS.md`): FR-2
+> requests filed + triaged (#87/#89, `docs/runtime/RUNTIME_FEATURE_REQUESTS.md`): FR-2
 > (`register_nodus_workflow`) and FR-3 (Next-Action acting) were already shipped upstream;
 > **FR-1 (connectors) is the net-new runtime work.** Still open app-side: Search v4, identity
 > inference, SYLVA, frontend lint residuals, Freelance agent-tools (Phase 2).
@@ -88,7 +88,7 @@ retained and host paging counters sampled, before theorising.
 ## SOAK-THEN-FLIP-1: five features are built, default-off, and waiting on a soak that cannot produce evidence (P1)
 
 **Status: OPEN, and it is the single largest block of built-but-not-on work in the repo.**
-Registered 2026-08-22; the underlying audit is `docs/handoffs/SOAK_AUDIT_2026-08-15.md`.
+Registered 2026-08-22; the underlying audit is `docs/verification/SOAK_AUDIT_2026-08-15.md`.
 
 Five features shipped behind default-off flags with the same plan attached — *ship shadow → ship
 advisory → soak → flip*:
@@ -139,7 +139,7 @@ filesystem, and the contents are then sent to an external LLM provider. The cont
 *after* the read and only matches known patterns.
 
 **Fix shape:** resolve the path and assert it is under the project root before reading. Write-up:
-`docs/handoffs/FRONTEND_WALK_LOG.md` item 20.
+`docs/verification/FRONTEND_WALK_LOG.md` item 20.
 
 ---
 
@@ -160,7 +160,7 @@ remedy is **new code, not wiring**: `analytics` registers no async jobs at all,
 `register_async_job("genesis.message")` would run the whole workflow including the LLM call, so it
 cannot serve a turn whose reply the client awaits.
 
-Write-up: `docs/handoffs/DEFECT_GENESIS_MESSAGE_LATENCY.md` (see §8).
+Write-up: `docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md` (see §8).
 
 ---
 
@@ -176,7 +176,7 @@ debounce cannot fire: scheduled stamps `scheduled`, a chat turn mismatches and r
 short-circuits first. Separately, the **lease embeds the trigger**, so two different-trigger recalcs
 for one user take different leases and may overlap, both upserting one row.
 
-Write-up: `docs/handoffs/DEFECT_INFINITY_RECALC_DEBOUNCE.md`.
+Write-up: `docs/verification/DEFECT_INFINITY_RECALC_DEBOUNCE.md`.
 
 ---
 
@@ -194,7 +194,7 @@ be down).
 periodic re-pruning, and a `pg_dump` of this stack will be dominated by that one table (a plain
 dump exceeded 4.3 GB; `--exclude-table-data=system_events` produced 17 MB).
 
-Runtime request: `docs/handoffs/RUNTIME_FEATURE_REQUESTS.md` FR-18. The app-side lever not taken is
+Runtime request: `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` FR-18. The app-side lever not taken is
 raising the healthcheck interval, which trades write volume for slower failure detection.
 
 ---
@@ -219,7 +219,7 @@ tables, which is the exact failure `APP-DEPLOY-1` fixed.
 
 The gap is the *other* path. Upgrading an **existing** database is what a real deployment does, and
 it is the one path CI never takes. A revision that breaks only on replay against populated tables
-would reach production unchallenged. Any fix must respect `docs/deployment/MIGRATION_POLICY.md` and
+would reach production unchallenged. Any fix must respect `docs/operations/MIGRATION_POLICY.md` and
 the runtime/app split of `alembic_version_runtime` vs `alembic_version`.
 
 **3. No E2E job.** No Playwright anywhere in CI. Unit tests catch component failures and the build
@@ -376,7 +376,7 @@ is still unbuilt/untested here (no Docker in the dev env).
 
 **Related doc fix (2026-07-05, done):** the pinned runtime exposes `aindy-runtime serve`, not
 `aindy-runtime-api` (which ships in no package). Corrected across `CLAUDE.md`, `README.md`,
-`docs/apps/RUNTIME_DEPENDENCY.md`, `docs/apps/APPS_MONOLITH_REPO_SHAPE.md`,
+`docs/runtime/RUNTIME_DEPENDENCY.md`, `docs/archive/APPS_MONOLITH_REPO_SHAPE.md`,
 `LIVE_VERIFICATION_SCOPE.md`, the `apps/agent/bootstrap.py` comment, and `.env.example`
 (the last three `.env.example` occurrences swept 2026-07-15).
 
@@ -443,7 +443,7 @@ a deterministic template **fallback** and a `source` provenance field, and
 (`_build_title` / `_build_hook` / `_build_body` string templates), and `generate_variations`
 merely appends "(1)/(2)/(3)" to the title/CTA (cosmetic, not real variation). The
 `/generate_content*` and `/generate_variations` endpoints therefore return canned copy, not
-model-authored drafts. Documented in `docs/apps/RIPPLETRACE.md` §7.
+model-authored drafts. Documented in `docs/domains/RIPPLETRACE.md` §7.
 
 **Fix when triggered:** route generation through the runtime LLM abstraction rather than a
 direct `openai` call — register a rippletrace content tool via `register_tool` (as
@@ -480,7 +480,7 @@ call on an already-completed task re-runs the full side-effect chain: downstream
 (`_unlock_downstream_tasks`), a `TASK_COMPLETED` `SystemEvent`, the `ExecutionUnit` status
 update, and — via the task-completion orchestration path — an Infinity re-score and memory
 capture. Only the `time_spent` accrual is guarded (runs solely when `start_time` is set).
-Documented in `docs/apps/INFINITY_ALGORITHM_FORMALIZATION.md` (State Transition Diagram:
+Documented in `docs/infinity/INFINITY_ALGORITHM_FORMALIZATION.md` (State Transition Diagram:
 "Completed → Completed … repeated completion is allowed by implementation").
 
 **Impact:** duplicate `TASK_COMPLETED` events, duplicate downstream-unlock effects, and
@@ -1055,7 +1055,7 @@ Guarded by `client/src/api/__tests__/routes-app-owned.test.js`.
 
 **Remaining (upstream):** `/platform/flows/strategies` is a genuine runtime/platform route — fixed in
 `@aindy/ui-kit` (every consumer benefits), then bump the dependency here. Spec + the optional ui-kit
-hygiene ask (remove the app-domain paths from the shared `ROUTES`) in `docs/handoffs/UIKIT_ROUTE_FIXES.md`.
+hygiene ask (remove the app-domain paths from the shared `ROUTES`) in `docs/archive/UIKIT_ROUTE_FIXES.md`.
 
 **Reopen trigger:** ui-kit ships the `/platform/flows` fix (bump the dep), or a new app-domain route
 family lands behind a backend router prefix (extend the `_routes.js` override).
@@ -1087,7 +1087,7 @@ semantic relevance via the runtime embedding stack, opt-in, with automatic lexic
 v3 Ranking Unification (PR #16) had intentionally shipped lexical-only with this pluggable seam;
 this pass wired the seam.
 
-**Context (original):** Phase v3 of the Search System (`docs/apps/SEARCH_SYSTEM.md`) added a shared
+**Context (original):** Phase v3 of the Search System (`docs/domains/SEARCH_SYSTEM.md`) added a shared
 ranking layer: `lexical_relevance()` + `composite_score()` in
 `apps/search/services/search_scoring.py`, applied by `rank_items()` in
 `apps/search/schemas/search_schema.py` so every surface (leadgen, research, SEO) ranks
@@ -1139,8 +1139,8 @@ map in `aindy-runtime/docs/runtime/RUNTIME_DOCSET_BOUNDARY.md`:
   `ABSTRACTED_ALGORITHM_SPEC.md`, `FORMULA_AND_ALGORITHM_OVERVIEW.md`
 - `docs/architecture/`: `PUBLIC_SURFACE_AUDIT.md`, `PUBLIC_SURFACE_CONTRACTS.md`,
   `PUBLIC_SURFACE_MIGRATION_GUIDE.md`, `USER_ID_AUDIT.md`
-- `docs/api/API_REFERENCE.md`, `docs/apps/IMPLEMENTATION_DOCS_AUDIT.md`,
-  `docs/apps/MASTERPLAN_SAAS.md`
+- `docs/api/API_REFERENCE.md`, `docs/verification/IMPLEMENTATION_DOCS_AUDIT.md`,
+  `docs/domains/MASTERPLAN_SAAS.md`
 
 **Fixup performed (2026-06-27):** The pre-split docs referenced a flat monolith layout
 (`services/foo.py`, `routes/foo.py`, `db/models/foo.py`, `AINDY/services/foo.py`). Every code-path
@@ -1155,7 +1155,7 @@ token was Glob-verified against the current tree and rewritten:
   `IMPLEMENTATION_DOCS_AUDIT`, `MASTERPLAN_SAAS`, `ABSTRACTED_ALGORITHM_SPEC` were already clean
   (no stale flat paths) — left untouched.
 
-**Also fixed in the same pass — AGENTICS.md:** `docs/apps/AGENTICS.md` was already present before the
+**Also fixed in the same pass — AGENTICS.md:** `docs/architecture/AGENTICS.md` was already present before the
 migration (one of the original 3 app docs, not part of the 18 moved) but carried the same stale flat
 paths. It got the identical Glob-verified rewrite — mostly runtime-owned (`AINDY/agents/...`,
 `AINDY/routes/...`), with `db/models/agent_run.py`/`agent_event.py` → `apps/agent/models/...`.
@@ -1209,7 +1209,7 @@ not app-owned — the apps-monolith slice was small. Disposition:
     runtime content belongs to `aindy-runtime`.
   - `platform/governance/release_notes.md` → **ARCHIVE-ONLY** — completed pre-split sprint history;
     app release tracking starts fresh from the split (git history + `CHANGELOG.md`).
-  - `platform/governance/EVOLUTION_PLAN.md` → **BROUGHT OVER** as `docs/apps/EVOLUTION_PLAN.md`.
+  - `platform/governance/EVOLUTION_PLAN.md` → **BROUGHT OVER** as `docs/architecture/EVOLUTION_PLAN.md`.
     It's an existing, current roadmap (not synthesized): Phases 1–4 are completed runtime hardening
     (kept as historical context, owned upstream by `aindy-runtime`), Phase 5 is the current
     cross-repo phase, and Phases 6–7 + the named phases are app-facing. Brought over with
@@ -1218,7 +1218,7 @@ not app-owned — the apps-monolith slice was small. Disposition:
 
 - **`platform/governance/INVARIANTS.md` (late finding — was pre-classified runtime-only, actually
   mixed ~50/50):** the app-domain invariants were extracted to
-  `docs/platform/governance/INVARIANTS.md` — masterplan/genesis (single-active, locking,
+  `docs/operations/INVARIANTS.md` — masterplan/genesis (single-active, locking,
   synthesis-ready gate, audit-draft gate, atomic creation, non-null columns), analytics canonical-
   metrics uniqueness, rippletrace DropPoint-before-Ping, freelance non-null columns, and the
   JWT/API-key/rate-limit invariants whose protected surfaces are app routers (enforcement mechanism
@@ -1230,8 +1230,8 @@ not app-owned — the apps-monolith slice was small. Disposition:
 relocation and the **runtime half of `INVARIANTS.md`** — shipped upstream with
 aindy-runtime 1.8.0 (DOCS-BUCKET-A-1 / FR-4). App-side reciprocal cross-links updated:
 `docs/GOVERNANCE_INDEX.md` Level 0 lists the relocated runtime governance docs,
-`docs/platform/governance/INVARIANTS.md` points at the now-authored runtime half (via
-`RUNTIME_DOCSET_BOUNDARY.md`), and `docs/apps/EVOLUTION_PLAN.md`'s cross-repo preamble
+`docs/operations/INVARIANTS.md` points at the now-authored runtime half (via
+`RUNTIME_DOCSET_BOUNDARY.md`), and `docs/architecture/EVOLUTION_PLAN.md`'s cross-repo preamble
 notes the relocation. Nothing further app-side.
 
 **Reopen trigger:** A re-triage of `EVOLUTION_PLAN` phases as they complete, or a new
@@ -1269,7 +1269,7 @@ the status is real, but it is unreadable without reading every cell end to end. 
 Four closure claims were re-verified in code rather than taken from the prose, and all four held.
 
 **The correction that matters:** four rows below prescribe *"soak, then flip the flag"* as if it
-were a routine ops step. `docs/handoffs/SOAK_AUDIT_2026-08-15.md` — written after those rows —
+were a routine ops step. `docs/verification/SOAK_AUDIT_2026-08-15.md` — written after those rows —
 concluded the opposite, and its title is the finding: **"the gate that could never open."** Read
 `SOAK-THEN-FLIP-1` before acting on any "soak, then flip" instruction in this section.
 
@@ -1309,7 +1309,7 @@ application guard, the DB unique-index rejection, and that distinct sessions rem
 | RippleTrace productization incomplete — execution-causality, graph edges, UI, and now end-to-end causal-graph validation (backend + frontend, Steps 1–2, 2026-06-28) exist; deeper insight generation and broader scenario coverage do not | rippletrace | M | before using RippleTrace as a primary incident/audit surface |
 | Masterplan dependency cascade + execution automation — anchor/ETA debt closed; ETA is now plan-scoped + cascade/critical-path aware (MASTERPLAN_SAAS Step 1, 2026-06-30, `apps/masterplan/services/eta_service.py`). task completion now returns the refreshed projection (Step 3, `_recalculate_active_masterplan_eta` → `task_orchestration.masterplan_projection`). the plan's ETA panel now surfaces the cascade metrics directly — basis chip, critical-chain depth, ready/blocked — and adopts the completion-response projection reactively via a `MasterplanProjectionProvider` context so completing a task refreshes the plan panel without a refetch (MASTERPLAN_SAAS Step 2, 2026-06-30, `client/src/components/app/MasterPlanDashboard.jsx`, `client/src/context/MasterplanProjectionContext.jsx`). ETA is now continuous-time: per-task `estimated_hours` drives a remaining-effort + effort-weighted-critical-path projection (`projection_basis="duration"`), reducing to count-based cascade when estimates are absent (2026-06-30, `apps/tasks/services/task_service.py`, `apps/masterplan/services/eta_service.py`). external automation connectors now reach external surfaces — CRM (stub → provider-agnostic outbound POST) and social (additive external delivery on top of the internal feed) join email/webhook/stripe, now registered via `register_connector` and dispatched through the runtime's capability-enforced connector boundary (FR-1 adopted 2026-07-18 on aindy-runtime 1.8.0 — see MASTERPLAN-CONNECTOR-RUNTIME-1, RESOLVED) (`apps/automation/services/automation_execution_service.py`, `tests/unit/test_automation_connectors.py`). No remaining app or runtime connector debt | masterplan | L | closed |
 | ARM self-tuning — RESOLVED (2026-07-17, #80). `auto_apply_safe` is now consumed by a guarded auto-apply loop (`apps/arm/services/arm_autotune_service.py`): a pure gate (numeric-knob whitelist / absolute bounds / min-sessions / cooldown) applies the safe subset with an auditable, revertible trail (`ArmAutoTuneLog`), plus syscall `sys.v1.arm.autotune` + `/arm/config/auto-tune` endpoints (dry-run default). ARM's Reflect→Adjust loop is closed | arm | — | closed |
-| Infinity loop autonomy still shallow — reasoning extracted into a reusable engine + dedicated `reason()` service (strategy_selector/feedback_analyzer) the loop consumes, plus `reasoning.*` observability events, agent integration (planner consumes the `analytics.reasoning_recommendation` job; completion hook → reasoning-backed orchestrator), reasoning `execution_intent` + a registered `reasoning` flow strategy / `reasoning_apply` flow, and the `reasoning.evaluate` agent tool (`apps/analytics/services/reasoning/`, `apps/analytics/agents/`, ARM/Reasoning Phases 1–5 + tool follow-up, 2026-06-28/29). All app-ownable reasoning phases are complete. Learned threshold/weight calibration is now underway (2026-07-17): the REFLECT expected-score calibrator ships in **shadow** (Phase 0, #85) + **advisory** (Phase 1, #86), default-off (`AINDY_INFINITY_LEARNED_SHADOW` / `_ADVISORY`), scoped in `docs/architecture/INFINITY_LEARNED_RECURSION_SCOPE.md` — Phase 2 (learned model *drives* canonical scoring) + the 3b-full weighting call remain. The bounded autonomous controller is the runtime **FR-3** Next-Action acting — shipped in aindy-runtime 1.8.0 (`next_action.dispatched` outcome contract, gated on `AINDY_NEXT_ACTION_ACTING`, default off). App-side adoption DONE (2026-07-18): the dispatch outcome is read back via `apps/agent/agents/next_action_outcomes.py` + `GET /apps/agent/next-action/outcomes` (disposition + CHOSEN→DISPATCHED chain + per-disposition summary — the soak observability). Remaining is ops-only: soak, then flip `AINDY_NEXT_ACTION_ACTING` on | analytics | M | Phase 2 needs the 3b-full decision + a soak; FR-3 flip is ops |
+| Infinity loop autonomy still shallow — reasoning extracted into a reusable engine + dedicated `reason()` service (strategy_selector/feedback_analyzer) the loop consumes, plus `reasoning.*` observability events, agent integration (planner consumes the `analytics.reasoning_recommendation` job; completion hook → reasoning-backed orchestrator), reasoning `execution_intent` + a registered `reasoning` flow strategy / `reasoning_apply` flow, and the `reasoning.evaluate` agent tool (`apps/analytics/services/reasoning/`, `apps/analytics/agents/`, ARM/Reasoning Phases 1–5 + tool follow-up, 2026-06-28/29). All app-ownable reasoning phases are complete. Learned threshold/weight calibration is now underway (2026-07-17): the REFLECT expected-score calibrator ships in **shadow** (Phase 0, #85) + **advisory** (Phase 1, #86), default-off (`AINDY_INFINITY_LEARNED_SHADOW` / `_ADVISORY`), scoped in `docs/infinity/INFINITY_LEARNED_RECURSION_SCOPE.md` — Phase 2 (learned model *drives* canonical scoring) + the 3b-full weighting call remain. The bounded autonomous controller is the runtime **FR-3** Next-Action acting — shipped in aindy-runtime 1.8.0 (`next_action.dispatched` outcome contract, gated on `AINDY_NEXT_ACTION_ACTING`, default off). App-side adoption DONE (2026-07-18): the dispatch outcome is read back via `apps/agent/agents/next_action_outcomes.py` + `GET /apps/agent/next-action/outcomes` (disposition + CHOSEN→DISPATCHED chain + per-disposition summary — the soak observability). Remaining is ops-only: soak, then flip `AINDY_NEXT_ACTION_ACTING` on | analytics | M | Phase 2 needs the 3b-full decision + a soak; FR-3 flip is ops |
 | Nodus-native reasoning execution — RESOLVED (2026-07-18). `register_nodus_workflow` adopted in 1.7.0 (the `.nd` registers at boot); FR-5 (native workflows reach app callables) shipped in aindy-runtime 1.9.0, and the app now **routes reasoning-apply through the Nodus VM**, flag-gated. `reasoning_apply_v1.nd` calls `sys("sys.v1.analytics.get_reasoning_recommendation", …)` (the `get_` verb makes `_infer_dispatch_capability` grant `analytics.read`, matching the syscall's required capability — the capability-inference gotcha that first denied a `reasoning_recommendation`-named syscall). `apps/analytics/services/reasoning/nodus_apply.py::run_reasoning_apply` executes it via `run_nodus_workflow` behind `AINDY_REASONING_NODUS_NATIVE` (default off) and normalizes `data.nodus_output_state.reasoning_apply_result` to the existing `{data: recommendation}` envelope; `reasoning_apply_node` delegates to it; any Nodus failure falls back to the Python path. Behavior-neutral substrate swap — verified end-to-end on the app-profile VM (`tests/unit/test_reasoning_nodus_apply.py`). Remaining is ops-only: soak, then flip `AINDY_REASONING_NODUS_NATIVE` | analytics | — | soak, then flip the flag |
 | Infinity support-system depth — explicit `UserFeedback` nudges per-user KPI **weights** (Step 5), support inputs are centralized into one `SupportState` snapshot (Step 1), and the support → decision seam has behavioral coverage (Step 6) (2026-06-29). Remaining: weight feedback into the KPI **score formulas** (deliberately deferred — risks conflating measurement with sentiment; weights are the principled lever); the full DB-backed loop E2E (integration-tier); fold `identity_boot_service` state into the snapshot; and consume observability + agent/async execution aggregates (Steps 3/4) — runtime-gated, need a runtime aggregate syscall/job. ARM's analysis-quality signal is now consumed from the ARM domain (DONE 2026-07-17): `arm_metrics_service.analysis_quality_signals` (exposed via `apps.arm.public.get_analysis_quality_signals`) computes usage + architecture/integrity quality avg + trend, and Infinity's `ai_productivity_boost` / `decision_efficiency` KPIs consume it — analytics no longer re-parses ARM's `result_full` schema (same scoring math, single source of truth) | analytics | M | when deepening Infinity optimization |
 | Agentics completion is runtime-owned — the doc that defined the `aindy-runtime` split. App-side decision levers (autonomy trigger policy, agent ranking strategy, completion hook) are now tested (AGENTICS hardening, 2026-06-29). Phases B (Nodus VM/`.nd`) and E (durable workers), and most of D (delegation/registry/conflict), are runtime work in `aindy-runtime`, not app edits; the registerable D lever (ranking) is done | runtime/agent | L | when `aindy-runtime` advances Agentics execution |

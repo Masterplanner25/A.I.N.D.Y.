@@ -263,7 +263,7 @@ async def adapt_policy_thresholds_endpoint(
 
 # ── Three-axis Infinity score — observability (Phase A) ───────────────────────
 # Volume / Worth / Trajectory computed alongside master_score, for observation only.
-# See docs/architecture/INFINITY_SCORE_MODEL.md. Never drives canonical scoring.
+# See docs/infinity/INFINITY_SCORE_MODEL.md. Never drives canonical scoring.
 
 from pydantic import BaseModel  # noqa: E402
 
@@ -364,7 +364,7 @@ async def get_goal_attainment(
     """Resolve the active plan's declared goal against real domain signals.
 
     Phase 0 of the goal-attainment work (see
-    docs/handoffs/MASTERPLAN_GOAL_ATTAINMENT_SPEC.md): read-only and **not wired into
+    docs/specs/MASTERPLAN_GOAL_ATTAINMENT_SPEC.md): read-only and **not wired into
     scoring** — `masterplan_progress` is unchanged. This route exists so the resolver
     can be inspected against real plans before it influences anything.
 

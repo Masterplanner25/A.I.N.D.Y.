@@ -1,6 +1,6 @@
 """Freelance Phase 3 — client workflow automation (multi-step lifecycle flows).
 
-Covers the two chained flows added in Phase 3 (`docs/apps/FREELANCING_SYSTEM.md`):
+Covers the two chained flows added in Phase 3 (`docs/domains/FREELANCING_SYSTEM.md`):
 
   * ``freelance_client_onboarding``  — lead -> client + order -> delivery dispatch
   * ``freelance_order_fulfillment``  — deliver order -> refresh revenue metrics

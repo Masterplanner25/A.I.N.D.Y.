@@ -181,7 +181,7 @@ in `aindy-runtime/alembic/`.
   rule as the runtime.
 
 Full migration discipline (revision workflow, additive-only policy, integrity and
-merge rules): `docs/deployment/MIGRATION_POLICY.md`.
+merge rules): `docs/operations/MIGRATION_POLICY.md`.
 
 ---
 
@@ -295,8 +295,8 @@ tells you the slot is full. It does not tell you what filled it.
    the healthcheck being impatient, not a crash.
 
 Only after those three should you look at application code. Full write-ups:
-`docs/handoffs/DEFECT_GENESIS_MESSAGE_LATENCY.md` §8.1 and
-`docs/handoffs/DEFECT_INFINITY_RECALC_DEBOUNCE.md`.
+`docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md` §8.1 and
+`docs/verification/DEFECT_INFINITY_RECALC_DEBOUNCE.md`.
 
 ---
 
@@ -310,13 +310,13 @@ Only after those three should you look at application code. Full write-ups:
 | Cross-app import checker | `scripts/check_app_imports.py` |
 | API reference drift guard | `scripts/check_api_reference.py` |
 | App-owned Alembic migrations | `alembic/alembic/versions/` |
-| Migration policy | `docs/deployment/MIGRATION_POLICY.md` |
-| Server deployment guide (+ enabling the Claude planner) | `docs/deployment/DEPLOYMENT.md` |
+| Migration policy | `docs/operations/MIGRATION_POLICY.md` |
+| Server deployment guide (+ enabling the Claude planner) | `docs/operations/DEPLOYMENT.md` |
 | Forward roadmap / track status | `docs/architecture/BUILD_PLAN.md` |
 | Plugin registry pattern doc | `docs/architecture/PLUGIN_REGISTRY_PATTERN.md` |
 | Boot profiles doc | `docs/architecture/BOOT_PROFILES.md` |
 | Cross-domain coupling doc | `docs/architecture/CROSS_DOMAIN_COUPLING.md` |
-| Runtime dependency contract doc | `docs/apps/RUNTIME_DEPENDENCY.md` |
-| CI ownership doc | `docs/apps/CI_OWNERSHIP.md` |
+| Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
+| CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |

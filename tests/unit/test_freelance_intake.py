@@ -1,7 +1,7 @@
 """Freelance Phase 1 — lead -> client -> order lineage.
 
 Covers the commercial intake path added in the Freelancing evolution
-(`docs/apps/FREELANCING_SYSTEM.md`, Phase 1): a `ClientAccount` entity, orders
+(`docs/domains/FREELANCING_SYSTEM.md`, Phase 1): a `ClientAccount` entity, orders
 auto-linked to clients on creation, lead->client->order conversion, and client
 lineage queries. Runs on the SQLite app-profile harness.
 """

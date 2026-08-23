@@ -5,7 +5,7 @@ Phase A measured the axes; Phase B shadow-logged them; Phase C is the first phas
 Worth and Trajectory axes are allowed to *move* the canonical ``master_score`` — but only
 when ``AINDY_INFINITY_THREE_AXIS_ADVISORY`` is on (default off), and only within bounded,
 reversible weight clamps. The behavioral KPIs remain the anchor (≥ ``BEHAVIORAL_MIN_WEIGHT``
-of the composite). See §8 of ``docs/architecture/INFINITY_SCORE_MODEL.md``.
+of the composite). See §8 of ``docs/infinity/INFINITY_SCORE_MODEL.md``.
 
 Design decisions this module implements (all locked in §8):
   * **Worth source = declared prior only** — the advisory blend reads Worth from the

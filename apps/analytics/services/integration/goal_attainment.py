@@ -14,7 +14,7 @@ no ``APP_DEPENDS_ON`` edge is added.
 Phase 0 (this module): resolver + unit registry + the ``tasks`` unit, which is the only
 one answerable with an existing syscall. Not wired into scoring — exposed read-only at
 ``GET /apps/analytics/goal-attainment`` so it can be inspected before it influences
-anything. See ``docs/handoffs/MASTERPLAN_GOAL_ATTAINMENT_SPEC.md``.
+anything. See ``docs/specs/MASTERPLAN_GOAL_ATTAINMENT_SPEC.md``.
 
 Contract note: every failure mode returns an *unresolved* result rather than raising.
 An unsupported unit is a normal answer, not an error — the caller must be able to fall

@@ -21,9 +21,9 @@ Documentation ownership note:
 - this document is currently shared because it maps both `AINDY/` and `apps/`
 - runtime-only operating behavior is defined in the separate runtime repo
 - the apps-side dependency boundary is documented in
-  [Runtime Dependency](../apps/RUNTIME_DEPENDENCY.md)
+  [Runtime Dependency](../runtime/RUNTIME_DEPENDENCY.md)
 - the future apps repo shape is defined in
-  [Apps Monolith Repo Shape](../apps/APPS_MONOLITH_REPO_SHAPE.md)
+  [Apps Monolith Repo Shape](../archive/APPS_MONOLITH_REPO_SHAPE.md)
 
 ## Boundary Status
 
@@ -263,7 +263,7 @@ Future extraction expectation:
 - app code moves together as one repo rooted around `apps/`
 - runtime code becomes an installed dependency rather than a sibling source tree
 - the concrete target layout is documented in
-  [Apps Monolith Repo Shape](../apps/APPS_MONOLITH_REPO_SHAPE.md)
+  [Apps Monolith Repo Shape](../archive/APPS_MONOLITH_REPO_SHAPE.md)
 
 ### The Syscall Contract
 The syscall dispatcher enforces capability checks, payload validation, version parsing, tenant context, and standardized envelopes. Version compatibility rules are defined in `AINDY/kernel/syscall_versioning.py`; runtime dispatch is implemented in `AINDY/kernel/syscall_dispatcher.py`.
@@ -302,7 +302,7 @@ Key files and directories:
 - `client/src/components/shared/`
 - `client/src/App.jsx`
 
-Use [Client Ownership](../apps/CLIENT_OWNERSHIP.md) as the authoritative
+Use [Client Ownership](../operations/CLIENT_OWNERSHIP.md) as the authoritative
 repo-split decision for `client/`.
 
 ## System Diagrams
@@ -346,7 +346,7 @@ config and DB setup
 - Runtime syscall, memory, isolation, and execution contracts live in the separate `aindy-runtime` repo
 - [Cross-Domain Coupling](./CROSS_DOMAIN_COUPLING.md)
 - [Plugin Registry Pattern](./PLUGIN_REGISTRY_PATTERN.md)
-- [Runtime Dependency](../apps/RUNTIME_DEPENDENCY.md)
+- [Runtime Dependency](../runtime/RUNTIME_DEPENDENCY.md)
 
 ## Last Verified
 2026-07-05

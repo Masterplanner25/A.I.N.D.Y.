@@ -17,8 +17,36 @@ This repo owns app domain code (`apps/<domain>/...`), the React client
 (`client/`), the app plugin manifest, app-owned migrations, and the app docs
 below. It does **not** own `AINDY/` — runtime contracts are *referenced* upstream
 authority, not redefined here. See
-[apps/RUNTIME_DEPENDENCY.md](./apps/RUNTIME_DEPENDENCY.md) and the runtime repo's
+[docs/runtime/RUNTIME_DEPENDENCY.md](./runtime/RUNTIME_DEPENDENCY.md) and the runtime repo's
 `docs/runtime/RUNTIME_DOCSET_BOUNDARY.md`.
+
+## 0. Directory Map
+
+Restructured **2026-08-22**. Directories are named for **what a document is**, not for which
+pre-split team owned it. `docs/apps/`, `docs/deployment/` and `docs/platform/` were retired:
+the first was a catch-all, and the other two were named after things they did not contain —
+`docs/platform/` held no platform-layer docs at all, only three app-owned files inherited from
+the old monolith's directory skeleton.
+
+| Directory | Holds | Note |
+|---|---|---|
+| `docs/architecture/` | how the system is built | plugin registry, boot profiles, coupling, public surfaces, roadmap |
+| `docs/infinity/` | the algorithm | 8 docs that were split across two directories, for the thing the README calls the point of the product |
+| `docs/domains/` | one guide per domain app | |
+| `docs/api/` | the HTTP surface | `API_REFERENCE` (app `/apps/*`, CI-guarded) + `API_CONTRACTS` (route→owner inventory) |
+| `docs/runtime/` | **the seam with `aindy-runtime`** | dependency contract, the feature-request register, upgrade notes. This repo does not own the runtime; it owns how it consumes it |
+| `docs/operations/` | running and shipping it | deploy, migrations, CI, testing, invariants, settings |
+| `docs/specs/` | forward specs, not yet built | |
+| `docs/verification/` | what we checked and what broke | walk log, soak audit, defect write-ups |
+| `docs/archive/` | dated, retired, kept for provenance | `status: outdated`; never retro-edited |
+| `docs/handoffs/` | **session handoffs only** | the owner's local working notes, gitignored. The directory finally contains only what its name says |
+
+**Every directory above except `docs/handoffs/` is frontmatter-linted** by
+`scripts/lint_docs.py`. Before this restructure the linter named five directories that have
+never existed in this repo and skipped the two largest real ones, so 44 of 65 documents were
+never checked — including the runtime feature-request register and every spec.
+
+---
 
 ## 1. Documentation Hierarchy
 
@@ -37,20 +65,20 @@ App code and docs must conform to these and must not contradict or redefine them
   **override default agent behavior**. First read before any change.
 
 ### Level 2 — Architecture & integration contract (app-owned)
-- `docs/platform/governance/INVARIANTS.md` — app-domain invariants (non-negotiable
+- `docs/operations/INVARIANTS.md` — app-domain invariants (non-negotiable
   constraints enforced by `apps/`); runtime invariants are owned by `aindy-runtime`.
 - `docs/architecture/ARCHITECTURE_MAP.md` — app architecture overview.
 - `docs/architecture/PLUGIN_REGISTRY_PATTERN.md` — runtime↔app registration contract.
 - `docs/architecture/BOOT_PROFILES.md` — boot profiles and manifest selection.
 - `docs/architecture/CROSS_DOMAIN_COUPLING.md` — cross-domain dependency rules.
-- `docs/apps/APPS_MONOLITH_REPO_SHAPE.md` — target repo shape.
-- `docs/apps/RUNTIME_DEPENDENCY.md` — runtime dependency contract.
-- `docs/apps/CLIENT_OWNERSHIP.md` — frontend ownership.
+- `docs/archive/APPS_MONOLITH_REPO_SHAPE.md` — target repo shape.
+- `docs/runtime/RUNTIME_DEPENDENCY.md` — runtime dependency contract.
+- `docs/operations/CLIENT_OWNERSHIP.md` — frontend ownership.
 
 ### Level 3 — Public surface & interface authority (app-owned)
 - `docs/architecture/PUBLIC_SURFACE_CONTRACTS.md` — cross-domain public surfaces.
 - `docs/architecture/PUBLIC_SURFACE_AUDIT.md`, `PUBLIC_SURFACE_MIGRATION_GUIDE.md`.
-- `docs/platform/interfaces/API_CONTRACTS.md` — HTTP route inventory
+- `docs/api/API_CONTRACTS.md` — HTTP route inventory
   (validated by `scripts/check_api_contracts.py`).
 - `docs/api/API_REFERENCE.md` (app-owned `/apps/*` coverage guarded by
   `scripts/check_api_reference.py`), `CHANGELOG.md` (repo root) — app REST surface + history.
@@ -58,19 +86,19 @@ App code and docs must conform to these and must not contradict or redefine them
 - `docs/architecture/USER_ID_AUDIT.md` — per-user scoping audit.
 
 ### Level 4 — Engineering & collaboration
-- `docs/platform/engineering/TESTING_STRATEGY.md`
-- `docs/deployment/MIGRATION_POLICY.md`, `docs/deployment/DEPLOYMENT.md` — schema/migration discipline + server deploy walkthrough.
-- `docs/apps/CI_OWNERSHIP.md`, `docs/apps/GITHUB_SETTINGS_CHECKLIST.md`
-- `docs/apps/IMPLEMENTATION_DOCS_AUDIT.md`
+- `docs/operations/TESTING_STRATEGY.md`
+- `docs/operations/MIGRATION_POLICY.md`, `docs/operations/DEPLOYMENT.md` — schema/migration discipline + server deploy walkthrough.
+- `docs/operations/CI_OWNERSHIP.md`, `docs/operations/GITHUB_SETTINGS_CHECKLIST.md`
+- `docs/verification/IMPLEMENTATION_DOCS_AUDIT.md`
 
 ### Level 5 — Evolution, risk & domain guides
 - `TECH_DEBT.md` (repo root) — debt register.
-- `docs/apps/EVOLUTION_PLAN.md` — phased app evolution roadmap.
+- `docs/architecture/EVOLUTION_PLAN.md` — phased app evolution roadmap.
 - `LIVE_VERIFICATION_SCOPE.md` — live-stack verification scope.
-- Domain guides under `docs/apps/`: `AGENTICS`, `AUTONOMOUS_REASONING_MODULE`,
-  `INFINITY_ALGORITHM*`, `RIPPLETRACE`, `SEARCH_SYSTEM`, `SOCIAL_LAYER`,
-  `FREELANCING_SYSTEM`, `ABSTRACTED_ALGORITHM_SPEC`,
-  `FORMULA_AND_ALGORITHM_OVERVIEW`; `docs/apps/MASTERPLAN_SAAS.md`.
+- Domain guides under `docs/domains/`: `AUTONOMOUS_REASONING_MODULE`, `FREELANCING_SYSTEM`,
+  `MASTERPLAN_SAAS`, `RIPPLETRACE`, `SEARCH_SYSTEM`, `SOCIAL_LAYER`.
+- The algorithm under `docs/infinity/` — see §0.
+- Forward specs under `docs/specs/`; verification records under `docs/verification/`.
 
 ## 2. Authority Rules
 - Upstream runtime contracts (Level 0) are authoritative; app docs may depend on
@@ -90,11 +118,11 @@ A structural change must update the docs it affects, in the same change:
 - Registration/bootstrap change → `docs/architecture/PLUGIN_REGISTRY_PATTERN.md`.
 - New/changed cross-domain coupling → `docs/architecture/CROSS_DOMAIN_COUPLING.md`
   and `PUBLIC_SURFACE_CONTRACTS.md`.
-- Route behavior change → `docs/platform/interfaces/API_CONTRACTS.md`,
+- Route behavior change → `docs/api/API_CONTRACTS.md`,
   `docs/api/API_REFERENCE.md`, and `CHANGELOG.md` (breaking/additive).
-- Schema/migration discipline change → `docs/deployment/MIGRATION_POLICY.md`.
-- Deploy artifact / serve-time env change → `docs/deployment/DEPLOYMENT.md`.
-- Test/validation discipline change → `docs/platform/engineering/TESTING_STRATEGY.md`.
+- Schema/migration discipline change → `docs/operations/MIGRATION_POLICY.md`.
+- Deploy artifact / serve-time env change → `docs/operations/DEPLOYMENT.md`.
+- Test/validation discipline change → `docs/operations/TESTING_STRATEGY.md`.
 - New deferred risk → `TECH_DEBT.md`.
 
 ## 4. Agent Interaction Protocol
@@ -130,6 +158,6 @@ modifications. For runtime behavior, defer to the runtime repo's authority docs.
 ## 9. Out of Scope (owned elsewhere)
 - Runtime behavior, execution/retry semantics, memory bridge, syscalls,
   invariants, deployment model → `aindy-runtime` (`docs/runtime/`).
-- The app evolution roadmap lives at `docs/apps/EVOLUTION_PLAN.md`
+- The app evolution roadmap lives at `docs/architecture/EVOLUTION_PLAN.md`
   (Level 5). Its Phase 1–4 runtime/platform hardening is owned upstream by
   `aindy-runtime` and retained there only as historical context.

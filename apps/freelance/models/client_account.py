@@ -1,6 +1,6 @@
 """Commercial client/account entity for the freelance domain.
 
-Phase 1 of the Freelancing evolution (`docs/apps/FREELANCING_SYSTEM.md`): give
+Phase 1 of the Freelancing evolution (`docs/domains/FREELANCING_SYSTEM.md`): give
 the freelance layer a first-class client/account record so leads, clients, and
 orders form one ``lead -> client -> order`` lineage instead of isolated rows.
 

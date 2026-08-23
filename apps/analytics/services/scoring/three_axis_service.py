@@ -4,7 +4,7 @@ Three-axis Infinity score — observability snapshot (Phase A).
 Computes Volume / Worth / Trajectory *alongside* the canonical `master_score`, for
 observation only. It **never** writes `master_score` or feeds `calculate_infinity_score`
 — the whole point of Phase A is to make the three axes visible before any decision to let
-them drive scoring (see `docs/architecture/INFINITY_SCORE_MODEL.md`).
+them drive scoring (see `docs/infinity/INFINITY_SCORE_MODEL.md`).
 
 Reads through the same boundaries the existing KPI scorers use — the
 ``sys.v1.task.get_user_tasks`` snapshot and the analytics ``dependency_adapter`` pillar

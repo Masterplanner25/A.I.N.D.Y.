@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-API_CONTRACTS_PATH = REPO_ROOT / "docs" / "platform" / "interfaces" / "API_CONTRACTS.md"
+API_CONTRACTS_PATH = REPO_ROOT / "docs" / "api" / "API_CONTRACTS.md"
 ROUTER_PATH_RE = re.compile(r"`([^`]+(?:router|routes)[^`]*\.py)`")
 
 ALLOWLIST = {

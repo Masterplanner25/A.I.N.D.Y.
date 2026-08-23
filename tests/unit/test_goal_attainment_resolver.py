@@ -7,7 +7,7 @@ undeclared goal, unusable target, unknown unit, degraded domain — must return
 because the whole design depends on scoring being unable to regress when a domain is
 down.
 
-See docs/handoffs/MASTERPLAN_GOAL_ATTAINMENT_SPEC.md.
+See docs/specs/MASTERPLAN_GOAL_ATTAINMENT_SPEC.md.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """End-to-end validation for RippleTrace causal-graph reconstruction.
 
-Evolution Plan (`docs/apps/RIPPLETRACE.md`) — Step 1: prove that a *single
+Evolution Plan (`docs/domains/RIPPLETRACE.md`) — Step 1: prove that a *single
 execution* produces reconstructable event **and** memory causality. The
 `trace_id` propagation fix means every event in one run shares a single
 `trace_id`; these tests assert the app-owned `rippletrace_service` rebuilds the

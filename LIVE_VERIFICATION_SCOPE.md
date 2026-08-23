@@ -10,7 +10,7 @@ apps it was designed to serve, from a real user's perspective.
 > **Status (2026-07-22): live verification is COMPLETE.** Both halves have been walked
 > — the Product UI and the Platform/operator UI — and the Phase 2b cross-cutting checks
 > have been run. **Phase 2c is gated on real usage, not on outstanding work** (see 2c).
-> 34 findings are recorded in `docs/handoffs/FRONTEND_WALK_LOG.md`; ~25 defects were
+> 34 findings are recorded in `docs/verification/FRONTEND_WALK_LOG.md`; ~25 defects were
 > fixed and merged across PRs #131–#166. What remains from this phase is a *decision
 > list*, not a bug list — the largest cluster being walk-log items 18 / 29 / 32, which
 > are one decision seen from three surfaces.
@@ -27,7 +27,7 @@ apps it was designed to serve, from a real user's perspective.
 > **2c was blocked on the wrong thing.** The numbers below (`three_axis_shadow_records` = 2,
 > `infinity_expectation_predictions` = 1, "~20+ days to reach the fitting floor") are stale: the
 > live counts are **58** and **320**, and the floor was crossed long ago.
-> `docs/handoffs/SOAK_AUDIT_2026-08-15.md` then measured 294 / 269 / 285 and concluded the
+> `docs/verification/SOAK_AUDIT_2026-08-15.md` then measured 294 / 269 / 285 and concluded the
 > opposite of what this section assumes — **"the gate that could never open."** Not for want of
 > rows, but because they are the same measurement repeated. **The blocker is variety, not volume,
 > and not time.** The reasoning below about synthetic traffic was right; what it missed is that

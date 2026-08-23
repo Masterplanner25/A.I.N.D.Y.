@@ -79,14 +79,14 @@ the Genesis plan-authoring engine, and the agent engine now reasons with Claude 
 suitably-provisioned deployment. **The remaining open item is not a track** — it's **3b-full**
 (which pillar signal moves the canonical Infinity score, and at what weight), a deliberate
 values decision now framed as the Worth axis of the three-axis model. See
-[INFINITY_SCORE_MODEL.md](./INFINITY_SCORE_MODEL.md).
+[INFINITY_SCORE_MODEL.md](../infinity/INFINITY_SCORE_MODEL.md).
 
 > **Superseded 2026-08-15.** This item was recorded as "gated on a shadow soak, not on build."
 > The soak ran and produced nothing usable — across 294 records Worth is constant and Trajectory
 > is entirely NULL. It is **usage-blocked**, not soak-gated. Note the blocker is *not* revenue:
 > Worth is computed from **declared** worth (`intent_value_declarations`, 0 rows — the API exists
 > with no UI) and Trajectory from estimate-vs-actual pace on completed tasks. See
-> [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md).
+> [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../verification/SOAK_AUDIT_2026-08-15.md).
 
 ## Tracks
 
@@ -122,7 +122,7 @@ Make the Claude planner the default instead of opt-in.
   Getting there also fixed four latent deploy walls now shipped in the compose: `AINDY_BOOT_MODE`
   (serve defaulted to `runtime-only` = zero apps), the planner env pass-through, the 30s DB
   idle-in-transaction reap (→ 120s), and the Nodus per-execution cold-start budget (→ 120s + 60s).
-  Turnkey steps: [../deployment/DEPLOYMENT.md](../deployment/DEPLOYMENT.md) ("Enabling the Claude
+  Turnkey steps: [../deployment/DEPLOYMENT.md](../operations/DEPLOYMENT.md) ("Enabling the Claude
   planner" + "Tuning for slower / cold-start-heavy hosts").
 - **Caveat (host, not code):** the literal loop needs a native-Linux Docker engine — Docker
   Desktop's VM (even via WSL integration, which silently substitutes its own engine) has slow pg
@@ -184,7 +184,7 @@ Track 2 proven on a provisioned native-Linux host. **All five tracks are shipped
 - **3b-full weighting** *(open — **usage-blocked**, not soak-gated)* — which pillar signal is
   promoted to move the canonical Infinity score, and at what weight. A values decision, framed as
   the **Worth axis** of the three-axis model in
-  [INFINITY_SCORE_MODEL.md](./INFINITY_SCORE_MODEL.md). Phases A/B/C (measure → shadow → advisory)
+  [INFINITY_SCORE_MODEL.md](../infinity/INFINITY_SCORE_MODEL.md). Phases A/B/C (measure → shadow → advisory)
   are **shipped**. Unifies with the learned-recursion work below — the two resolve to one decision.
 
   > **Restated 2026-08-15.** This was recorded as needing *"the Phase-B shadow soak's divergence
@@ -194,11 +194,11 @@ Track 2 proven on a provisioned native-Linux host. **All five tracks are shipped
   > time cannot fix it. It is *not* a revenue blocker: Worth reads **declared** worth
   > (`intent_value_declarations`, 0 rows, API routed but no UI) and `realized_revenue` is
   > observability-only, never folded into the score. Full evidence in
-  > [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md). **Do not flip.**
+  > [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../verification/SOAK_AUDIT_2026-08-15.md). **Do not flip.**
 - **Learned recursion (REFLECT calibration)** *(shipped through advisory)* — the learned
   expected-score calibrator: Phase 0 (shadow) and Phase 1 (advisory) are **merged**; Phase 2
   (driving the score) re-opens 3b-full and is soak-gated. Scoped in
-  [INFINITY_LEARNED_RECURSION_SCOPE.md](./INFINITY_LEARNED_RECURSION_SCOPE.md).
+  [INFINITY_LEARNED_RECURSION_SCOPE.md](../infinity/INFINITY_LEARNED_RECURSION_SCOPE.md).
 - **Face surface shape** *(resolved)* — shipped as a dedicated `/assistant` page in the user nav,
   not a global command bar.
 - **Streaming** *(resolved for now)* — MVP polls the run/steps endpoints (`useEffect` interval);
@@ -289,7 +289,7 @@ Recovered since: the composite and its per-user learned weights (`infinity_servi
 **Still missing: the Elo apex ranker** — TWR is a demoted peer route and there is no rating system
 (`grep -w Elo` across `apps/` and `client/src` returns nothing, confirmed 2026-08-15). The concept
 is reframed, not abandoned, in
-[`../handoffs/SELF_TRUST_CALIBRATION_SPEC.md`](../handoffs/SELF_TRUST_CALIBRATION_SPEC.md).
+[`../handoffs/SELF_TRUST_CALIBRATION_SPEC.md`](../specs/SELF_TRUST_CALIBRATION_SPEC.md).
 
 ### Two knots, untangled
 
@@ -321,7 +321,7 @@ weeks of security, adoption, diagnosis and specs moved everything except those t
 
 - Reconciled architecture map — **retired as an external artifact 2026-08-15**; its content is
   folded into this document (see the strategic-diagnosis section).
-- [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../handoffs/SOAK_AUDIT_2026-08-15.md) — why the
+- [`../handoffs/SOAK_AUDIT_2026-08-15.md`](../verification/SOAK_AUDIT_2026-08-15.md) — why the
   soak-gated flags cannot be validated on current data.
 - [ARCHITECTURE_MAP.md](./ARCHITECTURE_MAP.md) — code-structure reference.
 - [PLUGIN_REGISTRY_PATTERN.md](./PLUGIN_REGISTRY_PATTERN.md) — how apps extend the runtime.
