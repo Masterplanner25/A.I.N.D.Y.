@@ -100,10 +100,20 @@ IS_CORE_DOMAIN: bool = False
 def register() -> None:
     from AINDY.platform_layer.registry import (
         register_router, register_models, register_flow_definitions,
-        register_scheduled_job, register_syscall, register_agent_tool,
-        register_event_handler,
+        register_scheduled_job, register_event_handler,
+        register_run_tool_provider,
         # ...40 `register_*` functions in total (counted 2026-08-20)
     )
+    # SYSCALLS DO NOT COME FROM HERE. Verified 2026-08-22:
+    #   from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
+    # `platform_layer.registry` exports a `register_syscall` too, and it is the wrong one —
+    # it writes into a dict the SyscallDispatcher never reads. Every one of this repo's
+    # 90 registered syscalls uses the kernel path; zero use the platform_layer path, and
+    # this block used to say otherwise.
+    #
+    # AGENT TOOLS: use `register_run_tool_provider` (a callable returning the tool list),
+    # NOT `register_agent_tool` (static registration). No app uses the static form; the
+    # 16 live tools all arrive through a provider. `iter_agent_tools()` returns 0.
     # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
     # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
     # `register_syscalls` — which do not exist. Grepping for them returns nothing, which

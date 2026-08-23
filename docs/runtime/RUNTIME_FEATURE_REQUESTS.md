@@ -7,6 +7,66 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-23 — `/observability/system` reports 0 syscalls and 0 tools while 90 and 16 are live 🔴 observability
+
+**apps-monolith ref:** found 2026-08-22 while measuring the syscall vocabulary for a CLI-ownership
+question. Two separate causes, one visible symptom, and the symptom is a confident wrong number on
+an operator surface.
+
+### Measured on a full 16-app boot
+
+| `GET /observability/system` → `registry` | reports | actual |
+|---|---|---|
+| `syscall_count` | **0** | **90** (`AINDY.kernel.syscall_registry.SYSCALL_REGISTRY`) |
+| `tool_count` | **0** | **16** (`get_tools_for_run('agent')`) |
+
+`observability_router.py:491` computes both from `platform_layer.registry`:
+`sum(1 for _ in iter_syscalls())` and `sum(1 for _ in iter_agent_tools())`.
+
+### Cause 1 — two functions named `register_syscall`, and the dispatcher reads only one
+
+`platform_layer/registry.py:482` validates the handler and stores it in `_syscalls`. **The
+`SyscallDispatcher` never reads that dict** — `syscall_dispatcher.py:365,386` resolve against the
+kernel `SYSCALL_REGISTRY`. Every app registers through
+`AINDY.kernel.syscall_registry.register_syscall`; `_syscalls` is empty after a full boot.
+
+So `platform_layer.register_syscall` is a seam that accepts registrations, validates them, and
+routes them nowhere a call can reach. Its only consumer is the metric above, which is why the
+symptom is a zero rather than silence. Worth noting our own `CLAUDE.md` documented the
+platform_layer path as the one to use — corrected on our side the same day.
+
+### Cause 2 — the tool metric counts the extension model nobody uses
+
+Two models coexist in the same file: static `register_agent_tool` → `_agent_tools` (walked by
+`iter_agent_tools`), and `register_run_tool_provider` → `_agent_run_tools[run_type]`, a callable
+resolved by `get_tools_for_run`. **No app in this repo uses the static form**; both that do register
+tools use the provider. So `iter_agent_tools() == 0` is accurate about that dict and wrong as
+"tool_count".
+
+### The ask
+
+1. **Point the metric at the live sources** — `len(SYSCALL_REGISTRY)` and the resolved provider
+   count. Smallest possible fix, and it stops an operator surface asserting zero.
+2. **Decide what `platform_layer.register_syscall` is for.** If it is a legacy seam, deprecate or
+   delete it; a validating function that routes nowhere is worse than an absent one, because it
+   accepts work silently. If it is intended, wire it into dispatch.
+3. **Same question for `register_agent_tool`.** Two extension models where one is unused is a choice
+   worth stating, not an accident to preserve.
+
+### Why we are not fixing it ourselves
+
+`AINDY/` is yours, and the surface that displays these numbers is the operator dashboard in FR-21 —
+a repo boundary this reporting already sits across. We render what the endpoint returns.
+
+### What we are NOT claiming
+
+- **Not that syscalls are broken.** Dispatch works; 90 are registered and reachable. This is a
+  reporting defect plus an unwired seam, not a functional one.
+- **Not that the provider model is wrong.** It is the one in use and it works. Only that a metric
+  counting the other one reads as "no tools are registered".
+
+---
+
 ## FR-22 — 51 runtime routes are documented in our reference and guarded by nobody 🟡 drift
 
 **apps-monolith ref:** found 2026-08-22 while restructuring `docs/`. Small, and the cheapest of
