@@ -53,7 +53,7 @@ The intended split is two repos, not many repos:
 - `aindy-runtime`
   owns `AINDY/`, runtime packaging, runtime-only entrypoints, runtime manifests,
   runtime docs, and runtime CI
-- `aindy-apps-monolith`
+- A.I.N.D.Y.
   owns `apps/`, `client/`, app manifests, app bootstrap, app-profile tests,
   app docs, and app-facing deployment/config assets
 
@@ -289,7 +289,7 @@ Key files:
 
 ## Client Layer
 The frontend is a React/Vite client under `client/`. It belongs with the
-future `aindy-apps-monolith` repo, even though it now understands
+A.I.N.D.Y. repo, even though it now understands
 runtime-only mode. Today it is still one apps-hosted SPA rather than a
 separately deployable runtime console product. The main API client layer is
 `client/src/api/`. UI components are grouped into `client/src/components/app`,

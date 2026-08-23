@@ -56,7 +56,7 @@ This section describes the currently validated test baseline. Older sprint-by-sp
 **App CI subset**
 - App CI keeps tests that require `apps.bootstrap`, app-owned route shims, app enrichment, or app-to-runtime import validation.
 - Examples: `test_import_boundaries.py`, `test_runtime_agent_api_ownership.py`, `test_bootstrap_completeness.py`, and the app-manifest/public-contract tests under `tests/unit/`.
-- The future `aindy-apps-monolith` repo should also own the shared app-profile
+- The A.I.N.D.Y. repo should also own the shared app-profile
   helpers and fixtures that assume installed runtime plus local `apps/`:
   `tests/helpers/app_profile.py`, the transitional shim `tests/helpers/bootstrap.py`,
   `tests/fixtures/client.py`, and the app-profile

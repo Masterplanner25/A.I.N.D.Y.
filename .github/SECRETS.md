@@ -1,7 +1,7 @@
 # Apps Repo Secrets
 
 This document defines the secrets and configuration expectations for
-`aindy-apps-monolith`.
+A.I.N.D.Y..
 
 Use it for:
 

@@ -8,7 +8,7 @@ owner: "platform-team"
 # Apps Monolith Repo Shape
 
 This document defines the target structure for the extracted
-`aindy-apps-monolith` repo.
+A.I.N.D.Y. repo.
 
 The goal is not to split individual apps into separate packages. The goal is
 to move the existing `apps/` monolith into its own repo that depends on the
@@ -153,7 +153,7 @@ manifest and plugin modules those runtime entrypoints load.
 
 ## What Moves To The Apps Repo
 
-Move with `aindy-apps-monolith`:
+Move with A.I.N.D.Y.:
 
 - `apps/`
 - `client/`

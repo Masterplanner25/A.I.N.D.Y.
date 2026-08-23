@@ -8,7 +8,7 @@ owner: "apps-team"
 # Governance Index
 
 Authoritative registry of documentation scope and authority for
-`aindy-apps-monolith`. Defines the doc hierarchy, change protocol, and agent
+A.I.N.D.Y.. Defines the doc hierarchy, change protocol, and agent
 obligations for this repo. Authored fresh during DOCS-MIGRATION-2 (the pre-split
 monolith index was monolith-centric and referenced runtime-owned docs this repo
 does not own).

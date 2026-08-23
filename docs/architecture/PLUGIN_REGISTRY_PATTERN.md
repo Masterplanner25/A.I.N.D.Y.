@@ -149,7 +149,7 @@ function is called once at startup via `load_plugins()`. It is idempotent
 Ownership note:
 
 - `apps/bootstrap.py` is app-owned and belongs with the future
-  `aindy-apps-monolith` repo
+  A.I.N.D.Y. repo
 - the runtime only treats it as a manifest-selected plugin module name
 
 `apps/bootstrap.py` is an aggregator, not a monolithic registrar. It holds the

@@ -959,7 +959,7 @@ adopted wholesale, per the original scoping below. Residual non-blocking warning
 
 Original context retained below for history.
 
-**Context:** `aindy-apps-monolith` is on `eslint@^9.36.0`. The `@aindy/ui-kit` library it consumes is on `eslint@^10.4.0`. Both use flat config; shared plugin overlap is `eslint-plugin-react-hooks` (this repo on `^5.2.0`, ui-kit on `^7.1.1` — independent version tracks).
+**Context:** A.I.N.D.Y. is on `eslint@^9.36.0`. The `@aindy/ui-kit` library it consumes is on `eslint@^10.4.0`. Both use flat config; shared plugin overlap is `eslint-plugin-react-hooks` (this repo on `^5.2.0`, ui-kit on `^7.1.1` — independent version tracks).
 
 **Posture:** Consumer trails library by one major version. The library's choice to lead is structurally correct; this entry is the consumer's side of the same finding.
 
@@ -1129,7 +1129,7 @@ per-pass caching, flag-gated provider selection, and embedding-driven reordering
 
 **Status:** RESOLVED (2026-06-27). 18 docs moved + path-fixup sweep complete. Residuals noted below.
 
-**Context:** When `aindy-runtime` and `aindy-apps-monolith` were split out of the original combined
+**Context:** When `aindy-runtime` and A.I.N.D.Y. were split out of the original combined
 repo (`masterplan-infiniteweave-monday-node-2025-0411`), 18 app-owned docs were left behind in the
 archive. They were copied into this repo on 2026-06-27, preserving subtree paths, per the ownership
 map in `aindy-runtime/docs/runtime/RUNTIME_DOCSET_BOUNDARY.md`:

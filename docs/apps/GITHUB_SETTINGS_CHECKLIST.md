@@ -8,7 +8,7 @@ owner: "platform-team"
 # Apps GitHub Settings Checklist
 
 This document lists the manual GitHub UI settings that should be configured for
-`aindy-apps-monolith`.
+A.I.N.D.Y..
 
 These settings are not stored in git and must be recreated in GitHub after the
 repo split.

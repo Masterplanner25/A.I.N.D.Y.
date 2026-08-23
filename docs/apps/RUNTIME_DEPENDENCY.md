@@ -7,7 +7,7 @@ owner: "platform-team"
 ---
 # Runtime Dependency
 
-`aindy-apps-monolith` depends on the separately packaged `aindy-runtime`
+A.I.N.D.Y. depends on the separately packaged `aindy-runtime`
 distribution.
 
 This repo does not own `AINDY/`, runtime-only entrypoints, or runtime-only

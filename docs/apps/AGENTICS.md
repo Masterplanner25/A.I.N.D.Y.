@@ -9,7 +9,7 @@ owner: "apps-team"
 
 Ownership note:
 
-- this document belongs to the future `aindy-apps-monolith` repo
+- this document belongs to the A.I.N.D.Y. repo
 - it should not be treated as the runtime execution contract
 - the runtime execution contract lives in the separate `aindy-runtime` repo
 - the apps-side dependency boundary is documented in

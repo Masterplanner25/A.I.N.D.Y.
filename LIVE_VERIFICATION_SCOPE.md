@@ -3,7 +3,7 @@
 ## Purpose
 
 This document defines the scope of the live stack verification phase. Work happens
-in `aindy-apps-monolith`, but the primary objective is confirming that
+in A.I.N.D.Y., but the primary objective is confirming that
 **`aindy-runtime` works correctly end-to-end** — by activating it with the 16 domain
 apps it was designed to serve, from a real user's perspective.
 
@@ -69,14 +69,14 @@ route bug, a flow bug, a syscall bug, or a runtime pipeline bug. All are in play
 | Component | Repo | Role |
 |---|---|---|
 | Runtime API | `aindy-runtime` | FastAPI server, syscall dispatcher, flow engine, scheduler |
-| 16 domain apps | `aindy-apps-monolith` | Routes, flows, models, bootstrap |
-| Product UI | `aindy-apps-monolith/client/` | React SPA — the product surface |
+| 16 domain apps | A.I.N.D.Y. | Routes, flows, models, bootstrap |
+| Product UI | `client/` | React SPA — the product surface |
 | Platform UI | **both — unresolved** | `aindy-runtime` serves one at `/platform/`; this repo also builds `client/platform.html`. See the 2026-08-22 status entry and FR-21. |
 | Postgres | docker-compose | Persistent state |
 | Redis | docker-compose | Pub/sub, rate limiter |
 | MongoDB | docker-compose | Memory/search backend |
 
-Boot command (from `aindy-apps-monolith` root):
+Boot command (from A.I.N.D.Y. root):
 
 ```bash
 AINDY_APP_PLUGIN_MANIFEST=./aindy_plugins.json aindy-runtime serve

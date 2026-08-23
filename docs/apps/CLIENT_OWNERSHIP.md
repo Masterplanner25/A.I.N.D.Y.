@@ -8,17 +8,17 @@ owner: "platform-team"
 # Client Ownership
 
 > **Status (2026-07-05).** The repo split is complete — this repo *is*
-> `aindy-apps-monolith`, and `client/` is app-owned here. The text below records the
+> A.I.N.D.Y., and `client/` is app-owned here. The text below records the
 > standing ownership decision (written pre-split); it is now the operative state, not a plan.
 
-The `client/` tree belongs to the `aindy-apps-monolith` repo.
+The `client/` tree belongs to the A.I.N.D.Y. repo.
 
 That is a deliberate product decision, not an accident of the prior
 monolith.
 
 ## Decision
 
-Keep `client/` with `aindy-apps-monolith` for now.
+Keep `client/` with A.I.N.D.Y. for now.
 
 Why:
 
