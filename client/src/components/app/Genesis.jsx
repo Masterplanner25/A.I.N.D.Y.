@@ -385,6 +385,17 @@ export default function Genesis() {
                 <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter sends; Shift+Enter inserts a newline. A <textarea> inside a
+                // <form> does NOT submit on Enter the way an <input> does, so without
+                // this the SEND button was the only way to send a message (walk-log
+                // item 2). Guard on isComposing so an IME candidate selection — which
+                // also fires Enter — does not send a half-typed message.
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
               rows={2}
               disabled={loading}
               placeholder="Transmitting signal..."

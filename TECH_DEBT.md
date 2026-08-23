@@ -190,9 +190,31 @@ matters — read the entry.
 
 ---
 
-## GENESIS-TURN-LATENCY-1: a conversational turn blocks on the serialised dispatch slot (app-owned, P1)
+## GENESIS-TURN-LATENCY-1: one chat message takes the whole API down for ~14 minutes (app-owned, P0)
 
-**Status: OPEN, fully specified, writable now.** Blocks the MasterPlan V4 import.
+**Status: OPEN, fully specified, writable now — and measured on 2026-08-23, which raised it from
+P1 to P0.** No longer blocks the V4 import: that landed (Genesis session 7, 23,124 chars, HTTP 200
+in 6.3s). The import is `sys.v1.genesis.import_plan`; this defect is `genesis.message`. Those were
+conflated in the old blocker note, and acting on it would have deferred the import for no reason.
+
+### The measurement — first real conversational turn, 2026-08-23
+
+One user message produced, inside minute 17:26: `genesis.message.started/completed`, a full Infinity
+loop (`loop.started`, `loop.decision`, four `reasoning.*` events), four `external.call.*` pairs, and
+the system emitting **its own `feedback.latency_spike`**. The reply persisted at 17:26:41.
+
+**Then the API was unavailable from 17:27 to 17:45** — `unhealthy`, **zero restarts**, no log output,
+**zero `system_events` written**, 118% CPU — and recovered on its own. That is the exact fingerprint
+`CLAUDE.md` documents, produced here by a single chat message.
+
+A `py-spy` dump taken mid-stall showed **MainThread idle in `select()`** and the executor workers
+parked on the queue wait — nothing executing app code. So the stall is measured but its mechanism is
+**not identified**; do not assume it is the scoring work without confirming.
+
+**This is not "turns are slow".** It is a whole-API outage triggered by one conversational turn, and
+it is the strongest argument in the register for doing the fix.
+
+### Original entry
 
 The defect is **placement plus destination**, not a product decision: the scoring work runs
 synchronously on the one serialised dispatch slot, and the orchestration result is written to the
@@ -208,6 +230,53 @@ remedy is **new code, not wiring**: `analytics` registers no async jobs at all,
 cannot serve a turn whose reply the client awaits.
 
 Write-up: `docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md` (see §8).
+
+---
+
+## GENESIS-CLIENT-FABRICATES-FAILURE-1: the UI invents an assistant turn that never existed (P1)
+
+**Status: OPEN.** Found 2026-08-23 during the first real Genesis conversation, and it is a separate
+defect from the latency that caused it.
+
+`@aindy/ui-kit` aborts a request at a hardcoded **30 seconds** and raises
+`ApiError(408, "Request timed out after 30 seconds.")`. `Genesis.jsx:196` catches **any** error and
+does this:
+
+```js
+setMessages(prev => [...prev, { role: "ai", content: "Protocol error. Sync failed. Please try again." }]);
+```
+
+Three problems, in increasing order of seriousness:
+
+1. **The message is wrong.** A timeout is not a protocol error, and "try again" invites a duplicate
+   submission of work that already succeeded.
+2. **The work had succeeded.** The server persisted the real reply at 17:26:41; the client gave up at
+   30s. The user was told it failed while the answer sat in the database.
+3. **It fabricates an assistant turn.** The UI transcript now contains a message the model never
+   produced and the server never stored, so the rendered conversation **diverges from the persisted
+   one** until reload. A synthetic turn attributed to the AI is worse than an error banner.
+
+**Fix shape:** render transport failures as a *status on the user's own turn* (retryable), never as
+an assistant message; distinguish 408 from other errors; and on timeout re-fetch the session rather
+than assuming the turn was lost — it usually was not.
+
+**Related but not the same:** the 30s ceiling lives in ui-kit, so raising it is an upstream change,
+while not inventing a turn is entirely ours.
+
+---
+
+## GENESIS-USER-BUBBLE-UNSELECTABLE-1: user messages cannot be copied, assistant messages can (P3)
+
+**Status: OPEN — reported, not reproduced, cause unknown.** Reported by the owner on 2026-08-23.
+
+Searched and found **no cause in our code**: `Genesis.jsx:318-330` renders both roles with identical
+markup differing only in Tailwind colour/alignment classes, there is no `select-none` or
+`user-select` rule in `client/src/**/*.css`, and none in the `@aindy/ui-kit` bundle.
+
+So this needs to be reproduced in a browser with devtools rather than diagnosed from source —
+computed styles on the user bubble are the first thing to read. Filed at P3 because it is a
+papercut, and filed at all because "I could not find it in the code" is not the same as "it is not
+happening".
 
 ---
 

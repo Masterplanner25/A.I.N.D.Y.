@@ -44,7 +44,7 @@ client on Vite dev server at `localhost:5173` proxying to the API at `localhost:
 | # | Kind | Owner | Area | Item | Status |
 |---|---|---|---|---|---|
 | 1 | Design | app | Genesis | AI interrogates but never contributes ideas | decision needed |
-| 2 | Papercut | app | Genesis chat | Enter inserts a newline instead of sending | ready to fix |
+| 2 | Papercut | app | Genesis chat | Enter inserts a newline instead of sending | **FIXED** 2026-08-23 |
 | 3 | Defect | both | masterplan / memory | A 404 surfaces to the user as "Internal Server Error" | diagnosed, unfixed |
 | 4 | Defect | app | network | `InfiniteNetwork` calls `/api/users`, which no route serves; also no member-list endpoint exists and signup never provisions a social profile | confirmed live; 4 consolidation options logged, decision deferred |
 | 5 | Defect | app | Genesis | Leaving the page abandons the session; transcript is never stored | diagnosed, decision needed |
@@ -70,7 +70,7 @@ client on Vite dev server at `localhost:5173` proxying to the API at `localhost:
 | 25 | Defect | app | platform / dev proxy | The dev proxy swallowed **every** `/platform` API call — no platform panel could load data | fixed (#158) |
 | 26 | Defect | app | platform / registry | Registry read `registry.flows`; the route returns `flow_definitions`. Its unit test encoded the bug | fixed (#159) |
 | 27 | Defect | app | platform / strategies | `ScoreBar` calls `score.toFixed(2)` on a null score — both live strategies have `score: null` | fixed |
-| 28 | Defect | undecided | client telemetry | `reportClientError` POSTs to `/client/error`, which no route serves — every boundary trip 404s silently | diagnosed, unfixed |
+| 28 | Defect | both | client telemetry | `reportClientError` POSTs to `/client/error`, which no route serves — every boundary trip 404s silently | diagnosed, unfixed — **runtime shipped the route; the dev proxy lacked `/client`, FIXED 2026-08-23** |
 | 29 | Design | runtime | platform UI | The operator surface is a **record**, not a control plane — the API exposes 24 write routes, the UI wires 5 | design decision |
 | 30 | Defect | runtime | platform UI | The platform SPA had **no navigation at all** — 8 registered routes, 7 reachable only by typing a URL | fixed |
 | 31 | Defect | app | platform / agent console | `agent.js` never unwrapped `{data: […]}` — `runs.filter is not a function` blanked the console | fixed |

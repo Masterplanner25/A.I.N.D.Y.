@@ -174,6 +174,12 @@ export default defineConfig(({ mode }) => {
             return "/platform.html";
           },
         },
+        // `/client` is the runtime's client-telemetry sink (`/client/error`,
+        // `/client/vitals`). Both exist and return 204, but without this entry every
+        // POST hit Vite instead and 404'd, so client telemetry has never worked in dev
+        // — the browser console fills with `:5173/client/vitals 404` on every page.
+        // Same class as the `/platform` gap that swallowed every operator API call.
+        "/client": { target: "http://localhost:8000", changeOrigin: true },
         "/health": { target: "http://localhost:8000", changeOrigin: true },
         "/openapi.json": { target: "http://localhost:8000", changeOrigin: true },
       },
