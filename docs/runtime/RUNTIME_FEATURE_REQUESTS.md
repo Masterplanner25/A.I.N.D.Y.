@@ -67,7 +67,27 @@ a repo boundary this reporting already sits across. We render what the endpoint 
 
 ---
 
-## FR-22 — 51 runtime routes are documented in our reference and guarded by nobody 🟡 drift
+## FR-22 — 51 runtime routes are documented in our reference and guarded by nobody ✅ CLOSED in 2.6.0 — and our premise was wrong
+
+> **Amendment, 2026-08-23.** Shipped: `AINDY/route_inventory.json` now ships inside the wheel and
+> is contract-tested upstream in both directions. The runtime gave us something better than the
+> guard we asked for — a machine-readable inventory we can *subtract* from our booted surface to
+> derive the app-owned set, instead of curating one by hand.
+>
+> **The request also rested on a premise that is false, and it was ours.** We assumed `/apps/*`
+> marked the ownership boundary. Read from the installed wheel: the inventory has **126 entries, of
+> which exactly 35 are under `/apps/*`** — `/apps/memory/` (22) and `/apps/coordination/` (13). So
+> `scripts/check_api_reference.py`, scoped to `APP_PREFIX = "/apps/"`, has been enforcing over 35
+> runtime-owned routes all along, and of the 265 `/apps/*` entries in our reference **230 are
+> genuinely ours**.
+>
+> One small correction back: the 2.6.0 handoff describes the 35 as "coordination, memory, agent".
+> There are no `agent` routes in the file.
+>
+> Follow-up on our side is rewiring the guard onto the inventory, tracked in
+> `RUNTIME_2_6_0_UPGRADE.md` §6 — not here.
+
+## FR-22 — 51 runtime routes are documented in our reference and guarded by nobody 🟡 drift *(original request below)*
 
 **apps-monolith ref:** found 2026-08-22 while restructuring `docs/`. Small, and the cheapest of
 the requests filed this week.
