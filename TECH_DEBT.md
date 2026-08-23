@@ -43,7 +43,14 @@
 
 ## RUNTIME-PIN-FLOAT-1: an image rebuild no longer reproduces the adopted runtime (app-owned, P2)
 
-**Status: OPEN (found 2026-08-22).** `pyproject.toml` pins `aindy-runtime>=2.4.1,<3.0`. PyPI
+**Status: PARTIALLY ADDRESSED 2026-08-23 — the adoption pass ran; the float remains.**
+2.5.0 and 2.6.0 were adopted deliberately (`docs/runtime/RUNTIME_2_6_0_UPGRADE.md`), and the floor
+moved to `>=2.6.0,<3.0` in `pyproject.toml` and the contract test together. **The underlying issue
+is unchanged:** the range still floats, so the next published minor is what a rebuild installs. What
+this proves is only that an adoption pass is cheap when the runtime ships a handoff doc per release.
+The reproducibility half — a constraints file or build arg — is still open.
+
+*Original entry:* `pyproject.toml` pins `aindy-runtime>=2.4.1,<3.0`. PyPI
 published **2.5.0 on 2026-08-20T12:38:14**, so every build since — local *and* CI — resolves to
 2.5.0 while the repo's docs, upgrade notes and `RUNTIME_2_4_1_UPGRADE.md` all describe 2.4.1.
 Rebuilding the api image on 2026-08-22 installed 2.5.0 unasked; there is no
@@ -191,9 +198,21 @@ Write-up: `docs/verification/DEFECT_INFINITY_RECALC_DEBOUNCE.md`.
 
 ---
 
-## HEALTH-EVENT-VOLUME-1: liveness telemetry regrows ~98 MB/day (app-side mitigation only, P2)
+## HEALTH-EVENT-VOLUME-1: liveness telemetry regrowth — RESOLVED upstream in runtime 2.6.0 (FR-18)
 
-**Status: OPEN app-side; the fix is runtime-owned (FR-18).**
+**Status: RESOLVED 2026-08-23 — runtime 2.6.0 adopted.** Measured across the upgrade boundary on
+the live stack: **160 liveness rows in the final hour of 2.4.1 → 1 row in the first 3 minutes of
+2.6.0**, with the stored payload dropping from ~28 kB / 26 keys to **356 bytes / 10 keys**.
+`/health/detail` still serves the full snapshot on demand.
+
+**Two corrections to what this entry originally claimed.** The rate was recorded as ~98 MB/day,
+derived from a 34-day total; measured live, the database went **182 MB → 232 MB in about seven
+hours**, i.e. closer to **170 MB/day**. The 34-day figure understated it because the stack was not
+running continuously across those days. And the entry said pruning was "a mitigation, not a fix" —
+correct at the time, and the fix has now landed at source, so no periodic re-pruning is needed.
+
+*Original entry below, retained because the diagnostic it records (a `pg_dump` dominated by one
+table) is the thing that found it.*
 
 The runtime persists the entire `/health` response on every liveness probe, and the container
 healthcheck probes every 15s. On 2026-08-22 this was **3653 MB of a 3796 MB database** —
