@@ -17,12 +17,13 @@ client/test-results/
 # Local working notes (not tracked)
 Session Handoff Summary.md
 
-# Session handoffs are the owner's working notes for the *previous* session, not repo
-# documentation — they go stale the moment the next session starts and were being
-# committed only by habit. Durable docs that happen to share this directory
-# (RUNTIME_FEATURE_REQUESTS.md, DEFECT_*.md, the *_SPEC.md set, RUNTIME_*_UPGRADE.md)
-# stay tracked, so this rule is deliberately narrow.
-docs/handoffs/SESSION_HANDOFF_*.md
+# The session handoff is the owner's working notes for the *previous* session, not repo
+# documentation — it goes stale the moment the next session starts and was being committed
+# only by habit. Consolidated 2026-08-22 from four files (a root summary plus three dated
+# ones under docs/handoffs/, a folder that no longer exists) into this single rolling doc.
+# Anything durable belongs in a tracked document instead, because this file is invisible
+# to everyone else — see the migration table inside it.
+SESSION_HANDOFF.md
 
 # Local virtualenv
 venv/

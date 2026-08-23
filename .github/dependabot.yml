@@ -25,7 +25,7 @@ updates:
         update-types: ["patch", "minor"]
     ignore:
       # aindy-runtime is adopted deliberately, with a handoff doc and a floor bump each
-      # time (see docs/handoffs/RUNTIME_*_UPGRADE.md). A bot PR would race that process
+      # time (see docs/runtime/RUNTIME_*_UPGRADE.md). A bot PR would race that process
       # and land a pin move without the behaviour review that has caught a real defect
       # on every release so far.
       - dependency-name: "aindy-runtime"

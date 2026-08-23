@@ -39,10 +39,10 @@ the old monolith's directory skeleton.
 | `docs/specs/` | forward specs, not yet built | |
 | `docs/verification/` | what we checked and what broke | walk log, soak audit, defect write-ups |
 | `docs/archive/` | dated, retired, kept for provenance | `status: outdated`; never retro-edited |
-| `docs/handoffs/` | **session handoffs only** | the owner's local working notes, gitignored. The directory finally contains only what its name says |
+| *(root)* `SESSION_HANDOFF.md` | the single rolling handoff | the owner's local working notes, gitignored — **not** repo documentation. Consolidated 2026-08-22 from four files; `docs/handoffs/` no longer exists. Anything durable belongs in a tracked document instead |
 
-**Every directory above except `docs/handoffs/` is frontmatter-linted** by
-`scripts/lint_docs.py`. Before this restructure the linter named five directories that have
+**Every directory above is frontmatter-linted** by `scripts/lint_docs.py` (the root
+`SESSION_HANDOFF.md` is not — it is gitignored working notes, not documentation). Before this restructure the linter named five directories that have
 never existed in this repo and skipped the two largest real ones, so 44 of 65 documents were
 never checked — including the runtime feature-request register and every spec.
 

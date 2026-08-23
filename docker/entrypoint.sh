@@ -47,7 +47,7 @@ fi
 # effect of a container restart. What changed is that the *refusal* is now precise: an exit 3 says
 # exactly what to do, and 4/5 no longer masquerade as something a flag could fix.
 #
-# See docs/handoffs/RUNTIME_2_3_0_UPGRADE.md and FR-14 in RUNTIME_FEATURE_REQUESTS.md.
+# See docs/runtime/RUNTIME_2_3_0_UPGRADE.md and FR-14 in RUNTIME_FEATURE_REQUESTS.md.
 echo "[entrypoint] ensure pgvector: python scripts/ensure_pgvector.py"
 python scripts/ensure_pgvector.py
 

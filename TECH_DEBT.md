@@ -121,25 +121,36 @@ an ops chore. This item supersedes them.
 
 ---
 
-## ARM-PATH-CONFINE-1: ARM has no project-root confinement (app-owned, P1 security)
+## ARM-PATH-CONFINE-1: ARM has no project-root confinement — WITHDRAWN 2026-08-22, already fixed
 
-**Status: OPEN.** Found 2026-07-22 (walk log item 20); registered here 2026-08-22 because a
-deferred *security* risk belongs in this register, not only in a walk log
-(`docs/GOVERNANCE_INDEX.md:98`).
+**Status: NOT A DEFECT. Filed in error earlier the same day and withdrawn within hours.**
 
-`validate_file_path` guards with a blocked-segment list, an extension allowlist
-(`.py .js .jsx .ts .tsx .json .md .txt .yaml .yml`), and a post-read secret-pattern scan.
-**None of them check that the resolved path stays inside the project root.** Verified against the
-validator in the running container: `/usr/local/lib/python3.11/this.py` was ALLOWED.
-`/etc/passwd` and `../../etc/hosts` are rejected only for lacking an allowlisted extension — not
-by confinement.
+The concern was real when the frontend walk found it (item 20, 2026-07-22): `validate_file_path`
+guarded with a blocked-segment list and an extension allowlist and never checked containment, so
+any authenticated user could read any allowlisted-extension file anywhere on the server and its
+contents went to an external LLM.
 
-**Impact:** any authenticated user can read any allowlisted-extension file anywhere on the server
-filesystem, and the contents are then sent to an external LLM provider. The content scan runs
-*after* the read and only matches known patterns.
+**It was fixed on 2026-08-05 by PR #194**, three weeks before this entry was written.
+`apps/arm/services/deepseek/security_deepseek.py:95` now resolves the path first and calls
+`_within_project_root()` **before** the other guards; `.resolve()` collapses traversal and follows
+symlinks, and containment is checked before existence so it cannot be used as an existence oracle.
+A byte-identical `SecurityValidator` in `deepseek/__init__.py` — importable as a different class
+object, and therefore a bypass — was deleted in the same change.
 
-**Fix shape:** resolve the path and assert it is under the project root before reading. Write-up:
-`docs/verification/FRONTEND_WALK_LOG.md` item 20.
+### Why it was filed anyway, which is the part worth keeping
+
+The walk log's summary table listed item 20's status as *"hardening recommended"* while the item's
+own body said **`✅ FIXED (#194)`**. The row sat in a table headed **"Open"**. Filing this entry
+took the table at its word and never read the body.
+
+That is precisely the defect this register was audited for a few hours earlier — seven items whose
+bodies said RESOLVED while their headings said nothing. **The same failure was live in the walk
+log, and reading the summary instead of the entry reproduced it.** Both mismatched rows in that
+table (items 18 and 20) are now corrected.
+
+**The lesson is cheap to state and was expensive to relearn: a summary row is a claim about a
+document, not the document.** When a status matters — and a P1 security item is exactly when it
+matters — read the entry.
 
 ---
 
@@ -229,24 +240,36 @@ of the three — but it should be a decision that gets revisited, not one that s
 
 ---
 
-## CLIENT-ERROR-TELEMETRY-1: client error reporting has never worked (P2)
+## CLIENT-ERROR-TELEMETRY-1: client error reporting has never worked — WITHDRAWN 2026-08-22, route now exists
 
-**Status: OPEN, needs a decision before code.** Found 2026-07-22 (walk log item 28).
+**Status: NOT A DEFECT.** Filed in error the same day and withdrawn hours later, alongside
+`ARM-PATH-CONFINE-1`, for the same reason: the walk log entry describes 2026-07-22 and nobody
+re-checked it against the running stack before filing.
 
-`reportClientError` (`client/src/api/operator.js`) POSTs to `ROUTES.OPERATOR.CLIENT_ERROR`, which no
-backend route serves — every call 404s. It is wrapped in `.catch(() => {})`, so it can never break
-the page and equally can never report; every client-side crash during the entire frontend walk was
-swallowed.
+At the time of the walk, `reportClientError` POSTed to `/client/error` and every call 404'd. The
+runtime has since shipped the route. Verified live on 2026-08-22:
 
-**The decision, not the patch, is the blocker:** either the route belongs in the runtime and is
-missing (making this a runtime feature request), or the client should stop pretending to report and
-the call should be removed. Silently 404-ing on every crash is the only option that helps nobody.
+```
+POST /client/error                  -> 204
+POST /client/definitely-not-a-route -> 404      (so 204 is a real route, not a catch-all)
+```
+
+`/client/error` appears in `/openapi.json` with `post` as its only method. The runtime-or-app
+question the walk log posed — *"either the route belongs in the runtime and is missing, or the
+client should stop pretending to report"* — was answered upstream in the runtime's favour.
+
+**Not verified:** whether the client's reports now arrive intact and are readable anywhere. Only
+that the endpoint exists and accepts them.
 
 ---
 
 ## TRACE-ID-DUAL-1: every response carries two different trace ids (P2)
 
-**Status: OPEN.** Found 2026-07-22 (walk log item 33) during the Phase 2b trace-continuity check.
+**Status: OPEN — but UNVERIFIED since 2026-07-22.** Found during the Phase 2b trace-continuity
+check. Two sibling items filed from the same walk log on the same day turned out to be long fixed
+(`ARM-PATH-CONFINE-1`, `CLIENT-ERROR-TELEMETRY-1`), so treat this one as *unconfirmed* rather than
+current: reproducing it needs an authenticated `/apps/*` request, and an unauthenticated probe
+returns 401 before an envelope is produced. **Re-verify before acting on it.**
 
 A single `POST /apps/tasks/create` returns an `X-Trace-ID` header and a `data.trace_id` that agree,
 plus an **envelope `trace_id` that differs** — and both resolve to *different* execution graphs
