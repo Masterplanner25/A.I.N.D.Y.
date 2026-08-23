@@ -19,9 +19,9 @@ except Exception:  # pragma: no cover - optional dependency
 # runtime-owned) while omitting the two largest real ones, so 44 of 65 docs were never
 # checked at all, including the runtime feature-request register and every spec.
 #
-# docs/handoffs is deliberately absent: it holds only session handoffs, which are the
-# owner's local working notes and are gitignored. Linting files that are not in the
-# repo would make results depend on what happens to be on disk.
+# The session handoff is deliberately out of scope: it is a single gitignored file at the
+# repo root (SESSION_HANDOFF.md), the owner's local working notes. Linting a file that is
+# not in the repo would make results depend on what happens to be on disk.
 REQUIRED_DIRECTORIES = [
     Path("docs/api"),
     Path("docs/architecture"),

@@ -60,9 +60,9 @@ client on Vite dev server at `localhost:5173` proxying to the API at `localhost:
 | 15 | Question | app | tasks | Is a task tracked, or executed by the AI? (answered: tracked; AI execution is opt-in and has no UI) | answered, decision needed |
 | 16 | Defect | app | masterplan | The only non-Genesis MasterPlan create route 500s — Genesis is the sole working way to get a plan | confirmed live, unfixed |
 | 17 | Design | app | masterplan / genesis / tasks | The three surfaces were one section and are now disconnected tabs; no UI links a task to a plan. Includes an import-an-external-plan proposal | design decision |
-| 18 | Design | app | analytics / kpi | Analytics is LinkedIn-specific and owner-specific; KPI Snapshot is a manual-entry calculator that wants to be a dashboard | owner verdict: redesign or remove |
+| 18 | Design | app | analytics / kpi | Analytics is LinkedIn-specific and owner-specific; KPI Snapshot is a manual-entry calculator that wants to be a dashboard | **CLOSED** (#168) — /analytics half still open |
 | 19 | Defect | app | arm | ARM Analyze reads files from the **server**, the prefilled default cannot exist, and a failed analysis renders a blank screen | fixed (client); default path decision open |
-| 20 | Security | app | arm | ARM has no project-root confinement — any allowlisted-extension file anywhere on the server is readable and gets sent to an external LLM | hardening recommended |
+| 20 | Security | app | arm | ARM has no project-root confinement — any allowlisted-extension file anywhere on the server is readable and gets sent to an external LLM | **FIXED** (#194, 2026-08-05) |
 | 21 | Analysis | app | arm (whole surface) | What the six ARM screens actually do — the reasoning engine is real, but its entire input corpus is code-analysis telemetry | analysis, decisions listed |
 | 22 | Defect | app | identity | Every dimension card renders blank — `identity.js` never unwrapped the envelope | fixed |
 | 23 | Analysis | app | identity / memory | What both surfaces actually do — Identity is an AI personalization model (naming mismatch confirmed); Memory is a runtime-owned engine with a thin app wrapper | analysis, decisions listed |
