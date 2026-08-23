@@ -306,7 +306,7 @@ def _handle_task_get_user_tasks(payload: dict, ctx: SyscallContext) -> dict:
                     ),
                     # Estimated effort (hours) and actual elapsed (seconds) — the
                     # Volume + Trajectory axes of the three-axis score consume these
-                    # (docs/architecture/INFINITY_SCORE_MODEL.md).
+                    # (docs/infinity/INFINITY_SCORE_MODEL.md).
                     "duration": float(task.duration or 0.0),
                     "time_spent": float(task.time_spent or 0.0),
                 }

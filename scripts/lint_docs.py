@@ -13,16 +13,26 @@ except Exception:  # pragma: no cover - optional dependency
     yaml = None
 
 
+# Every documentation directory this repo owns. Before 2026-08-22 this list was
+# inherited from the pre-split monolith: it named five directories that have never
+# existed here (docs/runtime, docs/syscalls, docs/memory, docs/nodus, docs/sdk — all
+# runtime-owned) while omitting the two largest real ones, so 44 of 65 docs were never
+# checked at all, including the runtime feature-request register and every spec.
+#
+# docs/handoffs is deliberately absent: it holds only session handoffs, which are the
+# owner's local working notes and are gitignored. Linting files that are not in the
+# repo would make results depend on what happens to be on disk.
 REQUIRED_DIRECTORIES = [
-    Path("docs/architecture"),
-    Path("docs/platform"),
-    Path("docs/runtime"),
-    Path("docs/syscalls"),
-    Path("docs/memory"),
-    Path("docs/nodus"),
-    Path("docs/sdk"),
     Path("docs/api"),
-    Path("docs/deployment"),
+    Path("docs/architecture"),
+    Path("docs/archive"),
+    Path("docs/domains"),
+    Path("docs/infinity"),
+    Path("docs/operations"),
+    Path("docs/runtime"),
+    Path("docs/specs"),
+    Path("docs/verification"),
+    Path("docs/GOVERNANCE_INDEX.md"),
     Path("CHANGELOG.md"),
 ]
 REQUIRED_FIELDS = ("title", "last_verified", "api_version", "status", "owner")

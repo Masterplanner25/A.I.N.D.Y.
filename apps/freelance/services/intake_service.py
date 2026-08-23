@@ -1,6 +1,6 @@
 """Commercial intake service — lead -> client -> order lineage.
 
-Phase 1 of the Freelancing evolution (`docs/apps/FREELANCING_SYSTEM.md`). This
+Phase 1 of the Freelancing evolution (`docs/domains/FREELANCING_SYSTEM.md`). This
 service owns the commercial entry path: it resolves/creates `ClientAccount`
 records, links orders to clients, converts discovered leads into client orders
 without re-entry of core context, and exposes client lineage for querying

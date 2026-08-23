@@ -3,7 +3,7 @@ Intent value declaration — the Worth axis's *declared prior* (three-axis score
 Phase A).
 
 The canonical Infinity score measures throughput, not worth. The Worth axis (see
-`docs/architecture/INFINITY_SCORE_MODEL.md`) needs a value estimate for work, and realized
+`docs/infinity/INFINITY_SCORE_MODEL.md`) needs a value estimate for work, and realized
 money alone fails the proving case — Nodus / aindy-runtime earned $0 yet are high-worth.
 So worth starts from a *declared prior*: the user tags a task / masterplan / project with
 the value it holds (intrinsic, strategic, or monetary-potential), independent of revenue.

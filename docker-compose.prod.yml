@@ -60,7 +60,7 @@ services:
       # a crash loop — bare `bootstrap-schema` refuses to alter an existing runtime
       # table, and `set -e` + `restart: unless-stopped` turns that refusal into an
       # infinite loop. Read by docker/entrypoint.sh, NOT by the runtime.
-      # See docs/handoffs/RUNTIME_2_1_0_UPGRADE.md §1a/§7 (adopting 2.1.0 hit exactly this).
+      # See docs/runtime/RUNTIME_2_1_0_UPGRADE.md §1a/§7 (adopting 2.1.0 hit exactly this).
       AINDY_BOOTSTRAP_RECONCILE: "${AINDY_BOOTSTRAP_RECONCILE:-false}"
       # FR-15(a) — the remaining half of the Genesis-latency defect, and it is ours to trial.
       #
@@ -107,7 +107,7 @@ services:
       # Agent PLANNER backend (BUILD_PLAN Track 2). Default runtime_local (deterministic,
       # no egress). Flip to anthropic_chat in your .env to have Claude author real plans —
       # that path needs ANTHROPIC_API_KEY (above) + outbound HTTPS to api.anthropic.com.
-      # See docs/deployment/DEPLOYMENT.md "Enabling the Claude planner".
+      # See docs/operations/DEPLOYMENT.md "Enabling the Claude planner".
       AINDY_AGENT_PLANNER_BACKEND: "${AINDY_AGENT_PLANNER_BACKEND:-runtime_local}"
       AINDY_CLAUDE_PLANNER_MODEL: "${AINDY_CLAUDE_PLANNER_MODEL:-}"
       # ── Shadow / advisory flags (LIVE_VERIFICATION_SCOPE phase 2c) ──────────────
@@ -145,7 +145,7 @@ services:
       # which is too tight for cold-start + agent-execution workloads on slower hosts: a
       # request that holds a transaction open across a slow external call (embeddings, an
       # agent step) gets its connection reaped mid-flight, poisoning the pool. Raised here
-      # and env-overridable. See docs/deployment/DEPLOYMENT.md.
+      # and env-overridable. See docs/operations/DEPLOYMENT.md.
       DB_STATEMENT_TIMEOUT_MS: "${DB_STATEMENT_TIMEOUT_MS:-120000}"
       DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: "${DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-120000}"
       # Connection-pool headroom — agent execution fans out concurrent memory/embedding
@@ -155,7 +155,7 @@ services:
       # Nodus per-execution budget. The worker cold-starts the app stack (~16 apps) per run;
       # the runtime default (30s script + 15s boot allowance) is too tight for an app-profile
       # cold-start on a slower host, so executions fail with "worker exceeded 45000ms hard
-      # limit". Widened + env-overridable. See docs/deployment/DEPLOYMENT.md.
+      # limit". Widened + env-overridable. See docs/operations/DEPLOYMENT.md.
       AINDY_NODUS_MAX_EXECUTION_MS: "${AINDY_NODUS_MAX_EXECUTION_MS:-120000}"
       AINDY_NODUS_BOOT_ALLOWANCE_MS: "${AINDY_NODUS_BOOT_ALLOWANCE_MS:-60000}"
     ports:

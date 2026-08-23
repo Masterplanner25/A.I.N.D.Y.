@@ -15,10 +15,11 @@
 /alembic.ini @Masterplanner25
 
 # App-owned and shared app-facing docs/tests
-/docs/apps/ @Masterplanner25
-/docs/architecture/ @Masterplanner25
-/docs/deployment/ @Masterplanner25
-/docs/platform/ @Masterplanner25
+# Restructured 2026-08-22: docs/apps, docs/deployment and docs/platform were retired
+# in favour of directories named for what a document IS rather than which pre-split
+# team owned it. One rule covers all of docs/ so a new directory can never be added
+# without an owner.
+/docs/ @Masterplanner25
 /README.md @Masterplanner25
 /APPS_SIGNOFF.md @Masterplanner25
 /tests/ @Masterplanner25

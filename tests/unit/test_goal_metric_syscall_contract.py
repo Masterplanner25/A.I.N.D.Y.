@@ -9,7 +9,7 @@ lack of progress.
 The distinction matters most for social, which reads Mongo and degrades gracefully — a
 degraded read must not look like "you have zero impressions".
 
-See docs/handoffs/MASTERPLAN_GOAL_ATTAINMENT_SPEC.md §3.
+See docs/specs/MASTERPLAN_GOAL_ATTAINMENT_SPEC.md §3.
 """
 
 from __future__ import annotations

@@ -75,8 +75,8 @@ things is true:
 
 All three are real categories here, and the third is not hypothetical. *Carried* is also not the
 same as *acted on*: a signal can ride in `loop_context` while nothing reads it. The current map is
-maintained in [`docs/apps/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`](docs/apps/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md)
-and [`docs/architecture/INFINITY_SCORE_MODEL.md`](docs/architecture/INFINITY_SCORE_MODEL.md) —
+maintained in [`docs/infinity/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`](docs/infinity/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md)
+and [`docs/infinity/INFINITY_SCORE_MODEL.md`](docs/infinity/INFINITY_SCORE_MODEL.md) —
 check those rather than trusting a list in a README.
 
 ---
@@ -201,7 +201,7 @@ aindy-runtime serve      # run from the repo root so aindy_plugins.json is disco
 
 `aindy-runtime serve` **self-migrates the runtime schema at boot**, which is why moving to a new
 runtime version is not a free experiment. App-owned migrations are run separately
-(`alembic upgrade head`); see [`docs/deployment/MIGRATION_POLICY.md`](docs/deployment/MIGRATION_POLICY.md).
+(`alembic upgrade head`); see [`docs/operations/MIGRATION_POLICY.md`](docs/operations/MIGRATION_POLICY.md).
 
 Full local stack (api plus datastores) — both compose files and both profiles:
 
@@ -243,7 +243,7 @@ in `aindy-runtime` and arrive as a published dependency.
 
 The practical consequence: **when an app needs something the runtime does not expose, the answer is
 a runtime feature request, not an edit to `AINDY/`.** Open requests live in
-[`docs/handoffs/RUNTIME_FEATURE_REQUESTS.md`](docs/handoffs/RUNTIME_FEATURE_REQUESTS.md).
+[`docs/runtime/RUNTIME_FEATURE_REQUESTS.md`](docs/runtime/RUNTIME_FEATURE_REQUESTS.md).
 
 ## CI
 
@@ -253,7 +253,7 @@ and API-contract drift checks, the app-profile suite, cross-app import boundarie
 dependency validation, the route execution-pipeline contract, the frontend unit suite, and a client
 Docker build smoke.
 
-Ownership guidance: [`docs/apps/CI_OWNERSHIP.md`](docs/apps/CI_OWNERSHIP.md).
+Ownership guidance: [`docs/operations/CI_OWNERSHIP.md`](docs/operations/CI_OWNERSHIP.md).
 
 ## Contributing
 

@@ -5,7 +5,7 @@ These routes are maintained for existing callers. No new routes should
 be added here. Migrate callers to /apps/rippletrace/*.
 
 To check what callers exist: grep the client codebase and any external
-integrations for the paths listed in docs/platform/interfaces/API_CONTRACTS.md
+integrations for the paths listed in docs/api/API_CONTRACTS.md
 under "Legacy Compatibility Surface (Rippletrace)".
 
 Removal plan: when no callers are verified against these paths, remove

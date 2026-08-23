@@ -1,6 +1,6 @@
 """add_freelance_client_accounts
 
-Phase 1 of the Freelancing evolution (docs/apps/FREELANCING_SYSTEM.md): add the
+Phase 1 of the Freelancing evolution (docs/domains/FREELANCING_SYSTEM.md): add the
 `freelance_client_accounts` table and a `client_id` link on `freelance_orders`
 so leads, clients, and orders form one lead -> client -> order lineage.
 

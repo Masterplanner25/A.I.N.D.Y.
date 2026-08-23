@@ -20,7 +20,7 @@ Ownership note:
   in [Boot Profiles](./BOOT_PROFILES.md) and
   the runtime repo's `RUNTIME_ONLY_DEPLOYMENT.md`
 - the apps-side dependency boundary is documented in
-  [Runtime Dependency](../apps/RUNTIME_DEPENDENCY.md)
+  [Runtime Dependency](../runtime/RUNTIME_DEPENDENCY.md)
 
 ---
 
