@@ -35,6 +35,12 @@ server.err
 # Local diagnostic scripts (not tracked)
 scripts/diag_*.py
 
+# One-off diagnostic and repro scripts written during live debugging. They hardcode
+# this machine's paths (/mnt/c/dev/...) and compose-derived container names, so they
+# are meaningful only on the box that wrote them — the same reasoning that already
+# excludes scripts/diag_*.py above. 68 of them had been committed.
+scratchpad/
+
 # Local secrets — never commit (real API keys live here)
 .env
 .env.local
