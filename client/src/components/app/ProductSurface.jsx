@@ -1,7 +1,7 @@
 import React from "react";
 
 const TOKENS = {
-  panel: "border border-zinc-800/80 bg-zinc-950/80 backdrop-blur-sm",
+  panel: "border border-zinc-800/80 bg-zinc-950/80 backdrop-blur-xs",
   muted: "text-zinc-400",
   text: "text-zinc-100",
 };
@@ -31,7 +31,7 @@ export function MetricCard({ label, value, detail, tone = "cyan" }) {
     rose: "from-rose-400/20 to-rose-600/10 text-rose-200",
   };
   return (
-    <div className={`rounded-2xl border border-zinc-800/80 bg-gradient-to-br ${tones[tone] || tones.cyan} p-4`}>
+    <div className={`rounded-2xl border border-zinc-800/80 bg-linear-to-br ${tones[tone] || tones.cyan} p-4`}>
       <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">{label}</div>
       <div className="mt-3 text-2xl font-semibold text-zinc-50">{value}</div>
       {detail ? <div className="mt-2 text-sm text-zinc-400">{detail}</div> : null}

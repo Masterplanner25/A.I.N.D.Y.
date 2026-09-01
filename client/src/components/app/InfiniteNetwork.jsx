@@ -63,7 +63,7 @@ function App() {
         <div>
           <input
           /* Fixed: Added bg-zinc-800 and text-white to ensure visibility */
-            className="bg-zinc-800 border border-zinc-700 p-3 w-full rounded-lg text-white placeholder-zinc-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+            className="bg-zinc-800 border border-zinc-700 p-3 w-full rounded-lg text-white placeholder-zinc-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-hidden transition"
             placeholder="Name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -73,7 +73,7 @@ function App() {
         <div>
           <input
           /* Fixed: Added bg-zinc-800 and text-white to ensure visibility */
-            className="bg-zinc-800 border border-zinc-700 p-3 w-full rounded-lg text-white placeholder-zinc-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+            className="bg-zinc-800 border border-zinc-700 p-3 w-full rounded-lg text-white placeholder-zinc-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-hidden transition"
             placeholder="Tagline (e.g. AI Builder)"
             value={form.tagline}
             onChange={(e) => setForm({ ...form, tagline: e.target.value })} />
@@ -102,7 +102,7 @@ function App() {
         {safeMap(users, (user, i) =>
         <div
           key={i}
-          className="border border-zinc-800 p-4 bg-zinc-900 rounded-lg shadow hover:border-zinc-600 transition group">
+          className="border border-zinc-800 p-4 bg-zinc-900 rounded-lg shadow-sm hover:border-zinc-600 transition group">
           
             <h2 className="text-xl font-semibold text-white group-hover:text-blue-400 transition-colors">
               {user.name}

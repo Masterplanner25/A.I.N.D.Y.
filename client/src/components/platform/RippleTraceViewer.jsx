@@ -364,7 +364,7 @@ function RippleTraceViewerContent() {
             value={traceId}
             onChange={(event) => setTraceId(event.target.value)}
             placeholder="Enter trace_id"
-            className="rounded-full border px-4 py-2 text-sm outline-none"
+            className="rounded-full border px-4 py-2 text-sm outline-hidden"
             style={{
               color: surfacePalette.text,
               background: "rgba(255,255,255,0.03)",

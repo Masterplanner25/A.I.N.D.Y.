@@ -388,7 +388,7 @@ export default function Genesis() {
               rows={2}
               disabled={loading}
               placeholder="Transmitting signal..."
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-white resize-none focus:outline-none focus:border-[#00ffaa]/50 transition-all placeholder-zinc-600" />
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-white resize-none focus:outline-hidden focus:border-[#00ffaa]/50 transition-all placeholder-zinc-600" />
             
                 <button
               type="submit"

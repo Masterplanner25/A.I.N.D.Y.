@@ -152,7 +152,7 @@ export default function AppShell() {
     <div className="h-screen overflow-hidden bg-[#09090b] text-[#fafafa] selection:bg-[#00ffaa]/30 lg:flex">
       <aside
         className={[
-          "fixed inset-y-0 left-0 z-40 w-80 border-r border-zinc-800/60 bg-zinc-950/95 backdrop-blur transition-transform lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 w-80 border-r border-zinc-800/60 bg-zinc-950/95 backdrop-blur-sm transition-transform lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         ].join(" ")}
       >
@@ -223,7 +223,7 @@ export default function AppShell() {
       ) : null}
 
       <div className="flex h-full min-h-0 flex-1 flex-col lg:ml-0">
-        <header className="sticky top-0 z-20 border-b border-zinc-800/60 bg-[#09090b]/95 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-zinc-800/60 bg-[#09090b]/95 backdrop-blur-sm">
           <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3">
               <button

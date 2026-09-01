@@ -47,14 +47,14 @@ const RISK_COLOR = {
 
 const Badge = ({ status }) =>
   !status ? null : (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${STATUS_COLOR[status] || "text-zinc-400 border-zinc-700 bg-zinc-800/40"}`}>
+    <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider border ${STATUS_COLOR[status] || "text-zinc-400 border-zinc-700 bg-zinc-800/40"}`}>
       {STATUS_LABEL[status] || status.replace(/_/g, " ")}
     </span>
   );
 
 const Risk = ({ risk }) =>
   !risk ? null : (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${RISK_COLOR[risk] || RISK_COLOR.high}`}>
+    <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider ${RISK_COLOR[risk] || RISK_COLOR.high}`}>
       {risk} risk
     </span>
   );
@@ -166,7 +166,7 @@ export default function Assistant() {
     setSearchParams(m === "genesis" ? { mode: "genesis" } : {}, { replace: true });
 
   const modeBar = (
-    <div className="fixed top-3 left-1/2 -translate-x-1/2 z-30 flex gap-1 rounded-full border border-zinc-800 bg-zinc-950/90 p-1 shadow-lg shadow-black/40 backdrop-blur">
+    <div className="fixed top-3 left-1/2 -translate-x-1/2 z-30 flex gap-1 rounded-full border border-zinc-800 bg-zinc-950/90 p-1 shadow-lg shadow-black/40 backdrop-blur-sm">
       {safeMap([
         ["agent", "Agent"],
         ["genesis", "Plan"],
@@ -216,7 +216,7 @@ export default function Assistant() {
                 }}
                 placeholder="e.g. Create three tasks for my launch…"
                 rows={3}
-                className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-[#00ffaa]/50 resize-none custom-scrollbar"
+                className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-hidden focus:border-[#00ffaa]/50 resize-none custom-scrollbar"
               />
               <button
                 type="submit"
@@ -254,7 +254,7 @@ export default function Assistant() {
           <h1 className="text-lg font-bold text-white leading-snug flex-1">{run.goal}</h1>
           <button
             onClick={reset}
-            className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 border border-zinc-800 rounded px-2 py-1 flex-shrink-0"
+            className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 border border-zinc-800 rounded-sm px-2 py-1 shrink-0"
           >
             New
           </button>
@@ -279,7 +279,7 @@ export default function Assistant() {
             <div key={step.id || i} className="border border-zinc-800/60 rounded-lg px-4 py-3">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] font-mono text-zinc-600 w-4">{i + 1}</span>
-                <span className="font-mono text-xs text-[#00ffaa] flex-shrink-0">
+                <span className="font-mono text-xs text-[#00ffaa] shrink-0">
                   {step.tool_name || step.tool || "step"}
                 </span>
                 <Risk risk={step.risk_level} />

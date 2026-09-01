@@ -98,7 +98,7 @@ export default function ResetPasswordPage() {
                 type="text"
                 value={token}
                 onChange={(event) => setToken(event.target.value)}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-none transition-colors focus:border-[#00ffaa]/50"
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-hidden transition-colors focus:border-[#00ffaa]/50"
                 placeholder="Paste the token from your email"
               />
             </label>
@@ -112,7 +112,7 @@ export default function ResetPasswordPage() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-none transition-colors focus:border-[#00ffaa]/50"
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-hidden transition-colors focus:border-[#00ffaa]/50"
               placeholder="At least 8 characters"
             />
           </label>
@@ -125,7 +125,7 @@ export default function ResetPasswordPage() {
               type="password"
               value={confirm}
               onChange={(event) => setConfirm(event.target.value)}
-              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-none transition-colors focus:border-[#00ffaa]/50"
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-hidden transition-colors focus:border-[#00ffaa]/50"
               placeholder="........"
             />
           </label>

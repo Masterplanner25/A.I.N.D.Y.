@@ -63,19 +63,53 @@ function platformHtmlFallback() {
 
 export default defineConfig(({ mode }) => {
   const buildTarget = mode === "app" || mode === "platform" ? mode : "all";
-  const manualChunks = {
-    "vendor-react": ["react", "react-dom", "react-router-dom"],
-    "vendor-charts": ["recharts", "d3"],
-    "vendor-ui": [
-      "@radix-ui/react-slot",
-      "@radix-ui/react-tooltip",
-      "lucide-react",
-      "clsx",
-      "class-variance-authority",
-      "tailwind-merge",
-    ],
-    ...(buildTarget === "app" ? {} : { "chunk-platform": platformComponentPaths }),
-  };
+
+  // Vite 8 bundles with Rolldown, which rejects Rollup's object form of
+  // `manualChunks` outright — "Invalid type: Expected Function but received Object",
+  // then `TypeError: manualChunks is not a function`. Rolldown deprecates both
+  // `manualChunks` and its first replacement `advancedChunks` in favour of
+  // `output.codeSplitting`, so the grouping is expressed there rather than migrating
+  // onto a second deprecated API.
+  //
+  // `includeDependenciesRecursively` restores the semantics the object form had:
+  // Rollup pulled each listed module's private dependency subtree into the chunk
+  // with it. Matching on module id alone would capture only the eight platform
+  // component files themselves and scatter everything they import.
+  //
+  // Path separators are written `[\\/]` because these run against native module ids,
+  // which are backslash-separated on Windows.
+  const toPathPattern = (p: string) =>
+    p.replace("./", "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\//g, "[\\\\/]");
+  const platformComponentPattern = new RegExp(
+    `(${platformComponentPaths.map(toPathPattern).join("|")})$`,
+  );
+
+  const codeSplittingGroups = [
+    {
+      name: "vendor-react",
+      test: /node_modules[\\/](react|react-dom|react-router-dom)[\\/]/,
+      includeDependenciesRecursively: true,
+    },
+    {
+      name: "vendor-charts",
+      test: /node_modules[\\/](recharts|victory-vendor|d3(-[a-z0-9]+)?)[\\/]/,
+      includeDependenciesRecursively: true,
+    },
+    {
+      name: "vendor-ui",
+      test: /node_modules[\\/](@radix-ui[\\/]react-(slot|tooltip)|lucide-react|clsx|class-variance-authority|tailwind-merge)[\\/]/,
+      includeDependenciesRecursively: true,
+    },
+    ...(buildTarget === "app"
+      ? []
+      : [
+          {
+            name: "chunk-platform",
+            test: platformComponentPattern,
+            includeDependenciesRecursively: true,
+          },
+        ]),
+  ];
 
   const input =
     buildTarget === "app"
@@ -111,7 +145,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input,
         output: {
-          manualChunks,
+          codeSplitting: { groups: codeSplittingGroups },
           entryFileNames: (chunkInfo) =>
             chunkInfo.name === "platform"
               ? "platform/assets/[name]-[hash].js"
