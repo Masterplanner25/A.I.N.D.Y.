@@ -1,12 +1,85 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-08-06"
+last_verified: "2026-09-01"
 api_version: "1.0"
 status: current
 owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-24 — `nltk==3.10.0` is an exact pin, and it is now a published CVE 🔴 security
+
+**apps-monolith ref:** found 2026-09-01 while triaging a Dependabot backlog. This is the
+first runtime dependency pin to turn our `main` branch red on its own.
+
+### Symptom
+
+`Security Audit` on `main` went from green (2026-08-24) to red (2026-08-31) with no app
+change in between — the advisory was published into the window:
+
+```
+Name Version ID              Fix Versions Description
+---- ------- --------------- ------------ -----------
+nltk 3.10.0  PYSEC-2026-3726 3.10.2       nltk versions before 3.10.2 contain a symlink-based
+                                          arbitrary file read vulnerability in IPIPANCorpusReader
+                                          methods that bypass nltk.pathsec validation entirely.
+```
+
+It is now also the only red check on every unrelated PR, which is the expensive part —
+`pip-audit` runs on the resolved tree, so a CI-config bump (#252) and an npm-only
+bump (#251) both showed a failing "Python Dependency Audit" that neither one caused.
+
+### Why we cannot fix this on our side
+
+`nltk` is not ours. It is not in `pyproject.toml` — our direct dependencies are
+`aindy-runtime`, `aindy-sdk`, and `anthropic`. It arrives entirely through the runtime,
+and the pin is **exact**:
+
+```
+$ python -c "import importlib.metadata as md; print(md.distribution('aindy-runtime').requires)"
+... 'nltk==3.10.0', 'textstat==0.7.13' ...
+```
+
+Confirmed against the published metadata for the version we pin (`aindy-runtime>=2.6.0,<3.0`):
+
+```
+$ curl -s https://pypi.org/pypi/aindy-runtime/2.6.0/json | jq '.info.requires_dist[] | select(test("nltk"))'
+"nltk==3.10.0"
+```
+
+`==` leaves no room. Adding `nltk>=3.10.2` to our `pyproject.toml` produces a resolver
+conflict rather than an upgrade, so there is no app-side remedy that is not a lie to the
+resolver or a suppression of the finding.
+
+### Ask
+
+Relax the pin to admit the patched line. `3.10.2` is the advisory's stated fix; `3.10.3`
+is current:
+
+```diff
+- nltk==3.10.0
++ nltk>=3.10.2,<3.11
+```
+
+`textstat==0.7.13` is worth the same look while the file is open — it depends on `nltk`
+too, and an exact pin there will constrain the same resolution.
+
+### What we are doing in the meantime
+
+Nothing that hides it. We are **not** adding `--ignore-vuln PYSEC-2026-3726` to
+`.github/workflows/security-audit.yml`; the finding is real and reachable
+(`apps/search/services/seo_services.py` imports `nltk` directly), and an ignore entry
+outlives the memory of why it was added. We are merging around the red check by hand and
+treating this FR as the fix. If the runtime bump is going to take more than a release
+cycle, tell us and we will add a **dated, FR-referencing** ignore rather than keep
+merging past a red gate.
+
+### Note for us, not the runtime
+
+`apps/search/services/seo_services.py` imports `nltk` without declaring it — we get it
+transitively from the runtime. That is our bug regardless of how this FR lands, and it is
+why the CVE is reachable from app code at all. Tracked separately.
+
 ## FR-23 — `/observability/system` reports 0 syscalls and 0 tools while 90 and 16 are live 🔴 observability
 
 **apps-monolith ref:** found 2026-08-22 while measuring the syscall vocabulary for a CLI-ownership
