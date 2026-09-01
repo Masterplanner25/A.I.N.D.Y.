@@ -44,7 +44,7 @@ export default function ResearchEngine() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             required
-            className="bg-zinc-900 border border-zinc-700 text-white rounded p-3 outline-none focus:border-blue-500 transition-colors"
+            className="bg-zinc-900 border border-zinc-700 text-white rounded-sm p-3 outline-hidden focus:border-blue-500 transition-colors"
           />
         </div>
 
@@ -55,13 +55,13 @@ export default function ResearchEngine() {
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
             rows="4"
-            className="bg-zinc-900 border border-zinc-700 text-white rounded p-3 outline-none focus:border-blue-500 transition-colors"
+            className="bg-zinc-900 border border-zinc-700 text-white rounded-sm p-3 outline-hidden focus:border-blue-500 transition-colors"
           />
         </div>
 
         <button
           type="submit"
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded p-3 transition-colors disabled:bg-gray-600"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-sm p-3 transition-colors disabled:bg-gray-600"
           disabled={loading}
         >
           {loading ? (
@@ -77,13 +77,13 @@ export default function ResearchEngine() {
       </form>
 
       {error && (
-        <div className="bg-red-900/30 border border-red-600 text-red-200 p-3 rounded mt-4">
+        <div className="bg-red-900/30 border border-red-600 text-red-200 p-3 rounded-sm mt-4">
           {error}
         </div>
       )}
 
       {result && (
-        <div className="border border-zinc-700 rounded p-5 mt-6 bg-zinc-900 shadow-xl">
+        <div className="border border-zinc-700 rounded-sm p-5 mt-6 bg-zinc-900 shadow-xl">
           <div className="flex items-center justify-between mb-2 border-b border-zinc-800 pb-2">
             <h2 className="font-semibold text-xl text-blue-400">Research Results</h2>
             {result.search_score != null && (
