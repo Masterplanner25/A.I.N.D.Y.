@@ -210,6 +210,23 @@ would convert an unexplained outage into an assumed-solved one.
 latency drops to roughly the reply-persist time, and that the stall does not recur. Until then
 this is a P1 open question about the outage, not a P0 about placement.
 
+**A candidate mechanism arrived 2026-09-02 with runtime 2.7.0 — as a hypothesis, not a finding.**
+FR-15's defect was that `schedule()` was the only queue drainer, ran each item synchronously, and
+was registered `max_instances=1`, so one slow flow blocked every other queued item along with wait
+expiry and stale-wait cleanup, which share that 1-second tick. That is the scheduler saturation
+trap `CLAUDE.md` describes, and it is a plausible mechanism for the stall this entry could not
+explain. 2.7.0 hands queued work to a thread pool instead
+(`AINDY_ASYNC_SCHEDULER_DISPATCH`, default on).
+
+It applies to us: we run `EXECUTION_MODE=thread`. Our `docker-compose.prod.yml` does **not** set
+`EXECUTION_MODE` — only the runtime's own compose does, which is what the 2.7.0 handoff's table
+refers to. See `docs/runtime/RUNTIME_2_7_0_UPGRADE.md` §1.
+
+**Nothing here measures it.** Two unrelated causes have already produced this fingerprint (a slow
+Genesis request and pure host memory starvation), and the py-spy evidence above still says the
+mechanism was never identified. Treat FR-15 as the first thing to check when the live turn is run,
+via `aindy_execution_dispatch_total{mode="async"}` — not as the answer.
+
 Twin still open: `MEMORY-EXECUTE-LATENCY-1` below — the same synchronous call on
 `POST /memory/execute`.
 

@@ -69,8 +69,31 @@ jobs:
       # signing at all. If a future change adopts an EC algorithm (ES256 and friends),
       # this exception must be revisited — that is the condition under which it stops
       # being safe.
+      #
+      # PYSEC-2026-3740 (nltk 3.10.3 — CVE-2026-81726 / GHSA-8mgp-746c-j5xp) is ignored
+      # because **no fix is released**. 3.10.3 is the version aindy-runtime 2.7.0 pins,
+      # and it is pinned there deliberately: 3.10.0 carried PYSEC-2026-3726, a symlink
+      # arbitrary file read that *does* have a fix. Pinning back to quiet this scanner
+      # would trade a fixed vulnerability for an unfixed one. Do not do it.
+      #
+      # The runtime carries the same exemption, but **its first ground does not transfer
+      # to us and must not be copied**: it says `import nltk` has zero hits across the
+      # runtime. That is false here — `apps/search/services/seo_services.py:7` imports
+      # nltk directly. So this was assessed against our own call sites instead:
+      #
+      #   - The advisory's affected component is `TransitionParser`. Zero references
+      #     anywhere in apps/, tests/ or scripts/.
+      #   - It requires a caller-controlled model path. Our only `nltk.data.find` call
+      #     passes the string literal "tokenizers/punkt" (seo_services.py:21) — no
+      #     caller input reaches it.
+      #   - Our other call is `nltk.word_tokenize(normalized)` (seo_services.py:35),
+      #     which takes text, not a model path.
+      #
+      # Revisit this if app code ever calls TransitionParser, or passes a non-literal
+      # path to `nltk.data.find` / any nltk loader. That is the condition under which
+      # it stops being safe.
       - name: Audit installed Python dependencies
-        run: pip-audit --desc --ignore-vuln PYSEC-2026-1325
+        run: pip-audit --desc --ignore-vuln PYSEC-2026-1325 --ignore-vuln PYSEC-2026-3740
 
   client-audit:
     name: Client Dependency Audit

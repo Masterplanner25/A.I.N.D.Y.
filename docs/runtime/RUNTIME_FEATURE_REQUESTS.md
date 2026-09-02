@@ -7,7 +7,33 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
-## FR-24 — `nltk==3.10.0` is an exact pin, and it is now a published CVE 🔴 security
+## FR-24 — `nltk==3.10.0` is an exact pin, and it is now a published CVE ✅ SHIPPED in 2.7.0
+
+**Closed 2026-09-02, one day after filing.** `aindy-runtime` 2.7.0 pins `nltk==3.10.3`
+(runtime commit `4a9fea9`, "deps: bump nltk 3.10.0 -> 3.10.3"), which clears
+`PYSEC-2026-3726` / `CVE-2026-62383`. Adopted here in
+`docs/runtime/RUNTIME_2_7_0_UPGRADE.md`. The ask below — relax the exact pin to admit the
+patched line — is exactly what landed.
+
+Upstream also closed the reporting gap that let this sit unseen: `pip-audit` now runs on
+pushes to `main`, not only on pull requests. It previously gated every PR into `main` and
+never gated `main` itself, so a newly published advisory could redden an unchanged branch
+with nothing surfacing it for up to a week. That is precisely what happened on
+2026-08-31.
+
+**One thing did not go away, and it is not this FR.** 3.10.3 carries a *different*
+advisory — `PYSEC-2026-3740` / `CVE-2026-81726` — which has **no fix released**. So our
+`Security Audit` is still red-by-default until exempted, but for a new and unfixable
+finding rather than this one. We now carry that as a documented ignore, assessed against
+our own call sites rather than copied from the runtime's exemption: the runtime's first
+ground is that it never imports nltk, and **we do**
+(`apps/search/services/seo_services.py:7`). Reasoning in
+`RUNTIME_2_7_0_UPGRADE.md` §3 and in the workflow comment.
+
+Do not resolve that by pinning nltk back to 3.10.0 — that reintroduces the fixed
+vulnerability this FR was about.
+
+### Original entry (2026-09-01) — retained
 
 **apps-monolith ref:** found 2026-09-01 while triaging a Dependabot backlog. This is the
 first runtime dependency pin to turn our `main` branch red on its own.
