@@ -68,7 +68,7 @@ export default function AiSeoTool() {
             <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-400 mb-2">Article Content</label>
                 <textarea
-          className="w-full p-4 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+          className="w-full p-4 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-hidden transition-all"
           rows="8"
           placeholder="Paste your article or blog content here for analysis..."
           value={content}
@@ -131,7 +131,7 @@ export default function AiSeoTool() {
                             <h3 className="mt-4 font-bold text-white">Keyword Densities:</h3>
                             <ul className="grid grid-cols-2 gap-2 mt-2">
                                 {safeMap(Object.entries(seoData.keyword_densities || {}), ([keyword, density]) =>
-              <li key={keyword} className="bg-zinc-800 p-2 rounded text-sm border border-zinc-700">
+              <li key={keyword} className="bg-zinc-800 p-2 rounded-sm text-sm border border-zinc-700">
                                         <span className="text-gray-400">{keyword}:</span> <span className="text-blue-300">{density}%</span>
                                     </li>)
               }
