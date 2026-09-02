@@ -190,9 +190,32 @@ matters — read the entry.
 
 ---
 
-## GENESIS-TURN-LATENCY-1: one chat message takes the whole API down for ~14 minutes (app-owned, P0)
+## GENESIS-TURN-LATENCY-1: one chat message takes the whole API down for ~14 minutes (app-owned, P0) — PLACEMENT FIXED in #257, outage mechanism still unconfirmed
 
-**Status: OPEN, fully specified, writable now — and measured on 2026-08-23, which raised it from
+**Status: PARTIALLY RESOLVED 2026-09-01 (#257). Do not close it.** The placement half is fixed:
+`genesis_message_orchestrate` now submits `sys.v1.job.submit` for `analytics.infinity_recalc`
+instead of calling `sys.v1.analytics.execute_infinity` inline, so the ~32s of scoring work that
+ran *after* the reply was already persisted is off the request path. The node also returns
+SUCCESS when the submission fails, so a turn that produced a reply is no longer reported as
+failed because scoring could not be queued.
+
+**What is NOT fixed, and is the reason this stays open:** the ~14–18 minute whole-API stall was
+never traced to the scoring work. The entry below says so explicitly — a `py-spy` dump mid-stall
+showed MainThread idle in `select()` with executor workers parked, i.e. nothing executing app
+code — and that warning is the whole point. #257 removed *a* plausible cause from the request
+path; it did not demonstrate that it was *the* cause. Closing this on the strength of the fix
+would convert an unexplained outage into an assumed-solved one.
+
+**To close it:** run a real Genesis turn against the live stack and confirm both that turn
+latency drops to roughly the reply-persist time, and that the stall does not recur. Until then
+this is a P1 open question about the outage, not a P0 about placement.
+
+Twin still open: `MEMORY-EXECUTE-LATENCY-1` below — the same synchronous call on
+`POST /memory/execute`.
+
+### Original entry (2026-08-23) — retained; its py-spy caveat is still the operative one
+
+**Was: OPEN, fully specified, writable now — and measured on 2026-08-23, which raised it from
 P1 to P0.** No longer blocks the V4 import: that landed (Genesis session 7, 23,124 chars, HTTP 200
 in 6.3s). The import is `sys.v1.genesis.import_plan`; this defect is `genesis.message`. Those were
 conflated in the old blocker note, and acting on it would have deferred the import for no reason.
@@ -230,6 +253,77 @@ remedy is **new code, not wiring**: `analytics` registers no async jobs at all,
 cannot serve a turn whose reply the client awaits.
 
 Write-up: `docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md` (see §8).
+
+---
+
+## MEMORY-EXECUTE-LATENCY-1: `POST /memory/execute` still recalculates Infinity on the request path (app-owned, P2)
+
+**Status: OPEN, unmeasured.** Found 2026-09-01 while fixing `GENESIS-TURN-LATENCY-1` (#257). This
+is the same defect in a second flow, and it is filed because the Genesis fix deliberately changed
+only the one flow the outage was measured on.
+
+### The call site
+
+`apps/automation/flows/flow_definitions.py:400` — `memory_execution_orchestrate`:
+
+```python
+orchestration = _syscall_data(
+    "sys.v1.analytics.execute_infinity",
+    {"user_id": context.get("user_id"), "trigger_event": f"memory_{workflow}"},
+    context,
+    "score.recalculate",
+)
+```
+
+It is on a real user request path, not a background one. `POST /memory/execute` (runtime
+`memory_router.py:811`, authenticated, rate-limited 30/min) runs the `memory_execute_loop` flow,
+whose terminal node is `memory_execution_orchestrate`. The caller waits for the full Infinity loop
+before getting a response, exactly as a Genesis turn did.
+
+**The graph is runtime-owned, which is worth knowing before touching it.** `memory_execute_loop`
+is registered in `aindy-runtime` at `AINDY/runtime/flow_definitions_memory.py:467-478`, behind an
+`if "memory_execute_loop" not in FLOW_REGISTRY` guard. The app separately registers a
+*same-shaped* graph under a *different* name, `memory_execution`
+(`apps/automation/flows/flow_definitions.py:766-774`). Both chains end in the same app-owned node,
+so fixing the node fixes both callers — but do not go looking for a `memory_execute_loop` graph in
+this repo, because there isn't one.
+
+### Two ways it is *milder* than the Genesis case — do not copy the P0 framing
+
+1. **It already fails soft.** The `except` branch returns `SUCCESS` with
+   `orchestration_error` set, so a scoring failure does not fail the caller's request. Genesis
+   returned `FAILURE` and told the user the turn failed. That half of the bug is absent here.
+2. **It is unmeasured.** No latency trace, no stall, no outage has been attributed to this
+   endpoint. The Genesis P0 rating came from an observed ~14-minute API outage; nothing
+   comparable has been recorded here. Rating it P2 on the strength of the shared root cause is
+   deliberate — inflating it to P0 by analogy would repeat the mistake the 2026-08-22
+   reconciliation note calls out.
+
+### What the fix looks like
+
+The machinery now exists — `analytics.infinity_recalc` is registered with the runtime's
+`async_job_service` (`apps/analytics/bootstrap.py`), so this is a two-line change to submit
+`sys.v1.job.submit` with `trigger_event: f"memory_{workflow}"` rather than new plumbing.
+
+**One thing to check first that did not apply to Genesis.** This node attaches its result to
+`response["orchestration"]` on `memory_execution_response`, which *is* returned to the caller
+(`apps/automation/bootstrap.py:198-199` maps both `memory_execution` and `memory_execute_loop` to
+that key). For Genesis it was verified that nothing read the equivalent value. Here the check was
+narrower: no client file references `memory_execution_response`, and the `orchestration` reads in
+the client belong to the `task_completion` flow (`MasterplanProjectionContext.jsx`). That is
+suggestive, not conclusive — confirm no API consumer reads it before dropping it, or keep
+returning a queued-job acknowledgement in its place.
+
+### Explicitly NOT a third instance
+
+`watcher_ingest_orchestrate` (`flow_definitions.py:584`) makes the same synchronous
+`execute_infinity` call and is **not** part of this item. It runs only in the `watcher_ingest`
+flow, which is dispatched through `register_async_job("watcher.ingest")`
+(`apps/tasks/bootstrap.py:226`) — already off the request path. The HTTP endpoint
+`POST /watcher/signals` runs a different flow (`watcher_signals_receive`) that does not include
+that node. It also *consumes* the result synchronously (`next_action = orchestration["next_action"]`),
+so it could not be made async without a redesign. Checked and ruled out rather than left
+ambiguous, because a grep for the syscall name returns it and it looks like a twin.
 
 ---
 
