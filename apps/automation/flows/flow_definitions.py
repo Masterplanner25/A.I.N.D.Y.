@@ -253,18 +253,48 @@ def genesis_message_execute(state, context):
 
 @register_node("genesis_message_orchestrate")
 def genesis_message_orchestrate(state, context):
+    """Queue the Infinity recalculation instead of running it on the request path.
+
+    Measured on 2026-08-24 (session 7, the first real Genesis conversation):
+
+        +0s   genesis.message.started
+        +15s  the reply is persisted — the user's answer already exists
+        +30s  the client aborts (@aindy/ui-kit's hardcoded ceiling) and shows a failure
+        +43s  loop.started   <- this node's synchronous recalculation begins
+        +47s  genesis.message.completed
+
+    So 32 of the 47 seconds were spent after the answer existed, and the user was told
+    the turn failed while their reply sat in the database. A turn IS a scoring event —
+    that premise was tested and upheld — so the work is kept, not dropped. What changes
+    is only where it runs.
+
+    The result was also being attached to `genesis_response["orchestration"]`, which no
+    client reads (`Genesis.jsx` reads `reply` and `synthesis_ready` only). The durable
+    home already exists and is unaffected: the orchestrator appends to `score_history`
+    with `trigger_event` and `score_delta`. Nothing is lost by not returning it.
+
+    See GENESIS-TURN-LATENCY-1 and docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md.
+    """
     try:
-        orchestration = _syscall_data(
-            "sys.v1.analytics.execute_infinity",
-            {"user_id": context.get("user_id"), "trigger_event": "genesis_message"},
+        _syscall_data(
+            "sys.v1.job.submit",
+            {
+                "task_name": "analytics.infinity_recalc",
+                "payload": {
+                    "user_id": context.get("user_id"),
+                    "trigger_event": "genesis_message",
+                },
+                "source": "genesis_message",
+            },
             context,
-            "score.recalculate",
+            "job.submit",
         )
-        response = dict(state.get("genesis_response") or {})
-        response["orchestration"] = orchestration
-        return {"status": "SUCCESS", "output_patch": {"genesis_response": response}}
+        return {"status": "SUCCESS", "output_patch": {}}
     except Exception as e:
-        return {"status": "FAILURE", "error": str(e)}
+        # Scoring is downstream of answering. A turn that produced a reply must not be
+        # reported as failed because the recalculation could not be queued.
+        logger.warning("genesis_message_orchestrate: could not queue infinity recalc: %s", e)
+        return {"status": "SUCCESS", "output_patch": {}}
 
 
 @register_node("memory_execution_validate")

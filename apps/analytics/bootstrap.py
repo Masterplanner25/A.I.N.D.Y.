@@ -27,6 +27,7 @@ def register() -> None:
     _register_response_adapters()
     _register_events()
     _register_jobs()
+    _register_async_jobs()
     _register_scheduled_jobs()
     _register_syscalls()
     _register_required_syscalls()
@@ -119,6 +120,39 @@ def _register_jobs() -> None:
     register_job("analytics.reasoning_recommendation", _reasoning_recommendation)
     register_job("scheduler.infinity_scores", _scheduler_recalculate_all_scores)
     register_job("analytics.expectation_model_train", _train_expectation_model)
+
+
+def _register_async_jobs() -> None:
+    """Async (background) dispatch — distinct from `register_job` above.
+
+    `register_job` stores a SYNCHRONOUS callable looked up later by name; registering
+    one does not make it async. Background dispatch lives in the runtime's
+    `async_job_service`, and before 2026-08-24 this domain registered nothing there —
+    which is why a Genesis turn recalculated Infinity on the request path.
+    """
+    from AINDY.platform_layer.async_job_service import register_async_job
+
+    register_async_job("analytics.infinity_recalc")(_job_infinity_recalc)
+
+
+def _job_infinity_recalc(payload: dict, db):
+    """Run the Infinity orchestrator off the request path.
+
+    Deliberately the SAME `execute()` the synchronous path calls — this changes when
+    the work runs, not what it does. The orchestrator already takes its own execution
+    lease keyed on (user, trigger), so a queued run and a scheduled one cannot both
+    proceed; see INFINITY-RECALC-DEBOUNCE-1 for the known weakness in that keying.
+    """
+    from apps.analytics.services.orchestration.infinity_orchestrator import execute
+
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise ValueError("analytics.infinity_recalc requires 'user_id'")
+    return execute(
+        user_id=str(user_id),
+        trigger_event=payload.get("trigger_event") or "async",
+        db=db,
+    )
 
 
 def _register_scheduled_jobs() -> None:
