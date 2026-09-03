@@ -15,6 +15,6 @@ def test_apps_repo_declares_bounded_runtime_dependency():
     requirements = [Requirement(item) for item in pyproject["project"]["dependencies"]]
     runtime_requirement = next(req for req in requirements if req.name == "aindy-runtime")
 
-    assert str(runtime_requirement.specifier) == "<3.0,>=2.7.0"
+    assert str(runtime_requirement.specifier) == "<3.0,>=2.8.0"
     assert any(spec.operator == "<" for spec in runtime_requirement.specifier)
     assert any(spec.operator == ">=" for spec in runtime_requirement.specifier)
