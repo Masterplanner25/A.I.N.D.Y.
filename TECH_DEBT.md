@@ -41,7 +41,31 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
-## MASTERPLAN-NO-SCORING-1: the lock is DECLINED as a scoring event (owner, 2026-09-05); the trigger-coverage half stays open (app-owned, P2 — Gap)
+## MASTERPLAN-NO-SCORING-1: ✅ CLOSED 2026-09-05 — the lock is declined, and the other three triggers are unused features, not broken ones
+
+> ### ✅ Trigger-coverage half resolved — no defect
+>
+> The entry warned that `score_history` cannot distinguish *"the trigger is broken"* from
+> *"the feature has never been used"*, and said to check for domain activity before concluding
+> anything. Checked. **All three are the second case:**
+>
+> | trigger | domain evidence | verdict |
+> |---|---|---|
+> | `memory_{workflow}` | `memory_execute_loop` / `memory_execution`: **0 `flow_runs` ever** (25 distinct workflows have run; neither is among them). No caller anywhere — not `client/`, not `@aindy/ui-kit`, not `apps/`. | never invoked |
+> | `freelance_delivery` | `freelance_orders`=0, `client_feedback`=0, `freelance_payment_records`=0 | domain never used |
+> | `session_ended` | `watcher_signals`=0, watcher `flow_runs`=0 | domain never used |
+>
+> **So "only 3 of 7 wired triggers have ever fired" was true but misleading.** The other four are
+> not broken wiring; they are features nobody has exercised on this stack. That is a materially
+> different — and much less alarming — statement than the one this entry opened with, and it is
+> why the check-before-concluding instruction was written into it.
+>
+> The one real consequence is recorded against `MEMORY-EXECUTE-LATENCY-1`, whose severity this
+> changes: it describes a defect on a code path that has never executed and has no caller.
+>
+> **Nothing to do. Re-open only if a trigger fails to fire while its domain is demonstrably
+> active** — that is the observation this entry could not make, and the only one that would mean
+> broken wiring.
 
 > ### ✅ Decision — do not give the MasterPlan lock its own trigger
 >
@@ -643,9 +667,30 @@ Write-up: `docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md` (see §8).
 
 ---
 
-## MEMORY-EXECUTE-LATENCY-1: `POST /memory/execute` still recalculates Infinity on the request path (app-owned, P2)
+## MEMORY-EXECUTE-LATENCY-1: `POST /memory/execute` recalculates Infinity on the request path — but that path has never executed (app-owned, P2 → **P3** 2026-09-05)
 
-**Status: OPEN, unmeasured.** Found 2026-09-01 while fixing `GENESIS-TURN-LATENCY-1` (#257). This
+> ### ★ Downgraded — the defect is real, the exposure is zero
+>
+> Established 2026-09-05 while resolving a contradiction between this entry and
+> `MASTERPLAN-NO-SCORING-1`: this entry said the memory trigger runs synchronously on the request
+> path, while `score_history` held no `memory_*` row at all. Both could not be true.
+>
+> **The resolution is that the node has never run.** `memory_execute_loop` and `memory_execution`
+> have **0 `flow_runs`** — 25 distinct workflows have executed on this stack and neither is among
+> them. And nothing calls the endpoint: no reference in `client/`, none in `@aindy/ui-kit`, none
+> in `apps/` beyond a result-extractor mapping at `apps/automation/bootstrap.py:199`.
+>
+> So the code below is accurate and the defect is genuine — it is simply **latent**. The
+> synchronous `execute_infinity` sits on a route with no caller in this repo.
+>
+> **Downgraded P2 → P3, not closed.** The code is still wrong, `POST /memory/execute` is
+> runtime-owned and may have consumers outside this repo, and the moment anything here calls it
+> the original P2 framing applies unchanged.
+>
+> **It becomes P2 again the day `flow_runs` shows a `memory_execute_loop` row.** That is a cheap,
+> specific trigger to watch for, and better than a periodic re-read of this entry.
+
+**Status: OPEN (P3, latent).** Found 2026-09-01 while fixing `GENESIS-TURN-LATENCY-1` (#257). This
 is the same defect in a second flow, and it is filed because the Genesis fix deliberately changed
 only the one flow the outage was measured on.
 
@@ -680,11 +725,13 @@ this repo, because there isn't one.
 1. **It already fails soft.** The `except` branch returns `SUCCESS` with
    `orchestration_error` set, so a scoring failure does not fail the caller's request. Genesis
    returned `FAILURE` and told the user the turn failed. That half of the bug is absent here.
-2. **It is unmeasured.** No latency trace, no stall, no outage has been attributed to this
-   endpoint. The Genesis P0 rating came from an observed ~14-minute API outage; nothing
-   comparable has been recorded here. Rating it P2 on the strength of the shared root cause is
-   deliberate — inflating it to P0 by analogy would repeat the mistake the 2026-08-22
-   reconciliation note calls out.
+2. **It is unmeasured** — and as of 2026-09-05 we know *why*: the path has never executed
+   (see the ★ box above). No latency trace, no stall, no outage has been attributed to this
+   endpoint because nothing has ever called it. The Genesis P0 rating came from an observed
+   ~14-minute API outage; nothing comparable has been recorded here. Rating it P2 on the strength
+   of the shared root cause was deliberate — inflating it to P0 by analogy would repeat the
+   mistake the 2026-08-22 reconciliation note calls out — and the same discipline is why it is
+   now P3 rather than left at P2.
 
 ### What the fix looks like
 
