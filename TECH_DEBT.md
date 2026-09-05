@@ -41,12 +41,32 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
-## MASTERPLAN-NO-SCORING-1: locking a MasterPlan is not a scoring event, and three other triggers have never fired (app-owned, P2 — Gap)
+## MASTERPLAN-NO-SCORING-1: the lock is DECLINED as a scoring event (owner, 2026-09-05); the trigger-coverage half stays open (app-owned, P2 — Gap)
 
-**Status: OPEN, and it is a question before it is a defect.** Found 2026-09-05 after a real
-synthesise-and-lock on the live stack produced no scoring activity at all.
+> ### ✅ Decision — do not give the MasterPlan lock its own trigger
+>
+> **Owner's call, 2026-09-05, the same day it was filed.** A plan lock *should* be reflected in
+> scoring "within itself", but it is a rare event and **should not be treated any differently
+> from any other chat**. The initialisation conversation is a Genesis chat; Genesis chats already
+> score. Adding a `masterplan_lock` trigger would attribute a second scoring event to the same
+> stretch of user activity.
+>
+> **The evidence supports it.** The synthesis conversation scored three times — `genesis_message`
+> rows at 19:34:19, 20:11:43 and 20:44:47 — and the plan row was created and locked together at
+> 21:08:02, producing no fourth row. So the *work* was scored as it happened; only the commit of
+> that work was not. That is the intended shape, not a hole.
+>
+> **What this closes:** the masterplan-specific question. No code change. Do not re-file it —
+> the asymmetry with `genesis_message` is deliberate, and this paragraph exists so the next
+> person who notices it does not re-derive the question.
+>
+> **What it does NOT close:** the trigger-coverage finding below. Three *other* wired triggers
+> have still never fired, and that is a separate question with a separate answer.
 
-### The specific gap
+**Status of the remainder: OPEN.** Found 2026-09-05 after a real synthesise-and-lock on the live
+stack produced no scoring activity of its own.
+
+### The specific gap — retained as the record of what was decided, not as open work
 
 Nothing in `apps/masterplan/` calls `sys.v1.analytics.execute_infinity` or submits
 `analytics.infinity_recalc` — a grep for either across the whole domain returns nothing. So
@@ -62,11 +82,11 @@ A Genesis *chat message* scores. Locking the plan that the chat exists to produc
 Given the owner's thesis that the Infinity algorithm is the product and MasterPlan is one of the
 domains feeding it, that asymmetry is at least worth a deliberate answer.
 
-**It may be correct.** `score_history` is append-only and the scheduled recalculation runs
-regardless, so a lock is picked up within the scheduled window — just not attributed to the lock.
-If the answer is "plans are structural, not behavioural, and the schedule covers them", that is a
-fine answer and this entry closes as declined. What it must not stay is unanswered, which is the
-state it was in until someone locked a plan and looked.
+**It was correct — answered above.** The reasoning that landed was not the one guessed here. It
+is not that the schedule covers the plan; it is that **the conversation that produced the plan
+already scored, three times, as `genesis_message`**. The lock is the commit of work that was
+scored while it happened, so a `masterplan_lock` trigger would count the same user activity
+twice. Filed at 2026-09-05, answered the same day.
 
 ### The wider finding, which is the more useful half
 
@@ -99,12 +119,26 @@ also exactly the shape `docs/specs/WORLDVIEW_AND_KNOWLEDGE_SPEC.md` was filed ab
 machinery exists and has never been fed"), which is why it is worth a register entry rather than
 a passing note.
 
-### To close it
+### To close the rest
 
-Decide, per trigger, whether the event should score. If MasterPlan should, the machinery now
-exists and is proven — `analytics.infinity_recalc` is registered and three Genesis turns have
-queued and completed it — so it is a `sys.v1.job.submit` call with
-`trigger_event: "masterplan_lock"`. **Stringify the user id** when you do; see the ★ warning in
+MasterPlan is decided (declined, see the box at the top). **Three questions remain, one per
+trigger that exists in code and has never produced a row:**
+
+| trigger | the question |
+|---|---|
+| `memory_{workflow}` | Never fired — but `MEMORY-EXECUTE-LATENCY-1` says it runs synchronously on `POST /memory/execute`. Those cannot both be true. Resolve that contradiction first; it is the most likely of the three to be an actual defect rather than an absence. |
+| `freelance_delivery` / `_confirmed` | Plausibly just unexercised — has a freelance delivery ever been confirmed on this stack? Check before treating it as broken. |
+| `session_ended` (watcher ingest) | Same shape: does watcher ingest ever run here? |
+
+**Two of these three may be "the feature has never been used", not "the trigger is broken."**
+That distinction is the whole work, and `score_history` cannot tell them apart — a trigger that
+never fires and a code path that is never reached produce identical evidence. Check for domain
+activity (a confirmed delivery, a watcher batch, a `/memory/execute` call) before concluding
+anything.
+
+If any of them *should* score, the machinery is proven — `analytics.infinity_recalc` is
+registered and three Genesis turns have queued and completed it — so each is a
+`sys.v1.job.submit` call. **Stringify the user id** when you do; see the ★ warning in
 `MEMORY-EXECUTE-LATENCY-1`.
 
 ---
