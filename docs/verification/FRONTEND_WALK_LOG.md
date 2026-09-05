@@ -34,7 +34,7 @@ exists to break.
 
 Entries stay here until they are fixed, filed upstream, or explicitly declined.
 
-**Environment:** `aindy-runtime==1.10.2` · native `docker.io` in WSL2 Ubuntu · pgvector/pg16 ·
+**Environment:** `aindy-runtime==2.9.0` (was 1.10.2 when this log opened) · native `docker.io` in WSL2 Ubuntu · pgvector/pg16 ·
 client on Vite dev server at `localhost:5173` proxying to the API at `localhost:8000`.
 
 ---
@@ -1659,3 +1659,39 @@ Also closed in the same window, outside the walk's numbering: the `bridge` domai
 - **33** — every response carries two trace ids resolving to different graphs. The fix is
   naming (`pipeline_trace_id`), and the envelope is runtime-built.
 - **34** — scheduler status reports health but lists no jobs.
+
+---
+
+### 35. Tailwind v4 migration — looked at, nothing moved — `Verification` (passed)
+
+**Owner:** `app` · **Date:** 2026-09-05 · **Verdict:** no visible change, which is the pass.
+
+Not a finding. Recorded because the Tailwind v3 → v4 migration (#255) shipped with build and
+test evidence but **no human had looked at the rendered app**, and that gap was carried as
+outstanding through eight subsequent PRs.
+
+Looked at the running client on `localhost:5173` against the live stack. Owner's verdict:
+*"it all looks like it did before we did anything."* For a framework major that is the success
+criterion — v4 is supposed to render what v3 rendered.
+
+**What the look actually ruled out**, none of which the automated checks could:
+
+- **Preflight changed in v4.** A shift would have shown as altered default margins, form-control
+  appearance, or heading sizes.
+- **The default border colour moved from `gray-200` to `currentColor`** — the change most likely
+  to look obviously wrong, and the reason the codemod's compatibility shim covering `::before`,
+  `::after`, `::backdrop` and `::file-selector-button` was kept rather than trimmed.
+- **44 utility renames across 13 files.** A single mis-migration would read as a missing shadow,
+  a lost rounded corner, or an element that stopped shrinking in a flex row.
+
+**What a human eye could NOT have caught here, and why it did not need to.** The specific
+regression this migration nearly shipped was a double-migrated backdrop blur — v4 shifted the
+scale down a step, so applying the bare-name and `-sm` rules in sequence would have halved
+`AppShell`'s sidebar and header from 8px to 4px. Both sit at 95% opacity, where 8px and 4px are
+indistinguishable by eye. That one was only ever catchable in the generated CSS
+(`--blur-sm:8px` / `--blur-xs:4px`, each reached by the class that held that value under v3),
+which is where it was caught and fixed before merge.
+
+**The pairing is the point:** the eye covers preflight, borders and layout, which no test
+asserts; the generated stylesheet covers per-utility values, which no eye can resolve. Neither
+half would have been sufficient.
