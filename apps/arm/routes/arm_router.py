@@ -97,8 +97,8 @@ async def analyze_code(
         # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
         # Execution mode (INLINE vs ASYNC) is decided exclusively by
         # ExecutionDispatcher — not at the route level.
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise(
             "arm_analysis",
             {
                 "file_path": body.file_path,
@@ -109,10 +109,6 @@ async def analyze_code(
             db=db,
             user_id=str(current_user["sub"]),
         )
-        if result.get("status") == "error":
-            raise RuntimeError(
-                (result.get("data") or {}).get("message", "ARM analysis flow failed")
-            )
         data = result.get("data") or {}
         if not isinstance(data, dict):
             data = {"result": data}
@@ -150,8 +146,8 @@ async def generate_code(
         # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
         # Execution mode (INLINE vs ASYNC) is decided exclusively by
         # ExecutionDispatcher — not at the route level.
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise(
             "arm_generate",
             {
                 "prompt": body.prompt,
@@ -165,10 +161,6 @@ async def generate_code(
             db=db,
             user_id=str(current_user["sub"]),
         )
-        if result.get("status") == "error":
-            raise RuntimeError(
-                (result.get("data") or {}).get("message", "ARM generate flow failed")
-            )
         data = result.get("data") or {}
         if not isinstance(data, dict):
             data = {"result": data}
@@ -307,10 +299,8 @@ async def get_arm_metrics(
 ):
     """Get the full Thinking KPI report for this user's ARM sessions."""
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow("arm_metrics", {"window": window}, db=db, user_id=str(current_user["sub"]))
-        if result.get("status") == "error":
-            raise RuntimeError("ARM metrics flow failed")
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise("arm_metrics", {"window": window}, db=db, user_id=str(current_user["sub"]))
         data = result.get("data") or {}
         if not isinstance(data, dict):
             data = {"result": data}
@@ -337,10 +327,8 @@ async def get_config_suggestions(
 ):
     """Analyze ARM performance metrics and suggest configuration improvements."""
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow("arm_config_suggest", {"window": window}, db=db, user_id=str(current_user["sub"]))
-        if result.get("status") == "error":
-            raise RuntimeError("ARM config suggest flow failed")
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise("arm_config_suggest", {"window": window}, db=db, user_id=str(current_user["sub"]))
         data = result.get("data") or {}
         if not isinstance(data, dict):
             data = {"result": data}
@@ -376,15 +364,13 @@ async def auto_tune_config(
     applied run is auditable and revertible via /config/auto-tune history + revert.
     """
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise(
             "arm_config_autotune",
             {"window": window, "apply": apply, "trigger": "manual"},
             db=db,
             user_id=str(current_user["sub"]),
         )
-        if result.get("status") == "error":
-            raise RuntimeError("ARM auto-tune flow failed")
         data = result.get("data") or {}
         if not isinstance(data, dict):
             data = {"result": data}

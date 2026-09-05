@@ -1,5 +1,5 @@
 # /routes/dashboard_router.py
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline_sync
@@ -11,17 +11,9 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard Overview"], dependencie
 
 
 def _run_flow_dashboard(flow_name: str, payload: dict, db: Session, user_id: str):
-    from AINDY.runtime.flow_engine import run_flow
-    result = run_flow(flow_name, payload, db=db, user_id=user_id)
-    if result.get("status") == "FAILED":
-        error = result.get("error", "")
-        if error.startswith("HTTP_"):
-            parts = error.split(":", 1)
-            code = int(parts[0].replace("HTTP_", ""))
-            msg = parts[1] if len(parts) > 1 else error
-            raise HTTPException(status_code=code, detail=msg)
-        raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
-    return result.get("data")
+    from apps._shared.flow import run_flow_data
+
+    return run_flow_data(flow_name, payload, db=db, user_id=user_id)
 
 
 def _execute_dashboard(request: Request, route_name: str, handler, *, db: Session, user_id: str):

@@ -64,11 +64,9 @@ async def get_my_score(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
+        from apps._shared.flow import run_flow_or_raise
 
-        result = run_flow("score_get", {}, db=db, user_id=str(current_user["sub"]))
-        if result.get("status") == "error":
-            raise HTTPException(status_code=500, detail="Score fetch failed")
+        result = run_flow_or_raise("score_get", {}, db=db, user_id=str(current_user["sub"]))
         data = result.get("data") or {}
         if isinstance(data, dict) and not data.get("latest_adjustment"):
             data["latest_adjustment"] = _latest_adjustment_payload(
@@ -96,15 +94,13 @@ async def recalculate_my_score(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise(
             "score_recalculate",
             {},
             db=db,
             user_id=str(current_user["sub"]),
         )
-        if result.get("status") == "error":
-            raise HTTPException(status_code=500, detail="Score recalculation flow failed")
         return result.get("data")
 
     result = await execute_with_pipeline(
@@ -128,10 +124,8 @@ async def get_score_history(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow("score_history", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
-        if result.get("status") == "error":
-            raise HTTPException(status_code=500, detail="Score history fetch failed")
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise("score_history", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
         return result.get("data")
 
     return await execute_with_pipeline(
@@ -154,8 +148,8 @@ async def record_score_feedback(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise(
             "score_feedback",
             {
                 "source_type": body.source_type,
@@ -167,8 +161,6 @@ async def record_score_feedback(
             db=db,
             user_id=str(current_user["sub"]),
         )
-        if result.get("status") == "error":
-            raise HTTPException(status_code=500, detail="Score feedback flow failed")
         return result.get("data")
 
     result = await execute_with_pipeline(
@@ -189,10 +181,8 @@ async def get_score_feedback(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow("score_feedback_list", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
-        if result.get("status") == "error":
-            raise HTTPException(status_code=500, detail="Score feedback list failed")
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise("score_feedback_list", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
         return result.get("data")
 
     return await execute_with_pipeline(

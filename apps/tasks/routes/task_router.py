@@ -75,8 +75,8 @@ def create_task(
     _task_result: dict = {}
 
     def handler(_ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise(
             "task_create",
             {
                 "task_name": task.name,
@@ -97,10 +97,6 @@ def create_task(
             db=db,
             user_id=user_id,
         )
-        if result.get("status") == "error":
-            raise RuntimeError(
-                (result.get("data") or {}).get("message", "Task create flow failed")
-            )
         data = result.get("data")
         if isinstance(data, dict):
             _task_result.update(data)
@@ -142,17 +138,13 @@ def start_task(
     _not_found: list[bool] = []
 
     def handler(_ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise(
             "task_start",
             {"task_name": task.name},
             db=db,
             user_id=user_id,
         )
-        if result.get("status") == "error":
-            raise RuntimeError(
-                (result.get("data") or {}).get("message", "Task start flow failed")
-            )
         # run_flow returns {"status": "SUCCESS", "data": {"message": "..."}, ...}
         data = result.get("data") if isinstance(result, dict) else None
         msg = data.get("message", "") if isinstance(data, dict) else ""
@@ -176,17 +168,13 @@ def pause_task(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise(
             "task_pause",
             {"task_name": task.name},
             db=db,
             user_id=user_id,
         )
-        if result.get("status") == "error":
-            raise RuntimeError(
-                (result.get("data") or {}).get("message", "Task pause flow failed")
-            )
         return _flow_envelope(result)
 
     return _execute_tasks(request, "tasks.pause", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
@@ -204,17 +192,13 @@ def complete_task(
     _not_found: list[bool] = []
 
     def handler(_ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise(
             "task_completion",
             {"task_name": task.name},
             db=db,
             user_id=user_id,
         )
-        if result.get("status") == "error":
-            raise RuntimeError(
-                (result.get("data") or {}).get("message", "Task completion flow failed")
-            )
         # run_flow returns {"status": "SUCCESS", "data": {"task_result": "...", ...}, ...}
         data = result.get("data") if isinstance(result, dict) else None
         task_result = data.get("task_result", "") if isinstance(data, dict) else ""
@@ -257,10 +241,8 @@ def trigger_recurrence(
     """Triggers the recurrence check job asynchronously."""
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow("tasks_recurrence_check", {}, db=db, user_id=user_id)
-        if result.get("status") == "error":
-            raise RuntimeError((result.get("data") or {}).get("message", "Recurrence check failed"))
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise("tasks_recurrence_check", {}, db=db, user_id=user_id)
         return _flow_envelope(result)
     return _execute_tasks(request, "tasks.recurrence.check", handler, db=db, user_id=user_id)
 
