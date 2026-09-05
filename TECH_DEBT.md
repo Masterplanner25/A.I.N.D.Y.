@@ -41,6 +41,61 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## SYSCALL-SILENT-ERRORS-1: three syscalls fail inside a Genesis turn and log nothing (app-owned, P2)
+
+**Status: OPEN, mechanism not identified.** Found 2026-09-05 by runtime 2.9.0's new
+`aindy_syscall_outcome_total` metric. Nothing else was measuring this, and there is no log line
+to find — the metric is the only reason anyone knows.
+
+### The observation
+
+After one Genesis turn on a healthy stack:
+
+```
+aindy_syscall_outcome_total{status="error",syscall="sys.v1.agent.count_runs"}              1.0
+aindy_syscall_outcome_total{status="error",syscall="sys.v1.agent.list_recent_durations"}   1.0
+aindy_syscall_outcome_total{status="error",syscall="sys.v1.automation.update_loop_adjustment"} 1.0
+```
+
+The counter's `_created` timestamps place the first two at **19:34:19 UTC**, inside the turn's
+window (19:34:11 → 19:34:20), and every log line in that second carries the turn's trace id
+`6d217a72` — so these failed *within* the turn, not in a concurrent request.
+
+**`docker logs` contains no ERROR line for any of them.** Not a truncation artifact: a grep for
+the syscall names across the whole container log returns nothing.
+
+### What is ruled out
+
+- **Not unregistered.** All three are present after `apps.bootstrap.bootstrap()` — 90 syscalls
+  total, matching `CLAUDE.md`. (A first probe suggested `update_loop_adjustment` was missing;
+  that was wrong — a bare `python -c` imports the runtime without running the app bootstrap and
+  sees only the 24 runtime-owned syscalls. Anyone re-checking this must bootstrap first.)
+- **Not broken handlers.** Dispatched directly with a real `user_id` and a live session, both
+  agent syscalls return `status=success`. Whatever fails is contextual to the turn.
+
+### Why it matters more than "one error each"
+
+The callers swallow it correctly. `identity_boot_service._count_user_agent_runs` does
+`if result.get("status") != "success": return 0`, and `get_recent_agent_runs` returns `[]`. That
+is the right shape — and it means **a failing syscall renders as a legitimate-looking zero**.
+Any surface showing agent run counts or durations reports "none" rather than "unavailable", with
+nothing in the log to contradict it.
+
+This is the same family as `GENESIS-CLIENT-FABRICATES-FAILURE-1`: the system tells the user
+something false and confident.
+
+### Next step
+
+Identify what differs between the turn's dispatch context and a direct one — the likely
+candidates are a missing `_db` in the nested context or a capability not carried across the
+nesting, both of which have precedent here. The metric now makes the fix verifiable: it should
+stop incrementing.
+
+**P2**: three occurrences, one turn, no user-visible incident reported. Raise it if the zeros are
+confirmed reaching a surface someone reads.
+
+---
+
 ## APP-FLOW-STATUS-DEADBRANCH-1: 18 routes test `run_flow()` for a status it never returns (app-owned, P2)
 
 **Status: OPEN, unmeasured.** Found 2026-09-05 while classifying `== "error"` sites for the
@@ -269,7 +324,7 @@ matters — read the entry.
 
 ---
 
-## GENESIS-TURN-LATENCY-1: one chat message takes the whole API down for ~14 minutes (app-owned, P0) — PLACEMENT FIXED in #257, outage mechanism still unconfirmed
+## GENESIS-TURN-LATENCY-1: one chat message takes the whole API down for ~14 minutes (app-owned, was P0 → **P2** 2026-09-05) — placement PROVEN fixed; stall not reproduced in 3 turns
 
 **Status: PARTIALLY RESOLVED 2026-09-01 (#257). Do not close it.** The placement half is fixed:
 `genesis_message_orchestrate` now submits `sys.v1.job.submit` for `analytics.infinity_recalc`
@@ -314,14 +369,67 @@ turn, so the async machinery was working and the payload was not.
 executed. The node's fail-soft `except` then reported the turn as successful — which is that
 half working exactly as designed, and also what hid the defect.
 
-Fixed by stringifying the id, with regression tests that assert the payload survives
-`json.dumps` (verified to fail against the old line). **So this entry still needs one more
-turn:** a measurement where the recalc actually queues and runs off the request path. The 10s
-above is a floor, not the answer — the honest reading is "the stall is gone; the deferral is
-unproven."
+Fixed by stringifying the id (#263), with regression tests that assert the payload survives
+`json.dumps` (verified to fail against the old line).
 
-Note also that `aindy_execution_dispatch_total` remained empty throughout, so §1's FR-15
-hypothesis recorded below is **still untested** — nothing exercised the dispatch counter.
+### ★★ The deferral is now proven — turn 3, 2026-09-05 19:34, on the fixed image
+
+```
+19:34:11.217   turn starts
+19:34:18.764   analytics.infinity_recalc queued
+19:34:18.849   job starts
+19:34:20.069   turn's last log line          <-- request path ends here
+19:34:22.401   job completes                 <-- 2.33s LATER, off the request path
+```
+
+`job_logs` holds the row: `analytics.infinity_recalc | status=success | source=genesis_message`.
+Independently corroborated by 2.9.0's new metric,
+`aindy_syscall_outcome_total{status="success",syscall="sys.v1.job.submit"} 1.0`.
+
+**The scoring work outlived the turn by 2.33 seconds.** That is the deferral demonstrated
+rather than inferred, and it is what this entry was waiting for.
+
+| turn | wall time | recalc |
+|---|---|---|
+| 2026-08-24 (original defect) | ~47s | inline, on the request path |
+| 1 — 2026-09-05 16:51 (broken payload) | ~10.0s | skipped |
+| 2 — 2026-09-05 18:59 (broken payload) | ~7.1s | skipped |
+| **3 — 2026-09-05 19:34 (fixed)** | **~8.85s** | **queued, ran off-path** |
+
+The turn that actually does the work sits in the same band as the two that skipped it, so
+queueing costs essentially nothing on the request path. ~47s → ~8.85s with the scoring still
+performed.
+
+### The stall: not reproduced, and the likely explanation is not this defect
+
+No stall followed any of the three turns. `/health` answered 200 in 0.10–0.56s immediately
+after each; postgres cluster reinits stayed at 0; scheduler saturation warnings were confined to
+a 99-second boot window and stopped entirely.
+
+**But the honest reading is stronger than "three clean turns".** The original 14–18 minute
+outage was measured on 2026-08-23 on a host that we now know was independently pathological:
+7.7 GB RAM against a 23.6 GB commit charge, 40–58k hard page faults/sec, producing dead
+`/health`, zero restarts and no log output *with no app traffic at all*. `CLAUDE.md` already
+records that this exact fingerprint has two unrelated causes. The three clean turns were run at
+**65** page-faults/sec.
+
+So the most defensible account is that the stall was host starvation and the latency was the
+placement defect — two problems that shared one fingerprint, which is precisely what the entry's
+`py-spy` evidence (MainThread idle in `select()`, workers parked, nothing executing app code)
+pointed at all along.
+
+**What would still reopen it:** the stall recurring on a host with healthy
+`\Memory\Available MBytes`. Downgrade to P2 rather than closing outright, because three turns
+on one afternoon is not a soak.
+
+### FR-15 remains untested, for a corrected reason
+
+`aindy_execution_dispatch_total` is **declared but has zero samples** after all three turns —
+checked at `/metrics` (307 → `/metrics/`). Earlier readings of "not emitted" in this session
+were taken against `/platform/observability/metrics`, which returns the platform SPA's HTML, so
+they were grepping a web page and proved nothing either way. The corrected check gives the same
+conclusion on real evidence: the queued job ran through `async_job_service`'s executor, not
+through the scheduler tick, so 2.7.0's async scheduler dispatch is still unexercised.
 
 **A candidate mechanism arrived 2026-09-02 with runtime 2.7.0 — as a hypothesis, not a finding.**
 FR-15's defect was that `schedule()` was the only queue drainer, ran each item synchronously, and
