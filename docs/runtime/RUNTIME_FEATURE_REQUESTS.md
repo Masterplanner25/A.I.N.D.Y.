@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-01"
+last_verified: "2026-09-05"
 api_version: "1.0"
 status: current
 owner: "app-team"
