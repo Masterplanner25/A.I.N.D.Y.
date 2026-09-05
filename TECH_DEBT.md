@@ -397,6 +397,42 @@ resets when the VM restarts, so that is absence of evidence only. Carry the OOM 
 Next step is observation, not a fix: catch a burst (they cluster in the morning) with `dmesg`
 retained and host paging counters sampled, before theorising.
 
+### ★ Observation 2026-09-05 — a burst was caught, with the counters. Not stale; advanced.
+
+Checked whether this entry had gone stale. **It has not** — but the observation it asked for
+arrived incidentally, and it narrows the mechanism.
+
+**A burst, with host counters attached.** During a bring-up on **2026-09-02** the postgres
+container logged reinitialisations at 19:11:13, 19:12:17, 19:13:59 and 19:25:11 — 14 cumulative
+in that container's life. Host counters sampled across the same window:
+**`Available MBytes` 104–126**, **`Pages/sec` 40,000–58,000**, against 7.7 GB of physical RAM
+with a 23.6 GB commit charge. Containers were using ~443 MB in total, so the pressure was
+host-side, not the stack's. (That container has since been replaced, so its log is gone; this is
+the session record, which is why it is written down here rather than left to be re-derived.)
+
+**A clean window, for contrast.** The current container has been up **6h38m** (16:02:07 →
+22:40 UTC) with **zero** reinitialisations, zero `exit code 2`, zero signals, and one benign
+`FATAL: the database system is starting up` eight seconds into boot. 183 log lines covering the
+full uptime, so the zero is trustworthy rather than a truncation artifact. At the entry's stated
+rate of ~11/day you would expect roughly 3 in that window.
+
+**The refinement, and the reason this is worth recording.** At the time of that clean window
+`Pages/sec` was **22,386** — comparably high — with **726 MB** available. So a high paging *rate*
+alone does not produce reinitialisations. What differed on 09-02 was **available memory**
+(104 MB vs 726 MB). On this evidence the discriminator looks like available memory rather than
+paging rate, which matters because `Pages/sec` is the counter `CLAUDE.md` tells you to sample and
+the more alarming-looking number of the two.
+
+**Still `undiagnosed`, and the heading keeps that word.** This is a correlation across one caught
+burst and one clean window. It does not establish the killing mechanism, and the original
+evidence still stands against the simple story: no `signal 9` anywhere, and the exit-2 pattern is
+a backend `SIGQUIT` handler rather than a kernel OOM-kill. Carry the memory-pressure story as
+**better supported, still not established**.
+
+**Sharper next step than "catch a burst":** sample `Available MBytes` alongside the reinit count
+over a normal working day. If reinits only ever appear below some availability floor, that floor
+is the actionable number — and it is a host-capacity fact, not a postgres bug.
+
 ---
 
 ## IDEMPOTENCY-CONTENTION-UNVERIFIED-1: the effect gate is on, and unmeasured under load (P2)
