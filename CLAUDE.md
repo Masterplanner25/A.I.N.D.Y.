@@ -223,7 +223,7 @@ paired-repo development only.
 
 ### `run_flow()` return structure
 
-`run_flow()` returns a uniform envelope: `{"status": "SUCCESS"|"error", "data": {...}, "run_id": ..., "trace_id": ..., ...}`. The handler's actual output is always nested under `"data"`. **Do not read output keys from the top-level result dict.**
+`run_flow()` returns a uniform envelope: `{"status": ..., "data": {...}, "run_id": ..., "trace_id": ..., ...}`. The handler's actual output is always nested under `"data"`. **Do not read output keys from the top-level result dict.**
 
 ```python
 # CORRECT
@@ -234,6 +234,35 @@ message = data.get("message", "")  # flow output key lives here
 # WRONG — output keys are never at the top level of result
 message = result.get("message", "")
 ```
+
+**`status` is one of `SUCCESS` | `FAILED` | `SKIPPED` | `WAITING` — all uppercase. It is
+never `"error"`.** This block said `"SUCCESS"|"error"` until 2026-09-05, and that half was
+wrong; `_format_execution_response` (`flow_engine/runner_completion.py`) is only ever called
+with those four values. The runtime's own `memory_router._mem_run_flow` tests
+`result.get("status") == "FAILED"`, which is the pattern to copy.
+
+```python
+# WRONG — never matches, so a FAILED flow falls through to the success path
+if result.get("status") == "error":
+    raise RuntimeError(...)
+
+# CORRECT
+if result.get("status") != "SUCCESS":
+    ...
+```
+
+Two things this does NOT mean:
+
+- **It is not the syscall envelope.** A syscall response is lowercase and, since runtime
+  2.9.0, is `success` | `partial` | `unknown` | `error` — test those with `!= "success"`.
+  `run_flow` dispatches `sys.v1.flow.run` internally and **raises** if that syscall fails,
+  so a syscall-level failure reaches you as an exception, not as a status.
+- **Do not mechanically rewrite one into the other.** The two envelopes coexist inside the
+  same functions: a flow node reads a lowercase syscall status and returns an uppercase flow
+  status two lines later (see `_syscall_node` in `apps/*/flows/`).
+
+`APP-FLOW-STATUS-DEADBRANCH-1` in `TECH_DEBT.md` tracks the 18 routes still carrying the
+wrong test.
 
 ### `_fresh_main_app()` and `Base.metadata` — model import timing hazard
 

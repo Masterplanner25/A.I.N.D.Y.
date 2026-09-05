@@ -41,6 +41,85 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## APP-FLOW-STATUS-DEADBRANCH-1: 18 routes test `run_flow()` for a status it never returns (app-owned, P2)
+
+**Status: OPEN, unmeasured.** Found 2026-09-05 while classifying `== "error"` sites for the
+runtime 2.9.0 adoption. Not caused by that release — 2.9.0 is what made someone look.
+
+### The defect
+
+Four routers call `run_flow(...)` and then test the result like this:
+
+```python
+result = run_flow("task_create", {...}, db=db, user_id=user_id)
+if result.get("status") == "error":     # never true
+    raise RuntimeError(...)
+data = result.get("data")               # a FAILED flow arrives here
+```
+
+`run_flow()` does not return a lowercase `"error"` status. Both of its paths return the **flow**
+envelope: the direct path returns `runner.start(...)`, and the syscall path raises on a failed
+`sys.v1.flow.run` and otherwise returns `result["data"]["flow_result"]`. Its statuses come from
+`_format_execution_response` and are **`SUCCESS` / `FAILED` / `SKIPPED` / `WAITING` / `QUEUED` /
+`DEFERRED` — all uppercase**.
+
+So a flow that fails returns `status="FAILED"` with
+`result={"error": ..., "failed_node": ...}`, the test does not match, and the route returns
+**200 with whatever `data` holds** instead of raising. The failure is real, recorded, and
+invisible to the caller.
+
+**Independent confirmation:** the runtime's own `memory_router._mem_run_flow` tests
+`result.get("status") == "FAILED"`.
+
+### Inventory — 18 sites, verified individually
+
+| file | sites |
+|---|---|
+| `apps/arm/routes/arm_router.py` | 5 |
+| `apps/masterplan/routes/score_router.py` | 5 |
+| `apps/tasks/routes/task_router.py` | 5 |
+| `apps/masterplan/routes/goals_router.py` | 3 |
+
+Each was checked to actually follow a `run_flow(` call rather than matched by grep alone.
+
+**Two other `== "error"` sites in `apps/` are correct and must not be swept into a fix:**
+`social_router.py` reads the canonical HTTP envelope (the runtime's own
+`AINDY/core/response_adapter.py:60` tests it identically), and `content_ingest.py` checks
+`poll_source()`, which is ours.
+
+### The one path that makes the wrong test look right
+
+`_format_execution_response` *does* have an `if str(status).upper() == "ERROR"` branch that
+produces a lowercase envelope via `execution_error(...)`. It is reachable only through
+`_extract_async_handoff`, i.e. an async-handoff `202` whose `_http_response` declares an error
+status. That is an edge case, not the ordinary failure path — but it is almost certainly why the
+pattern was written and why it has never looked obviously wrong.
+
+### Why P2 and not higher
+
+It is a silent-wrong-answer bug on four core routers, which argues for P1. It is rated P2
+because **nothing has been observed firing**: no trace, no bug report, no 200-with-empty-data
+incident is on record. Rating it by reach rather than by evidence is the mistake the 2026-08-22
+reconciliation note in this file was written about. **What would raise it to P1:** one observed
+instance of a `FAILED` flow returning 200 to a client.
+
+### Why it is not fixed here
+
+Mechanically rewriting 18 tests to `!= "SUCCESS"` is wrong. `WAITING`, `QUEUED` and `DEFERRED`
+are not failures — a route that raises on them would break async handoff. The right behaviour is
+per-route and needs a decision about which non-`SUCCESS` statuses each endpoint should surface,
+which is a piece of work rather than a find-and-replace.
+
+### Related documentation defect — fixed 2026-09-05
+
+`CLAUDE.md`'s "`run_flow()` return structure" section documented the envelope as
+`{"status": "SUCCESS"|"error", ...}`. The `"error"` half was wrong and is the likely origin of
+the pattern. Corrected in the same change that filed this entry, with the real status set, the
+`_syscall_node` contrast (lowercase syscall status and uppercase flow status inside the same
+function), and a pointer here.
+
+---
+
 ## RUNTIME-PIN-FLOAT-1: an image rebuild no longer reproduces the adopted runtime (app-owned, P2)
 
 **Status: PARTIALLY ADDRESSED 2026-08-23 — the adoption pass ran; the float remains.**
