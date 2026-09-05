@@ -324,7 +324,7 @@ matters — read the entry.
 
 ---
 
-## GENESIS-TURN-LATENCY-1: one chat message takes the whole API down for ~14 minutes (app-owned, P0) — PLACEMENT PROVEN FIXED 2026-09-05; stall not reproduced in 3 turns
+## GENESIS-TURN-LATENCY-1: one chat message takes the whole API down for ~14 minutes (app-owned, was P0 → **P2** 2026-09-05) — placement PROVEN fixed; stall not reproduced in 3 turns
 
 **Status: PARTIALLY RESOLVED 2026-09-01 (#257). Do not close it.** The placement half is fixed:
 `genesis_message_orchestrate` now submits `sys.v1.job.submit` for `analytics.infinity_recalc`
