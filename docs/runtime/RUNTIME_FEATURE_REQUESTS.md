@@ -7,6 +7,68 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-25 — 11 of 13 syscall error paths emit no log line and no durable event 🔴 observability
+
+**apps-monolith ref:** found 2026-09-05, and found *only* because 2.9.0 shipped
+`aindy_syscall_outcome_total`. Before that metric this was unobservable, so thank you — the
+request is to finish the job the metric started.
+
+### What we hit
+
+Three syscalls were failing on our live stack — `sys.v1.agent.count_runs`,
+`sys.v1.agent.list_recent_durations`, `sys.v1.automation.update_loop_adjustment`. We only know
+because the new counter said so. `docker logs` contains no ERROR line for any of them, and
+`system_events` contains no `syscall.executed` row for them either.
+
+We spent a session narrowing it and could not identify the cause, because **there is no error
+message anywhere to read.** We excluded registration, capability mismatch, tenant violation and
+data-dependence by direct test, and could not reproduce it through the route
+(`GET /apps/identity/boot` returns 200 without moving the counter).
+
+### The mechanism, from your code
+
+Every dispatcher error funnels through `_error_envelope`
+(`AINDY/kernel/syscall_dispatcher.py:859`). It increments the outcome metric and returns the
+envelope. It does not log, and it does not call `_emit_syscall_event`.
+
+Thirteen call sites reach it. **Only two — line 375 (generic handler exception) and line 526 —
+log anything.** The other eleven are silent:
+
+> unknown syscall version · unknown syscall · permission denied · tenant violation ·
+> quota backend unavailable · input validation failed · handler contract violation ·
+> outcome contract violation · stable output validation failed
+
+Several of those are *operator-actionable configuration errors*. "Permission denied: requires
+capability X" is precisely the message someone needs, and today it exists only inside a returned
+dict that a defensive caller discards.
+
+Confirmed against our data: `system_events` holds `syscall.executed` rows with `status="error"`
+from August but none from 2026-09-05, because `_error_envelope` never emits one.
+
+### Why the swallow is not the caller's bug
+
+Our `identity_boot_service` does `if result.get("status") != "success": return 0`. That is
+correct defensive code — and exactly the shape 2.9.0's own §1 asked everyone to adopt. Combined
+with a silent dispatcher it produces a **confident wrong number**: a surface reporting "0 agent
+runs" rather than "unavailable", with nothing anywhere to contradict it.
+
+### Ask
+
+Log at `WARNING` inside `_error_envelope`, once, with the syscall name and the message it is
+already constructing. One line at the funnel covers all thirteen paths and cannot double-count —
+the same single-funnel property the comment there already relies on for the metric.
+
+Emitting `SYSCALL_EXECUTED` with `status="error"` from that funnel would additionally make
+failures reconcilable after the fact, which is the half that matters once a response is gone.
+We would take the log line alone.
+
+### Not asking for
+
+Any change to the envelope contract, or to the metric. Both are right. This is purely that the
+message already computed on line 862 should be visible to an operator.
+
+---
+
 ## FR-24 — `nltk==3.10.0` is an exact pin, and it is now a published CVE ✅ SHIPPED in 2.7.0
 
 **Closed 2026-09-02, one day after filing.** `aindy-runtime` 2.7.0 pins `nltk==3.10.3`

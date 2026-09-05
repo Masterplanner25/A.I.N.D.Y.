@@ -41,7 +41,7 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
-## SYSCALL-SILENT-ERRORS-1: three syscalls fail inside a Genesis turn and log nothing (app-owned, P2)
+## SYSCALL-SILENT-ERRORS-1: three syscalls fail with no log line and no durable event (app-owned, P2)
 
 **Status: OPEN, mechanism not identified.** Found 2026-09-05 by runtime 2.9.0's new
 `aindy_syscall_outcome_total` metric. Nothing else was measuring this, and there is no log line
@@ -57,9 +57,9 @@ aindy_syscall_outcome_total{status="error",syscall="sys.v1.agent.list_recent_dur
 aindy_syscall_outcome_total{status="error",syscall="sys.v1.automation.update_loop_adjustment"} 1.0
 ```
 
-The counter's `_created` timestamps place the first two at **19:34:19 UTC**, inside the turn's
-window (19:34:11 → 19:34:20), and every log line in that second carries the turn's trace id
-`6d217a72` — so these failed *within* the turn, not in a concurrent request.
+The counter's `_created` timestamps place the first two at **19:34:19 UTC**, which falls inside a
+Genesis turn's window (19:34:11 → 19:34:20). That coincidence initially read as "failed within the
+turn" — see the correction below; it does not hold.
 
 **`docker logs` contains no ERROR line for any of them.** Not a truncation artifact: a grep for
 the syscall names across the whole container log returns nothing.
@@ -84,15 +84,62 @@ nothing in the log to contradict it.
 This is the same family as `GENESIS-CLIENT-FABRICATES-FAILURE-1`: the system tells the user
 something false and confident.
 
+### Investigated 2026-09-05. Two corrections and one architectural finding.
+
+**Correction 1 — not specific to the Genesis turn.** The counters moved `1.0 → 2.0` with no turn
+in between, so the original "failed within the turn" reading was wrong: the timestamps merely
+coincided with a busy second in the log. Whatever calls these does so on ordinary traffic.
+
+**Correction 2 — a first probe reported `sys.v1.automation.update_loop_adjustment` unregistered.
+That was a false negative** and is now corrected in the header above: a bare `python -c` imports
+the runtime without running `apps.bootstrap`, seeing only 24 of the 90 syscalls.
+
+### Ruled out, each by direct test
+
+| hypothesis | how it was excluded |
+|---|---|
+| unregistered | all three present after `apps.bootstrap.bootstrap()` (90 total) |
+| capability mismatch | required vs `_infer_dispatch_capability` both `agent.read` / `automation.write` — exact match |
+| tenant violation | that check only fires when `metadata["_extension_call"]` is set; this path never sets it |
+| data-dependent | dispatched for a user with **0** agent runs and one with runs — both `success` |
+| the route itself | `GET /apps/identity/boot` with a minted token → **200, counters did not move** |
+
+Every out-of-process reproduction succeeds. The failure needs some state the probes do not have.
+
+### ★ Why there is nothing to find in the log — and this is the useful part
+
+Every dispatcher error funnels through one method, `_error_envelope`
+(`AINDY/kernel/syscall_dispatcher.py:859`). It increments the metric and returns. It does **not**
+emit a `SYSCALL_EXECUTED` SystemEvent, and it does **not** log.
+
+Thirteen call sites reach it. **Eleven emit no log line at all** — only lines 375 (generic handler
+exception) and 526 log. So a syscall failing in any of the other eleven — unknown version, unknown
+syscall, permission denied, tenant violation, quota-backend unavailable, input validation, handler
+contract, outcome contract, output validation — is **invisible in both the log and
+`system_events`**, and appears solely as a metric increment.
+
+That is confirmed against our own data: `system_events` holds `syscall.executed` rows with
+`status="error"` from August but **none** from today, because `_error_envelope` never emits one.
+
+**So these three failed in one of the eleven silent paths.** Combined with the exclusions above,
+the live candidates are quota-backend unavailability, input validation, output validation, or a
+handler/outcome contract violation.
+
 ### Next step
 
-Identify what differs between the turn's dispatch context and a direct one — the likely
-candidates are a missing `_db` in the nested context or a capability not carried across the
-nesting, both of which have precedent here. The metric now makes the fix verifiable: it should
-stop incrementing.
+Reproduce under concurrency — every successful reproduction so far was a quiet single call, and
+the failures appear on a loaded system. Then read the envelope's `error` string, which carries the
+exact message and is currently thrown away by the caller.
 
-**P2**: three occurrences, one turn, no user-visible incident reported. Raise it if the zeros are
-confirmed reaching a surface someone reads.
+Worth noting the caller is not at fault: `identity_boot_service` returning `0` on non-success is
+correct defensive code. It is the combination of a correct swallow with a silent dispatcher that
+produces a confident wrong number.
+
+**Filed upstream as FR-25** — 11 of 13 error paths emitting neither a log line nor a durable event
+is a runtime observability gap, not something this repo can fix.
+
+**P2**: still no user-visible incident reported. Raise it if the zeros are confirmed reaching a
+surface someone reads.
 
 ---
 
