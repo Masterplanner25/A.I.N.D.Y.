@@ -42,8 +42,12 @@ def _syscall_node(name: str, state: dict, context: dict, capability: str) -> dic
         },
     )
     result = get_dispatcher().dispatch(name, state, ctx)
-    if result["status"] == "error":
-        return {"status": "RETRY", "error": result["error"]}
+    # Not `== "error"`: runtime 2.9.0 widened the syscall envelope to
+    # success | partial | unknown | error. A `partial` falling through to the SUCCESS
+    # branch would report a half-applied effect as a completed flow node. `.get("error")`
+    # because only an `error` envelope is guaranteed to carry that key.
+    if result["status"] != "success":
+        return {"status": "RETRY", "error": result.get("error") or f"syscall {name} returned {result['status']}"}
     return {"status": "SUCCESS", "output_patch": result["data"]}
 
 

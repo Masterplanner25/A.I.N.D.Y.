@@ -89,8 +89,17 @@ def _dispatch_task_syscall(user_id: str, db: Session) -> dict:
         {"user_id": str(user_id)},
         ctx,
     )
-    if result["status"] == "error":
-        logger.warning("task syscall failed for %s: %s", user_id, result["error"])
+    # Not `== "error"`: runtime 2.9.0 widened the syscall envelope to
+    # success | partial | unknown | error. Anything that is not "success" must not
+    # reach the success path — a `partial` read as success would score against a
+    # half-fetched task list and report it as complete.
+    if result["status"] != "success":
+        logger.warning(
+            "task syscall not successful for %s (status=%s): %s",
+            user_id,
+            result.get("status"),
+            result.get("error"),
+        )
         return {"tasks": []}
     return result["data"]
 
