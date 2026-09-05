@@ -41,6 +41,74 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## MASTERPLAN-NO-SCORING-1: locking a MasterPlan is not a scoring event, and three other triggers have never fired (app-owned, P2 — Gap)
+
+**Status: OPEN, and it is a question before it is a defect.** Found 2026-09-05 after a real
+synthesise-and-lock on the live stack produced no scoring activity at all.
+
+### The specific gap
+
+Nothing in `apps/masterplan/` calls `sys.v1.analytics.execute_infinity` or submits
+`analytics.infinity_recalc` — a grep for either across the whole domain returns nothing. So
+synthesising and locking a plan does not recalculate Infinity, and never has:
+
+```sql
+SELECT count(*) FROM score_history
+ WHERE trigger_event ILIKE '%master%' OR ILIKE '%plan%' OR ILIKE '%lock%';
+-- 0
+```
+
+A Genesis *chat message* scores. Locking the plan that the chat exists to produce does not.
+Given the owner's thesis that the Infinity algorithm is the product and MasterPlan is one of the
+domains feeding it, that asymmetry is at least worth a deliberate answer.
+
+**It may be correct.** `score_history` is append-only and the scheduled recalculation runs
+regardless, so a lock is picked up within the scheduled window — just not attributed to the lock.
+If the answer is "plans are structural, not behavioural, and the schedule covers them", that is a
+fine answer and this entry closes as declined. What it must not stay is unanswered, which is the
+state it was in until someone locked a plan and looked.
+
+### The wider finding, which is the more useful half
+
+Auditing what has *ever* produced a scoring row, against what the code can emit:
+
+| `trigger_event` | in code | rows in `score_history` |
+|---|---|---|
+| `scheduled` | yes | **84** |
+| `genesis_message` | yes | **16** |
+| `task_completion` | yes | **3** |
+| `freelance_delivery` / `freelance_delivery_confirmed` | yes | **0** |
+| `session_ended` (watcher ingest) | yes | **0** |
+| `memory_{workflow}` (`memory_execution_orchestrate`) | yes | **0** |
+| anything masterplan | **no** | 0 |
+
+**Only three of the seven wired triggers have ever fired**, and one of those three
+(`scheduled`) accounts for 80% of all rows. The algorithm is being fed overwhelmingly by a clock
+rather than by events.
+
+Note this is *not* the same defect as `MEMORY-EXECUTE-LATENCY-1`. That entry is about the memory
+trigger running on the wrong thread; this is the observation that it has apparently never run at
+all. Both readings should be checked together — a trigger that is slow and a trigger that is
+never invoked look identical from `score_history`.
+
+### Why P2 and a Gap rather than a Defect
+
+Nothing is broken: no error, no crash, no wrong number. Scores are still produced on a schedule.
+This is an **absence** — the kind that is invisible until someone asks what fed a number. It is
+also exactly the shape `docs/specs/WORLDVIEW_AND_KNOWLEDGE_SPEC.md` was filed about ("the
+machinery exists and has never been fed"), which is why it is worth a register entry rather than
+a passing note.
+
+### To close it
+
+Decide, per trigger, whether the event should score. If MasterPlan should, the machinery now
+exists and is proven — `analytics.infinity_recalc` is registered and three Genesis turns have
+queued and completed it — so it is a `sys.v1.job.submit` call with
+`trigger_event: "masterplan_lock"`. **Stringify the user id** when you do; see the ★ warning in
+`MEMORY-EXECUTE-LATENCY-1`.
+
+---
+
 ## SYSCALL-SILENT-ERRORS-1: three syscalls fail with no log line and no durable event (app-owned, P2)
 
 **Status: OPEN, mechanism not identified.** Found 2026-09-05 by runtime 2.9.0's new
