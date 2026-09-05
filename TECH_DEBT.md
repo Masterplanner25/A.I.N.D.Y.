@@ -289,6 +289,40 @@ would convert an unexplained outage into an assumed-solved one.
 latency drops to roughly the reply-persist time, and that the stall does not recur. Until then
 this is a P1 open question about the outage, not a P0 about placement.
 
+### ★ The live turn was run 2026-09-05. Read both halves.
+
+On a healthy box (65 page-faults/sec, all containers healthy, runtime 2.9.0):
+
+| | 2026-08-24 | 2026-09-05 |
+|---|---|---|
+| turn wall time | ~47s | **~10.0s** (16:51:41.356 → 16:51:51.378) |
+| API stall afterwards | 14–18 min | **none** — `/health` 200 in 0.10s |
+| postgres cluster reinits | — | **0** |
+| scheduler saturation | 232 and climbing | 76, all inside a 99s boot window, **0 after** |
+
+**The stall did not recur.** That is real evidence and it is the half worth having.
+
+**But the latency number does not mean what it looks like.** The recalculation did not run
+*anywhere* — it was not deferred, it was **skipped**. `job_logs` holds **zero**
+`analytics.infinity_recalc` rows, while `memory.generate_embedding` queued twice in the same
+turn, so the async machinery was working and the payload was not.
+
+`genesis_message_orchestrate` passed `context["user_id"]` — a UUID object — into
+`sys.v1.job.submit`, which is effect-gated. The dispatcher JSON-serialises the payload in
+`execution_gate.compute_action_id` **before the handler runs**, so it raised
+`TypeError: Object of type UUID is not JSON serializable` inside dispatch and the syscall never
+executed. The node's fail-soft `except` then reported the turn as successful — which is that
+half working exactly as designed, and also what hid the defect.
+
+Fixed by stringifying the id, with regression tests that assert the payload survives
+`json.dumps` (verified to fail against the old line). **So this entry still needs one more
+turn:** a measurement where the recalc actually queues and runs off the request path. The 10s
+above is a floor, not the answer — the honest reading is "the stall is gone; the deferral is
+unproven."
+
+Note also that `aindy_execution_dispatch_total` remained empty throughout, so §1's FR-15
+hypothesis recorded below is **still untested** — nothing exercised the dispatch counter.
+
 **A candidate mechanism arrived 2026-09-02 with runtime 2.7.0 — as a hypothesis, not a finding.**
 FR-15's defect was that `schedule()` was the only queue drainer, ran each item synchronously, and
 was registered `max_instances=1`, so one slow flow blocked every other queued item along with wait
@@ -400,6 +434,19 @@ this repo, because there isn't one.
 The machinery now exists — `analytics.infinity_recalc` is registered with the runtime's
 `async_job_service` (`apps/analytics/bootstrap.py`), so this is a two-line change to submit
 `sys.v1.job.submit` with `trigger_event: f"memory_{workflow}"` rather than new plumbing.
+
+**★ Stringify the user id when you do, or this silently does nothing.**
+`flow_definitions.py:420` currently passes `context.get("user_id")` — a raw UUID — and that
+is fine *today* because `sys.v1.analytics.execute_infinity` is not effect-gated.
+`sys.v1.job.submit` **is**: the dispatcher JSON-serialises the payload in
+`execution_gate.compute_action_id` before the handler runs, so a UUID raises
+`TypeError: Object of type UUID is not JSON serializable` inside dispatch and the job is never
+queued. The node's `except` branch then reports success and nothing looks wrong.
+
+That is not hypothetical — it is exactly what the Genesis fix (#257) shipped with, and it took
+a live turn on 2026-09-05 to find it. Every contract check passed, because the difference is
+the gate path rather than the payload shape. `tests/unit/test_job_submit_payload_serializable.py`
+now pins the Genesis side; extend it when this one moves.
 
 **One thing to check first that did not apply to Genesis.** This node attaches its result to
 `response["orchestration"]` on `memory_execution_response`, which *is* returned to the caller

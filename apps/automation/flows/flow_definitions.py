@@ -279,13 +279,23 @@ def genesis_message_orchestrate(state, context):
 
     See GENESIS-TURN-LATENCY-1 and docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md.
     """
+    # `str(...)`, not the raw value. `context["user_id"]` is a UUID object, and
+    # `sys.v1.job.submit` is effect-gated: the dispatcher JSON-serialises the payload in
+    # `execution_gate.compute_action_id` BEFORE the handler runs, so a UUID raises
+    # `TypeError: Object of type UUID is not JSON serializable` and the syscall never
+    # executes. The previous inline call to `sys.v1.analytics.execute_infinity` passed the
+    # same raw value and worked, which is why this survived review and every contract
+    # check — it is a gate-path difference, not a payload-shape one, and only a live turn
+    # showed it. Measured 2026-09-05: zero `analytics.infinity_recalc` rows in `job_logs`
+    # while `memory.generate_embedding` queued twice in the same turn.
+    user_id = context.get("user_id")
     try:
         _syscall_data(
             "sys.v1.job.submit",
             {
                 "task_name": "analytics.infinity_recalc",
                 "payload": {
-                    "user_id": context.get("user_id"),
+                    "user_id": str(user_id) if user_id is not None else None,
                     "trigger_event": "genesis_message",
                 },
                 "source": "genesis_message",
