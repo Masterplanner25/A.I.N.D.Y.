@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "platform-team" }]
 dependencies = [
-  "aindy-runtime>=2.8.0,<3.0",
+  "aindy-runtime>=2.9.0,<3.0",
   "aindy-sdk>=1.0,<2.0",
   "anthropic>=0.40,<2.0",
 ]
