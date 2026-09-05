@@ -69,9 +69,9 @@ class GoalCreateRequest(BaseModel):
 
 
 def _do_create_goal(db: Session, body: GoalCreateRequest, user_id: str):
-    from AINDY.runtime.flow_engine import run_flow
+    from apps._shared.flow import run_flow_or_raise
 
-    result = run_flow(
+    result = run_flow_or_raise(
         "goal_create",
         {
             "name": body.name,
@@ -84,10 +84,6 @@ def _do_create_goal(db: Session, body: GoalCreateRequest, user_id: str):
         db=db,
         user_id=user_id,
     )
-    if result.get("status") == "error":
-        raise RuntimeError(
-            (result.get("data") or {}).get("message", "Goal create flow failed")
-        )
     return result.get("data")
 
 
@@ -100,10 +96,8 @@ def list_goals(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow("goals_list", {}, db=db, user_id=user_id)
-        if result.get("status") == "error":
-            raise RuntimeError((result.get("data") or {}).get("message", "Goals list flow failed"))
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise("goals_list", {}, db=db, user_id=user_id)
         return result.get("data")
     return _execute_goals(request, "goals.list", handler, db=db, user_id=user_id)
 
@@ -139,10 +133,8 @@ def list_goal_state(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow("goals_state", {}, db=db, user_id=user_id)
-        if result.get("status") == "error":
-            raise RuntimeError((result.get("data") or {}).get("message", "Goals state flow failed"))
+        from apps._shared.flow import run_flow_or_raise
+        result = run_flow_or_raise("goals_state", {}, db=db, user_id=user_id)
         return result.get("data")
     return _execute_goals(request, "goals.state", handler, db=db, user_id=user_id)
 

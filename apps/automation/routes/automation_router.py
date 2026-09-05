@@ -22,31 +22,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/automation", tags=["Automation"])
 
 
-def _flow_failure(result: dict) -> str:
-    direct_error = result.get("error")
-    if isinstance(direct_error, str) and direct_error:
-        return direct_error
-    for key in ("data", "result"):
-        payload = result.get(key)
-        if isinstance(payload, dict):
-            nested_error = payload.get("error") or payload.get("message")
-            if isinstance(nested_error, str) and nested_error:
-                return nested_error
-    return ""
-
-
 def _run_flow_automation(flow_name: str, payload: dict, db: Session, user_id: str):
-    from AINDY.runtime.flow_engine import run_flow
-    from AINDY.core.execution_gate import flow_result_to_envelope
-    result = run_flow(flow_name, payload, db=db, user_id=user_id)
-    if result.get("status") == "FAILED":
-        error = _flow_failure(result)
-        if error.startswith("HTTP_"):
-            parts = error.split(":", 1)
-            code = int(parts[0].replace("HTTP_", ""))
-            msg = parts[1] if len(parts) > 1 else error
-            raise HTTPException(status_code=code, detail=msg)
-        raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
+    # Failure handling — including the HTTP_<code> mapping and the nested-message lookup
+    # that originated here — now lives in apps/_shared/flow.py. The envelope decoration
+    # below is automation-specific and stays.
+    from apps._shared.flow import run_flow_or_raise
+
+    result = run_flow_or_raise(flow_name, payload, db=db, user_id=user_id)
     data = result.get("data")
     if isinstance(data, dict):
         # Use to_envelope with output=None: data IS the output, embedding
