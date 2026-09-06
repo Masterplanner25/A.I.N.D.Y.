@@ -8,6 +8,22 @@ export function runResearch(query, summary) {
   });
 }
 
+/**
+ * Record a feedback signal against one search result.
+ *
+ * Fire-and-forget by contract: the caller must never await this in a path that affects what
+ * the user sees. Feedback is telemetry — a failure to record it is not a failure the user
+ * should ever learn about, and must not delay or block navigating to the result.
+ *
+ * Idempotent server-side per (user, query, result_ref, signal), so repeat clicks are safe.
+ */
+export function recordSearchFeedback(query, resultRef, signal) {
+  return authRequest(ROUTES.SEARCH.FEEDBACK, {
+    method: "POST",
+    body: JSON.stringify({ query, result_ref: resultRef, signal }),
+  });
+}
+
 export function getSearchHistory(searchType = null, limit = 25) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (searchType) params.append("search_type", searchType);

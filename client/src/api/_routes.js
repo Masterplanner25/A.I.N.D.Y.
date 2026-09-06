@@ -109,13 +109,23 @@ function withAppsMount(group) {
 // so a future ui-kit that adds TASKS.DELETE overrides cleanly instead of colliding.
 const APP_ONLY_ROUTES = {
   TASKS: { DELETE: "/tasks/delete" },
+  // `/search/feedback` records implicit (click/dwell/convert/dismiss) and explicit
+  // (thumbs_up/thumbs_down) signals on a search result. The backend route, service and
+  // ranking nudge have all existed since Search v4 §8; nothing in the client called it, so
+  // `search_result_feedback` had 0 rows and AINDY_SEARCH_OUTCOME_WEIGHTING had no input.
+  SEARCH: { FEEDBACK: "/search/feedback" },
 };
 
 const SUB_ROUTER_CORRECTED = {
   ...UIKIT_ROUTES,
   ANALYTICS: withPrefix(UIKIT_ROUTES.ANALYTICS, COMPUTE_KEYS, "/compute"),
-  SEARCH: withPrefix(UIKIT_ROUTES.SEARCH, SEO_KEYS, "/seo"),
   TASKS: { ...UIKIT_ROUTES.TASKS, ...APP_ONLY_ROUTES.TASKS },
+  // `withPrefix` first (the kit's SEO paths), then the app-only additions. Order matters:
+  // the SEO correction must only ever touch keys the kit actually declares.
+  SEARCH: {
+    ...withPrefix(UIKIT_ROUTES.SEARCH, SEO_KEYS, "/seo"),
+    ...APP_ONLY_ROUTES.SEARCH,
+  },
 };
 
 const MOUNTED = {};
