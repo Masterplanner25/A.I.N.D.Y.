@@ -171,6 +171,17 @@ export default defineConfig(({ mode }) => {
 
     server: {
       proxy: {
+        // ★ `127.0.0.1`, never `localhost`. Node resolves `localhost` to `::1` first, and
+        // Docker's published port is reachable on IPv4 only — verified 2026-09-05 on this
+        // host: `127.0.0.1:8000` answered 200 while `[::1]:8000` and `localhost:8000` both
+        // hung for the full timeout. Meanwhile the dev server itself binds IPv6, so
+        // `localhost:5173` served the page fine and every proxied API call behind it
+        // failed. The app looks up and completely unable to reach its backend, which is a
+        // long way from the actual cause.
+        //
+        // The condition is host-dependent and intermittent — the same proxy worked earlier
+        // the same day — so this is not a workaround for one broken machine. An explicit
+        // IPv4 literal simply removes the resolution order from the equation.
         // Dev proxy: the client (via @aindy/ui-kit) calls the backend's route namespaces
         // relatively (empty API base), so forward them all to the local API — no /api-base
         // env needed in dev.
@@ -180,9 +191,9 @@ export default defineConfig(({ mode }) => {
         // no `/version`, so `/api/version` (ui-kit's ROUTES.PLATFORM.VERSION) 404'd in dev
         // while working in prod. No backend route lives at a stripped `/api/*` path, so there
         // is nothing for the rewrite to serve.
-        "/api": { target: "http://localhost:8000", changeOrigin: true },
-        "/auth": { target: "http://localhost:8000", changeOrigin: true },
-        "/apps": { target: "http://localhost:8000", changeOrigin: true },
+        "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
+        "/auth": { target: "http://127.0.0.1:8000", changeOrigin: true },
+        "/apps": { target: "http://127.0.0.1:8000", changeOrigin: true },
         // `/platform` is BOTH the SPA mount and the backend's operator API namespace
         // (51 routes). The split has to happen here rather than in a plugin middleware:
         // Vite installs the proxy ahead of plugin middlewares, so the proxy sees these
@@ -193,7 +204,7 @@ export default defineConfig(({ mode }) => {
         // asks for text/html — fetch/XHR sends */* or application/json — so document
         // requests render the SPA and every API call is forwarded verbatim.
         "/platform": {
-          target: "http://localhost:8000",
+          target: "http://127.0.0.1:8000",
           changeOrigin: true,
           bypass(req) {
             const method = req.method?.toUpperCase();
@@ -213,9 +224,9 @@ export default defineConfig(({ mode }) => {
         // POST hit Vite instead and 404'd, so client telemetry has never worked in dev
         // — the browser console fills with `:5173/client/vitals 404` on every page.
         // Same class as the `/platform` gap that swallowed every operator API call.
-        "/client": { target: "http://localhost:8000", changeOrigin: true },
-        "/health": { target: "http://localhost:8000", changeOrigin: true },
-        "/openapi.json": { target: "http://localhost:8000", changeOrigin: true },
+        "/client": { target: "http://127.0.0.1:8000", changeOrigin: true },
+        "/health": { target: "http://127.0.0.1:8000", changeOrigin: true },
+        "/openapi.json": { target: "http://127.0.0.1:8000", changeOrigin: true },
       },
     },
 

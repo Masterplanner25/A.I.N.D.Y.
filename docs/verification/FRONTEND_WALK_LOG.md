@@ -822,9 +822,42 @@ complete, and nothing in the UI ever says so.** The remaining work is roughly th
 post-lock next step — but what those links should be is a product decision, so nothing was built
 here.
 
-#### A separate gap this surfaced
+#### Seen from the MasterPlan end: the plan renders, but as an anonymous inert card
 
-`goals` has no relationship to `master_plans` — filed as `MASTERPLAN-GOALS-UNLINKED-1`.
+The owner recalled *"a MasterPlan not rendering in the UI after being created"*. Checked against
+the real locked plan. It does render — the payload is just almost empty, and two separate things
+make it look broken.
+
+`GET /apps/masterplans/` returns, in full:
+
+```json
+{ "id": 10, "status": "locked", "posture": "Stable",
+  "is_active": false, "locked_at": "…", "created_at": "…" }
+```
+
+**1. Nothing in it is a name.** `MasterPlanDashboard` falls through
+`plan.version_label || plan.version || '#' + plan.id` and lands on **`#10`**. The
+`master_plans` table has no `version` column at all (a query for it errors), and no title field
+is returned. The plan a user just spent a whole conversation authoring identifies itself by
+primary key. Same root as item 16's note that `MasterPlanInput` declares a `name` the table does
+not have: **the plan has no human-readable identity anywhere in the schema.**
+
+**2. Genesis locks a plan but never activates it,** and `MasterPlanDashboard:372` gates the ETA
+projection panel on `plan.is_active`. So velocity, tasks-complete and ready/blocked — the entire
+substantive half of the card — stay hidden behind an **Activate** button that nothing tells the
+user to press. Locked-but-inactive is a real state with no signposting.
+
+So the accurate phrasing is not *"the plan does not render"* but **"the plan renders as an
+anonymous, inert card"**. Both halves belong to this entry: they are the same missing connective
+tissue, seen from the MasterPlan end rather than the Genesis end.
+
+#### Two separate gaps this surfaced
+
+- `goals` has no relationship to `master_plans` — filed as `MASTERPLAN-GOALS-UNLINKED-1`.
+- The Vite dev proxy pointed at `localhost:8000`, which resolves to `::1`, while Docker's
+  published port answers on IPv4 only — so every browser API call failed while the page itself
+  loaded fine. Fixed by targeting `127.0.0.1` explicitly. Recorded here because it presents as
+  "the whole app is broken" and has nothing to do with the app.
 
 ---
 
