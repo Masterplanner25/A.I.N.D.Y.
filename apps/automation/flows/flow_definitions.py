@@ -255,60 +255,29 @@ def genesis_message_execute(state, context):
     return result
 
 
-@register_node("genesis_message_orchestrate")
-def genesis_message_orchestrate(state, context):
-    """Queue the Infinity recalculation instead of running it on the request path.
-
-    Measured on 2026-08-24 (session 7, the first real Genesis conversation):
-
-        +0s   genesis.message.started
-        +15s  the reply is persisted — the user's answer already exists
-        +30s  the client aborts (@aindy/ui-kit's hardcoded ceiling) and shows a failure
-        +43s  loop.started   <- this node's synchronous recalculation begins
-        +47s  genesis.message.completed
-
-    So 32 of the 47 seconds were spent after the answer existed, and the user was told
-    the turn failed while their reply sat in the database. A turn IS a scoring event —
-    that premise was tested and upheld — so the work is kept, not dropped. What changes
-    is only where it runs.
-
-    The result was also being attached to `genesis_response["orchestration"]`, which no
-    client reads (`Genesis.jsx` reads `reply` and `synthesis_ready` only). The durable
-    home already exists and is unaffected: the orchestrator appends to `score_history`
-    with `trigger_event` and `score_delta`. Nothing is lost by not returning it.
-
-    See GENESIS-TURN-LATENCY-1 and docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md.
-    """
-    # `str(...)`, not the raw value. `context["user_id"]` is a UUID object, and
-    # `sys.v1.job.submit` is effect-gated: the dispatcher JSON-serialises the payload in
-    # `execution_gate.compute_action_id` BEFORE the handler runs, so a UUID raises
-    # `TypeError: Object of type UUID is not JSON serializable` and the syscall never
-    # executes. The previous inline call to `sys.v1.analytics.execute_infinity` passed the
-    # same raw value and worked, which is why this survived review and every contract
-    # check — it is a gate-path difference, not a payload-shape one, and only a live turn
-    # showed it. Measured 2026-09-05: zero `analytics.infinity_recalc` rows in `job_logs`
-    # while `memory.generate_embedding` queued twice in the same turn.
-    user_id = context.get("user_id")
-    try:
-        _syscall_data(
-            "sys.v1.job.submit",
-            {
-                "task_name": "analytics.infinity_recalc",
-                "payload": {
-                    "user_id": str(user_id) if user_id is not None else None,
-                    "trigger_event": "genesis_message",
-                },
-                "source": "genesis_message",
-            },
-            context,
-            "job.submit",
-        )
-        return {"status": "SUCCESS", "output_patch": {}}
-    except Exception as e:
-        # Scoring is downstream of answering. A turn that produced a reply must not be
-        # reported as failed because the recalculation could not be queued.
-        logger.warning("genesis_message_orchestrate: could not queue infinity recalc: %s", e)
-        return {"status": "SUCCESS", "output_patch": {}}
+# ── genesis_message_orchestrate: REMOVED 2026-09-06 ────────────────────────────────────
+#
+# This node queued an Infinity recalculation after every Genesis turn. It no longer exists,
+# and the flow ends at `genesis_message_execute`.
+#
+# The premise it rested on — "a turn IS a scoring event" — was tested for LATENCY
+# (GENESIS-TURN-LATENCY-1 moved the work off the request path) but never for EFFECT. Measured
+# 2026-09-06 across 46 days of `score_history`: of 16 `genesis_message` recalculations,
+# **14 produced a score_delta of exactly 0**, including four consecutive turns 10-15s apart
+# all scoring 42.140. A full recalculation costs 1.8-4.1s of `gather_support_state` and
+# produced no information in 87% of cases.
+#
+# Owner's call, 2026-09-06: "I don't think it needs to be recalculated on each turn
+# specifically." A turn changes the transcript — not the task graph, the metrics, or the
+# pillars — so the score has nothing to move on until something is *done*.
+#
+# The score does NOT go stale. Eleven other triggers remain, including
+# `masterplan_goal_state_changed` (which covers the thing a Genesis session actually
+# produces), `task_completion`, `session_ended` and `agent_completed` — plus the daily
+# `scheduler.infinity_scores` cron at 07:00, which is the "polling recalculation" this
+# removal leans on.
+#
+# See INFINITY-RECALC-DEBOUNCE-1 and docs/verification/DEFECT_INFINITY_RECALC_DEBOUNCE.md §7.
 
 
 @register_node("memory_execution_validate")
@@ -770,9 +739,8 @@ def register_all_flows() -> None:
             "start": "genesis_message_validate",
             "edges": {
                 "genesis_message_validate": ["genesis_message_execute"],
-                "genesis_message_execute": ["genesis_message_orchestrate"],
             },
-            "end": ["genesis_message_orchestrate"],
+            "end": ["genesis_message_execute"],
         },
     )
 

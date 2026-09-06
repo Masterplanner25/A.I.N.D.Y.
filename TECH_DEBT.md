@@ -1179,7 +1179,36 @@ different route.
 
 ---
 
-## INFINITY-RECALC-DEBOUNCE-1: a Genesis turn triggers a recalculation that changes nothing (app-owned, P2 → **P3 Question** 2026-09-06)
+## INFINITY-RECALC-DEBOUNCE-1: ✅ RESOLVED 2026-09-06 — a Genesis turn no longer recalculates the score
+
+**Status: RESOLVED.** The owner answered the question this entry had been reduced to:
+
+> *"I'm gonna go with a no, as it would happen or could happen way too often. We're already
+> calculating the turn itself, but then recalculating on every turn is a bit much… my overall
+> point is I don't think it needs to be recalculated on each turn specifically."*
+
+`genesis_message_orchestrate` is **removed**, and the `genesis_message` flow now ends at
+`genesis_message_execute`. Deleted rather than emptied — an empty pass-through in a flow graph is
+the dead-surface shape this repo keeps rediscovering.
+
+**Both original defects are now unreachable rather than fixed**, which is what the verification
+below predicted: the debounce's trigger-mismatch short-circuit and the per-trigger lease each
+required a `genesis_message` recalculation to collide with another trigger, and there is no
+longer one.
+
+**The score is not stranded** — checked before removing anything. Eleven other triggers remain,
+including `masterplan_goal_state_changed`, which covers what a Genesis session actually
+*produces* (a changed plan) as distinct from the conversation about it — plus the daily
+`scheduler.infinity_scores` cron at hour 7. That cron is the "polling recalculation" the owner
+floated as an idea; it already existed, and it is what this removal leans on.
+
+**One deletion worth flagging.** `tests/unit/test_job_submit_payload_serializable.py` guarded the
+UUID serialization defect (#263) and tested only this node, so it had no subject left. Deleting
+tests that assert nothing is right; losing the lesson is not — and `sys.v1.job.submit` has no
+other caller in `apps/`, so nothing else covers it. The effect-gate JSON trap is now
+`RECURRING_DEFECT_PATTERNS.md` §6.
+
+*Reframing evidence retained below — it is what made the question answerable.*
 
 **Status: OPEN, REFRAMED. Verified against a running stack 2026-09-06 — and the mechanism below
 has never fired.** The entry was filed "grounded in code, not reproduced"; the write-up's §5 asked
