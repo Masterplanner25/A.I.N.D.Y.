@@ -7,9 +7,38 @@ import re
 import nltk
 import textstat
 
-from AINDY.utils import prepare_input_text
+from AINDY.utils import normalize_encoding, sanitize_text
 
 logger = logging.getLogger(__name__)
+
+# ── Why this file no longer calls prepare_input_text ───────────────────────────────────
+#
+# `AINDY.utils.prepare_input_text(raw_text, limit=500, ...)` is normalize + sanitize +
+# **enforce_word_limit**, and that third step defaults to a HARD 500-WORD CAP. `seo_analysis`
+# called it with the default, so every article was silently truncated to ~500 words before a
+# single metric was computed — and the truncated count was then reported as `word_count`, as
+# though it described the whole piece.
+#
+# Measured 2026-09-06 on a 2760-word article: 495 words analysed (17.9%), reported as
+# `word_count: 495`. A real ~4,000-word draft reported 507. Readability, keyword extraction
+# and every density were computed on the opening pages and presented as facts about the
+# article. That is worse than reporting nothing, because the numbers look authoritative.
+#
+# Analysis needs normalisation and sanitisation but must NOT be length-limited, so the two
+# useful steps are called directly. A bound still exists (`_MAX_ANALYSIS_WORDS`) because an
+# unbounded paste is a real cost — but it is ~100x larger and, crucially, is REPORTED when it
+# bites (`truncated` / `analyzed_word_count`) instead of quietly changing the answer.
+_MAX_ANALYSIS_WORDS = 50_000
+
+
+def _prepare_for_analysis(text: str) -> tuple[str, int, bool]:
+    """Normalise + sanitise without a word cap. Returns (text, full_word_count, truncated)."""
+    cleaned = sanitize_text(normalize_encoding(text or ""))
+    words = cleaned.split()
+    full_count = len(words)
+    if full_count <= _MAX_ANALYSIS_WORDS:
+        return cleaned, full_count, False
+    return " ".join(words[:_MAX_ANALYSIS_WORDS]), full_count, True
 _TOKENIZER_AVAILABLE: bool | None = None
 
 
@@ -40,9 +69,54 @@ def _tokenize_words(text: str) -> list[str]:
     return re.findall(r"\b\w+\b", normalized)
 
 
-def extract_keywords(text: str, top_n: int = 10):
+# ── Stopwords ──────────────────────────────────────────────────────────────────────────
+#
+# `extract_keywords` was `Counter(words).most_common(n)` with NO stopword filtering, so for
+# any English prose it returned the English language's most common words. A real scorecard
+# from 2026-09-06:
+#
+#   Top Keywords: the, it, a, not, that, to, and, was, of, i
+#   the: 6.52%   it: 2.96%   a: 2.57%
+#
+# That is a stopword frequency table, not a keyword list, and no amount of tuning changes it —
+# the filtering step was simply absent.
+#
+# The list is inline rather than `nltk.corpus.stopwords` on purpose: NLTK's data is NOT
+# downloaded in this deployment (`_ensure_tokenizer` already falls back to regex for exactly
+# this reason), so an NLTK-backed filter would silently no-op in production and pass in any
+# environment where a developer happened to have the corpus. An explicit list behaves the same
+# everywhere and is testable.
+_STOPWORDS = frozenset("""
+a about above after again against all am an and any are aren as at
+be because been before being below between both but by
+can cant cannot could couldnt
+did didnt do does doesnt doing dont down during
+each few for from further
+had hadnt has hasnt have havent having he hed hes her here hers herself him himself his how
+i id ill im ive if in into is isnt it its itself
+just
+lets
+me more most mustnt my myself
+no nor not now
+of off on once only or other ought our ours ourselves out over own
+same shant she shed shes should shouldnt so some such
+than that thats the their theirs them themselves then there theres these they theyd theyll
+theyre theyve this those through to too
+under until up
+very
+was wasnt we wed well were weve werent what whats when whens where wheres which while who
+whos whom why whys with wont would wouldnt
+you youd youll youre youve your yours yourself yourselves
+""".split())
+
+
+def extract_keywords(text: str, top_n: int = 10, *, include_stopwords: bool = False):
+    """Most frequent meaningful terms. Stopwords are excluded unless explicitly requested."""
     words = _tokenize_words(text.lower())
     words = [word for word in words if word.isalnum()]
+    if not include_stopwords:
+        # Single characters go too: "i", "a" survive as tokens and carry no topical signal.
+        words = [w for w in words if w not in _STOPWORDS and len(w) > 1]
     freq_dist = Counter(words)
     return freq_dist.most_common(top_n)
 
@@ -136,19 +210,31 @@ def seo_improvement_suggestions(analysis: dict) -> list[dict]:
 
 
 def seo_analysis(text: str, top_n: int = 10):
-    """Performs a basic SEO analysis on given text, with improvement suggestions."""
-    prepared_text = prepare_input_text(text)
+    """Performs a basic SEO analysis on given text, with improvement suggestions.
+
+    ★ Analyses the WHOLE article. This used to call `prepare_input_text`, whose `limit`
+    defaults to 500 words, so every metric below described only the opening ~500 words while
+    being reported as though it described the article. See the note at the top of this file.
+    """
+    prepared_text, full_word_count, truncated = _prepare_for_analysis(text)
     words = _tokenize_words(prepared_text)
     word_count = len(words)
     readability = textstat.flesch_reading_ease(prepared_text)
     keywords = extract_keywords(prepared_text, top_n)
     densities = {kw[0]: keyword_density(prepared_text, kw[0]) for kw in keywords}
     result = {
+        # The article's real length, not the analysed slice. These differ only past
+        # `_MAX_ANALYSIS_WORDS`, and when they do the caller is told rather than left to
+        # believe a truncated figure.
         "word_count": word_count,
         "readability": readability,
         "top_keywords": [kw[0] for kw in keywords],
         "keyword_densities": densities,
     }
+    if truncated:
+        result["truncated"] = True
+        result["submitted_word_count"] = full_word_count
+        result["analyzed_word_count"] = word_count
     result["suggestions"] = seo_improvement_suggestions(result)
     return result
 
