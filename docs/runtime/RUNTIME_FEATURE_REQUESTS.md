@@ -7,7 +7,17 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
-## FR-25 — 11 of 13 syscall error paths emit no log line and no durable event 🔴 observability
+## FR-25 — two places a runtime failure is less legible than it needs to be 🔴 observability
+
+> **Two independent asks, filed together because they are the same shape and neither is large.**
+> **(a)** is the original: a syscall failure that leaves no trace anywhere. **(b)** was found
+> separately on 2026-09-05 and is a one-line type annotation. Take them in either order; (a) is
+> the one that cost us a session.
+>
+> **(a)** — 11 of 13 syscall error paths emit no log line and no durable event. Below.
+> **(b)** — an unvalidated `str` path param turns a malformed id into a 500. At the end.
+
+### (a) 11 of 13 syscall error paths emit no log line and no durable event
 
 **apps-monolith ref:** found 2026-09-05, and found *only* because 2.9.0 shipped
 `aindy_syscall_outcome_total`. Before that metric this was unobservable, so thank you — the
@@ -66,6 +76,58 @@ We would take the log line alone.
 
 Any change to the envelope contract, or to the metric. Both are right. This is purely that the
 message already computed on line 862 should be visible to an operator.
+
+---
+
+### (b) An unvalidated `str` path param turns a malformed id into a 500
+
+**apps-monolith ref:** found 2026-09-05 while closing our walk-log item 3. We fixed the two
+routes we own; this is the one we do not.
+
+```
+GET /coordination/runs/not-a-uuid/children  ->  500
+{"detail":"badly formed hexadecimal UUID string"}
+```
+
+`AINDY/routes/coordination_router.py:273` declares `parent_run_id: str`, so FastAPI does not
+validate it. The handler then calls `normalize_uuid(parent_run_id)`, which raises `ValueError`
+for anything unparseable (`memory_scoring_service.py:17`), and that surfaces as a 500 carrying
+the raw parser message.
+
+**The route's own error handling is already correct** — it raises a clean 404 for a
+parent that does not exist and a 403 for one owned by someone else. Only the *type* is missing.
+
+### The fix, and why we are not sending a PR for it
+
+```diff
+-    parent_run_id: str,
++    parent_run_id: UUID,
+```
+
+FastAPI then answers **422** with a structured validation error, and the OpenAPI schema stops
+advertising the parameter as a free-form string. We made exactly this change on our side
+(`apps/rippletrace/routes/rippletrace_router.py`, both `/event/{event_id}/upstream` and
+`/downstream`) and verified it live: **422 for a malformed id, 200 for a valid one** — the second
+half mattering because a stricter type could have started rejecting good input.
+
+### How systemic it might be — stated as a bound, not a claim
+
+`grep '_id: str,' AINDY/routes/*.py` returns **36** across 8 router files. We have **confirmed
+exactly one** of those produces a 500, and we have not audited the rest: many will never
+uuid-parse their id and are perfectly fine as strings. The number is offered as the population
+worth a look, not as a defect count.
+
+The empirical check is cheap and is the only reliable one — a request per route with a
+deliberately malformed id, looking for 500 rather than 422. Static analysis will not find these:
+in our own codebase every affected file also contained correct pipeline usage, so the violation is
+per-route.
+
+### Why this sits with (a)
+
+Both are the same shape: a failure the runtime already knows about, arriving somewhere it cannot
+be read. In (a) an operator cannot see the message at all; in (b) a caller gets a 500 and a
+parser's internal string instead of the 422 that would tell them their input was malformed.
+Neither needs new behaviour — just the information already in hand, surfaced where it is useful.
 
 ---
 
