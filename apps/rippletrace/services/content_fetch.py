@@ -233,6 +233,49 @@ def _read_capped(response: requests.Response) -> str:
         return body.decode("utf-8", errors="replace")
 
 
+# Statuses that mean "this publisher blocks automated page fetches", not "your URL is wrong".
+# Cloudflare and most large publishers answer a scripted GET with one of these regardless of
+# User-Agent — verified 2026-09-06 against a Medium article: the same URL returned 200 and then
+# 403 from the SAME machine, client and IP within a minute, so it is volume/behaviour-based
+# rather than anything a header can fix.
+_BLOCKED_STATUSES = {401, 403, 405, 406, 429, 451}
+
+# The recovery, and it is a real one rather than a consolation. RippleTrace's whole design is
+# "a feed becomes a subscription; a page becomes one drop point" — and a feed is a document
+# publishers INTEND machines to read, so it is not bot-blocked. Verified the same day: the
+# Medium article page returned 403 while that publication's feed returned 200 from both the
+# host and the container.
+#
+# Normally `ingest_url` finds the feed for the user by reading the page's <link rel=alternate>
+# and returning `suggested_feeds`. A block breaks precisely that path — no page, no discovered
+# feed — so the message has to carry the advice the page would have carried.
+_BLOCKED_HINT = (
+    "That publisher blocks automated page fetches (HTTP {code}). Most sites publish an RSS or "
+    "Atom feed for exactly this — paste the feed URL instead and every future post is ingested "
+    "automatically, not just this one."
+)
+
+
+def _status_error_message(code: int) -> str:
+    """A failure the user can act on, rather than a status code they cannot.
+
+    `That URL returned HTTP 403.` is accurate and a dead end: it reads as "your link is
+    broken" when the link is fine and the publisher simply refuses scripted requests. The
+    user is then stuck, because the one thing that would work — the feed — is not mentioned
+    anywhere.
+    """
+    if code in _BLOCKED_STATUSES:
+        return _BLOCKED_HINT.format(code=code)
+    if code == 404:
+        return "That URL returned HTTP 404 — the page was not found. Check the link."
+    if code >= 500:
+        return (
+            f"That site returned HTTP {code}, which is a fault on their end. "
+            "It is worth retrying later."
+        )
+    return f"That URL returned HTTP {code}."
+
+
 def fetch_url(
     url: str,
     *,
@@ -305,9 +348,7 @@ def fetch_url(
                     continue
 
                 if response.status_code >= 400:
-                    raise ContentFetchError(
-                        f"That URL returned HTTP {response.status_code}."
-                    )
+                    raise ContentFetchError(_status_error_message(response.status_code))
 
                 return FetchResult(
                     url=current,
