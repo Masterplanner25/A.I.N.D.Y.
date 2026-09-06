@@ -45,7 +45,7 @@ client on Vite dev server at `localhost:5173` proxying to the API at `localhost:
 |---|---|---|---|---|---|
 | 1 | Design | app | Genesis | AI interrogates but never contributes ideas | decision needed |
 | 2 | Papercut | app | Genesis chat | Enter inserts a newline instead of sending | **FIXED** 2026-08-23 |
-| 3 | Defect | both | masterplan / memory | A 404 surfaces to the user as "Internal Server Error" | diagnosed, unfixed |
+| 3 | Defect | both | masterplan / memory | A 404 surfaces to the user as "Internal Server Error" | **RESOLVED** 2026-09-05 — app half fixed; 1 runtime-owned route left |
 | 4 | Defect | app | network | `InfiniteNetwork` calls `/api/users`, which no route serves; also no member-list endpoint exists and signup never provisions a social profile | confirmed live; 4 consolidation options logged, decision deferred |
 | 5 | Defect | app | Genesis | Leaving the page abandons the session; transcript is never stored | diagnosed, decision needed |
 | 6 | Gap | runtime | auth | No password recovery — a forgotten password locks the account out permanently | runtime feature request |
@@ -147,7 +147,7 @@ Genesis answers are often long.
 
 ---
 
-### 3. A 404 surfaces as "Internal Server Error" — `Defect`
+### 3. A 404 surfaces as "Internal Server Error" — `Defect` — RESOLVED 2026-09-05 (one runtime-owned route remains)
 
 **Observed:** hitting a stale/absent masterplan or memory-trace link returns a 500 rather than
 a not-found.
@@ -174,7 +174,37 @@ Three further routes 500 on malformed UUIDs rather than 422:
 `HTTPException` *also* contains pipeline usage, so the violation is per-route. The empirical
 sweep is the reliable detector.
 
-**Status:** diagnosed, unfixed. Cosmetic for the happy path; misleading when hit.
+### ★ Re-swept live 2026-09-05 — the diagnosed half is fixed; the other half was misdiagnosed
+
+Re-run against the live stack because #271 touched adjacent code and the entry says an empirical
+sweep is the only reliable detector. Authenticated, real ids.
+
+**The two "confirmed affected" routes now answer correctly:**
+
+| route | then | now |
+|---|---|---|
+| `/apps/masterplans/{plan_id}` (absent, valid int) | 500 | **404** |
+| `/apps/memory/traces/{trace_id}` (absent) | 500 | **404** |
+
+The contrast cases still behave: `/apps/agent/runs/{id}` 404, `/apps/freelance/metrics/latest` 404.
+(Note `plan_id` is an **integer** — passing a UUID gives a legitimate 422, which is easy to
+mistake for the defect. Use an int when re-testing.)
+
+**The three malformed-UUID routes still 500 — but not for the reason recorded above.** The body is
+`{"detail":"badly formed hexadecimal UUID string"}`. That is a raw `ValueError` from
+`uuid.UUID(str(...))`, raised *inside* a handler that had already entered the pipeline. It is not
+the `HTTPException`-before-pipeline-entry mechanism this entry describes; those two failures shared
+a symptom and nothing else.
+
+- `/apps/rippletrace/event/{id}/upstream` and `/downstream` — **app-owned, fixed**: the params were
+  declared `event_id: str`, so FastAPI never validated them and the runtime's
+  `uuid.UUID(str(event_id))` did the raising. Now declared `UUID`, which answers 422 and also stops
+  the OpenAPI schema advertising a free-form string.
+- `/apps/coordination/runs/{parent_run_id}/children` — **runtime-owned**
+  (`AINDY/routes/coordination_router.py:273`), same `parent_run_id: str` shape. Not ours to fix.
+
+**Status:** the diagnosed defect is **RESOLVED**; the app half of the misdiagnosed one is fixed;
+one runtime-owned route remains. Owner stays `both` for that reason.
 
 ---
 
