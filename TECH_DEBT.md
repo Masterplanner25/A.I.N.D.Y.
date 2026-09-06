@@ -574,6 +574,14 @@ because there is no data* — applies to all five at once, which is what makes i
 by real users; the gate opens on that or not at all. Any plan that reads "wait for the soak" is
 mis-specified.
 
+**Measured again 2026-09-06, and the picture is worse than "294 records".** The three-axis shadow
+ledger holds **104 rows carrying ~20 distinct measurements** across 4 users and 45 days, and until
+2026-09-06 **not one row had a trajectory score at all** — no task had ever been completed with
+both an estimate and an actual. There is now exactly **one** such sample (53.82, 7.6% ahead).
+Part of the inflation was a defect: `TASK-COMPLETE-ORCHESTRATE-REFIRE-1` double-wrote every task
+completion until it was fixed the same day. The data path is clean going forward; the ledger
+before that date is not.
+
 **Do not treat the individual domain rows as authoritative on this.** Several rows in
 `APP-DEBT-MIGRATED-1` predate the audit and still read "soak, then flip the flag" as though it were
 an ops chore. This item supersedes them.
@@ -1015,6 +1023,29 @@ are this duplicate pair: the entire trajectory evidence base was **one measureme
    `velocityMessage` is only set *after* the await resolves — so a ~14s completion gave no sign
    the click had registered, which is what invited the re-clicking. Now single-flight per task,
    with the flag cleared in `finally` so a genuine failure can still be retried.
+
+### The polluted rows were removed 2026-09-06
+
+The two duplicate rows this defect produced were deleted by id after the fix merged, so the
+ledger reflects one completion rather than two:
+
+| table | kept | deleted |
+|---|---|---|
+| `score_history` | `a293eab4…` 04:35:25.83, `score_delta = -11.05` | `f4c13b8a…` 04:35:36.51, `score_delta = 0` |
+| `three_axis_shadow_records` | `728bcadd…` 04:35:23.94 | `1c1aa8a2…` 04:35:36.37 |
+
+The kept row of each pair is the one carrying the real delta; the deleted one is the no-op
+recalculation. Both were exported to CSV before deletion.
+
+**Scope was deliberately narrow — only these two rows.** The ledger still holds 104 records with
+about 20 distinct measurements, and that repetition is *not* this defect: it is the scheduled
+recalc honestly recording "nothing changed" on an idle stack. Those rows are legitimate and were
+left alone.
+
+**★ The trajectory evidence base is now exactly one sample** (`shadow_with_trajectory = 1`).
+Anyone reading `SOAK-THEN-FLIP-1` should take that literally — one completed task with both an
+estimate and an actual, scoring 53.82 at 7.6% ahead of estimate. It is the first such sample the
+system has ever had, and it is not a soak.
 
 ### Not the same as INFINITY-RECALC-DEBOUNCE-1
 
