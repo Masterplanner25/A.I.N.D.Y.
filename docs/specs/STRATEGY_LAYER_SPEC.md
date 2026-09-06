@@ -14,8 +14,13 @@ first real use of a locked MasterPlan.
 **Problem:** the plan has no layer that can fail. Goals succeed or don't, tasks succeed or don't,
 and neither is a useful unit to learn from.
 
-**Proposal:** `MasterPlan → Goal → Strategy → Task`, where a strategy is temporary, executable,
-failable, and refined from its own outcomes.
+**Proposal:** `MasterPlan → Phase → Strategy → Task`, where a phase is the plan's own long arc,
+a strategy is temporary/executable/failable, and strategy outcomes feed **back up** into which
+phase you are in and what that phase requires.
+
+**Decided 2026-09-05 (owner):** phases sit a tier *above* strategies —
+*"execution of a strategy may change what phase you're in or what's required of a phase, but
+overall it should be above a strategy."* §5 models both of those edges.
 
 Context: `MASTERPLAN_GOAL_ATTAINMENT_SPEC.md` (goals resolved against real signals),
 `MASTERPLAN_REDESIGN_BRIEF.md` (diagnosis), `TECH_DEBT.md` →
@@ -132,6 +137,67 @@ is present and unused.
 `MASTERPLAN-GOALS-UNLINKED-1` seen from the other end: goals are not unlinked because nobody
 wrote the link, they are empty because nothing promotes what Genesis already produced into rows.
 
+### ★ "Phase" already exists three times, and they disagree
+
+The owner's tiering decision collides with machinery that is already there. Three separate
+representations of *phase* live on this one plan, none of them linked to each other:
+
+| # | where | form | who advances it |
+|---|---|---|---|
+| 1 | `structure_json["phases"]` | 5 named phases, description + `duration_months: 12` | nothing — inert JSON |
+| 2 | tasks 12–16 | those same 5, as task rows in a hard-dependency chain | task status transitions |
+| 3 | `master_plans.phase` | an **Integer**, currently `1` | `evaluate_phase()` via `wcu_service` |
+
+Representation 3 is the only one that *moves*, and it is the one to look at:
+
+```python
+# apps/masterplan/services/projection_service.py — evaluate_phase()
+thresholds_met = (
+    _requirement_met(plan.total_wcu,        plan.wcu_target)          # 0 vs 3000
+    and _requirement_met(plan.gross_revenue, plan.revenue_target)     # 0 vs 100000
+    and _requirement_met(plan.books_published, plan.books_required)   # 0 vs 3
+    and _flag_met(plan.platform_required,   plan.platform_live)       # required, not live
+    and _flag_met(plan.studio_required,     plan.studio_ready)        # required, not ready
+    and _requirement_met(plan.active_playbooks, plan.playbooks_required)  # 0 vs 2
+)
+if thresholds_met: return 2
+if now >= phase_end: return 2      # phase_end = start + duration_years × 365  → 5 years
+return 1
+```
+
+Two things about this:
+
+**It returns only 1 or 2.** The plan Genesis authored has five phases. The advancing mechanism
+cannot represent them.
+
+**Every threshold is a column default.** `wcu_target=3000`, `revenue_target=100000`,
+`books_required=3`, `platform_required=True`, `studio_required=True`, `playbooks_required=2` are
+all `Column(..., default=...)` in `masterplan.py:57-63` — nobody chose them for this plan. They
+are milestones from an earlier product shape (books, a studio, playbooks). The live plan is about
+ethical AI frameworks and partnerships and mentions none of them.
+
+So the live plan advances from phase 1 to phase 2 when it has **published three books and opened
+a studio** — or, failing that, in **five years**. That is the only phase progression the system
+currently performs.
+
+Five of the six progress columns also have no writer anywhere in the repo; `_requirement_met`
+already documents this and treats an unset requirement as satisfied to keep the gate reachable.
+Only `total_wcu` is genuinely fed.
+
+### And "goal" exists three times too, with zero rows in the goals table
+
+| where | value |
+|---|---|
+| `goals` table | **0 rows** |
+| `master_plans.goal_value` / `goal_unit` / `goal_description` / `anchor_date` | `1000000` / `USD` / `"Financial Freedom"` / `2030-12-31` — deliberately set via the anchor route, these columns are nullable with no default |
+| `structure_json["success_criteria"]` | 5 criteria, unmaterialized |
+
+The one the user actually declared is the scalar set on the plan. The table built to hold goals
+is empty, and the five criteria Genesis synthesized are unqueryable.
+
+This is the repo's dominant defect shape — a working mechanism beside a dead twin — sitting on
+the plan's spine, in triplicate.
+
 ### Table state
 
 | layer | table | scoped to | rows |
@@ -166,14 +232,21 @@ suggests it has already been a source of collision. This layer needs its own nam
 
 ## 4. Why "failable" is the load-bearing word
 
-A goal is too big and too slow to learn from: by the time it succeeds or fails, the information is
-months old and confounded. A task is too small, and its failure usually means nothing — a task that
-did not get done says more about the week than about the approach.
+Everything the plan currently has is either too slow or too small to learn from:
+
+| layer | horizon | what its failure tells you |
+|---|---|---|
+| Goal | years ("Financial Freedom", 2030) | almost nothing, and far too late |
+| Phase | **12 months** on this plan | that a year went badly, confounded by everything |
+| Task | hours | that you had a bad week — not that the approach was wrong |
+
+Adding phases as a tier (§5) does not fix this on its own; **a 12-month phase is the second-worst
+unit to learn from in the table.** That is the argument for a strategy sitting beneath it.
 
 A strategy is the grain where a **hypothesis** lives. "Publish twice a week to build inbound" is a
 claim that can be tried, abandoned, and — crucially — *repeated enough times that a success rate
-means something*. That is the unit the Infinity algorithm can actually learn from, and it is
-missing.
+means something*. It is the only proposed layer whose failure is both cheap and informative, and
+it is the one the Infinity algorithm could actually learn from.
 
 This also resolves the goal-scoping question in `MASTERPLAN-GOALS-UNLINKED-1`. Goals being
 user-scoped and long-lived is **correct** if strategies are the plan-scoped layer: the goal
@@ -185,13 +258,55 @@ That reading makes the current `goals.user_id`-only model right rather than wron
 ## 5. Proposed model
 
 ```
-MasterPlan  ──┐
-              ├── Strategy ──── Task
-Goal      ────┘
+MasterPlan
+    └── Phase          ordered, long (5 × 12 months here) — the plan's own arc
+          └── Strategy temporary, failable — "we are trying X"
+                └── Task     the work
+
+Goal ──────────────── measured against the whole thing, outlives plan versions
 ```
 
-A strategy references **both**: the plan it belongs to (so it churns with plan versions) and the
-goal it serves (so attainment can attribute movement).
+Plus the two edges the owner named, which run **back up** the tree and are the reason this is
+not a plain hierarchy:
+
+- **advance** — a strategy's outcome can satisfy a phase's exit condition, moving you into the
+  next phase.
+- **amend** — a strategy's outcome can change *what a phase requires*, without advancing it.
+
+That second edge is the interesting one, and nothing in the system can currently express it.
+`evaluate_phase` was reaching for the first edge and hardcoded its exit conditions into six
+columns on the plan (§3), so no outcome of any kind can move it.
+
+### `plan_phases`
+
+```python
+class PlanPhase(Base):
+    __tablename__ = "plan_phases"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id       = Column(UUID, ForeignKey("users.id"), nullable=False, index=True)
+    masterplan_id = Column(Integer, ForeignKey("master_plans.id"), nullable=False, index=True)
+
+    ordinal     = Column(Integer, nullable=False)      # 1..N — the arc order
+    name        = Column(String(255), nullable=False)  # "Foundation Building"
+    description = Column(Text, nullable=True)
+    duration_months = Column(Integer, nullable=True)   # Genesis supplies 12
+
+    status     = Column(String(32), default="pending")  # pending|active|complete
+    entered_at = Column(DateTime, nullable=True)
+    exited_at  = Column(DateTime, nullable=True)
+
+    # ★ Exit conditions live HERE, per phase, not as six global columns on the plan.
+    # This is what replaces the books/studio/playbooks gate — each phase declares what
+    # finishing *it* means, seeded from the plan's own success_criteria.
+    exit_criteria = Column(JSONB, nullable=False, default=list)
+```
+
+`exit_criteria` per phase is the whole point. The current design asks one global question
+("has this plan published 3 books?") of a plan with five distinct phases. A phase that owns its
+own exit condition can be seeded from what Genesis actually wrote.
+
+### `plan_strategies`
 
 ```python
 class PlanStrategy(Base):
@@ -200,27 +315,50 @@ class PlanStrategy(Base):
     id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id       = Column(UUID, ForeignKey("users.id"), nullable=False, index=True)
     masterplan_id = Column(Integer, ForeignKey("master_plans.id"), nullable=False, index=True)
+    phase_id      = Column(UUID, ForeignKey("plan_phases.id"), nullable=True, index=True)
     goal_id       = Column(UUID, ForeignKey("goals.id"), nullable=True, index=True)
 
-    name        = Column(String(255), nullable=False)
-    hypothesis  = Column(Text, nullable=True)   # what we believe this will do, in the user's words
-    status      = Column(String(32), default="proposed")  # proposed|active|paused|abandoned|succeeded
-    started_at  = Column(DateTime, nullable=True)
-    ended_at    = Column(DateTime, nullable=True)
-    outcome     = Column(String(32), nullable=True)   # worked|did_not_work|inconclusive
+    name       = Column(String(255), nullable=False)
+    hypothesis = Column(Text, nullable=True)   # what we believe this will do, in the user's words
+    status     = Column(String(32), default="proposed")  # proposed|active|paused|abandoned|succeeded
+    started_at = Column(DateTime, nullable=True)
+    ended_at   = Column(DateTime, nullable=True)
+
+    outcome      = Column(String(32), nullable=True)  # worked|did_not_work|inconclusive
     outcome_note = Column(Text, nullable=True)
+
+    # ★ The advance/amend edges, recorded on the cause rather than inferred later:
+    #   {"advanced": true} | {"amended_criteria": [{"phase_id": ..., "was": ..., "now": ...}]}
+    # Without this, a phase's exit_criteria changes with no trace of which attempt changed it,
+    # which is precisely the history the learning loop needs.
+    phase_effect = Column(JSONB, nullable=True)
 ```
 
-And one nullable column on tasks:
+`masterplan_id` is kept alongside `phase_id` so strategies churn with plan versions even if a
+phase is later reshuffled; `goal_id` stays nullable so a strategy need not claim a goal.
+
+### `tasks`
 
 ```python
 strategy_id = Column(UUID, ForeignKey("plan_strategies.id"), nullable=True, index=True)
+phase_id    = Column(UUID, ForeignKey("plan_phases.id"),     nullable=True, index=True)
 ```
 
-Nullable on purpose: a task that belongs to a plan but no strategy stays legal, which is what the
-three existing tasks are and what any quick "just do this" task should remain.
+Both nullable. A task with neither is a plain to-do and stays legal — that is what "Fix Nodus
+Issues" is today, and it should not become invalid.
+
+### What this deprecates
+
+`master_plans.phase` and the six threshold columns (`wcu_target`, `revenue_target`,
+`books_required`, `platform_required`, `studio_required`, `playbooks_required`) become dead once
+phases own their exit criteria. **Do not drop them** — `MIGRATION_POLICY.md` is additive-only.
+Mark them deprecated, stop reading them, and leave the columns.
+
+`evaluate_phase()` and its `wcu_service` caller would need rewriting against `plan_phases`, not
+deleting; the WCU computation itself is fine, it is the gate that is wrong.
 
 ### The cheaper alternative, and why it is not enough
+
 
 `parent_task_id` already exists and is NULL everywhere. Phases 12–16 could become parent tasks
 and real work could hang beneath them — no new table, no migration.
@@ -256,13 +394,10 @@ row. Storing a denormalised rate before anything computes one is how `strategies
 2. **Can a strategy serve more than one goal?** The model above says no (single `goal_id`). A join
    table is the honest answer if strategies routinely serve two goals, and premature otherwise.
 
-3. **Who authors a strategy?** ~~Biggest open question~~ — §3 mostly answers it. Genesis already
-   produces `phases`, `core_domains`, `success_criteria` and `risk_factors`, and lock time
-   already materializes one of them into rows. The remaining question is narrower: **are the
-   five 12-month phases strategies, or a tier above strategies?** They read as a tier above —
-   a strategy the owner would "try and abandon" is weeks, not a year. That suggests
-   `Plan → Phase → Strategy → Task`, which is one layer more than proposed, and is the single
-   decision that most changes the build.
+3. ~~**Are phases strategies, or a tier above?**~~ **RESOLVED 2026-09-05 (owner): a tier above.**
+   *"Execution of a strategy may change what phase you're in or what's required of a phase, but
+   overall it should be above a strategy."* Modelled in §5 as `plan_phases` plus the
+   advance/amend edges. This was the decision that would have cost a double migration.
 
 4. **What does abandoning a strategy do to its tasks?** Cascade to cancelled, orphan them back to
    the plan, or leave them? "Failable" is only useful if abandonment is cheap and obvious.
@@ -271,9 +406,26 @@ row. Storing a denormalised rate before anything computes one is how `strategies
    `success_signal`. If strategies get their own measurable target, that is a second measurement
    surface and needs to justify itself against the one that exists.
 
-6. **Should lock time seed `goals` from `success_criteria`?** This is separable from the whole
-   strategy question, is a much smaller change, and would put 5 rows in a table that has 0. It
-   may be the right first move regardless of what happens to strategies.
+6. **Should lock time seed `goals` from `success_criteria`?** Separable from the whole strategy
+   question, much smaller, and would put 5 rows in a table that has 0. Complicated slightly by
+   §3: the user's *actual* declared goal ("Financial Freedom", $1M, 2030-12-31) lives in scalar
+   columns on the plan, not in `goals`. Seeding from `success_criteria` without reconciling that
+   gives you a goals table that disagrees with the plan header.
+
+7. **What shape is `exit_criteria`?** Free text a human judges, or structured predicates the
+   system evaluates? Structured is what makes the advance edge automatic; free text is what the
+   owner can actually write on day one. A `{"text": ..., "metric": null}` shape that starts
+   human-judged and gains predicates later is the likely answer, but it should be chosen, not
+   defaulted into.
+
+8. **Who decides a phase advanced — the system or the human?** `evaluate_phase` currently decides
+   alone and is wrong (§3). Given the owner's framing ("a strategy may change what phase you're
+   in"), advancement is probably *proposed* by strategy outcomes and *confirmed* by the human.
+   That is a different UI than a gate that fires silently.
+
+9. **Do the 12-month phase durations mean anything?** Genesis emitted `duration_months: 12` five
+   times, which reads as an even split of the 5-year horizon rather than a considered estimate.
+   If phases carry dates, they inherit that arbitrariness; if they carry only order, they don't.
 
 ---
 
@@ -306,26 +458,39 @@ unjustified either way, and that is the question to answer first.
 
 ## 8. Migration shape
 
-Cheap, because the tables are nearly empty: **0 goals, 1 plan, 3 test tasks.**
+Cheap on paper — **0 goals, 1 plan, 9 tasks (6 on the plan)** — with one piece that needs care.
 
-1. `plan_strategies` table, additive, `IF NOT EXISTS` guarded per `MIGRATION_POLICY.md`.
-2. `tasks.strategy_id`, nullable, additive.
+1. `plan_phases` and `plan_strategies` tables, additive, `IF NOT EXISTS` guarded per
+   `MIGRATION_POLICY.md`.
+2. `tasks.strategy_id` and `tasks.phase_id`, nullable, additive.
 3. Optionally `goals.masterplan_id` if question 1 resolves toward plan-scoped goals; also empty.
 
-**The one non-trivial piece is the six existing rows.** Tasks 12–16 are phases wearing a task
-costume and would need to move to whatever layer wins; task 17 is a genuine task that should
-end up beneath one of them rather than beside them. Six rows, one user, one plan — a hand-written
-data migration, not an algorithm.
+**The six existing rows are the non-trivial piece, and they need a human, not an algorithm:**
 
-No other data migration exists to get wrong. This is the cheapest moment this change will ever
-be, which is an argument for deciding it now rather than for building it hastily.
+- Tasks 12–16 become `plan_phases` rows (`ordinal` 1–5, seeded from `structure_json["phases"]`,
+  which still holds the descriptions and durations). Their hard-dependency chain
+  12→13→14→15→16 becomes `ordinal` and is discarded.
+- Task 17 ("Fix Nodus Issues", `in_progress`) gets `phase_id` = phase 1 and stays a task. It is
+  the only row in the six that was ever meant to be one.
+- The five task rows should be **deleted, not archived** — they are not work, were never
+  actionable, and leaving them would keep the ambiguity this whole spec is about.
 
----
+One user, one plan, six rows. Write the migration by hand and read it before running it.
+
+**Deprecations, not drops.** `master_plans.phase` and the six threshold columns stop being read
+(§5). Additive-only policy: leave the columns in place. `evaluate_phase()` is rewritten against
+`plan_phases`, and `wcu_service`'s WCU computation is untouched — it is the gate that is wrong,
+not the arithmetic.
+
+**Order matters.** Nothing should read `plan_phases` until the six rows have moved, or the plan
+will briefly have five phases in one table and five phases-as-tasks in another — which is the
+condition §3 is complaining about, added to rather than removed.
 
 ## 9. What this spec does not claim
 
-It does not claim the *proposed* layer is the right shape. Open question 3 — whether phases and
-strategies are one tier or two — is unresolved, and getting it wrong means migrating twice.
+It does not claim the *proposed* layer is the right shape. Question 3 is now resolved, but
+questions 7 and 8 — what an exit criterion is, and who gets to say a phase advanced — are load-
+bearing and open.
 
 It does claim, on evidence rather than argument, that **the current model is flattened**: a
 twelve-month phase and an afternoon's work are the same row type, distinguished by nothing. That
