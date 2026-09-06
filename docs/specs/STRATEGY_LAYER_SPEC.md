@@ -207,12 +207,38 @@ the plan's spine, in triplicate.
 | Goal progress | `goal_states` | `goal_id` | **0** |
 | Task | `tasks` | `masterplan_id`, `parent_task_id` | 9 (6 on the plan, 3 test artifacts) |
 
-### And Trajectory measures nothing yet
+### ★ Trajectory measured something for the first time — 2026-09-06
 
-`time_spent` is **0.0 on all nine rows**, including task 17, which is `in_progress` with a
-start time. It accrues only on stop (`task_service.py:551`), and `compute_trajectory` skips any
-task without both `duration > 0` and `time_spent > 0`. So the axis §2 describes is correct,
-wired, and currently measuring a sample of zero.
+The owner completed task 17 an hour after starting it, which produced the **first row in the
+system's history with both an estimate and an actual**. Running the axis live against the plan
+owner:
+
+```json
+compute_trajectory → {"score": 53.82, "raw_score": 53.82, "padding_penalty": 0.0,
+                      "tasks_measured": 1, "mean_pace_ratio": 1.076,
+                      "ahead": 1, "on_time": 0, "behind": 0}
+compute_volume     → {"score": 2.47, "completed_count": 1, "effort_hours": 1.0}
+```
+
+Estimated 1.0 h, actual 0.929 h — 7.6% ahead, scoring just above the 50-point neutral. §2 is no
+longer an argument from code reading: **the timer's value flowed end-to-end into a real axis
+score.** Deleting start/stop would have taken this with it.
+
+(Volume sees only one task because tasks 3, 4 and 8 belong to a different user.)
+
+### …and the same measurement undercuts the timer
+
+`time_spent` is **3344.462676 s**. `end_time − start_time` is **3344.462676 s**. The delta is
+`0.000000`.
+
+For an uninterrupted task these are identical *by construction* — the timer accrues
+`now − start_time` on stop (`task_service.py:551`, `:595`), which is the same subtraction the
+database could do for free. They diverge only when a task is **paused and resumed**: then
+`time_spent` sums the worked intervals while wall-clock includes the gaps.
+
+So the honest position on the single real datum the system has: the interaction the owner
+objects to produced a number that required no interaction at all. The timer earns its keep only
+on interrupted work — which is a real case, but is not the one being paid for here.
 
 ### The name `strategies` is already taken
 
@@ -441,18 +467,26 @@ the system and permanently blank the Trajectory axis. The real options:
 | **B. Keep manual start/stop** | an interaction per task | works, if the flags are ever turned on |
 | **C. Infer actual time without the timer** | nothing | works, at lower fidelity |
 
-**C is the option worth designing.** The owner's objection is to *being asked to start and stop
-a stopwatch*, not to the system knowing how long things took. Those are separable. A task
-already has `start_time` and `end_time`; elapsed wall-clock between "started" and "completed" is
-a cruder but free estimate, and `_apply_padding_guard` already exists in
-`three_axis_service.py` precisely because self-reported pace data is untrustworthy.
+**C is the option worth designing, and 2026-09-06 supplies the evidence.** On the only real
+measurement in the system, `time_spent` and `end_time − start_time` agreed to six decimal places
+(§3). The owner's objection is to *being asked to run a stopwatch*, not to the system knowing how
+long things took — and for uninterrupted work those are the same number.
 
-If the strategy layer lands, C gets better: a strategy has a span, and tasks under it inherit a
-window, so pace can be measured per-strategy without asking the human for anything.
+A task already has `start_time` and `end_time`. `_apply_padding_guard` already exists in
+`three_axis_service.py` precisely because self-reported pace data is untrustworthy, so the
+fidelity loss from inference is smaller than it looks.
 
-**Recommendation: do not remove the timer as part of this work.** Decide it separately, and
-decide it against the soak — if the three-axis flags are never turned on, the timer is
-unjustified either way, and that is the question to answer first.
+The one case inference genuinely loses is **paused work**: `time_spent` sums worked intervals,
+wall-clock includes the gaps. Whether that matters is an empirical question nobody can answer
+from one task.
+
+If the strategy layer lands, C gets better still: a strategy has a span, tasks under it inherit a
+window, and pace becomes measurable per-strategy without asking the human for anything.
+
+**Recommendation: do not remove the timer as part of this work** — it is now demonstrably load-
+bearing, not speculatively so. But do not defend it on those grounds either: the same datum shows
+the number was free. Decide it separately, against two questions in order — will the three-axis
+flags ever be turned on, and does paused work happen often enough to pay an interaction for.
 
 ---
 
