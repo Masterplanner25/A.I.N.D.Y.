@@ -836,11 +836,20 @@ make it look broken.
 ```
 
 **1. Nothing in it is a name.** `MasterPlanDashboard` falls through
-`plan.version_label || plan.version || '#' + plan.id` and lands on **`#10`**. The
-`master_plans` table has no `version` column at all (a query for it errors), and no title field
-is returned. The plan a user just spent a whole conversation authoring identifies itself by
-primary key. Same root as item 16's note that `MasterPlanInput` declares a `name` the table does
-not have: **the plan has no human-readable identity anywhere in the schema.**
+`plan.version_label || plan.version || '#' + plan.id` and lands on **`#10`**. The plan a user
+just spent a whole conversation authoring identifies itself by primary key.
+
+> **Correction (2026-09-05).** This entry originally concluded *"the plan has no human-readable
+> identity anywhere in the schema."* **That is wrong.** `master_plans.version_label` exists and
+> is populated — the live plan holds `"V1"`. The bug is one layer out: `list_masterplans`
+> (`apps/masterplan/services/masterplan_service.py:16`) hand-picks six fields and omits it, so
+> the value the dashboard reaches for first is never sent. The `version` column genuinely does
+> not exist, and item 16's note about `MasterPlanInput.name` still stands.
+>
+> Two distinct gaps, and only one is a schema gap: the serializer drops the label it has
+> (a one-line fix, made below), and there is still no user-authored *title* — "V1" is a version,
+> not a name. Fixing the serializer moves the card from `#10` to `V1`, which is better and is
+> still not what the owner authored.
 
 **2. Genesis locks a plan but never activates it,** and `MasterPlanDashboard:372` gates the ETA
 projection panel on `plan.is_active`. So velocity, tasks-complete and ready/blocked — the entire
