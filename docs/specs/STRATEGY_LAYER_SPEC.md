@@ -28,6 +28,33 @@ Context: `MASTERPLAN_GOAL_ATTAINMENT_SPEC.md` (goals resolved against real signa
 
 ---
 
+## 0. ★ This layer was already specced — read that first
+
+`MASTERPLAN_REFINE_VS_REVISE_SPEC.md` (2026-08-23) **already names the missing Strategy layer**,
+proposes `Plan → Objective → Strategy → Task`, and defines the verbs that operate on it:
+
+> **Refine** — changes *how* an objective is pursued. Version **unchanged**.
+> **Revise** — changes *what* the plan is trying to accomplish. **New version**.
+>
+> *"Strategy is the layer refinement operates on, which is why its absence and the absence of a
+> refine verb are the same gap seen twice."*
+
+This spec did not know that when it was written, which is an instance of the repo's own dominant
+defect shape applied to its docs — a second surface built beside a working one. **The two are
+now reconciled here rather than left to diverge**, and the model in §5 has changed as a result.
+
+Division of labour going forward:
+
+| | |
+|---|---|
+| `MASTERPLAN_REFINE_VS_REVISE_SPEC` | the **verbs** — refine, revise, the append-only refinement series |
+| this spec | the **nouns and the evidence** — what exists in the live schema, phases, and the migration |
+
+The owner's answers of 2026-09-05 (§6, questions 7–8) resolve **open decision 1** of the
+refine/revise spec. That resolution is recorded in both documents.
+
+---
+
 ## 1. What prompted it
 
 The owner locked the first real MasterPlan on 2026-09-05, activated it, created a task against it
@@ -281,27 +308,57 @@ That reading makes the current `goals.user_id`-only model right rather than wron
 
 ---
 
-## 5. Proposed model
+## 5. Proposed model — two axes, not one chain
+
+The first draft of this section made `Phase` the parent of `Strategy`. **The owner's 2026-09-05
+answer breaks that:**
+
+> *"Maybe some things move phases — maybe some things get done at the same time."*
+
+A strategy that can move between phases without changing what the plan is trying to achieve is
+not *owned* by a phase. And Genesis already emits both axes separately:
+
+| Genesis output | axis | count on the live plan |
+|---|---|---|
+| `phases` | **when** — time-boxed segments of the arc | 5 × 12 months |
+| `core_domains` (name + intent) | **what** — the outcomes | 3 |
+| `success_criteria` | how you know the outcomes happened | 5 |
+
+`core_domains` are objectives in everything but name — *"Ethical AI Framework — to establish
+guidelines and standards for ethical AI development and deployment."* That is exactly the
+`Objective` layer `MASTERPLAN_REFINE_VS_REVISE_SPEC` proposes, already being generated and
+currently rendered only as read-only text in `GenesisDraftPreview.jsx:24`.
+
+So the model is two axes crossing at the strategy:
 
 ```
 MasterPlan
-    └── Phase          ordered, long (5 × 12 months here) — the plan's own arc
-          └── Strategy temporary, failable — "we are trying X"
-                └── Task     the work
-
-Goal ──────────────── measured against the whole thing, outlives plan versions
+  ├── Objective   "what must become true"   ← Genesis core_domains (3)
+  │     └── Strategy   "how we're trying"   ← temporary, failable
+  │           └── Task
+  └── Phase       "when"                    ← Genesis phases (5 × 12mo)
+          ↑
+          └─ a Strategy is SCHEDULED INTO a phase; it is OWNED by an objective
 ```
 
-Plus the two edges the owner named, which run **back up** the tree and are the reason this is
-not a plain hierarchy:
+A strategy therefore carries **two references with different meanings**:
 
-- **advance** — a strategy's outcome can satisfy a phase's exit condition, moving you into the
-  next phase.
-- **amend** — a strategy's outcome can change *what a phase requires*, without advancing it.
+- `objective_id` — **ownership**. Changing it changes what the strategy is for. Rare.
+- `phase_id` — **scheduling**. Changing it is the ordinary act of replanning, and is precisely a
+  **refine** under the existing spec: the route changed, the destination did not.
 
-That second edge is the interesting one, and nothing in the system can currently express it.
-`evaluate_phase` was reaching for the first edge and hardcoded its exit conditions into six
-columns on the plan (§3), so no outcome of any kind can move it.
+That single distinction is what makes "some things move phases" a cheap, expected operation
+rather than a plan rewrite. It also makes "some things get done at the same time" expressible:
+two strategies under different objectives can share a phase, which a strict tree with a
+hard-dependency chain (what tasks 12–16 encode today) forbids.
+
+### The advance/amend edges, restated
+
+- **advance** — a phase's work is complete, so the phase can close.
+- **amend** — an outcome changes what remains to be done, without closing the phase.
+
+Both are now *proposals*, not state changes. See the resolved questions 7 and 8 in §6: phase
+completion opens a **refine**, and the refine is what actually moves anything.
 
 ### `plan_phases`
 
@@ -322,15 +379,21 @@ class PlanPhase(Base):
     entered_at = Column(DateTime, nullable=True)
     exited_at  = Column(DateTime, nullable=True)
 
-    # ★ Exit conditions live HERE, per phase, not as six global columns on the plan.
-    # This is what replaces the books/studio/playbooks gate — each phase declares what
-    # finishing *it* means, seeded from the plan's own success_criteria.
-    exit_criteria = Column(JSONB, nullable=False, default=list)
+    # ★ NOT an exit_criteria column. See §6 Q7 — the owner's definition of an exit
+    # criterion is "are the things that are supposed to be done in that phase complete",
+    # which is a QUERY over the strategies scheduled into the phase, not a stored predicate.
+    # Storing a declared criterion beside the work it duplicates is how master_plans ended
+    # up with six threshold columns nobody set.
+    #
+    # An optional free-text `exit_note` may earn its place later for conditions the work
+    # cannot express ("wait for the grant decision"). It should be added when such a case
+    # actually appears, not in anticipation of one.
 ```
 
-`exit_criteria` per phase is the whole point. The current design asks one global question
-("has this plan published 3 books?") of a plan with five distinct phases. A phase that owns its
-own exit condition can be seeded from what Genesis actually wrote.
+**There is deliberately no `exit_criteria` column.** The current design asks one global question
+("has this plan published 3 books?") of a plan with five distinct phases; the fix is not to ask
+five stored questions instead, but to stop storing the question at all — a phase is complete when
+its scheduled strategies are.
 
 ### `plan_strategies`
 
@@ -341,6 +404,10 @@ class PlanStrategy(Base):
     id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id       = Column(UUID, ForeignKey("users.id"), nullable=False, index=True)
     masterplan_id = Column(Integer, ForeignKey("master_plans.id"), nullable=False, index=True)
+    # ★ Two references, different meanings (§5). objective_id is OWNERSHIP — changing it
+    # changes what the strategy is for, and is rare. phase_id is SCHEDULING — changing it is
+    # ordinary replanning, and is exactly a `refine` under MASTERPLAN_REFINE_VS_REVISE_SPEC.
+    objective_id  = Column(UUID, ForeignKey("plan_objectives.id"), nullable=True, index=True)
     phase_id      = Column(UUID, ForeignKey("plan_phases.id"), nullable=True, index=True)
     goal_id       = Column(UUID, ForeignKey("goals.id"), nullable=True, index=True)
 
@@ -353,12 +420,15 @@ class PlanStrategy(Base):
     outcome      = Column(String(32), nullable=True)  # worked|did_not_work|inconclusive
     outcome_note = Column(Text, nullable=True)
 
-    # ★ The advance/amend edges, recorded on the cause rather than inferred later:
-    #   {"advanced": true} | {"amended_criteria": [{"phase_id": ..., "was": ..., "now": ...}]}
-    # Without this, a phase's exit_criteria changes with no trace of which attempt changed it,
-    # which is precisely the history the learning loop needs.
-    phase_effect = Column(JSONB, nullable=True)
+    # NOTE: the draft carried a `phase_effect` JSONB here to record advance/amend. Dropped —
+    # MASTERPLAN_REFINE_VS_REVISE_SPEC already establishes that "a refinement is an event, not
+    # a mutation", append-only, with `score_history` as the in-repo precedent. The effect of a
+    # strategy on a phase belongs in that refinement series, not denormalised onto the cause.
 ```
+
+A `plan_objectives` table is implied by `objective_id` and is **specced in
+`MASTERPLAN_REFINE_VS_REVISE_SPEC`**, not here. It seeds from Genesis's three `core_domains`
+(name + intent), which are already generated and currently only displayed.
 
 `masterplan_id` is kept alongside `phase_id` so strategies churn with plan versions even if a
 phase is later reshuffled; `goal_id` stays nullable so a strategy need not claim a goal.
@@ -438,16 +508,43 @@ row. Storing a denormalised rate before anything computes one is how `strategies
    columns on the plan, not in `goals`. Seeding from `success_criteria` without reconciling that
    gives you a goals table that disagrees with the plan header.
 
-7. **What shape is `exit_criteria`?** Free text a human judges, or structured predicates the
-   system evaluates? Structured is what makes the advance edge automatic; free text is what the
-   owner can actually write on day one. A `{"text": ..., "metric": null}` shape that starts
-   human-judged and gains predicates later is the likely answer, but it should be chosen, not
-   defaulted into.
+7. ~~**What shape is `exit_criteria`?**~~ **RESOLVED 2026-09-05 (owner):** *"Are the things that
+   are supposed to be done in that phase complete — but the system should say 'you seem to be
+   done early with this phase'."*
 
-8. **Who decides a phase advanced — the system or the human?** `evaluate_phase` currently decides
-   alone and is wrong (§3). Given the owner's framing ("a strategy may change what phase you're
-   in"), advancement is probably *proposed* by strategy outcomes and *confirmed* by the human.
-   That is a different UI than a gate that fires silently.
+   So an exit criterion is **not a stored predicate at all**. It is a query over the strategies
+   scheduled into the phase. The `exit_criteria` JSONB column proposed in the first draft is
+   dropped (§5) — storing a declared criterion beside the work that already expresses it is how
+   `master_plans` acquired six threshold columns nobody set (§3).
+
+   The second half is the harder half: **"you seem to be done early"** is a detection, and it
+   fires *before* anyone has said the phase is over. That makes phase completion a **proposal**,
+   which is what Q8 answers.
+
+8. ~~**Who decides a phase advanced — the system or the human?**~~ **RESOLVED 2026-09-05
+   (owner):** *"A bit of both really. A phase being completed should trigger something like a
+   review/refine of the plan — especially if you finish some things quicker than you thought.
+   Maybe some things move phases, maybe some things get done at the same time."*
+
+   **The system detects and proposes; the human confirms; and the confirmation opens a refine
+   rather than flipping a status.** Phase completion is an *event that starts a conversation*,
+   not a state transition.
+
+   This resolves **open decision 1 of `MASTERPLAN_REFINE_VS_REVISE_SPEC`** ("Does a refinement
+   need a proposer? … whether refine is a user verb, an agent verb, or a user-confirmed agent
+   proposal is a product decision"). The answer is **user-confirmed agent proposal**, and phase
+   completion — especially *early* completion — is the first concrete trigger for it.
+
+   Three consequences worth stating:
+
+   - The plan already has the conversational surface for this. Genesis is where a plan is
+     authored; a phase-completion review is the same kind of session against an existing plan.
+   - "Some things move phases" is a `phase_id` change on a strategy — a **refine**, version
+     unchanged. "Some things get done at the same time" means phases must permit concurrent
+     strategies, which the hard-dependency chain on tasks 12–16 currently forbids (§8).
+   - Finishing early is the **signal**, not a nuisance. Trajectory already measures
+     estimate-vs-actual pace (§3) and the live plan's first datum was 7.6% ahead — the same
+     number that would trigger a review is the one already feeding the score.
 
 9. **Do the 12-month phase durations mean anything?** Genesis emitted `duration_months: 12` five
    times, which reads as an even split of the 5-year horizon rather than a considered estimate.
@@ -502,12 +599,19 @@ Cheap on paper — **0 goals, 1 plan, 9 tasks (6 on the plan)** — with one pie
 **The six existing rows are the non-trivial piece, and they need a human, not an algorithm:**
 
 - Tasks 12–16 become `plan_phases` rows (`ordinal` 1–5, seeded from `structure_json["phases"]`,
-  which still holds the descriptions and durations). Their hard-dependency chain
-  12→13→14→15→16 becomes `ordinal` and is discarded.
-- Task 17 ("Fix Nodus Issues", `in_progress`) gets `phase_id` = phase 1 and stays a task. It is
-  the only row in the six that was ever meant to be one.
-- The five task rows should be **deleted, not archived** — they are not work, were never
-  actionable, and leaving them would keep the ambiguity this whole spec is about.
+  which still holds the descriptions and durations).
+- **Their hard-dependency chain 12→13→14→15→16 is discarded, and that is a behaviour change, not
+  a cleanup.** It currently forces strict sequence; the owner's *"maybe some things get done at
+  the same time"* requires phases that permit concurrent work. Ordinal preserves the intended
+  order without forbidding overlap.
+- Task 17 ("Fix Nodus Issues", now `completed`) gets `phase_id` = phase 1 and stays a task. It is
+  the only row in the six that was ever meant to be one — and it is now also the system's only
+  Trajectory sample (§3), so it must survive the migration intact.
+- The five phase-rows should be **deleted, not archived** — they are not work, were never
+  actionable, and leaving them keeps the ambiguity this whole spec is about.
+
+Objectives seed separately from `structure_json["core_domains"]` (3 rows) per
+`MASTERPLAN_REFINE_VS_REVISE_SPEC`.
 
 One user, one plan, six rows. Write the migration by hand and read it before running it.
 
@@ -522,9 +626,12 @@ condition §3 is complaining about, added to rather than removed.
 
 ## 9. What this spec does not claim
 
-It does not claim the *proposed* layer is the right shape. Question 3 is now resolved, but
-questions 7 and 8 — what an exit criterion is, and who gets to say a phase advanced — are load-
-bearing and open.
+It does not claim the *proposed* layer is the right shape. Questions 3, 7 and 8 are resolved;
+1, 2, 4, 5, 6 and 9 are not, and question 6 (reconciling the plan's scalar goal columns with an
+empty `goals` table) is the one most likely to bite.
+
+It also no longer claims to be the primary document for this layer. `MASTERPLAN_REFINE_VS_REVISE_SPEC`
+got here first (§0); this spec supplies the live evidence, the phase axis and the migration.
 
 It does claim, on evidence rather than argument, that **the current model is flattened**: a
 twelve-month phase and an afternoon's work are the same row type, distinguished by nothing. That
