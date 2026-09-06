@@ -7,15 +7,16 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
-## FR-25 — two places a runtime failure is less legible than it needs to be 🔴 observability
+## FR-25 — three places a runtime failure is less legible than it needs to be 🔴 observability
 
-> **Two independent asks, filed together because they are the same shape and neither is large.**
+> **Three independent asks, filed together because they are the same shape and none is large.**
 > **(a)** is the original: a syscall failure that leaves no trace anywhere. **(b)** was found
-> separately on 2026-09-05 and is a one-line type annotation. Take them in either order; (a) is
-> the one that cost us a session.
+> separately on 2026-09-05 and is a one-line type annotation. **(c)** was found 2026-09-06 and
+> is a log level. Take them in any order; (a) and (c) are the two that each cost us a session.
 >
 > **(a)** — 11 of 13 syscall error paths emit no log line and no durable event. Below.
-> **(b)** — an unvalidated `str` path param turns a malformed id into a 500. At the end.
+> **(b)** — an unvalidated `str` path param turns a malformed id into a 500. Further down.
+> **(c)** — `_ensure_tools_loaded` swallows plugin-load failure at DEBUG. At the end.
 
 ### (a) 11 of 13 syscall error paths emit no log line and no durable event
 
@@ -122,12 +123,58 @@ deliberately malformed id, looking for 500 rather than 422. Static analysis will
 in our own codebase every affected file also contained correct pipeline usage, so the violation is
 per-route.
 
-### Why this sits with (a)
+### (c) `_ensure_tools_loaded` swallows plugin-load failure at DEBUG, and the symptom lands three layers away
 
-Both are the same shape: a failure the runtime already knows about, arriving somewhere it cannot
-be read. In (a) an operator cannot see the message at all; in (b) a caller gets a 500 and a
-parser's internal string instead of the 422 that would tell them their input was malformed.
-Neither needs new behaviour — just the information already in hand, surfaced where it is useful.
+**apps-monolith ref:** cost a full investigation on 2026-09-06. **This one is a log level.**
+
+`AINDY/agents/tool_registry.py::_ensure_tools_loaded` is the only plugin-load entry point in the
+Nodus worker subprocess (your own FR-5b comment in `nodus_worker.py` says so). It ends:
+
+```python
+    except Exception as exc:
+        logger.debug("agent tool plugin load skipped: %s", exc)
+```
+
+**When that load fails, nothing above DEBUG says so, and the run continues on a registry holding
+only the runtime's own syscalls** — 24 of 91 in our stack. What the caller then sees is:
+
+```
+"error": "Unknown syscall: 'sys.v1.analytics.get_reasoning_recommendation'"
+```
+
+…for a syscall that is correctly registered and present in the parent process. The reasoning
+workflow then took its designed fallback to Python, so the *only* remaining evidence was a
+missing `_via` key on the result.
+
+### The actual cause, for illustration
+
+`ModuleNotFoundError: No module named 'apps'` — the worker is spawned as
+`subprocess.run([sys.executable, worker_path])`, so `sys.path[0]` is the worker's own directory
+and the inherited cwd is **not** on `sys.path`. Our app package was not pip-installed in that
+venv, so `load_plugins()` could not import it.
+
+**That part is ours, and it is fixed on our side** (`pip install -e .[test]`). We are not asking
+you to change the spawn. The ask is only that the failure be legible when it happens.
+
+### What we would like
+
+1. **Raise the level to `warning`** — a plugin-load failure in the one process that needs plugins
+   is not a debug detail. Everything needed is already in `exc`.
+2. **Include what was being loaded** (manifest path or profile), so the message names the gap.
+3. **Optionally**, make the resulting degradation visible at the point of use: an "Unknown
+   syscall" error when the app plugin stack failed to load could say so. `dispatch_worker_syscall`
+   already knows both facts.
+
+None of this changes behaviour — the fallback is correct and should stay. It is one log line at a
+level someone will actually see.
+
+### Why this sits with (a) and (b)
+
+All three are the same shape: a failure the runtime already knows about, arriving somewhere it
+cannot be read. In (a) an operator cannot see the message at all; in (b) a caller gets a 500 and a
+parser's internal string instead of a 422; in (c) the message exists, is accurate, and is emitted
+one level below anywhere anyone looks. None needs new behaviour — just the information already in
+hand, surfaced where it is useful.
 
 ---
 

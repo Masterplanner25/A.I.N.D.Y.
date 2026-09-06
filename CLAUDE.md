@@ -296,6 +296,43 @@ for the container and for the same documented reason.
 load-dependent, so two consecutive failures are not proof of causation — check the log for the
 `45000ms hard limit` line first.
 
+**If that line is ABSENT, it is the other failure mode: your venv, not the code.** Diagnosed
+2026-09-06 after this entry sent a session looking for a timeout that was not there.
+
+```bash
+python -m pip list | grep aindy-apps-monolith   # empty = this is your problem
+python -m pip install -e .[test] --no-build-isolation
+```
+
+The Nodus worker is spawned as `subprocess.run([sys.executable, nodus_worker.py])`, so
+`sys.path[0]` is the *worker's* directory and the inherited cwd is **not** on `sys.path`. If this
+repo is not pip-installed, the worker cannot `import apps`, `load_plugins()` raises
+`ModuleNotFoundError`, and `_ensure_tools_loaded` swallows it **at DEBUG**. The worker then runs
+with 24 runtime syscalls instead of 91, and the visible symptom is three layers away:
+
+```
+"error": "Unknown syscall: 'sys.v1.analytics.get_reasoning_recommendation'"
+```
+
+…for a syscall that is registered and present in the parent process. Reasoning then takes its
+designed fallback to Python and the only surviving evidence is the missing `_via` key — i.e.
+**exactly the same assertion failure as the timeout case, with a completely different cause.**
+
+`pytest` and `python -c` both put cwd on `sys.path`, which is why every other test passes and
+only this one — the only test that crosses a subprocess boundary — notices. Two things depend on
+the install and fail silently without it:
+
+| missing | consequence |
+|---|---|
+| `pip install -e .` | the worker cannot import `apps` (above) |
+| `.[test]` extra → `pytest-env` | **`pytest.ini`'s entire `env =` block is inert**, including the `AINDY_NODUS_*` budgets this section prescribes and `ENFORCE_EXECUTION_CONTRACT=true` |
+
+That second row is why the remedy above can appear not to work: without `pytest-env` the budget
+fix is never applied. `conftest.py` sets `DATABASE_URL` and `AINDY_ALLOW_SQLITE` by
+`os.environ.setdefault`, which is why nothing else complains. CI runs `pip install -e .[test]`
+and has neither problem. Filed upstream as `RUNTIME_FEATURE_REQUESTS.md` FR-25(c) — the log
+level, not the spawn, which is ours.
+
 ### `AINDY_AGENT_PLANNER_BACKEND` in integration tests
 
 Use `disabled` (set in `pytest.integration.ini`), **not** `stub`. The `stub` backend causes planner-path tests to fail with errors rather than cleanly skip when the planner isn't wired up. Tests that touch planner-dependent paths must check `os.environ.get("AINDY_AGENT_PLANNER_BACKEND") == "disabled"` and skip or fast-path accordingly.
