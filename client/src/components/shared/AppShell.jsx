@@ -55,7 +55,6 @@ const NAV_GROUPS = [
       { to: "/search/leadgen", label: "Lead Gen" },
       { to: "/social", label: "Social Feed" },
       { to: "/rippletrace", label: "RippleTrace" },
-      { to: "/network", label: "Network" },
       { to: "/freelance", label: "Freelance" },
     ],
   },
