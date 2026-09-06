@@ -733,7 +733,14 @@ async def get_strategy_view(
 @limiter.limit("60/minute")
 async def get_event_downstream(
     request: Request,
-    event_id: str,
+    # `UUID`, not `str`: the runtime's `get_downstream_relationships` does
+    # `uuid.UUID(str(event_id))`, so a malformed id raised ValueError from inside the
+    # handler and surfaced as a 500 with the raw parser message ("badly formed
+    # hexadecimal UUID string"). Declaring the type moves that to FastAPI, which answers
+    # 422 — and the OpenAPI schema stops advertising this as a free-form string. The
+    # runtime signature is `str | uuid.UUID`, so passing the parsed object is supported.
+    # Walk-log item 3.
+    event_id: UUID,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -748,7 +755,7 @@ async def get_event_downstream(
 @limiter.limit("60/minute")
 async def get_event_upstream(
     request: Request,
-    event_id: str,
+    event_id: UUID,  # see the note on the downstream route above
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
