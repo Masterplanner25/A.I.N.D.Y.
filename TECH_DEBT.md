@@ -1024,6 +1024,44 @@ are this duplicate pair: the entire trajectory evidence base was **one measureme
    the click had registered, which is what invited the re-clicking. Now single-flight per task,
    with the flag cleared in `finally` so a genuine failure can still be retried.
 
+### Follow-up 2026-09-06: the estimate was optional, and TaskDashboard was the only unguarded surface
+
+Verifying the fix on the rebuilt image produced **one** score row where it previously produced
+two — confirmed. But the same completion showed a second, larger problem:
+
+```
+04:35  volume 2.47  effort_hours 1  completed_count 1  trajectory 53.82  pace 1.076
+06:53  volume 2.47  effort_hours 1  completed_count 2  trajectory 53.82  pace 1.076
+```
+
+Real work was done and **two of the three axes did not move at all**. The task was created with a
+blank estimate, so `Task.duration = 0` — and `duration` is what Volume *sums*, while
+`compute_trajectory` does `if est_hours <= 0: continue` and skips the task outright. Only
+`completed_count` moved.
+
+`estimated_hours` was optional in the create form. That is a data-loss default: a task can be
+logged, worked and completed while remaining invisible to the exact measurement
+`SOAK-THEN-FLIP-1` is blocked on. **Now required** (native `required` + `min="0.25"`, with a JS
+backstop for programmatic submits).
+
+The owner also reported the create button "takes a second to actually enter and then come up —
+that's why I made it twice", which produced duplicate tasks 18 and 19. Same root cause as the
+Done button: no in-flight feedback. ADD is now single-flight with an `ADDING…` state.
+
+**Is this frontend-wide? No — checked, and TaskDashboard was the outlier.** The other live
+mutating surfaces already disable their controls while in flight:
+
+| surface | guard |
+|---|---|
+| `Genesis` | `loading`, `resuming`, `synthesizing` |
+| `MasterPlanDashboard` | `saving`, `activating === plan.id` |
+| `PostComposer` | `loading` |
+
+The 11 components with no in-flight state at all are the `*Panel.jsx` manual-KPI calculators —
+the known-dead formula surface — so they are not worth guarding. A first pass at this survey
+inspected handler bodies and wrongly flagged all six live surfaces as unguarded; the guards are
+on the buttons, not in the handlers. Check the JSX, not the handler.
+
 ### The polluted rows were removed 2026-09-06
 
 The two duplicate rows this defect produced were deleted by id after the fix merged, so the

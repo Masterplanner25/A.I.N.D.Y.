@@ -94,3 +94,111 @@ describe("TaskDashboard completion is single-flight", () => {
     await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(2));
   });
 });
+
+/**
+ * The estimate lands in `Task.duration`, which the MasterPlan ETA projects against, which
+ * the Infinity Volume axis SUMS, and which the Trajectory axis gates on
+ * (`if est_hours <= 0: continue`). Leaving it optional meant a task could be logged,
+ * worked and completed while remaining invisible to two of the three axes.
+ *
+ * Measured 2026-09-06: completing a task created with a blank estimate moved
+ * `completed_count` 1 -> 2 and left `effort_hours`, `volume_score`, `trajectory_score` and
+ * `mean_pace_ratio` byte-identical.
+ */
+describe("TaskDashboard requires an estimate", () => {
+  beforeEach(() => {
+    mockGetTasks.mockReset();
+    mockCreateTask.mockReset();
+    mockCompleteTask.mockReset();
+    mockStartTask.mockReset();
+    mockGetTasks.mockResolvedValue([]);
+    mockCreateTask.mockResolvedValue({});
+  });
+
+  const submit = async (taskName, hours) => {
+    fireEvent.change(screen.getByPlaceholderText(/new directive|task/i), {
+      target: { value: taskName },
+    });
+    if (hours !== undefined) {
+      fireEvent.change(screen.getByPlaceholderText(/e\.g\. 1\.5/i), {
+        target: { value: hours },
+      });
+    }
+    fireEvent.click(screen.getByRole("button", { name: /^ADD$/i }));
+  };
+
+  it("marks the estimate required in the DOM, so the browser blocks it natively", async () => {
+    render(<TaskDashboard />);
+    await screen.findByRole("button", { name: /^ADD$/i });
+
+    const input = screen.getByPlaceholderText(/e\.g\. 1\.5/i);
+    expect(input).toBeRequired();
+    // `min` rejects 0 — the value that produced an unscored task on 2026-09-06.
+    expect(input).toHaveAttribute("min", "0.25");
+  });
+
+  it("sends no request when the estimate is blank", async () => {
+    render(<TaskDashboard />);
+    await screen.findByRole("button", { name: /^ADD$/i });
+
+    await submit("Close A.I.N.D.Y. PR");
+
+    // Native constraint validation stops the submit before the handler runs, so there is
+    // no toast to assert here — the outcome that matters is that nothing was created.
+    await waitFor(() => expect(mockCreateTask).not.toHaveBeenCalled());
+  });
+
+  it("the JS guard is a real backstop, not just the DOM attribute", async () => {
+    // `fireEvent.submit` bypasses constraint validation, which is what a programmatic
+    // submit or a browser without it would do. The handler must still refuse.
+    const { container } = render(<TaskDashboard />);
+    await screen.findByRole("button", { name: /^ADD$/i });
+
+    fireEvent.change(screen.getByPlaceholderText(/new directive|task/i), {
+      target: { value: "Close A.I.N.D.Y. PR" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. 1\.5/i), { target: { value: "0" } });
+    fireEvent.submit(container.querySelector("form"));
+
+    await waitFor(() => expect(screen.getByText(/Estimated hours is required/i)).toBeTruthy());
+    expect(mockCreateTask).not.toHaveBeenCalled();
+  });
+
+  it("sends estimated_hours when one is given", async () => {
+    render(<TaskDashboard />);
+    await screen.findByRole("button", { name: /^ADD$/i });
+
+    await submit("Close A.I.N.D.Y. PR", "0.25");
+
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalledTimes(1));
+    expect(mockCreateTask).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Close A.I.N.D.Y. PR", estimated_hours: 0.25 }),
+    );
+  });
+
+  it("sends one create when ADD is pressed repeatedly", async () => {
+    let resolveCreate;
+    mockCreateTask.mockImplementation(
+      () => new Promise((resolve) => { resolveCreate = resolve; }),
+    );
+
+    render(<TaskDashboard />);
+    await screen.findByRole("button", { name: /^ADD$/i });
+
+    fireEvent.change(screen.getByPlaceholderText(/new directive|task/i), {
+      target: { value: "Close A.I.N.D.Y. PR" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. 1\.5/i), { target: { value: "0.25" } });
+
+    const addButton = screen.getByRole("button", { name: /^ADD$/i });
+    fireEvent.click(addButton);
+    fireEvent.click(addButton);
+    fireEvent.click(addButton);
+
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("button", { name: /ADDING/i })).toBeDisabled();
+
+    resolveCreate({});
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalledTimes(1));
+  });
+});

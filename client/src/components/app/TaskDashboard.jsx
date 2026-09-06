@@ -36,6 +36,10 @@ export default function TaskDashboard() {
   // is the second of two layers — it stops the requests being sent at all, and gives the
   // user the feedback whose absence caused the re-clicking.
   const [completing, setCompleting] = useState(() => new Set());
+  // True while a create request is in flight. Creation round-trips through the API and the
+  // list only repaints after `fetchTasks()` resolves, so ADD appears to do nothing for a
+  // moment — which invites a second press and creates a duplicate task.
+  const [creating, setCreating] = useState(false);
   const { toast, showToast, clearToast } = useToast();
   const { publishProjection } = useMasterplanProjection();
   const { loading, error, data, execute: fetchTasks } = useApiCall(getTasks, {
@@ -71,17 +75,33 @@ export default function TaskDashboard() {
     e.preventDefault();
     if (!newTask.trim()) return;
 
+    // ★ The estimate is REQUIRED, not optional. It lands in `Task.duration`, which is
+    // load-bearing for three separate things: the MasterPlan ETA's effort projection, the
+    // Infinity Volume axis (which SUMS duration), and the Trajectory axis (which does
+    // `if est_hours <= 0: continue` — a task with no estimate is skipped outright).
+    //
+    // Leaving it optional was a data-loss default dressed as convenience. Measured
+    // 2026-09-06: a task completed with a blank estimate moved `completed_count` 1 -> 2 and
+    // left `effort_hours`, `volume_score`, `trajectory_score` and `mean_pace_ratio` byte-
+    // identical. Real work was done and two of the three axes did not register it — the
+    // exact measurement SOAK-THEN-FLIP-1 is blocked on.
     const hours = Number.parseFloat(estimatedHours);
-    if (estimatedHours.trim() !== "" && (!Number.isFinite(hours) || hours < 0)) {
-      showToast("Estimated hours must be a positive number.");
+    if (!Number.isFinite(hours) || hours <= 0) {
+      showToast("Estimated hours is required — a task without one is invisible to scoring.");
       return;
     }
 
+    // Single-flight, same reasoning as `handleComplete`: creation round-trips through the
+    // API and the list only refreshes after `fetchTasks()`, so there is a window where a
+    // submitted task is not on screen yet. Without this the obvious response — press ADD
+    // again — created a duplicate. It did, on 2026-09-06: tasks 18 and 19, same name.
+    if (creating) return;
+    setCreating(true);
+
     try {
-      // Only send the optional fields when they carry a value — the API treats both as
-      // Optional and an explicit null is not the same as omitting them.
-      const payload = { name: newTask, priority: "medium" };
-      if (Number.isFinite(hours) && hours > 0) payload.estimated_hours = hours;
+      // `masterplan_id` stays optional — the API treats it as Optional and an explicit
+      // null is not the same as omitting it.
+      const payload = { name: newTask, priority: "medium", estimated_hours: hours };
       if (masterplanId) payload.masterplan_id = Number.parseInt(masterplanId, 10);
 
       await createTask(payload);
@@ -90,6 +110,9 @@ export default function TaskDashboard() {
       fetchTasks();
     } catch (err) {
       showToast(err?.message || "Failed to create task. Please try again.");
+    } finally {
+      // `finally`, so a failed create can be retried — only an in-flight submit is blocked.
+      setCreating(false);
     }
   };
 
@@ -167,18 +190,31 @@ export default function TaskDashboard() {
             value={newTask}
             onChange={(e) => setNewTask(e.target.value)} />
 
-          <button type="submit" style={styles.addButton}>ADD</button>
+          <button
+            type="submit"
+            disabled={creating}
+            aria-busy={creating}
+            style={{
+              ...styles.addButton,
+              ...(creating ? { opacity: 0.6, cursor: "progress" } : null),
+            }}
+          >
+            {creating ? "ADDING…" : "ADD"}
+          </button>
         </div>
 
         <div style={styles.formRow}>
           <label style={styles.fieldLabel}>
-            Est. hours
+            Est. hours *
             <input
               style={styles.smallInput}
               type="number"
-              min="0"
+              min="0.25"
               step="0.25"
-              placeholder="0"
+              required
+              aria-required="true"
+              placeholder="e.g. 1.5"
+              title="Required — tasks without an estimate are excluded from Volume and Trajectory scoring"
               value={estimatedHours}
               onChange={(e) => setEstimatedHours(e.target.value)} />
           </label>
