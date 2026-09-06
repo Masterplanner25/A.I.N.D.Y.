@@ -24,6 +24,18 @@ export default function TaskDashboard() {
   const [masterplanId, setMasterplanId] = useState("");
   const [plans, setPlans] = useState([]);
   const [velocityMessage, setVelocityMessage] = useState("");
+  // Names of tasks with a completion request in flight. Completing a task runs the whole
+  // `task_completion` flow — memory capture, downstream unlock, ETA recalc and a full
+  // Infinity re-score — which took ~14s on the live stack, and until then this screen gave
+  // no sign the click had registered: no disabled state, no spinner, and `velocityMessage`
+  // is only set *after* the await resolves. So the button invited re-clicking.
+  //
+  // Measured 2026-09-06: one completion arrived at the API as 4 `tasks.complete` calls,
+  // producing 4 flow runs and duplicate score_history / three_axis_shadow_records rows.
+  // The server now refuses to re-orchestrate a repeat (task_orchestrate's guard), so this
+  // is the second of two layers — it stops the requests being sent at all, and gives the
+  // user the feedback whose absence caused the re-clicking.
+  const [completing, setCompleting] = useState(() => new Set());
   const { toast, showToast, clearToast } = useToast();
   const { publishProjection } = useMasterplanProjection();
   const { loading, error, data, execute: fetchTasks } = useApiCall(getTasks, {
@@ -82,6 +94,20 @@ export default function TaskDashboard() {
   };
 
   const handleComplete = async (taskName) => {
+    // Functional update + read-back: two clicks in the same tick would both see a stale
+    // `completing` from the closure and both pass a plain `.has()` check.
+    let alreadyInFlight = false;
+    setCompleting((prev) => {
+      if (prev.has(taskName)) {
+        alreadyInFlight = true;
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(taskName);
+      return next;
+    });
+    if (alreadyInFlight) return;
+
     try {
       const res = await completeTask(taskName);
 
@@ -104,6 +130,15 @@ export default function TaskDashboard() {
       setTimeout(() => setVelocityMessage(""), 5000);
     } catch (err) {
       showToast(err?.message || "Failed to complete task. Please try again.");
+    } finally {
+      // `finally`, so a failed completion re-enables the button — the user must be able
+      // to retry a genuine failure. Only an in-flight request is blocked, never a retry.
+      setCompleting((prev) => {
+        if (!prev.has(taskName)) return prev;
+        const next = new Set(prev);
+        next.delete(taskName);
+        return next;
+      });
     }
   };
 
@@ -195,8 +230,18 @@ export default function TaskDashboard() {
                       ▶ Start
                     </button>
               }
-                  <button onClick={() => handleComplete(task.task_name)} style={styles.completeBtn}>
-                    ✅ Done
+                  <button
+                    onClick={() => handleComplete(task.task_name)}
+                    disabled={completing.has(task.task_name)}
+                    aria-busy={completing.has(task.task_name)}
+                    style={{
+                      ...styles.completeBtn,
+                      ...(completing.has(task.task_name)
+                        ? { opacity: 0.6, cursor: "progress" }
+                        : null),
+                    }}
+                  >
+                    {completing.has(task.task_name) ? "… Completing" : "✅ Done"}
                   </button>
                 </>
             }

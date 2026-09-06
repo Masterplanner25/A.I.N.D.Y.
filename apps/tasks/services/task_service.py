@@ -569,6 +569,12 @@ def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
     return f"Task '{name}' is not in progress."
 
 
+# Sentinel prefix for the idempotent-completion no-op return. `task_orchestrate` matches
+# on this to decide whether the orchestration chain should run, so the two must agree —
+# hence a shared constant rather than a bare string compared in two files.
+TASK_ALREADY_COMPLETED_PREFIX = "Task already completed:"
+
+
 def complete_task(db: Session, name: str, user_id: str = None):
     """
     Mark task complete and persist the primary domain mutation.
@@ -580,11 +586,24 @@ def complete_task(db: Session, name: str, user_id: str = None):
     if task.status == "completed":
         # Idempotent completion: a repeated complete on an already-completed task
         # must NOT re-fire the side-effect chain — the TASK_COMPLETED event, the
-        # downstream unlock, the ExecutionUnit update, the Infinity re-score +
-        # memory capture (via the completion path), and the time_spent re-accrual.
+        # downstream unlock, the ExecutionUnit update, and the time_spent re-accrual.
         # Re-firing them double-counts the signal substrate the Infinity loop
         # depends on. Return a no-op result.
-        return f"Task already completed: {task.name}"
+        #
+        # ★ This guard does NOT cover the Infinity re-score or the completion memory
+        # capture, and an earlier version of this comment claimed it did. Those live in
+        # `orchestrate_task_completion`, which the `task_completion` flow runs as a
+        # SIBLING node (`task_validate -> task_complete -> task_orchestrate`), not as
+        # something this function calls. Returning early here stops the mutation and
+        # leaves the orchestration to run anyway.
+        #
+        # Verified live 2026-09-06: `tasks.complete` was invoked 4x for one task (three
+        # of them 21ms apart), this guard correctly no-op'd 3 of them, and the flow still
+        # ran 4 full orchestrations — 2 of which reached `calculate_infinity_score` and
+        # wrote duplicate `score_history` + `three_axis_shadow_records` rows. The skip
+        # decision therefore belongs in `task_orchestrate`, which is the only place that
+        # can see this return value. See TASK-COMPLETE-ORCHESTRATE-REFIRE-1.
+        return f"{TASK_ALREADY_COMPLETED_PREFIX} {task.name}"
     if not _dependencies_complete(db, task, user_id=user_id):
         _recompute_task_status(db, task, user_id=user_id)
         db.commit()
