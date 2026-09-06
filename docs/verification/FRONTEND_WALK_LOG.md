@@ -201,7 +201,8 @@ a symptom and nothing else.
   `uuid.UUID(str(event_id))` did the raising. Now declared `UUID`, which answers 422 and also stops
   the OpenAPI schema advertising a free-form string.
 - `/apps/coordination/runs/{parent_run_id}/children` — **runtime-owned**
-  (`AINDY/routes/coordination_router.py:273`), same `parent_run_id: str` shape. Not ours to fix.
+  (`AINDY/routes/coordination_router.py:273`), same `parent_run_id: str` shape. Not ours to fix —
+  filed upstream as **FR-25(b)**, with the verified before/after from our two routes attached.
 
 **Status:** the diagnosed defect is **RESOLVED**; the app half of the misdiagnosed one is fixed;
 one runtime-owned route remains. Owner stays `both` for that reason.
