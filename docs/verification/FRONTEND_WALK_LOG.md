@@ -749,7 +749,7 @@ column to land in, so either the model gains one or the schema drops it.
 
 ---
 
-### 17. MasterPlan, Genesis/Assistant and Tasks were one section and are now disconnected — `Design`
+### 17. MasterPlan, Genesis/Assistant and Tasks were one section and are now disconnected — `Design` — re-mapped 2026-09-05; the field half is FIXED, the navigation half is not
 
 **Observed (owner):** these three were originally a single tab/section. They are now separate
 top-level routes, and the connective tissue went with the split.
@@ -771,6 +771,62 @@ top-level routes, and the connective tissue went with the split.
 So the split is not cosmetic: it severed the field that made the three surfaces one product.
 This is the same "working backends, underspecified presentation" theme, but here the missing
 piece is a *single field on a form*.
+
+### ★ Re-mapped against schema and UI, 2026-09-05
+
+Re-checked because the owner asked, during a walkthrough, *"what exactly are the tasks for?"*
+Half of what this entry says is now out of date, and the half that remains is not the half it
+emphasises.
+
+#### The schema chain is complete, and half of it is populated
+
+```
+genesis_sessions  ←──  master_plans.linked_genesis_session_id
+                              ↑
+                        tasks.masterplan_id
+```
+
+Both foreign keys exist. `master_plans` holds 1 row and **its `linked_genesis_session_id` is
+set** — Genesis → MasterPlan works end to end, in the data, today.
+
+#### The headline claim is FIXED — `masterplan_id` reaches the API from the form
+
+This entry says the field appeared *"**never** in the task-creation path"*. That stopped being
+true on **2026-07-22 in #157**, which this entry predates: `TaskDashboard.jsx:73` sends
+`masterplan_id`, a plan `<select>` renders at `:156`, each row shows `• Plan {id}` at `:186`, and
+`task-create-payload.test.jsx` covers both the present and absent cases.
+
+**The three tasks with no plan are not evidence of the gap.** They are
+`Runtime walk seed task`, `Effort-bearing task` and `trace-admin-1784783417` — test artifacts,
+all created 2026-07-23. And more decisively: **the first real MasterPlan was created 2026-09-05
+at 21:08.** There was nothing to attach a task to until that afternoon. Wired, correct, never
+exercised — the same shape as `MASTERPLAN-NO-SCORING-1`'s trigger audit.
+
+#### What is actually missing is navigation, not data
+
+| surface | links out to |
+|---|---|
+| `Genesis` | **nothing** — 0 uses of `Link` / `navigate` |
+| `TaskDashboard` | **nothing** — 0 uses |
+| `MasterPlanDashboard` | one, and it points *backwards*: `/collaborator?mode=genesis` |
+
+Locking a plan renders `MASTERPLAN LOCKED · <version> · Posture: …` and stops. No link to the
+plan it just created, no prompt to add tasks against it. The user has just authored the object
+the whole product is organised around and the UI leaves them on a terminal screen.
+
+In `AppShell`'s nav the three are flat siblings — `Collaborator`, `Dashboard`, `Tasks`,
+`MasterPlan` — with nothing expressing that one produces the next.
+
+**So the answer to "what are the tasks for" is precise: they are for a plan, the wiring is
+complete, and nothing in the UI ever says so.** The remaining work is roughly three links and a
+post-lock next step — but what those links should be is a product decision, so nothing was built
+here.
+
+#### A separate gap this surfaced
+
+`goals` has no relationship to `master_plans` — filed as `MASTERPLAN-GOALS-UNLINKED-1`.
+
+---
 
 **Proposal raised by the owner — import a plan authored elsewhere.** Bring in a MasterPlan
 drafted with an external assistant (Claude, ChatGPT), translated into A.I.N.D.Y.'s data points.
