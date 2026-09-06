@@ -23,6 +23,30 @@ from AINDY.db.database import Base
 VALID_WORTH_KINDS = {"monetary_potential", "intrinsic", "strategic"}
 VALID_TARGET_TYPES = {"task", "masterplan", "project", "other"}
 
+# ★ Two kinds are ORDINAL, one is CARDINAL — and that asymmetry is the point.
+#
+# `monetary_potential` is dollars: genuinely cardinal, and $100k really is twice $50k, so it
+# keeps a free float. `intrinsic` and `strategic` were also free floats, which was false
+# precision — nothing distinguished 8 from 7, nothing bounded the value, and an unbounded
+# rating can saturate the axis just as the un-scaled monetary figure used to
+# (SOAK_AUDIT_2026-08-15 §2b).
+#
+# The mapping is roughly geometric because worth judgements are order-of-magnitude ones: the
+# gap between "low" and "high" is not one step of something, it is a different class of thing.
+#
+# ★ These numbers are a CONTRACT, not a tuning knob. `ordinal_level` persists the level the
+# user chose, so retuning these does not silently reinterpret history — but a change still
+# alters every existing row's contribution to the score. `test_worth_ordinal_levels` pins them
+# so a change is deliberate and visible in review.
+WORTH_ORDINAL_LEVELS: dict[str, float] = {
+    "low": 1.0,
+    "moderate": 3.0,
+    "high": 8.0,
+    "critical": 20.0,
+}
+ORDINAL_WORTH_KINDS = {"intrinsic", "strategic"}
+CARDINAL_WORTH_KINDS = {"monetary_potential"}
+
 
 class IntentValueDeclaration(Base):
     __tablename__ = "intent_value_declarations"
@@ -34,12 +58,20 @@ class IntentValueDeclaration(Base):
     target_id = Column(String, nullable=True, index=True)          # id of the tagged thing (freeform allowed)
     label = Column(String, nullable=True)                          # human name, e.g. "Nodus language"
 
-    declared_value = Column(Float, nullable=False, default=0.0)    # the worth the user assigns (relative or $-potential)
+    # For a cardinal kind this is the declared figure (dollars). For an ordinal kind it is
+    # the MAPPED value of `ordinal_level` — scoring reads this field either way, so the
+    # per-kind maths in three_axis_service is unchanged.
+    declared_value = Column(Float, nullable=False, default=0.0)
     kind = Column(String(16), nullable=False, default="strategic") # monetary_potential | intrinsic | strategic
+    # What the user actually chose, for ordinal kinds; NULL for monetary_potential. Persisted
+    # rather than reverse-derived from declared_value: a reverse mapping would silently
+    # reinterpret every historical row if WORTH_ORDINAL_LEVELS were ever retuned.
+    ordinal_level = Column(String(16), nullable=True)
     note = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
-        return f"<IntentValueDeclaration(target={self.target_type}:{self.target_id}, value={self.declared_value}, kind={self.kind})>"
+        shown = self.ordinal_level or self.declared_value
+        return f"<IntentValueDeclaration(target={self.target_type}:{self.target_id}, value={shown}, kind={self.kind})>"

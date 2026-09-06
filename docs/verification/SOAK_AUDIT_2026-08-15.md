@@ -286,6 +286,26 @@ Rough sufficiency, a floor rather than a target: **≥30 distinct `actual_score`
 type** before a learned model drives anything, and **Worth non-constant with Trajectory non-null**
 before Phase D is considered.
 
+> **Update 2026-09-06 — the declaration shape changed, and the old one could not express worth.**
+>
+> Two problems beyond §2b's arithmetic, both now fixed:
+>
+> 1. **One target could hold only one kind.** The upsert key was
+>    `(user, target_type, target_id)` with `kind` absent, and the write did `row.kind = kind`.
+>    Declaring a project's strategic worth and then its monetary potential **overwrote** the
+>    first. The owner's objection: *it cannot be either/or, because that would not capture
+>    worth accurately.* `kind` is now part of the key. This also made §2b's per-kind fix
+>    largely theoretical — the maths could combine kinds the write path could barely produce.
+> 2. **`intrinsic` and `strategic` were free floats.** False precision: nothing distinguished
+>    8 from 7, nothing bounded the value, and an unbounded rating can saturate the axis just
+>    as the un-scaled monetary figure used to. Both are now **ordinal** — `low` | `moderate` |
+>    `high` | `critical`, mapped roughly geometrically (1 / 3 / 8 / 20), with the chosen level
+>    persisted in `ordinal_level` so retuning the mapping cannot silently reinterpret history.
+>    `monetary_potential` **keeps its float** — dollars are genuinely cardinal.
+>
+> A number sent for an ordinal kind is rejected rather than coerced: accepting 8 for "high"
+> would let the false precision back in silently.
+
 ### Do not fabricate the inputs
 
 Worth accepts a declared number and Volume counts completed tasks, so both are trivially

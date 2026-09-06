@@ -2189,9 +2189,21 @@ blend would make `master_score`. The blend only *moves* the persisted score whil
 
 #### POST /apps/analytics/worth/declare
 Declare Worth — declare what a task / masterplan / project is worth (the Worth axis's prior).
-Upserts per (user, target_type, target_id).
+Upserts per (user, target_type, target_id, **kind**) — one target may hold several kinds of
+worth at once, since the same project can be strategically important *and* have monetary
+potential.
 
-**Body:** target_type: string (required), declared_value: number (required), target_id: string | null, label: string | null, kind: string, note: string | null
+**Body:** target_type: string (required), declared_value: string | number (required), target_id: string | null, label: string | null, kind: string, note: string | null
+
+`declared_value` is interpreted by `kind`:
+
+| kind | type | accepted values |
+|---|---|---|
+| `monetary_potential` | number | dollars, >= 0 — genuinely cardinal |
+| `intrinsic`, `strategic` | string | `low` \| `moderate` \| `high` \| `critical` |
+
+A number sent for an ordinal kind is **rejected, not coerced** (422): accepting `8` for
+`"high"` would reintroduce the false precision the ordinal scale exists to prevent.
 
 **Response 200:** unspecified
 

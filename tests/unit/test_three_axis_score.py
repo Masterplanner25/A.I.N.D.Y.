@@ -88,24 +88,33 @@ class TestTrajectory:
 
 class TestWorthDeclarations:
     def test_record_and_summary_by_kind(self, db_session):
+        # `intrinsic` and `strategic` are ORDINAL — a level name, mapped to a float by
+        # WORTH_ORDINAL_LEVELS. They used to take a free float, which was false precision
+        # (nothing distinguished 8 from 7, and nothing bounded it).
         uid = _uid()
         record_value_declaration(db_session, user_id=uid, target_type="project",
-                                 label="Nodus", declared_value=80.0, kind="intrinsic")
+                                 label="Nodus", declared_value="critical", kind="intrinsic")
         record_value_declaration(db_session, user_id=uid, target_type="project",
-                                 label="runtime", declared_value=40.0, kind="strategic")
+                                 label="runtime", declared_value="high", kind="strategic")
         s = declared_worth_summary(db_session, uid)
-        assert s["total"] == pytest.approx(120.0)
-        assert s["by_kind"] == {"intrinsic": 80.0, "strategic": 40.0}
+        assert s["by_kind"] == {"intrinsic": 20.0, "strategic": 8.0}
+        assert s["total"] == pytest.approx(28.0)
         assert s["count"] == 2
 
     def test_upsert_on_target(self, db_session):
+        """Re-declaring the SAME kind on the same target updates in place.
+
+        The upsert key gained `kind`, so a *different* kind on the same target now inserts
+        rather than overwrites — covered in test_worth_ordinal_and_multi_kind.py. This test
+        pins the half that must not change: same target, same kind, one row.
+        """
         uid = _uid()
         record_value_declaration(db_session, user_id=uid, target_type="task",
-                                 target_id="42", declared_value=10.0)
+                                 target_id="42", declared_value="low")
         out = record_value_declaration(db_session, user_id=uid, target_type="task",
-                                       target_id="42", declared_value=25.0)
+                                       target_id="42", declared_value="critical")
         assert out["created"] is False
-        assert declared_worth_summary(db_session, uid)["total"] == pytest.approx(25.0)
+        assert declared_worth_summary(db_session, uid)["total"] == pytest.approx(20.0)
         assert len(list_value_declarations(db_session, uid)) == 1
 
     def test_validation(self, db_session):
@@ -143,7 +152,7 @@ class TestSnapshotAndInvariant:
 
         uid = _uid()
         _task(db_session, uid, duration=8.0, time_spent=4 * 3600)
-        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value=50.0)
+        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value="high")
         before = db_session.query(UserScore).filter(UserScore.user_id == uuid.UUID(uid)).count()
         tas.compute_three_axes(db_session, uid)
         after = db_session.query(UserScore).filter(UserScore.user_id == uuid.UUID(uid)).count()
