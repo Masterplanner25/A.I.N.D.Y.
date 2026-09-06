@@ -107,11 +107,14 @@ vestigial:
 
 ### Why it still *feels* like it feeds nothing
 
-Both three-axis flags are **default-off**: `AINDY_INFINITY_THREE_AXIS_SHADOW` and
-`AINDY_INFINITY_THREE_AXIS_ADVISORY`. Phase A is observation-only and "never writes
-`master_score`". So today the timer feeds a computation that runs in shadow, if enabled at all,
-and changes nothing the user sees. Phase D — letting the axes drive scoring — is gated on a
-real-deployment soak that has not happened.
+Both three-axis flags are default-off **in code** — but not on this stack. Verified 2026-09-06:
+`AINDY_INFINITY_THREE_AXIS_SHADOW=1` is set (`.env:117`), so the shadow ledger **is** recording;
+`AINDY_INFINITY_THREE_AXIS_ADVISORY` is unset, so the axes still never touch `master_score`.
+Phase A is observation-only by design. Phase D — letting the axes drive scoring — is gated on a
+real-deployment soak (`SOAK-THEN-FLIP-1`, P1) that has not happened.
+
+So the timer's value is being *recorded* and is not yet *used*. That is the intended stage of
+"ship shadow → ship advisory → soak → flip", not a bug.
 
 That is a **sequencing** problem, not a dead-code problem. The consumer is built and correct;
 it is switched off. The honest statement is: *the timer costs an interaction today and pays out
