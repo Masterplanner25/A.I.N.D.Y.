@@ -111,6 +111,11 @@ export default function ResearchEngine() {
             results={result.results}
             searchScore={result.search_score}
             title="Ranked Sources"
+            /* Feedback weights are aggregated per query, so the query has to travel with
+               the results for a click to be attributable. `result.query` rather than the
+               live `query` state: the input is editable after a search, and the box may
+               already hold the NEXT query by the time a result is clicked. */
+            query={result.query || null}
           />
         </div>
       )}

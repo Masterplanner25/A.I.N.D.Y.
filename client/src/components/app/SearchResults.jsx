@@ -1,4 +1,5 @@
 import { safeMap } from "../../utils/safe";
+import { recordSearchFeedback } from "../../api/search.js";
 
 function toPercent(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return null;
@@ -27,9 +28,40 @@ function ScoreBadge({ value, label = "score", tone = "emerald" }) {
  * Renders a unified, ranked SearchResponse.results list (Evolution Plan — v5).
  * Each item follows the shared SearchResultItem shape: { title, url, snippet,
  * score, metadata: { relevance, quality_score, ... } }.
+ *
+ * ★ Opening a result emits a `click` feedback signal (Search v4 §8). This is
+ * INSTRUMENTATION, not a UI feature — nothing is added to the page and the user is never
+ * asked to rate anything. Four of the six feedback signals the backend understands are
+ * implicit (click 0.3, dwell 0.5, convert 1.0, dismiss -0.3); only thumbs up/down are
+ * explicit, and those are the signals a user supplies least often. The ranking service,
+ * the aggregation and the route have existed since Search v4 §8 with nothing calling them,
+ * so `search_result_feedback` had 0 rows and AINDY_SEARCH_OUTCOME_WEIGHTING had no input.
+ *
+ * `query` is optional: without it a signal cannot be attributed to a query (the weights are
+ * aggregated per query), so the component silently records nothing rather than sending a
+ * useless row. Existing callers that do not pass it keep working unchanged.
  */
-export default function SearchResults({ results = [], searchScore = null, title = "Ranked Results" }) {
+export default function SearchResults({
+  results = [],
+  searchScore = null,
+  title = "Ranked Results",
+  query = null,
+}) {
   if (!Array.isArray(results) || results.length === 0) return null;
+
+  const handleResultOpen = (item) => {
+    // Fire-and-forget, and deliberately NOT awaited: this runs in an anchor's onClick, and
+    // the browser navigates immediately. Awaiting would either delay the navigation or be
+    // abandoned mid-flight. `.catch` is mandatory — an unhandled rejection here would
+    // surface as a console error on a link click, and feedback failing is not something the
+    // user should ever be told about.
+    if (!query || !item?.url) return;
+    try {
+      recordSearchFeedback(query, item.url, "click")?.catch?.(() => {});
+    } catch {
+      // A synchronous throw (bad route config, missing token) must not stop the link.
+    }
+  };
 
   return (
     <div className="border border-zinc-800 rounded-lg bg-zinc-950/70 p-4 mt-6">
@@ -53,6 +85,7 @@ export default function SearchResults({ results = [], searchScore = null, title 
                       href={item.url}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={() => handleResultOpen(item)}
                       className="text-sm text-blue-400 hover:text-blue-300 truncate"
                     >
                       {item.title}
