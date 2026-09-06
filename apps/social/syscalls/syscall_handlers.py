@@ -65,7 +65,80 @@ def _handle_social_goal_metric(payload: dict, ctx: SyscallContext) -> dict:
     }
 
 
+def _handle_ensure_profile(payload: dict, ctx: SyscallContext) -> dict:
+    """Create the user's social profile if they do not have one yet.
+
+    Exists so signup can provision a profile the way it already provisions a score and an
+    initial agent run. Before this, `signup_initialization_service` created neither, so a
+    freshly registered user got a 404 from `GET /apps/social/profile/{username}` and the
+    profile screen opened in create-mode for every new account.
+
+    A syscall rather than a direct call because `identity` declares an empty
+    `APP_DEPENDS_ON` and must not import `apps.social`. The syscall boundary is the
+    runtime-mediated way across.
+
+    ★ This never raises for a missing Mongo. The social layer is Mongo-backed and
+    **degradable by design** — `docker-compose.prod.yml` ships without Mongo — so a
+    registration must not fail because the optional datastore is absent. An unavailable
+    Mongo returns `created=False, degraded=True`, which is a fact about the world rather
+    than an error.
+    """
+    from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
+
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.mongo_setup import MONGO_DB_NAME, get_mongo_client
+    from apps.social.services.identity_binding_service import resolve_canonical_username
+
+    user_id = str(payload.get("user_id") or ctx.user_id or "").strip()
+    if not user_id:
+        raise ValueError("sys.v1.social.ensure_profile requires 'user_id'")
+
+    client = get_mongo_client()
+    if client is None:
+        return {"created": False, "degraded": True, "reason": "mongodb_unavailable"}
+
+    external_db = ctx.metadata.get("_db")
+    db = external_db if external_db is not None else SessionLocal()
+    owns_session = external_db is None
+    try:
+        # The canonical `users.username` is the source of truth (SOCIAL-IDENTITY-1). At
+        # signup it is already set, so the profile is created verified rather than
+        # inheriting the unverified social-only path the HTTP route falls back to.
+        canonical, is_canonical = resolve_canonical_username(db, user_id)
+        if not canonical:
+            return {"created": False, "degraded": False, "reason": "no_canonical_username"}
+
+        try:
+            profiles = client[MONGO_DB_NAME]["profiles"]
+            if profiles.find_one({"user_id": user_id}):
+                return {"created": False, "degraded": False, "reason": "already_exists",
+                        "username": canonical}
+
+            from apps.social.models.social_models import SocialProfile
+
+            profile = SocialProfile(username=canonical).dict()
+            profile["user_id"] = user_id
+            profile["username_verified"] = is_canonical
+            profiles.insert_one(profile)
+            return {"created": True, "degraded": False, "username": canonical}
+        except ServerSelectionTimeoutError:
+            return {"created": False, "degraded": True, "reason": "mongodb_unavailable"}
+        except PyMongoError as exc:
+            return {"created": False, "degraded": True, "reason": str(exc)}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_all() -> None:
+    register_syscall(
+        "sys.v1.social.ensure_profile",
+        _handle_ensure_profile,
+        "social.write",
+        "Create the user's social profile if absent (idempotent; degrades when Mongo is off)",
+        input_schema={"properties": {"user_id": {"type": "string"}}},
+        stable=False,
+    )
     register_syscall(
         "sys.v1.social.adapt_linkedin",
         _handle_adapt_linkedin,

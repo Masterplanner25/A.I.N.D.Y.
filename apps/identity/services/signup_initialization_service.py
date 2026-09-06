@@ -72,6 +72,24 @@ def initialize_signup_state(*, db, user) -> dict:
     if agent_result.get("status") == "success":
         agent_run_id = agent_result.get("data", {}).get("run_id")
 
+    # Provision the social profile here rather than leaving it to the user's first visit to
+    # `/profile/:username`. Without this a freshly registered account 404s on
+    # `GET /apps/social/profile/{username}` and that screen opens in create-mode every time.
+    #
+    # Tolerant on purpose, matching the agent-run step above rather than the score step:
+    # social is Mongo-backed and degradable, and the prod compose ships without Mongo. A
+    # registration must not fail because an optional datastore is absent, so a non-success
+    # result is recorded and ignored.
+    social_result = dispatch_syscall(
+        "sys.v1.social.ensure_profile",
+        {"user_id": str(user.id)},
+        db=db,
+        user_id=str(user.id),
+    )
+    social_profile = (
+        social_result.get("data", {}) if social_result.get("status") == "success" else {}
+    )
+
     queue_system_event(
         db=db,
         event_type="identity.created",
@@ -95,6 +113,14 @@ def initialize_signup_state(*, db, user) -> dict:
             "status": "initialized",
             "steps": 0,
             "run_id": agent_run_id,
+        },
+        # `created` distinguishes a new profile from one that already existed; `degraded`
+        # says Mongo was unreachable, which is a normal deployment state rather than a
+        # failure. Both are reported so a caller can tell "no profile" from "no Mongo".
+        "social_profile": {
+            "created": bool(social_profile.get("created")),
+            "degraded": bool(social_profile.get("degraded")),
+            "username": social_profile.get("username"),
         },
     }
 
