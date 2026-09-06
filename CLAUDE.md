@@ -261,8 +261,12 @@ Two things this does NOT mean:
   same functions: a flow node reads a lowercase syscall status and returns an uppercase flow
   status two lines later (see `_syscall_node` in `apps/*/flows/`).
 
-`APP-FLOW-STATUS-DEADBRANCH-1` in `TECH_DEBT.md` tracks the 18 routes still carrying the
-wrong test.
+**Do not hand-write this check.** Use `run_flow_or_raise` / `run_flow_data` from
+`apps/_shared/flow.py`; every route that runs a flow goes through it. Eight routers each
+hand-rolling the same decision is how eighteen sites in four of them ended up testing
+`== "error"` — fixed in #271, recorded as `APP-FLOW-STATUS-DEADBRANCH-1`. The helper also
+maps a node's `HTTP_<code>:<msg>` error onto that status code, which a hand-written check
+will not.
 
 ### `_fresh_main_app()` and `Base.metadata` — model import timing hazard
 

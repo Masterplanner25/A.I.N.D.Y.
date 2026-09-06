@@ -269,9 +269,38 @@ surface someone reads.
 
 ---
 
-## APP-FLOW-STATUS-DEADBRANCH-1: 18 routes test `run_flow()` for a status it never returns (app-owned, P2)
+## APP-FLOW-STATUS-DEADBRANCH-1: ✅ RESOLVED 2026-09-05 (#271) — all 18 sites now use one shared helper
 
-**Status: OPEN, unmeasured.** Found 2026-09-05 while classifying `== "error"` sites for the
+> ### ✅ Fixed, and the duplication that caused it is gone
+>
+> All eighteen sites in `arm_router`, `score_router`, `goals_router` and `task_router` now call
+> `run_flow_or_raise` from **`apps/_shared/flow.py`**. So do the four routers that already had it
+> right — `automation`, `autonomy`, `dashboard`, `health_dashboard` — so the decision exists once
+> instead of eight times, which is how four of the eight came to be wrong.
+>
+> **The fix carried a second one.** The shared version adopts `automation`'s error extraction, the
+> only one of the four correct copies that looked past the top level for a message; and it maps a
+> node's `HTTP_<code>:<msg>` onto that status code, which none of the eighteen did. That is very
+> likely part of **walk-log item 3** — *"a 404 surfaces to the user as Internal Server Error"* —
+> and that item should be re-checked against a live 404 before being assumed fixed by this.
+>
+> **`WAITING` / `QUEUED` / `DEFERRED` are deliberately still not handled.** They are not failures
+> and not success; no flow has ever entered one here (0 of 349 `flow_runs`, and the eight flows
+> behind these routes have no wait nodes), so there was nothing to write against. They pass
+> through, the extension point is documented in the module, and a parametrised test pins the
+> current behaviour so that adding the 202 branch fails that test and forces the decision to be
+> made rather than drifting into place.
+>
+> **Two `== "error"` sites in `apps/` remain and are correct**, as the original entry said:
+> `social_router.py:196` reads the canonical HTTP envelope (the runtime tests it identically at
+> `AINDY/core/response_adapter.py:60`) and `content_ingest.py:555` checks `poll_source()`, which
+> is ours. Do not sweep them into a future cleanup.
+>
+> `CLAUDE.md`'s `run_flow()` section now points at the helper rather than at this entry.
+
+### Original entry (2026-09-05) — retained
+
+**Was: OPEN, unmeasured.** Found 2026-09-05 while classifying `== "error"` sites for the
 runtime 2.9.0 adoption. Not caused by that release — 2.9.0 is what made someone look.
 
 ### The defect
