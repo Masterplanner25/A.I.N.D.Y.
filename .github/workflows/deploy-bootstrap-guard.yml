@@ -111,7 +111,8 @@ jobs:
       - name: Install app (pulls pinned aindy-runtime >=1.7.0 from PyPI)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[test]
+          # Same pin as the image — this guard exists to model the deployed boot.
+          python -m pip install -e .[test] -c constraints.txt
 
       - name: Confirm runtime provides bootstrap-schema (>= 1.7.0)
         run: |

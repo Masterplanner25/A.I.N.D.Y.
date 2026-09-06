@@ -1,0 +1,44 @@
+# Reproducible-build constraints — RUNTIME-PIN-FLOAT-1.
+#
+# `pyproject.toml` declares a RANGE (`aindy-runtime>=2.9.0,<3.0`). A range is the right
+# thing to publish — it says what this app is compatible with — but it is the wrong thing
+# to BUILD against, because pip resolves it to whatever is newest on PyPI at build time.
+# That made an image depend on the date it was built: rebuilding on 2026-08-22 silently
+# installed 2.5.0 while every doc in the repo described 2.4.1.
+#
+# ★ Why this is not merely hygiene. `docker/entrypoint.sh` runs `aindy-runtime serve`,
+# which SELF-MIGRATES the runtime schema at boot. So an unintended version bump is an
+# unintended, irreversible database migration — discovered by the container, on start,
+# with no clean path back. The range floats; the database does not.
+#
+# This file pins the EXACT version this repo has run an adoption pass against. Moving it is
+# therefore a deliberate act with a paper trail (`docs/runtime/RUNTIME_<v>_UPGRADE.md`),
+# which is what "adopted" is supposed to mean.
+#
+# ── Keeping this honest ────────────────────────────────────────────────────────────────
+# `tests/unit/test_runtime_dependency_contract.py` asserts this pin and the `pyproject.toml`
+# floor stay in lockstep. Raise the floor without raising the pin (or vice versa) and that
+# test fails rather than letting the two drift apart silently — the same discipline already
+# applied to the specifier string itself.
+#
+# ── Scope: first-party only, deliberately ──────────────────────────────────────────────
+# Only `aindy-runtime` is pinned. This is a constraints file, not a lockfile:
+#
+#   * `aindy-runtime` is pinned because we adopt it release-by-release and because it
+#     migrates our database. It is the dependency whose float has actually cost us.
+#   * `aindy-sdk` and `anthropic` are left ranged. Neither touches the schema, and pinning
+#     them here would imply a lockfile's guarantee this file does not provide (no hashes,
+#     no transitive closure).
+#
+# If full reproducibility is wanted later, that is `pip-compile`/hashes and a different
+# artifact — not more lines here. Do not let this file grow into a half-lockfile.
+#
+# ── Usage ──────────────────────────────────────────────────────────────────────────────
+#   Docker:  python -m pip install . -c constraints.txt
+#   CI:      python -m pip install -e .[test] -c constraints.txt
+#
+# Local paired-repo development against a sibling checkout does NOT use this file — the
+# editable install (`pip install -e ../aindy-runtime --no-deps`) is the point there, and a
+# constraint would defeat it. See CLAUDE.md, "Runtime dependency contract".
+
+aindy-runtime==2.9.0

@@ -428,7 +428,50 @@ function), and a pointer here.
 
 ---
 
-## RUNTIME-PIN-FLOAT-1: an image rebuild no longer reproduces the adopted runtime (app-owned, P2)
+## RUNTIME-PIN-FLOAT-1: ✅ RESOLVED 2026-09-06 — builds now install a pinned runtime
+
+**Status: RESOLVED.** Both halves are now closed. The adoption half ran on 2026-08-23; the
+reproducibility half — the one this entry kept open — landed 2026-09-06.
+
+`constraints.txt` pins `aindy-runtime==2.9.0`, and every build path installs with
+`-c constraints.txt`: the `Dockerfile` and **five** CI workflows (`app-ci`,
+`deploy-bootstrap-guard`, `nodus-vm-integration`, `security-audit`, `serve-run-completion`).
+An image no longer depends on the date it was built.
+
+**The fifth workflow was found by the test, not by grep.** A `grep | head -10` while wiring
+this up truncated the list and missed `serve-run-completion.yml`; the guard below caught it.
+That is the argument for asserting the property rather than checking it by hand.
+
+### What keeps it closed
+
+`tests/unit/test_runtime_dependency_contract.py` gained four tests:
+
+| test | catches |
+|---|---|
+| `..._pins_the_runtime_exactly` | a range, or a missing pin, in `constraints.txt` |
+| `..._satisfies_the_declared_range` | a pin outside `pyproject.toml`'s compatibility range |
+| `..._equals_the_floor` | a pin that merely *satisfies* the floor instead of **being** it |
+| `..._build_paths_install_with_the_constraints_file` | a Dockerfile or workflow that does not pass `-c` |
+
+The third is the subtle one and is deliberately stricter than the second: a pin above the
+floor satisfies the range while shipping a runtime no adoption pass covered. Verified by
+setting the pin to 2.9.5 — the range test passes, the equality test fails.
+
+### Verified, not assumed
+
+- `pip install --dry-run . -c constraints.txt` resolves to `aindy-runtime-2.9.0`, no conflicts.
+- The constraint **binds**: a deliberately contradictory pin (2.7.0) produces
+  `ERROR: ResolutionImpossible` rather than being ignored. `-c` is load-bearing, not decoration.
+
+### Scope, deliberately narrow
+
+Only `aindy-runtime` is pinned. `aindy-sdk` and `anthropic` stay ranged — neither touches the
+schema, and pinning them would imply a lockfile's guarantee a constraints file does not provide
+(no hashes, no transitive closure). If full reproducibility is wanted, that is `pip-compile`
+and a different artifact. The file says so, so it does not grow into a half-lockfile.
+
+*Original entry below, retained — its second consequence (the self-migrating schema) is what
+made this worth closing rather than living with.*
 
 **Status: PARTIALLY ADDRESSED 2026-08-23 — the adoption pass ran; the float remains.**
 2.5.0 and 2.6.0 were adopted deliberately (`docs/runtime/RUNTIME_2_6_0_UPGRADE.md`), and the floor
