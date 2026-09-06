@@ -147,6 +147,95 @@ minutes at a stretch. That environment cannot distinguish an application stall f
 
 ---
 
+## 7. ★ Verified against a running stack, 2026-09-06 — and §1's mechanism has never fired
+
+§5 asked for three things to be checked on a host that is not thrashing, before fixing anything.
+Done, against 109 `score_history` rows spanning **2026-07-23 → 2026-09-06**, 4 users. The answers
+change what this document recommends.
+
+### Q1 — do two alternating-trigger recalculations for one user both run?
+
+**In code, yes. In 46 days of data, it has never happened.**
+
+Every pair of recalculations for one user less than 60 seconds apart — five pairs in the entire
+history — has the **same** trigger on both sides:
+
+```
+usr       prev_trigger      trigger_event     gap_s
+aef0cf5b  genesis_message   genesis_message    7.72
+aef0cf5b  genesis_message   genesis_message   55.40
+aef0cf5b  genesis_message   genesis_message   10.15
+aef0cf5b  genesis_message   genesis_message   10.44
+aef0cf5b  genesis_message   genesis_message   14.76
+```
+
+The alternating traffic §1 is built on does not occur. Real traffic arrives in **bursts of one
+trigger**, because that is what a conversation is.
+
+**This inverts §1's remedy.** The document says *"raising the window would not help —
+`_ANALYTICS_DUPLICATE_DEBOUNCE_SECONDS = 1` is a double-submit guard, and the mismatch
+short-circuits first."* For the traffic that actually exists, the mismatch never short-circuits
+and **the 1-second window is the only thing letting these through**. The stated diagnosis is
+code-accurate and empirically backwards.
+
+### Q2 — can they overlap, and what happens to `user_scores`?
+
+Structurally yes: `lease_name = f"analytics.infinity:{user_id}:{trigger_event}"` embeds the
+trigger, so two different-trigger recalculations take different leases. **Not observed**, and not
+deliberately provoked — which would require inducing concurrency rather than measuring history.
+It remains a real race and an unverified one. Note it is only reachable via the alternating
+pattern Q1 shows does not occur, so its likelihood is lower than §4 assumed.
+
+### Q3 — what is the per-turn cost, and is the fix "debounce properly" or "do not recalculate per turn"?
+
+**Decisively the second, and for a reason this document does not have.**
+
+Cost, measured from a sequential scheduled sweep over 4 users:
+
+| | |
+|---|---|
+| `calculate_infinity_score` alone (`loop.started` → row written) | **0.03 – 0.61 s** |
+| full per-user recalculation (gap between consecutive `loop.started`) | **1.8 – 4.1 s** |
+
+So the scoring is cheap and `gather_support_state` is essentially all of it. §4's framing —
+"one full 5-KPI recalculation per turn" — points at the wrong half.
+
+**The decisive measurement is not cost, it is effect.** `score_delta = master - previous_master`
+(`infinity_service.py:609`), and of 16 `genesis_message` recalculations, **14 produced a delta of
+exactly 0**. The clearest instance, four consecutive turns 10–15 s apart:
+
+```
+2026-08-01 06:21:12  42.140  genesis_message  delta 0
+2026-08-01 06:21:27  42.140  genesis_message  delta 0
+2026-08-01 06:21:37  42.140  genesis_message  delta 0
+2026-08-01 06:21:47  42.140  genesis_message  delta 0
+```
+
+Four full recalculations, four identical scores, ~8 seconds of support-gathering, zero information
+produced.
+
+**So the question is not how to throttle a conversational turn's recalculation. It is whether a
+conversational turn should trigger one at all.** §3 already noticed that somebody decided a turn
+is a scoring event "and then did not finish the decision" — this is the evidence that finishes it.
+A turn changes the transcript, not the task graph, the metrics, or the pillars; the score has
+nothing to move on until something is *done*.
+
+### What this means for the fix
+
+**Do not implement a better debounce.** Tuning a window to suppress recalculations that should not
+be requested is the wrong layer, and it would make the real decision harder to see later.
+
+The remaining decision is a product one and belongs to the owner: does a Genesis turn warrant a
+score recalculation? The evidence says no — 14 of 16 moved nothing. If the answer is no, the fix
+is at the call site (`flow_definitions.py`), not in the orchestrator, and both §1 and §2 become
+unreachable rather than fixed.
+
+**Downgraded from P2 to P3 (Question) on this evidence.** Two of the three defects here are real
+in code and have never occurred in 46 days; the third is a design decision wearing a defect's
+clothes.
+
+---
+
 ## 6. Related — the async path this interacts with
 
 `apps/analytics/bootstrap.py` registers **no** `register_async_job`. It registers
