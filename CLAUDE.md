@@ -198,12 +198,30 @@ merge rules): `docs/operations/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime>=2.4.1,<3.0
+aindy-runtime>=2.9.0,<3.0     # pyproject.toml — the COMPATIBILITY range
+```
+```
+aindy-runtime==2.9.0          # constraints.txt — the BUILD pin
 ```
 
 The upper bound is required. Never widen to an unbounded range.
 
-For local dev against a sibling `aindy-runtime` checkout:
+**Two files, two jobs, and they must move together.** The range says what this app is
+compatible with; the pin says what it is actually built and tested against. Builds install
+with `-c constraints.txt` — the Dockerfile and all five CI workflows — so an image stops
+depending on the date it was built (`RUNTIME-PIN-FLOAT-1`).
+
+This matters more than ordinary hygiene because `docker/entrypoint.sh` has `aindy-runtime
+serve` **self-migrate the runtime schema at boot**: an unintended version bump is an
+unintended, irreversible database migration, discovered by the container on start.
+
+**Raising the floor and the pin is one act, not two.**
+`tests/unit/test_runtime_dependency_contract.py` asserts they are equal — not merely
+compatible — so a floor raised during an adoption pass while the pin is forgotten fails there
+instead of silently shipping an unadopted runtime.
+
+For local dev against a sibling `aindy-runtime` checkout — this path deliberately does **not**
+use `constraints.txt`, since the editable install is the whole point and a pin would defeat it:
 
 ```bash
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation

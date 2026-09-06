@@ -25,9 +25,14 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Install the app package first (this resolves and installs the pinned aindy-runtime and the
-# rest of the dependency tree from PyPI). Layer-cached on source-only changes.
-COPY pyproject.toml README.md ./
+# Install the app package first (this resolves and installs aindy-runtime and the rest of the
+# dependency tree from PyPI). Layer-cached on source-only changes.
+#
+# `-c constraints.txt` is what makes the image reproducible (RUNTIME-PIN-FLOAT-1). Without it
+# `pyproject.toml`'s range resolves to whatever is newest on PyPI at build time, so the same
+# Dockerfile produced different runtimes on different days — and because `entrypoint.sh` has
+# `aindy-runtime serve` self-migrate the schema at boot, that difference reached the database.
+COPY pyproject.toml README.md constraints.txt ./
 COPY apps ./apps
 #
 # The pip cache is a BuildKit cache mount, NOT an image layer: wheels survive between
@@ -38,7 +43,7 @@ COPY apps ./apps
 # between a build that finishes and one that never does.
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     PIP_NO_CACHE_DIR=0 python -m pip install --upgrade pip \
- && PIP_NO_CACHE_DIR=0 python -m pip install .
+ && PIP_NO_CACHE_DIR=0 python -m pip install . -c constraints.txt
 
 # App-profile deployment inputs owned by this repo. The working directory must be the repo
 # root so the runtime discovers aindy_plugins.json, and so Alembic finds alembic.ini

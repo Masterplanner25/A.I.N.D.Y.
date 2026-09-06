@@ -84,7 +84,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[test]
+          # -c constraints.txt: CI must install the SAME runtime the image ships
+          # (RUNTIME-PIN-FLOAT-1). Without it CI validates against whatever PyPI
+          # published most recently, which is not what gets deployed.
+          python -m pip install -e .[test] -c constraints.txt
 
       - name: Verify installed runtime dependency
         run: |

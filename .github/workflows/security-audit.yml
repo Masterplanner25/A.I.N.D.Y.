@@ -46,7 +46,8 @@ jobs:
       - name: Install project and pip-audit
         run: |
           python -m pip install --upgrade pip setuptools
-          python -m pip install -e .
+          # Audit the runtime the image actually ships, not the newest published one.
+          python -m pip install -e . -c constraints.txt
           python -m pip install pip-audit==2.9.0
 
       # Audits the resolved environment rather than a requirements file, so it sees the

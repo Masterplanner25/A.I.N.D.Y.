@@ -112,7 +112,9 @@ jobs:
       - name: Install app (pulls pinned aindy-runtime from PyPI)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[test]
+          # Same pin as the image (RUNTIME-PIN-FLOAT-1) — this job boots the server,
+          # so it must boot the runtime that actually ships.
+          python -m pip install -e .[test] -c constraints.txt
 
       - name: Preflight — required secret present (anthropic_chat only)
         if: ${{ (github.event.inputs.planner_backend || 'anthropic_chat') == 'anthropic_chat' }}

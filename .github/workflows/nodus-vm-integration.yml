@@ -85,7 +85,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[test]
+          # Same pin as the image (RUNTIME-PIN-FLOAT-1); the VM path is runtime-sensitive.
+          python -m pip install -e .[test] -c constraints.txt
 
       - name: Verify runtime provides the RTR-1 resume surface (>= 1.5.3)
         # Importing runtime_api pulls in AINDY.db.database, which calls
