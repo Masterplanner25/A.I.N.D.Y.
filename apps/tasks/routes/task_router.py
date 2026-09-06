@@ -231,6 +231,82 @@ def list_tasks(
         }
     return _execute_tasks(request, "tasks.list", handler, db=db, user_id=user_id)
 
+@router.post("/delete")
+@limiter.limit("30/minute")
+def delete_task(
+    request: Request,
+    task: TaskAction,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete one of the caller's tasks by name.
+
+    The capability already existed as `sys.v1.task.delete_by_ids` and
+    `delete_tasks_by_ids`, reachable only from `masterplan_execution_service` — there was
+    no HTTP route and no UI, so a task created by mistake could not be removed by the
+    person who created it. (Two duplicates had to be deleted by hand on 2026-09-06.)
+
+    Takes a NAME rather than an id because that is what every other verb on this router
+    takes (`/start`, `/pause`, `/complete` all use `TaskAction`) and what the client
+    already holds. The lookup is user-scoped, so a name resolves within the caller's own
+    tasks only.
+
+    404 rather than a silent success when nothing matched: `delete_tasks_by_ids` returns a
+    count, and a 200 with `deleted_count: 0` would let the UI report a deletion that never
+    happened. The 404 is raised *after* the pipeline returns — raising it inside the handler
+    would be served as an opaque 500 (`PRE-PIPELINE-RAISE`).
+    """
+    user_id = str(current_user["sub"])
+    # Closure flag rather than re-parsing the pipeline envelope on the way out — the same
+    # pattern `/start` and `/complete` use for their 404s, and it does not depend on the
+    # envelope's shape.
+    _not_found: list[bool] = []
+
+    def handler(_ctx):
+        from AINDY.kernel.syscall_dispatcher import dispatch_syscall
+        from apps.tasks.services.task_service import find_task
+
+        target = find_task(db, task.name, user_id=user_id)
+        if target is None:
+            _not_found.append(True)
+            return {"deleted_count": 0, "task_name": task.name}
+
+        result = dispatch_syscall(
+            "sys.v1.task.delete_by_ids",
+            {"task_ids": [target.id], "user_id": user_id},
+            db=db,
+            user_id=user_id,
+            capability="task.write",
+        )
+        # Lowercase syscall envelope, not the uppercase flow one — and since runtime
+        # 2.9.0 a non-`success` may be `partial` or `unknown`, so test `!= "success"`
+        # rather than `== "error"` (CLAUDE.md, run_flow vs syscall envelopes).
+        if result.get("status") != "success":
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error") or "task delete failed",
+            )
+        data = result.get("data") or {}
+        return {
+            "deleted_count": int(data.get("deleted_count") or 0),
+            "task_name": task.name,
+            "execution_envelope": to_envelope(
+                eu_id=None, trace_id=None, status="SUCCESS",
+                output=None, error=None, duration_ms=None, attempt_count=1,
+            ),
+        }
+
+    response = _execute_tasks(
+        request, "tasks.delete", handler, db=db, user_id=user_id,
+        input_payload={"task_name": task.name},
+    )
+    # Raised outside the handler: a 404 raised *inside* would be served as an opaque
+    # 500 internal_error — the pre-pipeline-raise shape now guarded against in CI.
+    if _not_found:
+        raise HTTPException(status_code=404, detail=f"Task '{task.name}' not found")
+    return response
+
+
 @router.post("/recurrence/check")
 @limiter.limit("30/minute")
 def trigger_recurrence(

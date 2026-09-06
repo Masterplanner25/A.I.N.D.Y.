@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { getTasks, createTask, completeTask, startTask } from "../../api/tasks.js";
+import { getTasks, createTask, completeTask, startTask, deleteTask } from "../../api/tasks.js";
 import { listMasterPlans } from "../../api/masterplan.js";
 import { Toast } from "../shared/Toast";
 import DomainError from "../shared/DomainError.jsx";
@@ -40,6 +40,8 @@ export default function TaskDashboard() {
   // list only repaints after `fetchTasks()` resolves, so ADD appears to do nothing for a
   // moment — which invites a second press and creates a duplicate task.
   const [creating, setCreating] = useState(false);
+  // Names with a delete request in flight — same single-flight reasoning as `completing`.
+  const [deleting, setDeleting] = useState(() => new Set());
   const { toast, showToast, clearToast } = useToast();
   const { publishProjection } = useMasterplanProjection();
   const { loading, error, data, execute: fetchTasks } = useApiCall(getTasks, {
@@ -113,6 +115,38 @@ export default function TaskDashboard() {
     } finally {
       // `finally`, so a failed create can be retried — only an in-flight submit is blocked.
       setCreating(false);
+    }
+  };
+
+  const handleDelete = async (taskName) => {
+    // Deletion is irreversible and there is no undo, so it is confirmed rather than
+    // single-click. Every other action here is recoverable; this one is not.
+    if (!window.confirm(`Delete "${taskName}"? This cannot be undone.`)) return;
+
+    let alreadyInFlight = false;
+    setDeleting((prev) => {
+      if (prev.has(taskName)) {
+        alreadyInFlight = true;
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(taskName);
+      return next;
+    });
+    if (alreadyInFlight) return;
+
+    try {
+      await deleteTask(taskName);
+      fetchTasks();
+    } catch (err) {
+      showToast(err?.message || "Failed to delete task. Please try again.");
+    } finally {
+      setDeleting((prev) => {
+        if (!prev.has(taskName)) return prev;
+        const next = new Set(prev);
+        next.delete(taskName);
+        return next;
+      });
     }
   };
 
@@ -281,6 +315,24 @@ export default function TaskDashboard() {
                   </button>
                 </>
             }
+              {/* Outside the not-completed guard on purpose: a task completed by mistake
+                  is exactly the one you want to remove, so Delete stays available for
+                  every status. */}
+              <button
+                onClick={() => handleDelete(task.task_name)}
+                disabled={deleting.has(task.task_name)}
+                aria-busy={deleting.has(task.task_name)}
+                aria-label={`Delete ${task.task_name}`}
+                title="Delete this task — cannot be undone"
+                style={{
+                  ...styles.deleteBtn,
+                  ...(deleting.has(task.task_name)
+                    ? { opacity: 0.6, cursor: "progress" }
+                    : null),
+                }}
+              >
+                {deleting.has(task.task_name) ? "… Deleting" : "🗑 Delete"}
+              </button>
             </div>
           </div>)
         }
@@ -326,5 +378,8 @@ const styles = {
   taskMeta: { fontSize: "12px", color: "#666" },
   actions: { display: "flex", gap: "8px" },
   actionBtn: { background: "#222", border: "1px solid #444", color: "#ccc", padding: "6px 12px", borderRadius: "4px", cursor: "pointer" },
-  completeBtn: { background: "rgba(0, 255, 170, 0.2)", border: "1px solid #00ffaa", color: "#00ffaa", padding: "6px 12px", borderRadius: "4px", cursor: "pointer" }
+  completeBtn: { background: "rgba(0, 255, 170, 0.2)", border: "1px solid #00ffaa", color: "#00ffaa", padding: "6px 12px", borderRadius: "4px", cursor: "pointer" },
+  // Muted rather than alarming: destructive, but it is confirmed before it fires, and a
+  // red button next to every task reads as a warning about the task rather than an action.
+  deleteBtn: { background: "transparent", border: "1px solid #663333", color: "#cc7777", padding: "6px 12px", borderRadius: "4px", cursor: "pointer" }
 };
