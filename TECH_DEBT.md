@@ -839,9 +839,37 @@ ambiguous, because a grep for the syscall name returns it and it looks like a tw
 
 ---
 
-## GENESIS-CLIENT-FABRICATES-FAILURE-1: the UI invents an assistant turn that never existed (P1)
+## GENESIS-CLIENT-FABRICATES-FAILURE-1: ✅ RESOLVED 2026-09-05 (#275) — the UI no longer invents an assistant turn
 
-**Status: OPEN.** Found 2026-08-23 during the first real Genesis conversation, and it is a separate
+> ### ✅ Fixed
+>
+> `role: "ai"` is gone from every error path. A transport failure is now a status line on the
+> **user's own turn** with a Retry link, so the AI never speaks unless the server said it did and
+> the rendered transcript cannot diverge from the persisted one.
+>
+> **The 408 case does what the fix shape asked for.** On timeout the client re-fetches the session
+> via the existing `getGenesisSession` / `restoreMessages` path; if the transcript now ends with an
+> assistant turn, that turn is adopted — the reply had landed and the request was merely slow.
+> Recovery is best-effort, and when it fails the turn is marked rather than declared lost, because
+> at that point we genuinely do not know.
+>
+> Wording is distinguished per the entry's point 1: a timeout reads *"Still sending — the reply may
+> arrive on reload"*, never *"try again"*, because re-sending risks duplicating work that already
+> succeeded.
+>
+> **Regression tests verified against the old code** — `client/src/test/genesis-turn-failure.test.jsx`,
+> 5 tests, all 5 failing on the previous catch block. One of them initially passed for the wrong
+> reason (asserting the absence of a string is also true of a test that never sent anything), so it
+> now asserts `sendGenesisMessage` was actually called first.
+>
+> **Still upstream, and unchanged:** the 30s ceiling itself lives in `@aindy/ui-kit`. Raising it was
+> never this entry's ask. Worth noting the exposure dropped independently — turns now complete in
+> 7–10s against that ceiling (`GENESIS-TURN-LATENCY-1`), so this path should fire rarely. That is
+> mitigation, not a fix, and the fix is what shipped.
+
+### Original entry (2026-08-23) — retained
+
+**Was: OPEN.** Found 2026-08-23 during the first real Genesis conversation, and it is a separate
 defect from the latency that caused it.
 
 `@aindy/ui-kit` aborts a request at a hardcoded **30 seconds** and raises
@@ -862,9 +890,9 @@ Three problems, in increasing order of seriousness:
    produced and the server never stored, so the rendered conversation **diverges from the persisted
    one** until reload. A synthetic turn attributed to the AI is worse than an error banner.
 
-**Fix shape:** render transport failures as a *status on the user's own turn* (retryable), never as
-an assistant message; distinguish 408 from other errors; and on timeout re-fetch the session rather
-than assuming the turn was lost — it usually was not.
+**Fix shape (all three shipped in #275):** render transport failures as a *status on the user's own
+turn* (retryable), never as an assistant message; distinguish 408 from other errors; and on timeout
+re-fetch the session rather than assuming the turn was lost — it usually was not.
 
 **Related but not the same:** the 30s ceiling lives in ui-kit, so raising it is an upstream change,
 while not inventing a turn is entirely ours.
