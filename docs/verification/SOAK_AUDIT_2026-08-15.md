@@ -109,7 +109,27 @@ already found the mirror image from the planning side: *"Nodus and the runtime a
 least-measured. A value model that reports zero for the thing that created the value is
 mis-specified, and the fix is not more revenue.
 
-### 2b. …but the Worth aggregation is broken, so do not collect declarations yet
+### 2b. …but the Worth aggregation is broken, so do not collect declarations yet — ✅ FIXED 2026-09-06
+
+> **RESOLVED.** Worth is now scored **per kind**, and the composite is the mean over the kinds
+> actually declared — never a cross-kind sum. The audit's table, re-run against the fix:
+>
+> | Declaration | was | now |
+> |---|---|---|
+> | `monetary_potential: 5000` | **100.0** (saturated) | **9.52** |
+> | `strategic: 8` | 7.7 | **7.69** — unchanged, this half was never wrong |
+> | Both together | **100.0**, strategic invisible | **8.60**, both visible in `score_by_kind` |
+>
+> `WORTH_DECLARED_SCALE` is replaced by `WORTH_KIND_SCALES`: dollars get a dollar-sized
+> denominator (50,000 — $50k → 63, $100k → 86), the two relative kinds keep 100.0 exactly as
+> before. `compute_worth` now also returns `score_by_kind`, and the KPI panel renders those
+> sub-scores instead of the mixed-unit `declared_total`.
+>
+> Locked by `tests/unit/test_worth_per_kind_normalisation.py`, which pins this table as the
+> specification and was verified to fail on the old code with `assert 100.0 == 9.52`.
+>
+> **Consequence for §7: "go declare some worth" is now safe advice.** The entry below is
+> retained because its reasoning is the reason the fix looks the way it does.
 
 Found while checking 2a. `declared_worth_summary` sums **every kind into one total**
 (`value_declaration_service.py:109`, `total += v`), and that total is fed through
@@ -251,11 +271,12 @@ Mostly not a build. Use the system for real, on the loop it already measures:
   **three** things at once: it moves `actual_score` off its constant, fills **Trajectory**
   (estimate-vs-actual pace), and produces the first calibratable pairs for
   `SELF_TRUST_CALIBRATION_SPEC.md` §4. Needs no money and no new code.
-- **Value declarations.** Worth's only input. The API exists and is routed, but **§2b must be
-  fixed first** — the aggregation sums incommensurable kinds and one monetary figure saturates the
-  axis. Fix the normalisation, then build the entry surface, then declare. Declaring against the
-  current maths would produce a confidently wrong Worth score.
-- **A MasterPlan with a `goal_value`.** `master_plans` is empty.
+- **Value declarations.** Worth's only input. ~~§2b must be fixed first~~ — **fixed 2026-09-06**;
+  the maths is now per-kind and declaring is safe. What remains is the entry surface: the API
+  exists and is routed, but nothing in the UI calls it, so declarations are currently only
+  reachable by hand. **0 declarations exist.**
+- ~~**A MasterPlan with a `goal_value`.** `master_plans` is empty.~~ **Satisfied 2026-09-05** —
+  one locked, active plan with `goal_value = 1000000 USD` ("Financial Freedom").
 
 **None of this requires revenue.** An earlier draft of this document asserted Worth was defined
 over realized revenue and therefore blocked on income; that was wrong, and it pointed the remedy
