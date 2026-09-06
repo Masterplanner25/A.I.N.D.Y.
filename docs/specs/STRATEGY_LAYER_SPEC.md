@@ -348,9 +348,64 @@ A strategy therefore carries **two references with different meanings**:
   **refine** under the existing spec: the route changed, the destination did not.
 
 That single distinction is what makes "some things move phases" a cheap, expected operation
-rather than a plan rewrite. It also makes "some things get done at the same time" expressible:
-two strategies under different objectives can share a phase, which a strict tree with a
-hard-dependency chain (what tasks 12–16 encode today) forbids.
+rather than a plan rewrite.
+
+### ★ "Some things get done at the same time" is about execution, not scheduling
+
+An earlier draft read this as *concurrency* — two strategies sharing a phase — and concluded the
+dependency chain on tasks 12–16 had to go. **Corrected by the owner 2026-09-05; that was wrong on
+both counts.** The chain stays (§8), and the real point is divergence between what was planned
+and what actually happened:
+
+> *"A human can plan to write a book and plan to write articles — but might only write the
+> articles. Or vice versa: they may plan to write only the articles and end up writing both.
+> Something like that would affect the phases of the plan, and is what would lead to a refine
+> and/or a revise."*
+
+Two failure modes, and **the model can express neither**:
+
+| what happened | today | what it actually means |
+|---|---|---|
+| Planned the book, wrote only the articles | the book task sits `pending` forever | the book was **displaced**, not failed — you chose differently |
+| Planned only articles, wrote a book too | **no record exists at all** | the plan under-described reality |
+
+The second is the more damaging. A strategy nobody planned has nowhere to be recorded, so the
+single most informative thing that can happen — *you did something the plan never anticipated,
+and it worked* — leaves no trace. That is the same class of blindness as
+`MASTERPLAN_GOAL_ATTAINMENT_SPEC`'s activity-vs-achievement gap, one layer up.
+
+Two fields carry it:
+
+```python
+# on PlanStrategy
+origin = Column(String(16), default="planned")   # planned | emergent
+#   planned  — declared up front, in the plan
+#   emergent — it just happened; recorded after the fact
+
+status = Column(String(32), default="proposed")
+#   ... | abandoned  — tried it, it did not work        (a result)
+#       | displaced  — never tried; something else was done instead   (a CHOICE)
+```
+
+`abandoned` and `displaced` must not be collapsed. "We tried publishing and it did not move the
+objective" and "we never published because we did the partnership instead" are different pieces
+of evidence, and a success-rate computed over a set that mixes them is meaningless.
+
+### Divergence is what decides refine vs revise
+
+This gives the system a **derivable** proposal rule, which is what makes Q8's "the system
+detects and proposes" mechanical rather than aspirational:
+
+| divergence | serves an existing objective? | verb |
+|---|---|---|
+| a planned strategy was displaced | — | **refine** — the route changed |
+| an emergent strategy succeeded | yes | **refine** — a route nobody wrote down |
+| an emergent strategy succeeded | **no** | **revise** — the plan is now aiming somewhere it does not say |
+
+That last row is the one worth building for. An emergent strategy with no home objective is the
+system noticing that *what you are actually doing has outgrown what your plan says you are doing*
+— and under `MASTERPLAN_REFINE_VS_REVISE_SPEC`'s rule ("changes **what** the plan is trying to
+accomplish → revise and version") that is precisely a revise trigger.
 
 ### The advance/amend edges, restated
 
@@ -540,8 +595,9 @@ row. Storing a denormalised rate before anything computes one is how `strategies
    - The plan already has the conversational surface for this. Genesis is where a plan is
      authored; a phase-completion review is the same kind of session against an existing plan.
    - "Some things move phases" is a `phase_id` change on a strategy — a **refine**, version
-     unchanged. "Some things get done at the same time" means phases must permit concurrent
-     strategies, which the hard-dependency chain on tasks 12–16 currently forbids (§8).
+     unchanged. "Some things get done at the same time" is *not* about concurrent scheduling; it
+     is about execution diverging from the plan, and it is what feeds the refine/revise decision.
+     See §5.
    - Finishing early is the **signal**, not a nuisance. Trajectory already measures
      estimate-vs-actual pace (§3) and the live plan's first datum was 7.6% ahead — the same
      number that would trigger a review is the one already feeding the score.
@@ -600,10 +656,20 @@ Cheap on paper — **0 goals, 1 plan, 9 tasks (6 on the plan)** — with one pie
 
 - Tasks 12–16 become `plan_phases` rows (`ordinal` 1–5, seeded from `structure_json["phases"]`,
   which still holds the descriptions and durations).
-- **Their hard-dependency chain 12→13→14→15→16 is discarded, and that is a behaviour change, not
-  a cleanup.** It currently forces strict sequence; the owner's *"maybe some things get done at
-  the same time"* requires phases that permit concurrent work. Ordinal preserves the intended
-  order without forbidding overlap.
+- **Their hard-dependency chain 12→13→14→15→16 must be PRESERVED, not discarded.** An earlier
+  draft said to drop it. That was wrong, and verifying it showed why: the chain feeds
+  `sys.v1.tasks.get_graph_context` → `eta_service._scope_plan_from_graph`, which derives
+  `critical_depth` (the longest remaining dependency chain, `eta_service.py:159`) and uses it in
+  `_project_days` to set a **sequential floor** on the ETA:
+
+  ```python
+  sequential_days = (critical_depth / chain_rate) if (critical_depth > 1 and chain_rate > 0) else 0.0
+  ```
+
+  Drop the chain and `critical_depth` collapses to 1, the sequential floor vanishes, and the plan
+  projects as if all five phases could be done at once. `dependency_cascade.py:87` reads it too.
+  The phase order is load-bearing — carry it onto `plan_phases` as ordering **plus** an explicit
+  dependency edge, not as `ordinal` alone.
 - Task 17 ("Fix Nodus Issues", now `completed`) gets `phase_id` = phase 1 and stays a task. It is
   the only row in the six that was ever meant to be one — and it is now also the system's only
   Trajectory sample (§3), so it must survive the migration intact.
