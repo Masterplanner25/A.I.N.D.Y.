@@ -84,6 +84,9 @@ export default function Genesis() {
   const { toast, showToast, clearToast } = useToast();
 
   const bottomRef = useRef(null);
+  // Identifies a user turn so a delivery failure can be attached to it, and so Retry
+  // updates that turn instead of appending the text a second time.
+  const turnSeq = useRef(0);
 
   // Resume an in-progress session on mount. Uses a GET, so simply visiting Genesis never
   // creates a session — only the explicit Initialize action does.
@@ -175,14 +178,32 @@ export default function Genesis() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
-
-    const userMessage = { role: "user", content: input.trim() };
-    setMessages((prev) => [...prev, userMessage]);
+    const content = input.trim();
     setInput("");
+    await deliverTurn(content);
+  };
+
+  // Extracted so Retry re-runs exactly the path the first attempt took, rather than a
+  // second implementation that can drift from it.
+  const deliverTurn = async (content, retryTurnId = null) => {
+    // A ref counter rather than Date.now()/Math.random(): those are impure and the lint
+    // rule cannot tell this runs from an event handler rather than during render. A
+    // monotonic counter is also easier to reason about in a transcript.
+    const turnId = retryTurnId ?? `turn-${(turnSeq.current += 1)}`;
+
+    if (retryTurnId) {
+      // Clear the previous failure on THIS turn rather than appending the text again —
+      // a retry must not duplicate the user's message in the transcript.
+      setMessages((prev) =>
+        safeMap(prev, (m) => (m.id === turnId ? { ...m, failure: null } : m))
+      );
+    } else {
+      setMessages((prev) => [...prev, { role: "user", content, id: turnId, failure: null }]);
+    }
     setLoading(true);
 
     try {
-      const data = await sendGenesisMessage(sessionId, userMessage.content);
+      const data = await sendGenesisMessage(sessionId, content);
 
       if (data.synthesis_ready && !synthesisReady) {
         setSynthesisReady(true);
@@ -193,14 +214,70 @@ export default function Genesis() {
         setLoading(false);
       }, 600);
     } catch (err) {
-      console.error(err);
-      showToast(err?.message || "Genesis message failed. Please try again.");
-      setMessages((prev) => [
-      ...prev,
-      { role: "ai", content: "Protocol error. Sync failed. Please try again." }]
-      );
-      setLoading(false);
+      await handleTurnFailure(err, turnId);
     }
+  };
+
+  // GENESIS-CLIENT-FABRICATES-FAILURE-1.
+  //
+  // This used to append `{role: "ai", content: "Protocol error. Sync failed."}` on ANY
+  // error. Three things were wrong with that, worst last: a timeout is not a protocol
+  // error; "try again" invited a duplicate submission of work that had already succeeded;
+  // and it put a message in the transcript that the model never produced and the server
+  // never stored, so the rendered conversation diverged from the persisted one until
+  // reload. A synthetic turn attributed to the AI is worse than an error banner.
+  //
+  // So: transport failures are now a status on the USER's own turn, and the AI never
+  // speaks unless the server said it did.
+  const handleTurnFailure = async (err, turnId) => {
+    console.error(err);
+    const timedOut = err?.status === 408;
+
+    // A 408 is the CLIENT giving up at ui-kit's hardcoded 30s ceiling — it is not a
+    // statement that the work failed. On 2026-08-23 the server had persisted the reply at
+    // +15s and the user was told it failed. So ask the server what happened before saying
+    // anything: if the transcript now ends with an assistant turn, the reply landed and
+    // this was only a slow response.
+    if (timedOut && sessionId) {
+      try {
+        const session = await getGenesisSession(sessionId);
+        const recovered = restoreMessages(session);
+        if (recovered.length && recovered[recovered.length - 1].role === "ai") {
+          setMessages(recovered);
+          setSynthesisReady(Boolean(session?.synthesis_ready));
+          setLoading(false);
+          showToast("That reply took longer than usual — recovered it from the session.");
+          return;
+        }
+      } catch {
+        // Recovery is best-effort. Fall through to marking the turn, which is still
+        // honest: we genuinely do not know whether it landed.
+      }
+    }
+
+    setMessages((prev) =>
+      safeMap(prev, (m) =>
+        m.id === turnId
+          ? {
+              ...m,
+              failure: {
+                retryable: true,
+                // Distinguished because the advice differs: a timeout may well have
+                // succeeded server-side, so re-sending risks duplicating it.
+                message: timedOut
+                  ? "Still sending — the reply may arrive on reload."
+                  : err?.message || "Message not delivered.",
+              },
+            }
+          : m
+      )
+    );
+    setLoading(false);
+    showToast(
+      timedOut
+        ? "That turn is taking unusually long. Reload to see if it landed."
+        : err?.message || "Genesis message failed."
+    );
   };
 
   const handleSynthesize = async () => {
@@ -314,18 +391,34 @@ export default function Genesis() {
             <div className="flex-1 space-y-6 mb-6 overflow-y-auto pr-2 custom-scrollbar">
               {safeMap(messages, (msg, index) =>
             <div
-              key={index}
-              className={`flex ${msg.role === "ai" ? "justify-start" : "justify-end"}`}>
-              
+              key={msg.id || index}
+              className={`flex flex-col ${msg.role === "ai" ? "items-start" : "items-end"}`}>
+
                   <div
                 className={`max-w-[85%] px-5 py-4 rounded-xl text-sm leading-relaxed ${
                 msg.role === "ai" ?
                 "bg-zinc-900 border border-zinc-800 text-zinc-200" :
                 "bg-[#00ffaa] text-black font-bold shadow-[0_0_15px_rgba(0,255,170,0.2)]"}`
                 }>
-                
+
                     {msg.content}
                   </div>
+                  {/* Delivery status belongs to the user's OWN turn. It is deliberately not
+                      a chat bubble: an assistant-styled error is the defect this replaced. */}
+                  {msg.failure &&
+              <div className="mt-1.5 flex items-center gap-2 text-[11px] text-amber-400/90">
+                      <span>{msg.failure.message}</span>
+                      {msg.failure.retryable &&
+                <button
+                  type="button"
+                  onClick={() => deliverTurn(msg.content, msg.id)}
+                  disabled={loading}
+                  className="underline underline-offset-2 hover:text-amber-300 disabled:opacity-50 disabled:no-underline">
+                          Retry
+                        </button>
+                }
+                    </div>
+              }
                 </div>)
             }
               {loading &&
