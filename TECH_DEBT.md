@@ -167,6 +167,57 @@ registered and three Genesis turns have queued and completed it — so each is a
 
 ---
 
+## MASTERPLAN-GOALS-UNLINKED-1: a goal belongs to a user, never to a plan (app-owned, P3 — Question)
+
+**Status: OPEN, and it is a question before it is a defect.** Found 2026-09-05 while mapping how
+Genesis, MasterPlan and Tasks relate for walk-log item 17.
+
+### The observation
+
+`Goal` is defined in `apps/masterplan/goals.py` — the MasterPlan domain owns it — and its only
+foreign key is `user_id`:
+
+```python
+class Goal(Base):
+    __tablename__ = "goals"
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    # ... name, description, goal_type, priority, status, success_metric
+    # no masterplan_id
+```
+
+Confirmed against the live database: the only FKs touching `goals` are `goals.user_id → users`
+and `goal_states.goal_id → goals`. Nothing connects a goal to the plan it presumably belongs to.
+
+For contrast, everything else in that neighbourhood *is* linked:
+`tasks.masterplan_id`, `canonical_metrics.masterplan_id`, `freelance_orders.masterplan_id`, and
+`master_plans.linked_genesis_session_id`.
+
+### Why this is a question and not a bug
+
+**There is a good reason it might be right.** `master_plans.parent_id` exists, so plans are
+versioned. A goal that outlives a plan revision — "reach $10k MRR" surviving v1 → v2 — is
+sensibly user-scoped rather than re-created per version. If that is the intent, the model is
+correct and this entry closes as declined.
+
+**The reason to ask anyway:** `MASTERPLAN_GOAL_ATTAINMENT` work exists to make the plan measure
+achievement rather than activity, and "which goals does *this plan* claim" is not currently a
+question the schema can answer. It can only answer "which goals does this user have".
+
+### Current state, for whoever picks this up
+
+**0 goals exist** against **1 locked plan**, so nothing is broken today and no migration is
+urgent. That also means the answer costs nothing to act on right now — the cheapest moment to
+add a nullable `masterplan_id` is while the table is empty.
+
+### To close it
+
+Decide whether a goal is scoped to a user or to a plan. If plan-scoped, it is one nullable
+column and a backfill of zero rows. If user-scoped, write the reason down here and close it —
+the point is that the next person mapping these surfaces should not have to re-derive the
+question.
+
+---
+
 ## SYSCALL-SILENT-ERRORS-1: three syscalls fail with no log line and no durable event (app-owned, P2)
 
 **Status: OPEN, mechanism not identified.** Found 2026-09-05 by runtime 2.9.0's new
