@@ -25,6 +25,12 @@ def list_masterplans(db: Session, *, user_id: str) -> dict[str, Any]:
         "plans": [
             {
                 "id": plan.id,
+                # `version_label` is the only human-readable identity a plan has, and this
+                # serializer used to drop it. `MasterPlanDashboard` resolves its heading as
+                # `version_label || version || '#' + id`, so omitting it made every plan render
+                # as `#10` — and because there is no `version` column either, the fallback chain
+                # went all the way to the primary key. The value was there the whole time ("V1").
+                "version_label": plan.version_label,
                 "status": plan.status,
                 "posture": plan.posture,
                 "is_active": plan.is_active,
