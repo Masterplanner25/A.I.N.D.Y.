@@ -1,6 +1,6 @@
 ---
 title: "MasterPlan — Refine vs Revise, and the missing Strategy layer"
-last_verified: "2026-08-23"
+last_verified: "2026-09-05"
 api_version: "1.0"
 status: draft
 owner: "app-team"
@@ -33,7 +33,10 @@ own closed loop.
 
 Two findings from that audit:
 
-- **There is no Strategy layer.** Across `apps/masterplan/**` and all three MasterPlan specs
+- **There is no Strategy layer.** (Still true 2026-09-05. `STRATEGY_LAYER_SPEC.md` now carries
+  the live-schema evidence, the **Phase** axis this spec does not model, and the migration —
+  including the finding that the plan's five phases already exist as ordinary task rows.)
+  Across `apps/masterplan/**` and all three MasterPlan specs
   (`MASTERPLAN_DOMAIN_ENGINE_SPEC`, `MASTERPLAN_REDESIGN_BRIEF`, `MASTERPLAN_GOAL_ATTAINMENT_SPEC`):
   `strategy` appears **0 times**, `revise` **0 times**, `objective` **once**. This is missing from
   the design corpus, not merely unimplemented.
@@ -73,6 +76,18 @@ Plan          what must ultimately become true
     └── Strategy   the chosen approach for achieving an objective   <- MISSING TODAY
         └── Task   the concrete actions that execute a strategy
 ```
+
+**Amended 2026-09-05.** There is a second axis this hierarchy does not show. The owner decided
+phases sit *above* strategies, and Genesis already emits both: `phases` (5 × 12 months — *when*)
+and `core_domains` (3, name + intent — *what*, i.e. the Objectives above, already generated and
+currently only displayed). A strategy is **owned by an objective** and **scheduled into a phase**:
+
+```
+Objective ──owns──> Strategy <──schedules── Phase
+```
+
+Changing the owner changes what the strategy is for. Changing the phase is ordinary replanning —
+**a refine**. Full model and evidence: `STRATEGY_LAYER_SPEC.md` §5.
 
 **Strategy is the layer refinement operates on**, which is why its absence and the absence of a
 refine verb are the same gap seen twice.
@@ -114,9 +129,30 @@ Not a build order. The decisions in §5 come first.
 
 ## 5. Open decisions — none of these are settled
 
-1. **Does a refinement need a proposer?** The owner's original loop had the AI propose refinements
-   from reported results. Whether `refine` is a user verb, an agent verb, or a user-confirmed
-   agent proposal is a product decision, not a schema one.
+1. ~~**Does a refinement need a proposer?**~~ **RESOLVED 2026-09-05 (owner):
+   user-confirmed agent proposal** — *"a bit of both really."*
+
+   The owner also supplied the **first concrete trigger**, which this spec did not have: a phase
+   completing. *"A phase being completed should trigger something like a review/refine of the
+   plan — especially if you finish some things quicker than you thought. Maybe some things move
+   phases, maybe some things get done at the same time."*
+
+   So: the system detects that a phase's work is done — including, pointedly, **done early** —
+   proposes a review, and the human confirms. **The confirmation opens a refine rather than
+   flipping a status.** Phase completion is an event that starts a conversation.
+
+   Two things follow for this spec:
+
+   - **Moving work between phases is a refine, not a revise.** It changes *when* and *how*, not
+     *what* — the destination is unchanged. This is the cleanest worked example of the §2 rule
+     the spec has, and a better one than the publishing example because it is mechanical.
+   - **Early completion is the highest-value trigger, and it is already measured.** The
+     Trajectory axis computes estimate-vs-actual pace, and on 2026-09-06 it produced its first
+     real datum: 7.6% ahead of estimate. The signal that should prompt a review is already being
+     computed for the score. See `STRATEGY_LAYER_SPEC.md` §3.
+
+   Still open underneath this: what threshold counts as "seem to be done early" (§5.2's evidence
+   question), and whether an unconfirmed proposal expires.
 2. **What counts as evidence?** Task completion, goal attainment deltas, Infinity sub-scores, and
    `score_history.trigger_event` are all candidates. Attainment is the obvious first input since it
    already measures achievement rather than activity.
