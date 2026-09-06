@@ -152,9 +152,51 @@ time**:
 Without the draft as the unit, saving produces a pile of unrelated scorecards and the before/after
 question stays unanswerable — which is most of why saving is wanted.
 
-**Open question:** does a draft belong to the SEO tool, or is it a `rippletrace` content item?
-RippleTrace already tracks the owner's external publications, and an article that gets published
-becomes one. Deciding this later means migrating drafts; deciding it now costs one conversation.
+### ★ Resolved 2026-09-06 — both, split by publication
+
+> *"Honestly it has a possibility to be both — but the difference would be, the SEO tool is the
+> before work; RippleTrace comes after the work is published publicly. That may be a point we
+> should make clear in the UI though."*
+
+They are not competing homes. They are **two stages of one lifecycle**, and publication is the
+boundary:
+
+```
+SEO tool          ──── publish ────>     RippleTrace
+the draft                                the published thing
+before                                   after
+you can still change it                  you can only measure it
+```
+
+RippleTrace's own model already says this. `content_source.py`:
+
+> *"A drop point is a thing you published somewhere else."*
+
+So the distinction is not new — it was already the design, just never stated anywhere the user
+could see it.
+
+**This makes the handoff nearly free rather than a migration.** A `ContentSourceDB` row is an
+RSS/Atom feed that ingests every future post automatically. The owner publishes to a Medium
+publication, which has a feed. Register it once and a published article arrives in RippleTrace as
+a drop point on the poll job, with no action at publication time.
+
+Current state (2026-09-06): **0 content sources**, 1 drop point, 8 pings — so the automatic path
+exists and is unused. Registering the Medium feed is a smaller and more valuable piece of work
+than anything else in this section.
+
+**And it closes a loop nothing else can.** If a saved draft can be matched to the drop point it
+became — by URL, or by title — then the SEO tool's advice becomes checkable against what the
+article actually did after publication. That is the only path in this repo from "the tool said
+your density was thin" to "and here is whether that mattered." It does not need to be built now,
+but the draft record should carry whatever makes the match possible later (the published URL, at
+minimum).
+
+**UI consequence, which the owner raised and which is the actionable part today.** Nothing on
+either surface says which phase it is for. A writer with a draft has no way to know RippleTrace is
+not for them yet, and a writer with a published article has no reason to think the SEO tool is
+done with it. One line on each surface, naming the phase and pointing at the other, is most of the
+fix — and it is worth doing *before* the save feature, because saving is what makes the two
+surfaces start to look alike.
 
 ---
 
@@ -164,7 +206,10 @@ becomes one. Deciding this later means migrating drafts; deciding it now costs o
    from the text and confirmed by the writer? The third is the most useful and the most dangerous
    — a suggested keyword the writer accepts unread is the tool deciding what the article is about.
 
-2. **Is a draft an SEO artefact or a RippleTrace content item?** §4. Cheap now, a migration later.
+2. ~~**Is a draft an SEO artefact or a RippleTrace content item?**~~ **RESOLVED 2026-09-06 (owner):
+   both, split by publication** — the SEO tool is the before-work, RippleTrace is after. See §4.
+   What remains is narrower and is now the near-term work: **say so in the UI**, and register the
+   Medium feed so the handoff actually happens (0 content sources exist today).
 
 3. **Should the scorecard's overall score survive at all?** `search_score` blends readability,
    average density and word count into one number (`search_scoring.py:291`). With targets and a
