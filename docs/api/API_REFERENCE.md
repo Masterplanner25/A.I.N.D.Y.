@@ -1,6 +1,6 @@
 ---
 title: "App HTTP REST API Reference"
-last_verified: "2026-08-02"
+last_verified: "2026-09-06"
 api_version: "1.0"
 status: current
 owner: "apps-team"
@@ -2077,6 +2077,15 @@ Create Task
 **Body:** automation_config: map[unspecified] | null, automation_type: string | null, category: string | null, dependencies: array[object], dependency_type: string | null, due_date: string | null, masterplan_id: integer | null, name: string | null, parent_task_id: integer | null, priority: string | null, recurrence: string | null, reminder_time: string | null, scheduled_time: string | null, title: string | null
 
 **Response 200:** unspecified
+
+#### POST /apps/tasks/delete
+Delete Task
+
+**Body:** name: string (required)
+
+**Response 200:** unspecified
+
+**Response 404:** the named task does not exist for the caller
 
 #### GET /apps/tasks/list
 List Tasks

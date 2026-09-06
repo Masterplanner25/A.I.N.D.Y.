@@ -26,6 +26,16 @@ export const completeTask = taggedRequest("tasks", (taskName) =>
   }).then(unwrapEnvelope)
 );
 
+// The delete capability existed as a syscall (`sys.v1.task.delete_by_ids`) with no HTTP
+// route and no UI, so a task created by mistake could only be removed from the database by
+// hand. The route was added alongside this.
+export const deleteTask = taggedRequest("tasks", (taskName) =>
+  authRequest(ROUTES.TASKS.DELETE, {
+    method: "POST",
+    body: JSON.stringify({ name: taskName }),
+  }).then(unwrapEnvelope)
+);
+
 export const startTask = taggedRequest("tasks", (taskName) =>
   authRequest(ROUTES.TASKS.START, {
     method: "POST",

@@ -100,10 +100,22 @@ function withAppsMount(group) {
   return Object.freeze(corrected);
 }
 
+// Routes this repo owns that the ui-kit does not declare AT ALL — a third correction
+// alongside the two above, which both fix paths the kit already has. `/tasks/delete` is
+// app-owned (the backend mounts it on the tasks router), so it flows through
+// `withAppsMount` below and picks up the `/apps` prefix like every other app route.
+//
+// Kept here rather than hardcoded at the call site so the route-map guard test sees it and
+// so a future ui-kit that adds TASKS.DELETE overrides cleanly instead of colliding.
+const APP_ONLY_ROUTES = {
+  TASKS: { DELETE: "/tasks/delete" },
+};
+
 const SUB_ROUTER_CORRECTED = {
   ...UIKIT_ROUTES,
   ANALYTICS: withPrefix(UIKIT_ROUTES.ANALYTICS, COMPUTE_KEYS, "/compute"),
   SEARCH: withPrefix(UIKIT_ROUTES.SEARCH, SEO_KEYS, "/seo"),
+  TASKS: { ...UIKIT_ROUTES.TASKS, ...APP_ONLY_ROUTES.TASKS },
 };
 
 const MOUNTED = {};
@@ -114,4 +126,9 @@ for (const [domain, group] of Object.entries(SUB_ROUTER_CORRECTED)) {
 export const ROUTES = Object.freeze(MOUNTED);
 
 // Exposed for the route-map guard test.
-export const APP_OWNED_ROUTE_CORRECTIONS = { COMPUTE_KEYS, SEO_KEYS, RUNTIME_OWNED_PREFIXES };
+export const APP_OWNED_ROUTE_CORRECTIONS = {
+  COMPUTE_KEYS,
+  SEO_KEYS,
+  RUNTIME_OWNED_PREFIXES,
+  APP_ONLY_ROUTES,
+};
