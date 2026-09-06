@@ -320,12 +320,21 @@ export default function KPIDashboard() {
             <AxisTile title="Worth" score={worth?.score}>
               {/* $ and declared units are deliberately kept separate — never fake-combined. */}
               <AxisStat label="Realized revenue" value={fmtMoney(worth?.realized_revenue)} />
-              <AxisStat label="Declared (units)" value={fmtNum(worth?.declared_total, 0)} />
+              {/* Per-kind sub-scores, not the raw cross-kind total. `declared_total` sums
+                  dollars into ratings, so rendering it as one figure invited the reading the
+                  score itself used to make (SOAK_AUDIT §2b). The score is the mean of these. */}
+              {safeMap(Object.entries(worth?.score_by_kind || {}), ([kind, kindScore]) => (
+                <AxisStat
+                  key={kind}
+                  label={kind.replace(/_/g, " ")}
+                  value={fmtNum(kindScore, 1)}
+                />
+              ))}
               <AxisStat label="Declarations" value={worth?.declaration_count ?? 0} />
             </AxisTile>
           </div>
           <p style={{ fontSize: 10, color: C.text2, marginTop: 8 }}>
-            Realized revenue is raw dollars; declared worth is in your own units — the two are shown side by side, never summed.
+            Realized revenue is raw dollars. Declared worth is scored separately per kind — dollars and ratings are incommensurable, so they are never summed; the Worth score is the mean of the per-kind sub-scores shown above.
           </p>
         </div>
       )}

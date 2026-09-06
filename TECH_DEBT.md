@@ -625,6 +625,33 @@ Part of the inflation was a defect: `TASK-COMPLETE-ORCHESTRATE-REFIRE-1` double-
 completion until it was fixed the same day. The data path is clean going forward; the ledger
 before that date is not.
 
+### ★ Update 2026-09-06 — one of the four gates was a bug, not a usage gap
+
+Measured per gate rather than treating "soak" as one thing:
+
+| gate | needs | state |
+|---|---|---|
+| Trajectory | completed tasks **with estimates** | **1 sample.** Estimates became mandatory 2026-09-06, so future tasks all count |
+| Learned calibrator | ≥30 distinct `actual_score` per decision type | `review_plan` 19/30 · `create_new_task` **1**/30 · `continue_highest_priority_task` **3**/30 · `reprioritize_tasks` **2**/30 |
+| Worth | value declarations | **0** — and it was **blocked on a defect**, now fixed (below) |
+| Search outcome weighting | search usage | `search_history`, `search_result_feedback`, `research_results` all **0** — never exercised once |
+
+**261 `review_plan` predictions carry 19 distinct actual scores.** That ratio is the audit's
+"rows, not evidence" in one line: distinct values only appear when `master_score` actually
+moves, and completing a task is what moves it.
+
+**Worth was not a usage gap at all.** `SOAK_AUDIT §2b` — Worth summing three incommensurable
+kinds through one saturation scale, so a single $5,000 declaration pinned the axis at 100.0
+forever and drowned every non-monetary declaration — was still unfixed. Collecting declarations
+against those maths would have produced a *confidently wrong* Worth score, which is worse than
+an empty one and undetectable downstream. **Fixed 2026-09-06** (per-kind scales, mean over
+declared kinds); §2b is now closed and declaring is safe.
+
+**So the honest summary:** three of the four gates advance on one action — completing tasks with
+honest estimates. Search should arguably leave the soak list entirely until the feature is used
+at all. What remains built-but-unreachable for Worth is the entry surface: the API exists and is
+routed, but no UI calls it.
+
 **Do not treat the individual domain rows as authoritative on this.** Several rows in
 `APP-DEBT-MIGRATED-1` predate the audit and still read "soak, then flip the flag" as though it were
 an ops chore. This item supersedes them.

@@ -39,7 +39,30 @@ logger = logging.getLogger(__name__)
 VOLUME_WINDOW_DAYS = 14
 VOLUME_EFFORT_SCALE = 40.0     # effort-hours in window → ~63 (saturating); 80h → ~86
 TRAJECTORY_RATIO_CAP = 2.0     # 2× faster than estimate = max; 2× slower ≈ 25
-WORTH_DECLARED_SCALE = 100.0   # declared-units → provisional 0..100 (saturating)
+# ★ Worth is normalised PER KIND. The three declaration kinds are incommensurable — one is
+# dollars, two are open-ended relative ratings — so there is no single scale that can serve
+# them, and there is no meaningful sum across them.
+#
+# The old single `WORTH_DECLARED_SCALE = 100.0` applied to the summed total, which produced
+# (SOAK_AUDIT_2026-08-15 §2b):
+#
+#   monetary_potential: 5000  (a modest contract)  -> 100.0   saturated, permanently
+#   strategic: 8              (a rating)           ->   7.7
+#   both together                                  -> 100.0   the strategic one is invisible
+#
+# One ordinary money figure pinned the axis at its ceiling forever and drowned every
+# non-monetary declaration. The audit's conclusion was that "go declare some worth" was not
+# safe advice until this was fixed — declaring against the old maths would have produced a
+# confidently wrong Worth score, which is worse than an empty one.
+#
+# The non-monetary scale is UNCHANGED at 100.0: it was never the broken part. Only the
+# monetary scale (dollars need a dollar-sized denominator) and the combination rule change.
+WORTH_KIND_SCALES = {
+    "monetary_potential": 50_000.0,  # dollars: $50k -> 63, $100k -> 86, $250k -> 99
+    "intrinsic": 100.0,              # open-ended relative units (unchanged)
+    "strategic": 100.0,              # open-ended relative units (unchanged)
+}
+WORTH_DEFAULT_KIND_SCALE = 100.0     # an unrecognised kind falls back to relative units
 
 # --- Trajectory anti-gaming guard (Phase C, decision §8.3) ---
 # The gaming vector is estimate *padding*: since trajectory ∝ estimated/actual, inflating
@@ -168,21 +191,62 @@ def _apply_padding_guard(
     return 50.0 + excess * (1.0 - penalty), penalty
 
 
+def _worth_kind_score(kind: str, kind_total: float) -> float:
+    """Saturating 0..100 sub-score for one declaration kind, in that kind's own units."""
+    scale = WORTH_KIND_SCALES.get(kind, WORTH_DEFAULT_KIND_SCALE)
+    if kind_total <= 0 or scale <= 0:
+        return 0.0
+    return _clamp(100.0 * (1.0 - math.exp(-kind_total / scale)))
+
+
 def compute_worth(db: Session, user_id) -> dict[str, Any]:
-    """Declared prior + realized revenue. Components are kept separate (units differ)."""
+    """Declared prior + realized revenue. Components are kept separate (units differ).
+
+    The declared prior is scored **per kind** and combined as the MEAN over the kinds that
+    were actually declared — never as a sum. Summing dollars into ratings is the defect this
+    replaces; see `WORTH_KIND_SCALES` above and SOAK_AUDIT_2026-08-15 §2b.
+
+    Why the mean over *present* kinds, rather than the alternatives:
+
+    * **Not a sum** — that is the original bug: incommensurable units added together, with
+      the largest-unit kind deciding the result.
+    * **Not the max** — the max lets one kind speak for the whole axis, which reproduces the
+      drowning the sum caused, just more quietly.
+    * **Not a mean over all three** — a kind you have not declared is unknown, not zero.
+      Averaging in absent kinds would penalise a user for expressing worth in one dimension.
+
+    A consequence worth knowing: adding a low declaration in a *new* kind can lower the axis,
+    because the mean now spans one more dimension. That is the honest reading — you declared
+    something of low worth in a dimension you had not previously used — and it is the price of
+    each kind being independently interpretable.
+    """
     from apps.analytics.services.scoring.value_declaration_service import declared_worth_summary
 
     declared = declared_worth_summary(db, user_id)
     realized_revenue = _realized_revenue(db, user_id)
-    declared_total = float(declared.get("total") or 0.0)
-    provisional = _clamp(100.0 * (1.0 - math.exp(-declared_total / WORTH_DECLARED_SCALE))) if declared_total > 0 else 0.0
+    by_kind = declared.get("by_kind") or {}
+
+    score_by_kind = {
+        kind: round(_worth_kind_score(kind, float(total or 0.0)), 2)
+        for kind, total in by_kind.items()
+    }
+    present = [v for v in score_by_kind.values() if v > 0]
+    provisional = (sum(present) / len(present)) if present else 0.0
+
     return {
         "score": round(provisional, 2),           # provisional — from declared prior only
+        # Raw cross-kind sum. Retained because the shadow ledger has a column for it and the
+        # KPI panel renders it, but it is a MIXED-UNIT figure and is deliberately no longer an
+        # input to `score`. Read `score_by_kind` to interpret the axis.
         "declared_total": declared.get("total", 0.0),
-        "declared_by_kind": declared.get("by_kind", {}),
+        "declared_by_kind": by_kind,              # raw totals, per kind, in that kind's units
+        "score_by_kind": score_by_kind,           # 0..100 sub-score per kind — the interpretable half
         "declaration_count": declared.get("count", 0),
         "realized_revenue": realized_revenue,     # raw $, NOT folded into score in Phase A
-        "note": "provisional score reflects declared worth only; realized_revenue is shown raw",
+        "note": (
+            "provisional score is the mean of per-kind declared sub-scores; declared_total is a "
+            "raw mixed-unit sum and does not drive the score; realized_revenue is shown raw"
+        ),
     }
 
 
