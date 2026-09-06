@@ -115,7 +115,34 @@ on a soak that cannot produce evidence (`SOAK-THEN-FLIP-1`).
 
 ---
 
-## 6. The summary row that contradicts its own entry
+## 6. The gate path, not the payload — a call that works one way and vanishes the other
+
+An **effect-gated** syscall JSON-serialises its payload in `execution_gate.compute_action_id`
+**before the handler runs**. So a payload carrying a non-JSON-native value — a `UUID`, a
+`datetime`, a model instance — never reaches the handler at all. It raises inside dispatch,
+where a fail-soft `except` usually catches it and reports success.
+
+**The trap is that the same payload works on an ungated syscall.** `genesis_message_orchestrate`
+passed `context["user_id"]` (a UUID object) inline to `sys.v1.analytics.execute_infinity` for
+months, correctly. Moving the same call to the effect-gated `sys.v1.job.submit` — a change whose
+purpose was latency, not payload — silently broke it. Measured 2026-09-05: **zero**
+`analytics.infinity_recalc` rows in `job_logs` from a real Genesis turn, while
+`memory.generate_embedding` queued twice in the same turn.
+
+Why every check passed: the difference is the **gate path**, not the payload shape. Unit tests
+that stub the dispatcher never reach the gate. Contract tests that inspect the payload dict see a
+valid dict. A code review sees a value that was already being passed. It took a live turn and a
+query against `job_logs` to see it.
+
+**What to do:** `str()` anything that is not a JSON primitive before it enters a gated payload,
+and when moving a call between syscalls, check whether the destination is effect-gated rather
+than assuming payload compatibility. When the fail-soft `except` exists for good reason — the
+turn must not fail because scoring could not be queued — it also guarantees the failure is
+silent, so the durable check is a query against the job table, not the response.
+
+---
+
+## 7. The summary row that contradicts its own entry
 
 A document's index says one thing and the entry says another. Readers scan the index.
 

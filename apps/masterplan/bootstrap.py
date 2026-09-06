@@ -207,7 +207,7 @@ def _register_flow_plans() -> None:
     )
     register_flow_plan(
         "genesis_message",
-        {"steps": ["genesis_message_validate", "genesis_message_execute", "genesis_message_orchestrate"]},
+        {"steps": ["genesis_message_validate", "genesis_message_execute"]},
     )
     register_flow_plan(
         "genesis_lock",
