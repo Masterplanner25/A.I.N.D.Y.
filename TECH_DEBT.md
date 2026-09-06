@@ -1179,7 +1179,50 @@ different route.
 
 ---
 
-## INFINITY-RECALC-DEBOUNCE-1: both recalc guards are keyed on `trigger_event` (app-owned, P2)
+## INFINITY-RECALC-DEBOUNCE-1: a Genesis turn triggers a recalculation that changes nothing (app-owned, P2 → **P3 Question** 2026-09-06)
+
+**Status: OPEN, REFRAMED. Verified against a running stack 2026-09-06 — and the mechanism below
+has never fired.** The entry was filed "grounded in code, not reproduced"; the write-up's §5 asked
+for three checks before fixing anything. They are done (write-up §7), across 109 `score_history`
+rows spanning 2026-07-23 → 2026-09-06.
+
+**Both original claims are accurate in code. Neither has occurred.**
+
+- The debounce short-circuits on a trigger mismatch (`infinity_orchestrator.py:99`) — real, but in
+  46 days **every** pair of recalculations under 60 s apart has the **same** trigger on both sides.
+  The alternating traffic the entry describes does not exist; real traffic arrives in bursts of one
+  trigger, because that is what a conversation is. **This inverts the stated remedy**: the entry
+  says "raising the window would not help", when the 1-second window is in fact the only thing
+  letting the real duplicates through.
+- The lease embeds the trigger (`analytics.infinity:{user}:{trigger}`) — real, and only reachable
+  via the alternating pattern that does not occur. Still unverified; still a genuine race.
+
+### ★ What the measurement actually found
+
+`score_delta = master - previous_master`. Of **16** `genesis_message` recalculations, **14 produced
+a delta of exactly 0** — including four consecutive turns 10–15 s apart, all scoring 42.140:
+
+| | |
+|---|---|
+| `calculate_infinity_score` alone | 0.03 – 0.61 s |
+| full per-user recalculation | **1.8 – 4.1 s** (almost entirely `gather_support_state`) |
+| information produced by 14 of 16 | **none** |
+
+**So this is not a throttling problem.** The question is whether a conversational turn should
+trigger a score recalculation at all. A turn changes the transcript — not the task graph, the
+metrics, or the pillars — so the score has nothing to move on until something is *done*. The
+write-up's §3 already noticed somebody decided a turn is a scoring event "and then did not finish
+the decision"; this is the evidence that finishes it.
+
+### To close it
+
+**Do not build a better debounce** — tuning a window to suppress recalculations that should not be
+requested is the wrong layer, and it would bury the real decision. The open question is the
+owner's: *should a Genesis turn recalculate the score?* If no, the change is at the call site
+(`flow_definitions.py`), and both original defects become unreachable rather than fixed.
+
+*Original entry, retained — its code reading was correct and is what made the measurement
+targeted:*
 
 **Status: OPEN. Grounded in code, not reproduced.** Low severity today, high at real usage — which
 is the point, since every measurement gate is currently usage-blocked.
