@@ -14,8 +14,11 @@ from sqlalchemy.orm import Session
 
 from AINDY.platform_layer.user_ids import parse_user_id
 from apps.analytics.value_declaration import (
+    CARDINAL_WORTH_KINDS,
+    ORDINAL_WORTH_KINDS,
     VALID_TARGET_TYPES,
     VALID_WORTH_KINDS,
+    WORTH_ORDINAL_LEVELS,
     IntentValueDeclaration,
 )
 
@@ -33,7 +36,20 @@ def record_value_declaration(
     kind: str = "strategic",
     note: str | None = None,
 ) -> dict[str, Any]:
-    """Record (or update, per (user, target_type, target_id)) a declared worth."""
+    """Record (or update, per (user, target_type, target_id, kind)) a declared worth.
+
+    ★ `kind` is part of the upsert key, and that is load-bearing. Without it, declaring one
+    thing's strategic worth and then its monetary potential OVERWROTE the first — the row's
+    kind simply flipped. A single item could therefore only ever hold one flavour of worth,
+    which does not describe how worth works: the same project can be strategically important
+    *and* have monetary potential, and forcing a choice between them records something false.
+
+    `declared_value` is interpreted by kind:
+
+    * cardinal kinds (`monetary_potential`) take a number — dollars, genuinely cardinal
+    * ordinal kinds (`intrinsic`, `strategic`) take a LEVEL NAME from `WORTH_ORDINAL_LEVELS`,
+      stored as `ordinal_level` alongside its mapped float
+    """
     uid = parse_user_id(user_id)
     if uid is None:
         raise ValueError("a valid user_id is required")
@@ -43,12 +59,33 @@ def record_value_declaration(
     kind = (kind or "strategic").strip().lower()
     if kind not in VALID_WORTH_KINDS:
         raise ValueError(f"kind must be one of {sorted(VALID_WORTH_KINDS)}")
-    try:
-        value = float(declared_value)
-    except (TypeError, ValueError):
-        raise ValueError("declared_value must be a number")
+    ordinal_level: str | None = None
+    if kind in ORDINAL_WORTH_KINDS:
+        # A number here is rejected rather than coerced. Accepting 8 for "high" would let the
+        # false precision back in through the side door, and silently — the caller would think
+        # it had expressed something finer-grained than the scale supports.
+        level = str(declared_value or "").strip().lower()
+        if level not in WORTH_ORDINAL_LEVELS:
+            raise ValueError(
+                f"{kind} is an ordinal kind; declared_value must be one of "
+                f"{sorted(WORTH_ORDINAL_LEVELS)} (got {declared_value!r})"
+            )
+        ordinal_level = level
+        value = float(WORTH_ORDINAL_LEVELS[level])
+    else:
+        try:
+            value = float(declared_value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"{kind} is a cardinal kind; declared_value must be a number "
+                f"(got {declared_value!r})"
+            )
+        if value < 0:
+            raise ValueError("declared_value must not be negative")
 
-    # Upsert on (user, target_type, target_id) when a target is given; else always insert.
+    # Upsert on (user, target_type, target_id, KIND) when a target is given; else insert.
+    # `kind` in the key is what lets one target carry several flavours of worth at once —
+    # see the docstring. Re-declaring the same kind on the same target still updates in place.
     row = None
     if target_id:
         row = (
@@ -57,6 +94,7 @@ def record_value_declaration(
                 IntentValueDeclaration.user_id == uid,
                 IntentValueDeclaration.target_type == target_type,
                 IntentValueDeclaration.target_id == str(target_id),
+                IntentValueDeclaration.kind == kind,
             )
             .first()
         )
@@ -69,6 +107,9 @@ def record_value_declaration(
         created = True
     row.declared_value = value
     row.kind = kind
+    # Cleared for cardinal kinds, so a target switched from ordinal to monetary does not keep
+    # a stale level that no longer describes its value.
+    row.ordinal_level = ordinal_level
     if label is not None:
         row.label = label
     if note is not None:
@@ -119,6 +160,9 @@ def _serialize(row: IntentValueDeclaration) -> dict[str, Any]:
         "label": row.label,
         "declared_value": row.declared_value,
         "kind": row.kind,
+        # The level for ordinal kinds; None for cardinal ones. Callers should render this in
+        # preference to declared_value where present — 8.0 is an implementation detail.
+        "ordinal_level": row.ordinal_level,
         "note": row.note,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }

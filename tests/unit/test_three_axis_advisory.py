@@ -146,7 +146,7 @@ class TestHookFromScoring:
 
         uid = _uid()
         _task(db_session, uid, duration=8.0, time_spent=4 * 3600)
-        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value=80.0)
+        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value="critical")
 
         monkeypatch.delenv(comp.ADVISORY_FLAG, raising=False)
         with orchestrator_score_context():
@@ -166,7 +166,7 @@ class TestHookFromScoring:
 
         uid = _uid()
         _task(db_session, uid, duration=8.0, time_spent=4 * 3600)   # ahead → trajectory data
-        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value=80.0)
+        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value="critical")
 
         monkeypatch.setenv(comp.ADVISORY_FLAG, "1")
         with orchestrator_score_context():
@@ -195,7 +195,7 @@ class TestHookFromScoring:
 
         uid = _uid()
         _task(db_session, uid, duration=8.0, time_spent=4 * 3600)
-        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value=50.0)
+        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value="high")
         monkeypatch.delenv(comp.ADVISORY_FLAG, raising=False)
         with orchestrator_score_context():
             calculate_infinity_score(uid, db_session, trigger_event="manual")

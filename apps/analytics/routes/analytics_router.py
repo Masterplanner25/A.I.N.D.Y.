@@ -270,7 +270,18 @@ from pydantic import BaseModel  # noqa: E402
 
 class ValueDeclarationRequest(BaseModel):
     target_type: str            # task | masterplan | project | other
-    declared_value: float
+    # `float | str`, because the three kinds are not the same shape of judgement:
+    #   monetary_potential -> a number (dollars; genuinely cardinal)
+    #   intrinsic/strategic -> a level name ("low" | "moderate" | "high" | "critical")
+    # Declared as a union rather than `float` so an ordinal level survives validation and
+    # reaches the service, which is where the per-kind rule is enforced and where a wrong
+    # shape becomes a 422 naming the accepted values. Typing this `float` alone would have
+    # rejected "high" with an unhelpful pydantic message before the domain rule ran.
+    #
+    # `str` is listed FIRST on purpose: pydantic's smart union would otherwise coerce the
+    # string "8" to a float, which is exactly the false precision the ordinal kinds exist to
+    # prevent. The service rejects a numeric string for an ordinal kind explicitly.
+    declared_value: str | float
     target_id: str | None = None
     label: str | None = None
     kind: str = "strategic"     # monetary_potential | intrinsic | strategic

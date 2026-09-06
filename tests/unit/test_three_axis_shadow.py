@@ -53,7 +53,7 @@ class TestFlagAndWrite:
         monkeypatch.setenv("AINDY_INFINITY_THREE_AXIS_SHADOW", "1")
         uid = _uid()
         _completed_task(db_session, uid, duration=8.0, time_spent=4 * 3600)  # ahead of estimate
-        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value=60.0)
+        record_value_declaration(db_session, user_id=uid, target_type="project", declared_value="critical")
         assert tas.shadow_log_three_axes(db_session, user_id=uid, master_score=72.5,
                                          trigger_event="task_completion") is True
         rows = db_session.query(ThreeAxisShadowRecord).filter(
@@ -64,7 +64,9 @@ class TestFlagAndWrite:
         assert r.trigger_event == "task_completion"
         assert r.volume_score is not None and r.worth_score is not None
         assert r.trajectory_score is not None and r.trajectory_score > 50  # ahead
-        assert r.declared_total == pytest.approx(60.0)
+        # 20.0 is WORTH_ORDINAL_LEVELS["critical"] — `strategic` is an ordinal kind, so the
+        # stored float is the mapped level rather than a free-form figure.
+        assert r.declared_total == pytest.approx(20.0)
 
 
 class TestReport:
