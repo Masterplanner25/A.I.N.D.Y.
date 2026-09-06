@@ -81,6 +81,40 @@ def task_complete(state, context):
 
 
 def task_orchestrate(state, context):
+    # ★ Skip the whole orchestration chain when `task_complete` was a no-op.
+    #
+    # `complete_task` is idempotent — a repeat on an already-completed task returns early
+    # without mutating anything — but that guard is invisible from here, because this is a
+    # SIBLING node, not a caller. So a duplicate submit used to run the full chain anyway:
+    # memory capture, downstream unlock, ETA recalc and a complete Infinity re-score.
+    #
+    # Measured on the live stack 2026-09-06: `tasks.complete` was invoked 4x for one task
+    # (three of them within 21ms), producing 4 `task_completion` flow runs and duplicate
+    # `score_history` / `three_axis_shadow_records` rows for a single completion — one with
+    # `score_delta = 0`, a recalculation that could not change anything. That pollutes the
+    # very ledger SOAK-THEN-FLIP-1 is waiting on, where 105 rows hold only 20 distinct
+    # measurements.
+    #
+    # Matched on the shared constant rather than a bare string so the two files cannot
+    # drift apart silently.
+    from apps.tasks.services.task_service import TASK_ALREADY_COMPLETED_PREFIX
+
+    task_result = state.get("task_result")
+    if isinstance(task_result, str) and task_result.startswith(TASK_ALREADY_COMPLETED_PREFIX):
+        # SUCCESS, not FAILURE: a repeated completion is a legitimate no-op, and the route
+        # still needs `task_result` to reach the client unchanged.
+        return {
+            "status": "SUCCESS",
+            "output_patch": {
+                "task_orchestration": {
+                    "skipped": True,
+                    "reason": "already_completed",
+                    "score_orchestrated": False,
+                    "next_action": None,
+                }
+            },
+        }
+
     result = _syscall_node("sys.v1.task.orchestrate", state, context, "task.orchestrate")
     if result.get("status") == "RETRY":
         return {"status": "FAILURE", "error": result.get("error", "")}

@@ -965,6 +965,67 @@ happening".
 
 ---
 
+## TASK-COMPLETE-ORCHESTRATE-REFIRE-1: ✅ RESOLVED 2026-09-06 — a repeat completion re-ran the full orchestration
+
+**Status: RESOLVED. Found by measurement, not by reading code** — the owner completed one real
+task and the ledger showed the duplicate.
+
+### What happened
+
+One task completion (task 17, "Fix Nodus Issues") reached the API as **four `tasks.complete`
+calls**, producing **four `task_completion` flow runs** and duplicate rows in both score tables:
+
+```
+score_history:
+  04:35:25.83 | 34.71 | task_completion | delta -11.05
+  04:35:36.50 | 34.71 | task_completion | delta 0        <- a recalc that could not change anything
+```
+
+### Why the existing idempotency guard did not stop it
+
+`complete_task` **is** idempotent — `TASK-COMPLETE-IDEMPOTENCY-1` (resolved 2026-07-17) added the
+`if task.status == "completed": return` guard, and it worked correctly, no-op'ing three of the
+four calls.
+
+**But the orchestration is a sibling flow node, not a callee.** The flow plan is
+`task_validate → task_complete → task_orchestrate`, and `task_orchestrate` dispatched
+`sys.v1.task.orchestrate` unconditionally — it had no way to see that `task_complete` had been a
+no-op. `orchestrate_task_completion` guards only on `not task or not owner_user_id`, and by the
+time it runs, `task.status == "completed"` in *both* the genuine and the repeat case, so status
+alone cannot distinguish them. Everything downstream re-fired: memory capture, downstream
+unlock, ETA recalc, and a full `calculate_infinity_score`.
+
+The comment on the guard claimed it prevented "the Infinity re-score". It did not, and that
+wrong comment is why this looked covered. Corrected in place.
+
+### Why it mattered more than a duplicate row
+
+It polluted the evidence base of `SOAK-THEN-FLIP-1` (P1). That ledger holds **105 rows carrying
+only 20 distinct measurements**, and the 2026-08-15 audit's verdict — *the soak accumulated rows,
+not evidence* — is partly this defect. Only 2 rows have ever carried a trajectory score, and they
+are this duplicate pair: the entire trajectory evidence base was **one measurement, written twice**.
+
+### The fix — two layers
+
+1. **Server (authoritative).** `task_orchestrate` skips the chain when `task_complete` returned
+   the no-op sentinel, matching on a shared `TASK_ALREADY_COMPLETED_PREFIX` constant so the two
+   files cannot drift. Returns `SUCCESS` with `{"skipped": true, "reason": "already_completed"}` —
+   a repeat is a legitimate no-op, not a failure.
+2. **Client.** `TaskDashboard`'s Done button had no disabled state and no pending label, and
+   `velocityMessage` is only set *after* the await resolves — so a ~14s completion gave no sign
+   the click had registered, which is what invited the re-clicking. Now single-flight per task,
+   with the flag cleared in `finally` so a genuine failure can still be retried.
+
+### Not the same as INFINITY-RECALC-DEBOUNCE-1
+
+That entry (still open) describes *alternating* triggers defeating a debounce keyed on
+`trigger_event`. Here the triggers **matched** and no debounce was involved: four separate
+submissions each ran a legitimate flow. Fixing this does not close that one, and this defect is
+one reason it had never been reproduced — the duplicates it predicted were arriving by a
+different route.
+
+---
+
 ## INFINITY-RECALC-DEBOUNCE-1: both recalc guards are keyed on `trigger_event` (app-owned, P2)
 
 **Status: OPEN. Grounded in code, not reproduced.** Low severity today, high at real usage — which
