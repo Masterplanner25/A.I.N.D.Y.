@@ -164,6 +164,12 @@ describe("TaskDashboard error handling", () => {
     fireEvent.change(screen.getByPlaceholderText(/initialize new directive/i), {
       target: { value: "Write release checklist" },
     });
+    // `estimated_hours` is required as of 2026-09-06 — it lands in Task.duration, which
+    // the Volume and Trajectory axes gate on. Without it the form refuses to submit and
+    // this test never reaches the createTask failure it exists to assert.
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. 1\.5/i), {
+      target: { value: "1" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /add/i }));
 
     const toast = await screen.findByRole("alert");
