@@ -188,6 +188,18 @@ export default function RippleTrace() {
         <p className="text-sm text-zinc-500 mt-1">
           Track what you publish elsewhere, so the system can measure what happened after.
         </p>
+        {/* The other half of the sentence on the SEO tool. Publication is the boundary
+            between the two surfaces, and this is the side where a piece can only be
+            measured — `content_source.py` already puts it exactly this way: "a drop point
+            is a thing you published somewhere else". */}
+        <p className="text-sm text-zinc-500 mt-1">
+          <span className="text-zinc-300">After you publish.</span>{" "}
+          Still drafting? Analyse it in the{" "}
+          <a href="/search/seo" className="text-blue-400 hover:text-blue-300 underline">
+            AI SEO tool
+          </a>{" "}
+          first.
+        </p>
       </header>
 
       <form
