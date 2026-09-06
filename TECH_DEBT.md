@@ -652,6 +652,20 @@ honest estimates. Search should arguably leave the soak list entirely until the 
 at all. What remains built-but-unreachable for Worth is the entry surface: the API exists and is
 routed, but no UI calls it.
 
+### Worth 2026-09-06 — the maths is fixed; the entry point is specced, not built
+
+The Worth gate is no longer blocked on a defect. Per-kind scoring (#287), ordinal levels for
+`intrinsic`/`strategic` with a float kept for `monetary_potential`, and several kinds per target
+(#289) all landed. Declaring is now safe.
+
+**It is still blocked on there being no way to declare.** The route exists and is routed;
+nothing calls it. The owner's call on where it belongs: *"probably in Genesis, as that's where
+you could say how much each means to you or the actual value worth."* Written up as
+`docs/specs/WORTH_DECLARATION_IN_GENESIS_SPEC.md` rather than built, because the failure mode is
+invisible — an LLM asked to fill in a worth field will fill it in, and a fabricated declaration
+is indistinguishable from a real one. Same shape as the calibrator in §3 of the audit that "won"
+by memorising a constant.
+
 **Do not treat the individual domain rows as authoritative on this.** Several rows in
 `APP-DEBT-MIGRATED-1` predate the audit and still read "soak, then flip the flag" as though it were
 an ops chore. This item supersedes them.
