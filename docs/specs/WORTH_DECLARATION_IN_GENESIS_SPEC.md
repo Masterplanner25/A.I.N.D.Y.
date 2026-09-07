@@ -2,7 +2,7 @@
 title: "Declaring Worth in Genesis"
 last_verified: "2026-09-07"
 api_version: "1.0"
-status: partially-implemented
+status: current
 owner: "app-team"
 ---
 
