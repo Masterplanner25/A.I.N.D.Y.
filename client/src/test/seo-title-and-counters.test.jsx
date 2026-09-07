@@ -1,13 +1,23 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { mockAnalyzeSeo, mockGenerateMeta, mockGenerateTitles, mockSuggest, mockGetHistory } =
-  vi.hoisted(() => ({
-    mockAnalyzeSeo: vi.fn(),
-    mockGenerateMeta: vi.fn(),
-    mockGenerateTitles: vi.fn(),
-    mockSuggest: vi.fn(),
-    mockGetHistory: vi.fn(),
-  }));
+const {
+  mockAnalyzeSeo, mockGenerateMeta, mockGenerateTitles, mockSuggest, mockGetHistory,
+  mockListDrafts, mockCreateDraft, mockGetDraft, mockUpdateDraft, mockDeleteDraft,
+  mockAnalyzeDraft, mockPruneDraft,
+} = vi.hoisted(() => ({
+  mockAnalyzeSeo: vi.fn(),
+  mockGenerateMeta: vi.fn(),
+  mockGenerateTitles: vi.fn(),
+  mockSuggest: vi.fn(),
+  mockGetHistory: vi.fn(),
+  mockListDrafts: vi.fn(),
+  mockCreateDraft: vi.fn(),
+  mockGetDraft: vi.fn(),
+  mockUpdateDraft: vi.fn(),
+  mockDeleteDraft: vi.fn(),
+  mockAnalyzeDraft: vi.fn(),
+  mockPruneDraft: vi.fn(),
+}));
 
 vi.mock("../api/search.js", () => ({
   analyzeSeo: mockAnalyzeSeo,
@@ -15,6 +25,13 @@ vi.mock("../api/search.js", () => ({
   generateTitles: mockGenerateTitles,
   suggestSeoImprovements: mockSuggest,
   getSearchHistory: mockGetHistory,
+  listDrafts: mockListDrafts,
+  createDraft: mockCreateDraft,
+  getDraft: mockGetDraft,
+  updateDraft: mockUpdateDraft,
+  deleteDraft: mockDeleteDraft,
+  analyzeDraft: mockAnalyzeDraft,
+  pruneDraftAnalyses: mockPruneDraft,
 }));
 
 vi.mock("./SearchHistory", () => ({ default: () => null }));
@@ -36,6 +53,13 @@ import AiSeoTool from "../components/app/AiSeoTool";
  */
 describe("SEO tool title and character budgets", () => {
   beforeEach(() => {
+    mockListDrafts.mockReset();
+    mockListDrafts.mockResolvedValue({ drafts: [] });
+    mockCreateDraft.mockReset();
+    mockGetDraft.mockReset();
+    mockUpdateDraft.mockReset();
+    mockAnalyzeDraft.mockReset();
+    mockPruneDraft.mockReset();
     mockAnalyzeSeo.mockReset();
     mockGenerateMeta.mockReset();
     mockSuggest.mockReset();

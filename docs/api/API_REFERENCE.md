@@ -1956,6 +1956,72 @@ Generate Meta
 
 **Response 200:** unspecified
 
+#### POST /apps/seo/drafts
+Create Seo Draft
+
+A draft is the unit that makes the tool a loop rather than a set of readings taken once
+(`SEO_EDITING_AID_SPEC` §4). It holds its own content, title and target keywords, so two
+analyses of one draft cannot silently have been measured against different targets.
+
+**Body:** name: string (required), content: string | null, title: string | null, target_keywords: array of string | null
+
+**Response 200:** id, name, title, target_keywords, published_url, content, created_at, updated_at, analysis_count
+
+#### GET /apps/seo/drafts
+List Seo Drafts
+
+**Response 200:** drafts: array of the above, without `content` (the largest field; a picker does not need it)
+
+#### GET /apps/seo/drafts/{draft_id}
+Get Seo Draft
+
+**Response 200:** the draft, plus `analyses` (newest first), `latest` (with the full stored result), `deltas` and `retention`.
+
+`deltas` carries `since_previous` and `since_baseline` — both, because "since last time" is
+what you act on during a session and "since the first reading" is what says whether the session
+went anywhere. A metric is `null`, not `0`, when the older analysis did not measure it.
+
+`retention` is a **proposal**: `prune_suggested`, `total`, `prunable_ids`, `prunable_count`,
+`keeps_recent`, `keeps_baseline`. Reading a draft never deletes anything.
+
+#### PATCH /apps/seo/drafts/{draft_id}
+Update Seo Draft
+
+**Body:** name, content, title, target_keywords, published_url — all optional. `null` means
+"not supplied" and never wipes a field; an explicit empty value clears one.
+
+`published_url` is what makes a draft matchable to the RippleTrace drop point it becomes after
+publication.
+
+#### DELETE /apps/seo/drafts/{draft_id}
+Delete Seo Draft
+
+Removes the draft and its analyses. **Response 200:** deleted: bool, draft_id: string
+
+#### POST /apps/seo/drafts/{draft_id}/analyze
+Analyze Seo Draft
+
+Analyses the draft as stored and keeps the reading. The request carries no text — the draft is
+the source of the content, the title and the targets.
+
+**Body:** top_n: integer | null
+
+**Response 200:** analysis (the full scorecard), recorded (the stored row), deltas, retention
+
+#### POST /apps/seo/drafts/{draft_id}/prune
+Prune Seo Draft Analyses
+
+Deletes the analyses a person confirmed. Never called by the system on its own: retention is
+proposed and confirmed, because a silent cap would remove the earliest readings, which are
+exactly what a before/after comparison is measured against.
+
+Takes explicit ids rather than re-deriving what is prunable — between a proposal and its answer
+a new analysis may have been recorded. A baseline is refused even when asked for.
+
+**Body:** analysis_ids: array of string (required)
+
+**Response 200:** deleted: integer, refused: integer, requested: integer, not_found: integer
+
 #### POST /apps/seo/title
 Generate Title
 

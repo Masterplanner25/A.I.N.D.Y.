@@ -5,11 +5,28 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
-from apps.search.schemas.seo import SEOInput, MetaInput, TitleInput
+from apps.search.schemas.seo import (
+    SEOInput,
+    MetaInput,
+    TitleInput,
+    DraftCreateInput,
+    DraftUpdateInput,
+    DraftAnalyzeInput,
+    DraftPruneInput,
+)
 from AINDY.services.auth_service import get_current_user
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from apps.search.services.title_generation import generate_title_candidates
+from apps.search.services.draft_service import (
+    create_draft,
+    delete_draft,
+    get_draft,
+    list_drafts,
+    prune_analyses,
+    record_analysis,
+    update_draft,
+)
 from apps.search.services.search_service import (
     analyze_seo_content,
     execute_durable_search,
@@ -249,3 +266,201 @@ def suggest_improvements_compat(
         _execute_seo(request, "seo.suggest.compat", handler, db=db, user_id=user_id)
     )
 
+
+# ── Drafts ─────────────────────────────────────────────────────────────────────────
+#
+# The unit that makes the tool a loop rather than a set of readings taken once
+# (SEO_EDITING_AID_SPEC §4). A draft holds its own content, title and target keywords, so
+# re-analysing it is a request with no body: two analyses of the same draft are guaranteed to
+# have been measured against the same targets, which is what makes them comparable.
+
+
+@router.post("/drafts")
+@limiter.limit("30/minute")
+def create_seo_draft(
+    request: Request,
+    data: DraftCreateInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        try:
+            return create_draft(
+                db,
+                user_id=user_id,
+                name=data.name,
+                content=data.content or "",
+                title=data.title,
+                target_keywords=data.target_keywords,
+            )
+        except ValueError as exc:
+            # Raised before pipeline entry would surface as an opaque internal_error
+            # (PRE-PIPELINE-RAISE-500S); returned as an HTTP_ marker it reaches the caller as
+            # the 422 it is.
+            raise ValueError(f"HTTP_422:{exc}") from exc
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.drafts.create", handler, db=db, user_id=user_id)
+    )
+
+
+@router.get("/drafts")
+@limiter.limit("60/minute")
+def list_seo_drafts(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        return {"drafts": list_drafts(db, user_id=user_id)}
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.drafts.list", handler, db=db, user_id=user_id)
+    )
+
+
+@router.get("/drafts/{draft_id}")
+@limiter.limit("60/minute")
+def get_seo_draft(
+    request: Request,
+    draft_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        draft = get_draft(db, user_id=user_id, draft_id=draft_id)
+        if draft is None:
+            raise ValueError("HTTP_404:draft not found")
+        return draft
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.drafts.get", handler, db=db, user_id=user_id)
+    )
+
+
+@router.patch("/drafts/{draft_id}")
+@limiter.limit("60/minute")
+def update_seo_draft(
+    request: Request,
+    draft_id: str,
+    data: DraftUpdateInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        draft = update_draft(
+            db,
+            user_id=user_id,
+            draft_id=draft_id,
+            name=data.name,
+            content=data.content,
+            title=data.title,
+            target_keywords=data.target_keywords,
+            published_url=data.published_url,
+        )
+        if draft is None:
+            raise ValueError("HTTP_404:draft not found")
+        return draft
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.drafts.update", handler, db=db, user_id=user_id)
+    )
+
+
+@router.delete("/drafts/{draft_id}")
+@limiter.limit("30/minute")
+def delete_seo_draft(
+    request: Request,
+    draft_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        if not delete_draft(db, user_id=user_id, draft_id=draft_id):
+            raise ValueError("HTTP_404:draft not found")
+        return {"deleted": True, "draft_id": draft_id}
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.drafts.delete", handler, db=db, user_id=user_id)
+    )
+
+
+@router.post("/drafts/{draft_id}/analyze")
+@limiter.limit("30/minute")
+def analyze_seo_draft(
+    request: Request,
+    draft_id: str,
+    data: DraftAnalyzeInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Analyse the draft as it stands, and keep the reading.
+
+    ★ The request carries no text. The draft is the source of the content, the title AND the
+    target keywords, so two analyses of one draft cannot silently have been measured against
+    different targets — which would make them incomparable while still looking comparable.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        draft = get_draft(db, user_id=user_id, draft_id=draft_id)
+        if draft is None:
+            raise ValueError("HTTP_404:draft not found")
+        analysis = analyze_seo_content(
+            draft["content"],
+            data.top_n or 10,
+            db=db,
+            user_id=user_id,
+            title=draft["title"] or None,
+            target_keywords=draft["target_keywords"] or None,
+        )
+        recorded = record_analysis(
+            db, user_id=user_id, draft_id=draft_id, result=analysis
+        )
+        refreshed = get_draft(db, user_id=user_id, draft_id=draft_id) or {}
+        return {
+            "analysis": analysis,
+            "recorded": recorded,
+            "deltas": refreshed.get("deltas"),
+            "retention": refreshed.get("retention"),
+        }
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.drafts.analyze", handler, db=db, user_id=user_id)
+    )
+
+
+@router.post("/drafts/{draft_id}/prune")
+@limiter.limit("15/minute")
+def prune_seo_draft_analyses(
+    request: Request,
+    draft_id: str,
+    data: DraftPruneInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete the analyses a person confirmed. Never called by the system on its own.
+
+    Retention here is proposed and confirmed, not enforced: a silent cap would remove the
+    earliest readings, which are exactly what a before/after comparison is measured against.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        return prune_analyses(
+            db, user_id=user_id, draft_id=draft_id, analysis_ids=data.analysis_ids
+        )
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.drafts.prune", handler, db=db, user_id=user_id)
+    )

@@ -25,3 +25,40 @@ class TitleInput(BaseModel):
     # echoes it back untouched and never returns a replacement for it.
     current_title: Optional[str] = None
     target_keywords: Optional[list[str]] = None
+
+
+class DraftCreateInput(BaseModel):
+    name: str
+    content: Optional[str] = ""
+    title: Optional[str] = None
+    target_keywords: Optional[list[str]] = None
+
+
+class DraftUpdateInput(BaseModel):
+    # Every field optional and `None` means "not supplied": omitting a key must never wipe it,
+    # while an explicit empty string still clears one.
+    name: Optional[str] = None
+    content: Optional[str] = None
+    title: Optional[str] = None
+    target_keywords: Optional[list[str]] = None
+    published_url: Optional[str] = None
+
+
+class DraftAnalyzeInput(BaseModel):
+    """Analyse a draft and attach the reading to it.
+
+    Nothing is sent: the draft already holds its content, title and target keywords, which is
+    the point of it being a unit. `top_n` is the only knob.
+    """
+
+    top_n: Optional[int] = 10
+
+
+class DraftPruneInput(BaseModel):
+    """Ids the person confirmed, not a request to recompute what is prunable.
+
+    Between a proposal and its answer a new analysis may have been recorded; a prune that
+    re-derived the set would delete something the person was never shown.
+    """
+
+    analysis_ids: list[str]
