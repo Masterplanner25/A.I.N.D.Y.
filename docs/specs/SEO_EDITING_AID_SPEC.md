@@ -24,6 +24,23 @@ change, without changing it for them.
 
 ---
 
+## 0. Status, 2026-09-07
+
+| section | state |
+|---|---|
+| §2 Target keywords | ✅ built (#312) |
+| §3 Repetition | ✅ built (#312) |
+| §4 Saving — the analysis persists | ✅ fixed and **verified live** (see below) |
+| §4 Saving — **the draft as a unit** | ❌ **the only unbuilt piece** |
+| §4 Phase labels in the UI | ✅ shipped |
+| §4 Feeds registered so the handoff happens | ✅ 4 sources, 215 drop points |
+
+**Not complete.** Three of §5's four open questions are still open, and all three are questions
+about the draft unit rather than about anything already built — which is the honest reading of
+where this spec stands: the measurements are done, the loop is not.
+
+---
+
 ## 1. What just got fixed, and why it matters to this spec
 
 Two defects, fixed outside this spec, because they needed no design decision:
@@ -188,12 +205,33 @@ broke as memory filled up — and every test that recalls nothing still passes.
 Fixed by converting through the runtime's own `memory_items_to_dicts`, already used this way in
 `automation/flows/flow_definitions.py:361`.
 
+### ★ Verified live 2026-09-07 — the fix works, in the condition that used to break it
+
+Asserting in tests that a MemoryItem serialises is not the same as proving the write lands, so
+the path was exercised against the running stack:
+
+```
+search_history before   0 rows
+analyze_seo_content(... db, user_id) → memory count 2
+search_history after    1 row
+```
+
+**`memory count 2` is the part that matters.** The bug was conditional on recall finding
+something — with an empty memory `items` is `[]`, which serialises fine, which is exactly why it
+survived so long. A run that recalled two items and still persisted is the case that used to
+fail. (The test row was deleted afterwards; the panel is a real surface, not a scratch pad.)
+
 **What this changes for §4.** The analysis now persists. What is still genuinely absent is
 narrower than "saving":
 
 - the **meta description** and **suggestions** are separate calls whose output is not stored
 - there is no **draft** as a unit, so analyses cannot be compared over time — the before/after
   question this section is really about
+
+★ **This is the only unbuilt part of the spec** as of 2026-09-07, and it is the part that turns
+a set of readings into a loop. Everything else the tool now does is a measurement taken once:
+you can learn that a phrase repeats and that a target is thin, act on both, re-run, and the tool
+has no memory that the first reading ever happened.
 
 `seo_routes.py` also persists three metrics via `save_calculation` (`seo_readability`,
 `seo_word_count`, `seo_avg_keyword_density`) into the analytics calculation store, which remains
@@ -245,6 +283,12 @@ Current state (2026-09-06): **0 content sources**, 1 drop point, 8 pings — so 
 exists and is unused. Registering the Medium feed is a smaller and more valuable piece of work
 than anything else in this section.
 
+**✅ Done, and it worked.** Measured 2026-09-07: **4 content sources**, **215 drop points**, **264
+pings**. The owner registered the Substack and dev.to feeds, detection was switched on, and the
+automatic path produced a corpus overnight without further action. What it has not yet produced
+is the *match* — no saved draft exists to link to a drop point, because the draft unit above is
+still unbuilt.
+
 **And it closes a loop nothing else can.** If a saved draft can be matched to the drop point it
 became — by URL, or by title — then the SEO tool's advice becomes checkable against what the
 article actually did after publication. That is the only path in this repo from "the tool said
@@ -269,8 +313,8 @@ surfaces start to look alike.
 
 2. ~~**Is a draft an SEO artefact or a RippleTrace content item?**~~ **RESOLVED 2026-09-06 (owner):
    both, split by publication** — the SEO tool is the before-work, RippleTrace is after. See §4.
-   What remains is narrower and is now the near-term work: **say so in the UI**, and register the
-   Medium feed so the handoff actually happens (0 content sources exist today).
+   Both near-term pieces are now done: the phase line ships on each surface, and 4 feeds are
+   registered (215 drop points ingested).
 
 3. **Should the scorecard's overall score survive at all?** `search_score` blends readability,
    average density and word count into one number (`search_scoring.py:291`). With targets and a
