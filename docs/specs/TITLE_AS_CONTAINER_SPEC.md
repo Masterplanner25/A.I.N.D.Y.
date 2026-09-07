@@ -197,6 +197,80 @@ thing that spec exists to prevent.
 
 ---
 
+## 6a. ★ The word counter was built, and wired to the opposite end of the pipeline
+
+The owner asked whether a dedicated word-count function had been built, citing his own design
+note (`dedicated word count function.docx`, in the build-docs archive). It had. It lives in the
+runtime at `AINDY/utils/text_constraints.py`, and it implements four of the note's five ideas:
+
+| the design note | the code |
+|---|---|
+| Hard limit — stop exactly at the target | `enforce_word_limit(mode="hard")` |
+| Soft limit — a small tolerance around it | `mode="soft"` — but **±5%**, not the note's ±5 words |
+| Auto-trim excess while keeping readability | `trim_to_word_limit` |
+| Preemptive structuring — no half-finished sentences | `sentence_safe=True` |
+| **Live word tracking while the text is generated** | **not built** |
+
+**The missing fifth is structural, not an oversight.** The note is about constraining
+*generated output* — count as the model writes, so it never overshoots. What shipped is an
+**input hygiene** layer, and the package says so in its own first line:
+
+```
+A.I.N.D.Y. Input Hygiene Layer
+```
+
+It trims text going *into* the database and the analysis pipeline. Its only live caller
+anywhere is `memory_persistence`; nothing in `apps/` calls it, nothing generates text through
+it, and it has **no tests**.
+
+The one time it did touch app text it was doing harm. `seo_analysis` called
+`prepare_input_text(limit=500)`, so a 4,000-word draft reported `word_count: 507` — every
+metric described the opening 500 words while being labelled as the article. That call was
+removed rather than repurposed (see the note at the top of `seo_services.py`).
+
+### ★ And the unit is wrong for what §6 needs
+
+`enforce_word_limit` counts **words**. A title budget (~60) and a meta-description budget
+(~160) are **characters**. That is not a detail — it has already caused a shipped defect:
+`generate_meta_description` passed `limit=160` straight into `enforce_word_limit` and produced
+~160 *words*, roughly 900 characters, six times past the SERP cutoff. The fix hand-rolled a
+character trimmer inside `seo_services`.
+
+So the system now holds two halves of one idea, in two repos, in two units:
+
+| | where | unit | callers in `apps/` |
+|---|---|---|---|
+| `enforce_word_limit` / `trim_to_word_limit` | `aindy-runtime` | words | **0** |
+| the character trimmer inside `generate_meta_description` | this repo | characters | 1 |
+
+Everything §6 proposes — a title budget, a description budget, a count shown to the writer —
+needs the character one. The word one is not wrong; it is a different tool for a different job
+(input truncation), and treating them as interchangeable is exactly what produced the
+900-character meta description.
+
+**Ownership note:** `text_constraints.py` is runtime-owned. Nothing here requires changing it.
+The character-budget logic belongs in `apps/search` next to the analysis that uses it, which is
+where the working half already lives.
+
+### Two smaller findings from the same audit
+
+- **The SEO word count runs on a fallback.** `_tokenize_words` prefers `nltk.word_tokenize`,
+  but the `punkt` data is not installed in the container (`nltk` the package is — 3.10.3), so
+  `_ensure_tokenizer()` returns False and the regex fallback runs on every analysis. The
+  fallback is the *correct* branch here: it strips punctuation, where `word_tokenize` emits
+  `,` and `.` as tokens. So installing an optional data package would raise every reported
+  `word_count` and silently move the `_MIN_WORD_COUNT = 300` thin-content threshold, the
+  `length_score = word_count / 1000` ranking term, and the persisted `seo_word_count` metric
+  with it. **A word count should not depend on whether an optional corpus happens to be
+  present.**
+
+- **There is no live counter.** `word_count` appears only after Analyze is clicked, which is
+  the one idea the design note opened with — *"the user gets real-time updates as the text is
+  written."* For an editing aid, a count while you type is closer to the point than a count
+  after you submit.
+
+---
+
 ## 7. ★ And this is where authorship shows up
 
 > *"And oh there it is — authorship's importance showing up lol."*
@@ -252,7 +326,15 @@ question 3 below, and it is a domain-ownership question, not a schema one.
    title is. That is a real interface change — today it takes one blob of body text — and it is
    a prerequisite for title analysis, title generation and any character budget.
 
-5. **Does a generated title know about the container?** If the author has a series, a proposed
+5. **Should the two limit tools be reconciled, or kept apart on purpose?** §6a leaves a
+   word-based enforcer in the runtime with no app callers and a character trimmer in this repo
+   with one. Reconciling means a limit that carries its unit rather than assuming one, which is
+   what would have prevented the 900-character meta description. Keeping them apart is also
+   defensible — input truncation and output budgeting are genuinely different jobs — but then
+   the naming should say so, because `enforce_word_limit` reads as the general answer and is
+   not.
+
+6. **Does a generated title know about the container?** If the author has a series, a proposed
    title probably belongs to it, and the container is the part that must not be regenerated.
    This is where §4 and §6 meet, and it is the reason they are one spec rather than two.
 
@@ -271,3 +353,9 @@ failure. Nothing here should fire for an author who writes unrelated pieces.
 It does not claim the SEO and RippleTrace halves must ship together. §6 is a self-contained
 correction — a mislabelled button, a missing character budget, and an absent feature — and is
 worth doing on its own whatever is decided about containers.
+
+It does not claim `text_constraints.py` is broken or should be removed. It does what it says,
+and it is used — once, for the job it was placed in. The finding in §6a is that the design note
+it came from described an output constraint, the implementation became an input filter, and
+nothing since has closed that gap. So the answer to *"did we build this?"* is **yes, and it is
+pointed the other way.**
