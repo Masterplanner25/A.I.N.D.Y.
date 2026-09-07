@@ -326,7 +326,8 @@ The Nodus worker is spawned as `subprocess.run([sys.executable, nodus_worker.py]
 `sys.path[0]` is the *worker's* directory and the inherited cwd is **not** on `sys.path`. If this
 repo is not pip-installed, the worker cannot `import apps`, `load_plugins()` raises
 `ModuleNotFoundError`, and `_ensure_tools_loaded` swallows it **at DEBUG**. The worker then runs
-with 24 runtime syscalls instead of 91, and the visible symptom is three layers away:
+with 24 runtime syscalls instead of 92 (measured 2026-09-07), and the visible symptom is
+three layers away:
 
 ```
 "error": "Unknown syscall: 'sys.v1.analytics.get_reasoning_recommendation'"

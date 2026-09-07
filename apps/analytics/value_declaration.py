@@ -21,7 +21,11 @@ from AINDY.db.database import Base
 
 # What flavor of worth the declaration expresses (interpretable, not enforced).
 VALID_WORTH_KINDS = {"monetary_potential", "intrinsic", "strategic"}
-VALID_TARGET_TYPES = {"task", "masterplan", "project", "other"}
+# `domain` is a MasterPlan core domain — the thing Genesis actually talks about. Worth is
+# stated in Genesis against a domain ("the ethics framework is critical"), and before this
+# existed the only home for it was `other`, which loses the fact that the target is a named
+# part of a plan and makes the row unjoinable to anything.
+VALID_TARGET_TYPES = {"task", "masterplan", "project", "domain", "other"}
 
 # ★ Two kinds are ORDINAL, one is CARDINAL — and that asymmetry is the point.
 #
@@ -54,7 +58,7 @@ class IntentValueDeclaration(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
 
-    target_type = Column(String(16), nullable=False, index=True)   # task | masterplan | project | other
+    target_type = Column(String(16), nullable=False, index=True)   # task | masterplan | project | domain | other
     target_id = Column(String, nullable=True, index=True)          # id of the tagged thing (freeform allowed)
     label = Column(String, nullable=True)                          # human name, e.g. "Nodus language"
 

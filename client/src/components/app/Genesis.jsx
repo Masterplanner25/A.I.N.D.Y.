@@ -469,6 +469,16 @@ export default function Genesis() {
                 <p className="text-zinc-400 text-xs mt-1">
                   {lockedPlan.version} · Posture: {lockedPlan.posture}
                 </p>
+                {/* Worth stated in the conversation becomes declarations at lock. Said out
+                    loud because a declaration dropped for want of a supporting quote is the
+                    designed behaviour, and a feature that silently records nothing is
+                    indistinguishable from one that is broken. */}
+                {lockedPlan.worth_declared?.recorded > 0 &&
+                  <p className="text-zinc-500 text-xs mt-1">
+                    {lockedPlan.worth_declared.recorded} worth declaration
+                    {lockedPlan.worth_declared.recorded === 1 ? "" : "s"} recorded from what you said
+                  </p>
+                }
               </div>
           }
 

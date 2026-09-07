@@ -92,6 +92,43 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
         db.rollback()
         raise
 
+    # ── Worth declarations: the plan's stated value becomes rows ──────────────────────────
+    #
+    # The same materialisation shape as phases → tasks, applied to the one thing Genesis was
+    # already capturing and the schema was already dropping. Only declarations backed by the
+    # user's own words survive; see `genesis_worth` for why that check is code and not a
+    # prompt rule.
+    #
+    # Non-fatal on purpose. Locking a plan is the user's act, and a worth row that failed to
+    # write must not undo it — the plan above is already committed by this point.
+    # Each declaration is committed by the analytics syscall that writes it, so a failure
+    # part-way leaves the earlier ones recorded. That is the honest outcome: they were stated
+    # and they were stored.
+    worth_result: dict = {"recorded": [], "dropped": []}
+    if user_id:
+        try:
+            from apps.masterplan.services.genesis_worth import (
+                WORTH_STATE_KEY,
+                record_genesis_declarations,
+            )
+
+            worth_result = record_genesis_declarations(
+                db,
+                user_id=user_id,
+                masterplan_id=masterplan.id,
+                declared_worth=(session.summarized_state or {}).get(WORTH_STATE_KEY),
+                transcript=session.transcript,
+            )
+        except Exception:
+            db.rollback()
+            emit_observability_event(
+                logger,
+                event="masterplan_worth_declaration_failed",
+                session_id=session_id,
+                user_id=user_id,
+                masterplan_id=getattr(masterplan, "id", None),
+            )
+
     # Capture lock event to memory (fire-and-forget)
     if user_id:
         try:
@@ -144,6 +181,10 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
             )
             raise
 
+    # Carried on the instance rather than in the return type: every caller returns the
+    # MasterPlan itself, and a tuple here would be a signature change across four call sites
+    # for a diagnostic. Nothing depends on it; it exists so a lock can say what it recorded.
+    masterplan.genesis_worth_result = worth_result
     return masterplan
 
 

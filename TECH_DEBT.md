@@ -667,7 +667,7 @@ Measured per gate rather than treating "soak" as one thing:
 |---|---|---|
 | Trajectory | completed tasks **with estimates** | **1 sample.** Estimates became mandatory 2026-09-06, so future tasks all count |
 | Learned calibrator | ≥30 distinct `actual_score` per decision type | `review_plan` 19/30 · `create_new_task` **1**/30 · `continue_highest_priority_task` **3**/30 · `reprioritize_tasks` **2**/30 |
-| Worth | value declarations | **0** — and it was **blocked on a defect**, now fixed (below) |
+| Worth | value declarations | **0** — the defect is fixed and the Genesis entry point shipped 2026-09-07; it records only volunteered worth, so it can stay at 0 (below) |
 | Search outcome weighting | search usage | `search_history`, `search_result_feedback`, `research_results` all **0** — never exercised once |
 
 **261 `review_plan` predictions carry 19 distinct actual scores.** That ratio is the audit's
@@ -692,12 +692,22 @@ The Worth gate is no longer blocked on a defect. Per-kind scoring (#287), ordina
 `intrinsic`/`strategic` with a float kept for `monetary_potential`, and several kinds per target
 (#289) all landed. Declaring is now safe.
 
-**It is still blocked on there being no way to declare.** The route exists and is routed;
-nothing calls it. The owner's call on where it belongs: *"probably in Genesis, as that's where
-you could say how much each means to you or the actual value worth."* Written up as
-`docs/specs/WORTH_DECLARATION_IN_GENESIS_SPEC.md` rather than built, because the failure mode is
-invisible — an LLM asked to fill in a worth field will fill it in, and a fabricated declaration
-is indistinguishable from a real one. Same shape as the calibrator in §3 of the audit that "won"
+**The entry point shipped 2026-09-07.** Genesis now extracts declared worth from the
+conversation and materialises it at lock, on the owner's call: *"probably in Genesis, as that's
+where you could say how much each means to you or the actual value worth."* The defence the spec
+called mandatory was built first: **every declaration carries the user's words and is dropped
+unless those words are found in a user turn of the transcript** — enforced in
+`apps/masterplan/services/genesis_worth.py`, not in prompt text.
+
+**What is still not there is Genesis raising the subject.** It records worth when the owner
+states it and never asks. So a conversation that does not happen to mention worth still yields
+nothing, and the gate can stay at 0 with the feature working exactly as designed. That decision
+— defence 2, *"ask, do not guess"* — is open question 1 of the spec and is the one that decides
+whether this produces data at all.
+
+The failure mode this was built around, for the record: an LLM asked to fill in a worth field
+will fill it in, and a fabricated declaration is indistinguishable from a real one. Same shape
+as the calibrator in §3 of the audit that "won"
 by memorising a constant.
 
 **Do not treat the individual domain rows as authoritative on this.** Several rows in

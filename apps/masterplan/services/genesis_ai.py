@@ -50,6 +50,23 @@ State extraction:
   never invent a value to fill a field.
 - "confidence" is your own 0.0-1.0 judgement of how well you understand this person's plan.
 
+On "declared_worth" — record what the user SAID something is worth, never what you think:
+- Only add an entry when the user has stated how much something matters or what it could be
+  worth. Emphasis, ordering, how long they talked about it, and your own sense of importance
+  are NOT statements of worth. If they have not said it, the list stays empty.
+- Every entry MUST carry "quote": the user's own words, copied verbatim from THEIR message,
+  that state the worth. Elide with an ellipsis if the passage is long; do not paraphrase.
+  An entry whose quote is not found in the user's own words is discarded before it is stored,
+  so a paraphrased quote silently throws the declaration away.
+- "kind" is one of: strategic, intrinsic, monetary_potential.
+  - strategic / intrinsic take a level: "low", "moderate", "high" or "critical".
+  - monetary_potential takes a number, in dollars.
+- "label" names what the worth is about - use the core domain name where one fits. Omit it
+  only when the statement is about the whole plan.
+- The same thing can hold several kinds at once. Something both strategically critical and
+  worth real money is two entries, not a choice between them.
+- Only report entries this conversation supports; earlier ones are kept for you.
+
 You MUST return valid JSON in this exact format:
 
 {
@@ -61,10 +78,14 @@ You MUST return valid JSON in this exact format:
     "assets_summary": null,
     "inferred_domains": [],
     "inferred_phases": [],
+    "declared_worth": [],
     "confidence": 0.0
   },
   "synthesis_ready": false
 }
+
+Each "declared_worth" entry:
+{"label": "...", "kind": "strategic", "value": "critical", "quote": "their exact words"}
 """
 
 
@@ -287,6 +308,12 @@ they know where to pick up.
 Set "synthesis_ready": true only if vision_summary, time_horizon and mechanism_summary
 are all present and coherent in the source text, and confidence is at least 0.6.
 
+"declared_worth" records only worth the document itself states — what something is worth,
+or how much it matters. Every entry MUST carry "quote": the words copied verbatim from the
+document. An entry whose quote is not found in the source text is discarded before it is
+stored. "kind" is strategic, intrinsic (level: low/moderate/high/critical) or
+monetary_potential (a number in dollars). Leave the list empty if the plan does not say.
+
 You MUST return valid JSON in this exact format:
 
 {
@@ -298,10 +325,14 @@ You MUST return valid JSON in this exact format:
     "assets_summary": null,
     "inferred_domains": [],
     "inferred_phases": [],
+    "declared_worth": [],
     "confidence": 0.0
   },
   "synthesis_ready": false
 }
+
+Each "declared_worth" entry:
+{"label": "...", "kind": "strategic", "value": "critical", "quote": "the document's words"}
 """
 
 

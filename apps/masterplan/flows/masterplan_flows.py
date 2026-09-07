@@ -88,7 +88,8 @@ def genesis_session_create_node(state, context):
             synthesis_ready=False,
             summarized_state={
                 "vision_summary": None, "time_horizon": None, "mechanism_summary": None,
-                "assets_summary": None, "inferred_domains": [], "inferred_phases": [], "confidence": 0.0,
+                "assets_summary": None, "inferred_domains": [], "inferred_phases": [],
+                "declared_worth": [], "confidence": 0.0,
             },
         )
         db.add(session)
@@ -307,6 +308,15 @@ def genesis_activate_node(state, context):
         return {"status": "FAILURE", "error": str(e)}
 
 
+def _worth_summary(masterplan) -> dict:
+    """Counts only — the quotes stay server-side; this rides in an API response."""
+    result = getattr(masterplan, "genesis_worth_result", None) or {}
+    return {
+        "recorded": len(result.get("recorded") or []),
+        "dropped": len(result.get("dropped") or []),
+    }
+
+
 def masterplan_lock_from_genesis_node(state, context):
     try:
         from apps.masterplan.services.masterplan_factory import create_masterplan_from_genesis
@@ -333,6 +343,11 @@ def masterplan_lock_from_genesis_node(state, context):
             "posture": masterplan.posture,
             "status": masterplan.status,
             "task_sync": task_sync,
+            # What the lock actually recorded from the conversation. Reported rather than
+            # left silent: a declaration dropped for want of a supporting quote is the
+            # designed behaviour, and a feature that silently records nothing is
+            # indistinguishable from one that is broken.
+            "worth_declared": _worth_summary(masterplan),
         }}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}
