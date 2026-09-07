@@ -40,3 +40,9 @@ class TaskCreate(BaseModel):
 
 class TaskAction(BaseModel):
     name: str
+    # Optional 1-5 judgements, supplied on completion only. They feed WCU
+    # (`effort x complexity x difficulty`) and were permanently 1 until this was collected.
+    # Optional rather than required so `/start` and `/pause`, which share this schema, are
+    # unaffected, and so a caller that cannot judge omits them instead of inventing a value.
+    task_complexity: int | None = None
+    task_difficulty: int | None = None
