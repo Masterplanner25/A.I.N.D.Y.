@@ -113,8 +113,62 @@ def _utcnow() -> datetime:
 # ── Theme derivation ──────────────────────────────────────────────────────────
 
 
-def derive_themes(*, title: str, summary: str, tags: list[str]) -> list[str]:
-    """Publisher tags when they exist, keywords from the text when they do not."""
+# A term appearing in at least this share of a user's published work carries no information
+# about any single piece — it describes the author, not the article. Measured 2026-09-07 on a
+# 214-drop corpus: "chatgpt" appeared in most of it, and every Substack drop derived themes of
+# `case, study, series, chatgpt` because that is the title template on
+# "2025 ChatGPT Case Study Series: ...".
+#
+# 0.15 was chosen from the measured distribution rather than intuition. On the 214-drop
+# corpus the document frequencies fall into two groups with a 5x gap between them:
+#
+#   chatgpt 97.7%  case 67.3%  study 66.8%  duality 26.6%  progress 26.6%  series 25.7%
+#   ---------------------------- gap ----------------------------
+#   prompt 5.6%  productivity 5.1%  framework 4.2%  business 4.2%  search 3.7%
+#
+# Everything above the gap is a naming convention — "2025 ChatGPT Case Study Series: ..." and
+# "2025 ChatGPT/AI The Duality Of Progress Series: ...". Everything below is topical. Any
+# threshold inside the gap separates them; 0.15 sits in the middle of it rather than on either
+# edge, so neither group is one document away from flipping.
+#
+# Tunable, and deliberately NOT applied to a small corpus (see _MIN_CORPUS_FOR_DISCOUNT):
+# with eight documents "in 15% of them" means "in one", which discounts everything.
+UBIQUITOUS_TERM_RATIO = 0.15
+_MIN_CORPUS_FOR_DISCOUNT = 12
+
+
+def _discounted_terms(corpus_df: dict[str, int] | None, corpus_size: int) -> set[str]:
+    """Terms so common across this author's work that they cannot distinguish one piece."""
+    if not corpus_df or corpus_size < _MIN_CORPUS_FOR_DISCOUNT:
+        return set()
+    threshold = corpus_size * UBIQUITOUS_TERM_RATIO
+    return {term for term, count in corpus_df.items() if count >= threshold}
+
+
+def derive_themes(
+    *,
+    title: str,
+    summary: str,
+    tags: list[str],
+    corpus_df: dict[str, int] | None = None,
+    corpus_size: int = 0,
+) -> list[str]:
+    """Publisher tags when they exist, keywords from the text when they do not.
+
+    ★ `corpus_df` / `corpus_size` make the text path CORPUS-AWARE. Without them this counted
+    words within one document, which for a catalogue of similarly-titled pieces returns the
+    title template: every Substack drop was themed `case, study, series, chatgpt` off
+    "2025 ChatGPT Case Study Series: ...", and the three strategies built from those themes
+    all said the same thing.
+
+    Stopword filtering does not help here — these are real words. What makes them useless is
+    that they are in *everything the author writes*, which is only visible from the corpus.
+
+    Tags still win when present. That is a separate and larger question — for 168 of 214 drops
+    the themes are labels the author typed, which is declared intent rather than discovery
+    (RIPPLETRACE-NO-CONTENT-1). This change improves the derived path only; it does not
+    pretend to answer what a piece is *about*.
+    """
     cleaned_tags = [tag.strip().lower() for tag in (tags or []) if tag and tag.strip()]
     if cleaned_tags:
         return _unique(cleaned_tags)[:MAX_THEMES]
@@ -127,6 +181,15 @@ def derive_themes(*, title: str, summary: str, tags: list[str]) -> list[str]:
             if len(word) < 3 or word in _STOPWORDS:
                 continue
             counts[word] = counts.get(word, 0) + weight
+
+    # Drop terms the author uses everywhere BEFORE ranking, so the discount frees slots for
+    # distinguishing terms rather than merely removing the winners and leaving fewer themes.
+    ubiquitous = _discounted_terms(corpus_df, corpus_size)
+    if ubiquitous:
+        filtered = {w: c for w, c in counts.items() if w not in ubiquitous}
+        # Never return nothing: a piece whose every term is ubiquitous is genuinely on the
+        # author's main beat, and reporting its common terms beats reporting silence.
+        counts = filtered or counts
 
     ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     return [word for word, _count in ranked[:MAX_THEMES]]
@@ -143,6 +206,95 @@ def _unique(values: list[str]) -> list[str]:
 
 
 # ── Drop point upsert ─────────────────────────────────────────────────────────
+
+
+def corpus_term_frequency(db: Session, user_id: str | None) -> tuple[dict[str, int], int]:
+    """Document frequency of each term across one user's existing drop titles.
+
+    Returns ``({term: documents_containing_it}, document_count)`` for
+    :func:`derive_themes` to discount the author's ubiquitous vocabulary.
+
+    Reads TITLES only, deliberately. Summaries are not stored (`drop_points` has no content
+    column — RIPPLETRACE-NO-CONTENT-1), so titles are the whole corpus available, and a term
+    that recurs across an author's titles is exactly the naming-convention noise this exists
+    to remove.
+
+    Best-effort: any failure returns an empty map, which makes `derive_themes` behave as it
+    did before. Theme derivation must never be the reason an ingest fails.
+    """
+    uid = _as_uuid(user_id)
+    if uid is None:
+        return {}, 0
+    try:
+        titles = [
+            row[0] or ""
+            for row in db.query(DropPointDB.title)
+            .filter(DropPointDB.user_id == uid)
+            .all()
+        ]
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("[rippletrace] corpus term frequency unavailable: %s", exc)
+        return {}, 0
+
+    frequency: dict[str, int] = {}
+    for title in titles:
+        # Per-DOCUMENT counting, not per-occurrence: a word repeated in one title is still
+        # one document, and document frequency is what "appears across the corpus" means.
+        seen: set[str] = set()
+        for match in _WORD_RE.finditer(title.lower()):
+            word = match.group(0).strip("'’-")
+            if len(word) < 3 or word in _STOPWORDS:
+                continue
+            seen.add(word)
+        for word in seen:
+            frequency[word] = frequency.get(word, 0) + 1
+    return frequency, len(titles)
+
+
+def rederive_themes_for_user(db: Session, user_id: str | None, *, apply: bool = False) -> dict[str, Any]:
+    """Recompute derived themes for one user's drop points against the whole corpus.
+
+    Needed because the corpus-aware discount only applies at ingest, so drops already stored
+    keep whatever they were themed with — and for a catalogue that is not actively growing,
+    that means nothing improves until the next publication.
+
+    Only touches drops whose themes were DERIVED. A drop themed from publisher tags is left
+    exactly alone: those are labels the author typed, and silently replacing them with
+    inferred ones would answer RIPPLETRACE-NO-CONTENT-1's open question by accident.
+
+    Tags are not stored on the drop point, so "was this derived?" is inferred from whether
+    re-deriving the title against the corpus differs from what is stored. That is imprecise
+    at the edges and deliberately conservative: `apply=False` (the default) reports what
+    would change without writing.
+    """
+    corpus_df, corpus_size = corpus_term_frequency(db, user_id)
+    if corpus_size < _MIN_CORPUS_FOR_DISCOUNT:
+        return {"corpus_size": corpus_size, "examined": 0, "changed": 0, "applied": False,
+                "reason": "corpus too small to discount"}
+
+    uid = _as_uuid(user_id)
+    rows = db.query(DropPointDB).filter(DropPointDB.user_id == uid).all()
+    changed: list[dict[str, Any]] = []
+    for row in rows:
+        current = [t.strip() for t in (row.core_themes or "").split(",") if t.strip()]
+        proposed = derive_themes(
+            title=row.title or "", summary="", tags=[],
+            corpus_df=corpus_df, corpus_size=corpus_size,
+        )
+        # A drop themed from tags will not match a title-derived list, so requiring the
+        # CURRENT value to be reproducible from the title without the corpus is what
+        # identifies the derived ones.
+        was_derived = current == derive_themes(title=row.title or "", summary="", tags=[])
+        if not was_derived or not proposed or proposed == current:
+            continue
+        changed.append({"title": row.title, "from": current, "to": proposed})
+        if apply:
+            row.core_themes = ",".join(proposed)
+
+    if apply and changed:
+        db.commit()
+    return {"corpus_size": corpus_size, "examined": len(rows),
+            "changed": len(changed), "applied": bool(apply), "samples": changed[:5]}
 
 
 def upsert_drop_point(
@@ -170,7 +322,20 @@ def upsert_drop_point(
 
     canonical = normalize_url(url)
     identifier = drop_point_id_for(user_id, canonical)
-    themes = derive_themes(title=title, summary=summary, tags=tags or [])
+    # Corpus-aware: terms the author uses across most of their catalogue are discounted, so
+    # a title template ("2025 ChatGPT Case Study Series: ...") stops becoming the theme.
+    # Skipped entirely when tags are present, since tags win anyway.
+    corpus_df: dict[str, int] = {}
+    corpus_size = 0
+    if not (tags or []):
+        corpus_df, corpus_size = corpus_term_frequency(db, user_id)
+    themes = derive_themes(
+        title=title,
+        summary=summary,
+        tags=tags or [],
+        corpus_df=corpus_df,
+        corpus_size=corpus_size,
+    )
     resolved_platform = platform or infer_platform(canonical)
     # Left NULL when the source published no date, rather than defaulted to "now".
     # "Now" is a lie that costs something concrete: echo detection rejects results
