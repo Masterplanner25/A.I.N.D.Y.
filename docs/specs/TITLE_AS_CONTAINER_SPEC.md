@@ -139,6 +139,68 @@ assignment in `derive_themes`'s caller, plus a backfill over the existing 215 dr
 
 ---
 
+## 4b. ★ Built 2026-09-07 — confirmed, never inferred
+
+Owner's call: *"confirmed not inferred."* The fourth time this shape has been the right answer
+here — masterplan phase advance, worth declaration, analysis pruning, and now this.
+
+### Detection proposes a NAME, not a term set
+
+`_discounted_terms()` returns `{chatgpt, case, study, series}`. That is enough to know something
+is there and useless as a question: *"is `{chatgpt, case, series, study}` a series of yours?"*
+cannot be answered by a person.
+
+So `container_service.detect_candidates` finds the longest token sequences that actually recur
+across **titles** (document frequency, not occurrence count — a phrase repeated three times in
+one title is a tic; a phrase in three titles is a series), reconstructs the casing the author
+used, and ships the example titles it was drawn from. *"Is **2025 ChatGPT Case Study Series** a
+series of yours?"*, with three of the pieces, is answerable.
+
+A shorter phrase wholly inside a longer one is dropped: "ChatGPT Case Study" and "Case Study
+Series" are both real n-grams of the same name, and offering all three asks one question three
+times.
+
+### Detection never writes
+
+Asserted directly, and it is the load-bearing property: running detection tags nothing and
+creates no row. Candidates are derived on demand rather than stored — an unanswered question is
+just a measurement of the current corpus, and a stored list would drift out of step with the
+drops it came from.
+
+### What the two answers mean
+
+| | effect |
+|---|---|
+| **confirm** | writes the container into `tagged_entities` on every drop whose title carries it; new drops join it automatically at ingest, without being asked again |
+| **dismiss** | stops it being proposed — and **leaves drops already tagged alone** |
+
+The second half of that dismissal row is deliberate. A dismissal says *"stop asking"*, not
+*"pretend it was never true"*: silently rewriting history the engines have already reasoned over
+is the failure this whole feature exists to avoid.
+
+Dismissals are stored for the same reason confirmations are. Without them the system re-proposes
+a rejected candidate every time anyone looks, which turns an answered question into a nag.
+
+### The keyword-style author, still handled for free
+
+§5's point survives the build unchanged: a corpus with no repeated title structure produces no
+candidates, which is the correct answer rather than a failure. Pinned by a test.
+
+### What it unblocks
+
+`strategy_engine` builds `{entity} Influence Spike` strategies from the top entities. That path
+had **never once fired**, because `entity_counter` was always empty. A test now confirms a
+container and asserts an Influence Spike comes out — the classification unblocking code that was
+already written and wired.
+
+**Where a container lives is still open** (§8 question 3). `ripple_containers` holds the
+*reference* side, which is what RippleTrace can reasonably own. Whether something should hold the
+work itself — a name, when it started, what belongs to it, whether it is finished — is
+unanswered, and `authorship` is still the domain named for it that holds neither works nor
+titles.
+
+---
+
 ## 5. Where the owner's other reading matters
 
 > *"For other people (especially SEO ones) the title is probably what they were trying to rank
@@ -339,14 +401,10 @@ question 3 below, and it is a domain-ownership question, not a schema one.
 
 ## 8. Open questions
 
-1. **Does the container get inferred, confirmed, or declared?** Inference is free and already
-   computed, and it is also a guess about identity — the thing `content_ingest` deliberately
-   refused to guess about. A confirm step ("I see a series called *2025 ChatGPT Case Study
-   Series* across 46 pieces — is that right?") asked **once per container** rather than per
-   drop is cheap, and it converts a measurement into a declaration. This is the same
-   ask-once-accept-silence shape settled for worth in `WORTH_DECLARATION_IN_GENESIS_SPEC` §4a,
-   and the same reasoning applies: an inferred identity that is wrong is worse than none,
-   because four engines will reason from it.
+1. ~~**Does the container get inferred, confirmed, or declared?**~~ **RESOLVED 2026-09-07
+   (owner): confirmed, not inferred.** Built — see §4b. The reasoning held: an inferred identity
+   that is wrong is worse than none, because three engines reason from `tagged_entities` as
+   though it were a fact about the author's body of work.
 
 2. **What happens to the 168 tag-themed drops?** Publisher tags stay in `core_themes` — they
    are what the author declared the piece is about. But `chatgpt` as a dev.to tag and `chatgpt`

@@ -11,6 +11,7 @@ from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 
+from apps.rippletrace.services import container_service
 from apps.rippletrace.services import content_ingest
 from apps.rippletrace.services import ripple_detection
 from apps.rippletrace.services import rippletrace_services
@@ -815,3 +816,101 @@ async def get_trace_graph(
         }
 
     return await execute_with_pipeline(request, "rippletrace_trace_graph", handler)
+
+
+# ── Containers ───────────────────────────────────────────────────────────────────
+#
+# A container is the project or series a piece belongs to — "2025 ChatGPT Case Study Series"
+# (TITLE_AS_CONTAINER_SPEC §4). ★ Confirmed, never inferred: the corpus can measure which
+# words recur, but three engines treat `tagged_entities` as a fact about the author's body of
+# work, and an inferred identity that is wrong is worse than none.
+
+
+class ContainerDecision(BaseModel):
+    name: str
+    note: Optional[str] = None
+
+
+@router.get("/containers/candidates")
+@limiter.limit("30/minute")
+async def list_container_candidates(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Phrases recurring across enough of this author's titles to be worth asking about.
+
+    Derived on demand rather than stored: a stored candidate list drifts out of step with the
+    drops it was derived from, and there is nothing to remember — an unanswered question is
+    just a measurement of the current corpus.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        return {"candidates": container_service.detect_candidates(db, user_id)}
+
+    return await execute_with_pipeline(request, "rippletrace_containers_candidates", handler)
+
+
+@router.get("/containers")
+@limiter.limit("60/minute")
+async def list_containers(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        return {"containers": container_service.list_containers(db, user_id)}
+
+    return await execute_with_pipeline(request, "rippletrace_containers_list", handler)
+
+
+@router.post("/containers/confirm")
+@limiter.limit("30/minute")
+async def confirm_container(
+    request: Request,
+    data: ContainerDecision,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Record that this IS a work of yours, and tag every drop whose title carries it.
+
+    Tagging happens here rather than at read time so the three engines that read
+    `tagged_entities` see it without knowing this feature exists.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        result = container_service.confirm_container(db, user_id, name=data.name, note=data.note)
+        if result is None:
+            raise ValueError("HTTP_422:a container needs a name")
+        return result
+
+    return await execute_with_pipeline(request, "rippletrace_containers_confirm", handler)
+
+
+@router.post("/containers/dismiss")
+@limiter.limit("30/minute")
+async def dismiss_container(
+    request: Request,
+    data: ContainerDecision,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Record that this is NOT a container, so it stops being proposed.
+
+    Drops already tagged keep the entity: a dismissal says "stop asking", not "pretend it was
+    never true", and silently rewriting history the engines have reasoned over is the thing
+    this whole feature exists to avoid.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        result = container_service.dismiss_container(db, user_id, name=data.name)
+        if result is None:
+            raise ValueError("HTTP_422:a container needs a name")
+        return result
+
+    return await execute_with_pipeline(request, "rippletrace_containers_dismiss", handler)

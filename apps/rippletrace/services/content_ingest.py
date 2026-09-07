@@ -355,9 +355,13 @@ def upsert_drop_point(
         row.platform = resolved_platform
         row.url = canonical
         row.core_themes = ",".join(themes)
-        # tagged_entities is only ever populated from explicit publisher tags; guessing
-        # entities from prose would pollute the strategy conditions built on top of it.
+        # tagged_entities is never GUESSED from prose — that would pollute the strategy
+        # conditions built on top of it. It is populated from explicit publisher tags and,
+        # since TITLE_AS_CONTAINER_SPEC §4, from containers the owner has already CONFIRMED.
+        # The second is not a guess: the identity was decided once, and a new piece carrying
+        # its name belongs to it.
         row.tagged_entities = row.tagged_entities or ""
+        tag_drop_with_confirmed_containers(db, row)
         if published_at is not None:
             row.date_dropped = naive_utc(published_at)
         return row, False
@@ -374,7 +378,26 @@ def upsert_drop_point(
         user_id=_as_uuid(user_id),
     )
     db.add(row)
+    tag_drop_with_confirmed_containers(db, row)
     return row, True
+
+
+def tag_drop_with_confirmed_containers(db, row: DropPointDB) -> list[str]:
+    """Delegate to the container service, tolerating its absence.
+
+    Imported lazily and guarded: ingestion is a scheduled job and must not stop working
+    because a newer feature raised. A drop that misses its container tag is recoverable by
+    re-confirming; an ingestion that dies is not.
+    """
+    try:
+        from apps.rippletrace.services.container_service import (
+            tag_drop_with_confirmed_containers as _tag,
+        )
+
+        return _tag(db, row)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("[rippletrace] container tagging skipped: %s", exc)
+        return []
 
 
 def drop_point_to_dict(row: DropPointDB) -> dict[str, Any]:
