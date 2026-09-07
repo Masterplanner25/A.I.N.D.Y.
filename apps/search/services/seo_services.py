@@ -128,12 +128,139 @@ def keyword_density(text: str, keyword: str):
     return round((words.count(keyword.lower()) / len(words)) * 100, 2)
 
 
+# ── Character budgets ─────────────────────────────────────────────────────────────
+#
+# ★ CHARACTERS, not words, and the distinction has already shipped a defect here.
+# `generate_meta_description` once passed `limit=160` into the runtime's `enforce_word_limit`
+# — a WORD limiter — and produced ~160 words, roughly 900 characters, six times past the SERP
+# cutoff. See `TITLE_AS_CONTAINER_SPEC.md` §6a: the repo holds a word-based limiter in the
+# runtime with no callers here, and this character logic, which is the one every budget below
+# actually needs.
+#
+# The numbers are what Google renders before truncating, which varies with pixel width rather
+# than character count, so they are approximations stated as approximations. They are shown to
+# the writer WITH the measured value, never instead of it — same rule as the keyword-density
+# thresholds below: a verdict that hides the number is the tool deciding for the writer.
+TITLE_CHAR_BUDGET = 60          # beyond this a SERP title is usually cut
+TITLE_CHAR_MIN = 30             # below this there is room being left unused
+META_CHAR_BUDGET = 160          # the existing default for generate_meta_description
+META_CHAR_MIN = 70
+
+
+def count_characters(text: str | None) -> int:
+    """Characters as a SERP counts them: whitespace collapsed, ends trimmed."""
+    return len(" ".join((text or "").split()))
+
+
+def truncate_preview(text: str | None, budget: int) -> tuple[str, bool]:
+    """What survives truncation, and whether anything was lost.
+
+    Shown rather than described. "62 characters, budget 60" tells a writer they are over;
+    seeing which word falls off the end tells them what to do about it.
+    """
+    cleaned = " ".join((text or "").split())
+    if len(cleaned) <= budget:
+        return cleaned, False
+    cut = cleaned[:budget].rstrip()
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return f"{cut}\u2026", True
+
+
+def analyze_title(title: str | None, *, body_keywords: list[str] | None = None) -> dict:
+    """Measure a title against the SERP budget. Never rewrites it.
+
+    ``body_keywords`` is the article's own top terms, so the report can say whether the title
+    shares any language with the piece it belongs to. That is a statement about consistency,
+    not a ranking claim — the tool cannot verify a ranking claim and does not make one.
+    """
+    cleaned = " ".join((title or "").split())
+    characters = len(cleaned)
+    preview, truncated = truncate_preview(cleaned, TITLE_CHAR_BUDGET)
+
+    if not cleaned:
+        verdict = "empty"
+    elif characters > TITLE_CHAR_BUDGET:
+        verdict = "long"
+    elif characters < TITLE_CHAR_MIN:
+        verdict = "short"
+    else:
+        verdict = "healthy"
+
+    lowered = cleaned.lower()
+    shared = [
+        keyword for keyword in (body_keywords or [])
+        if keyword and keyword.lower() in lowered
+    ]
+
+    return {
+        "title": cleaned,
+        "characters": characters,
+        "words": len(cleaned.split()),
+        "budget": TITLE_CHAR_BUDGET,
+        "minimum": TITLE_CHAR_MIN,
+        # Positive when over budget, so a client can render "7 over" without doing the sum.
+        "over_by": max(0, characters - TITLE_CHAR_BUDGET),
+        "verdict": verdict,
+        "serp_preview": preview,
+        "truncated": truncated,
+        "shared_keywords": shared,
+    }
+
+
 # Thresholds for SEO improvement suggestions (Search v4 §3.1).
 _MIN_WORD_COUNT = 300           # thin-content floor
 _READABILITY_HARD = 30.0        # Flesch reading ease below this = very hard to read
 _READABILITY_DIFFICULT = 50.0   # below this = fairly difficult
 _KEYWORD_STUFFING_PCT = 4.0     # single-keyword density above this = stuffing risk
 _WEAK_FOCUS_PCT = 0.5           # top keyword density below this = weak topical focus
+
+
+def _title_suggestions(title_analysis: dict | None) -> list[dict]:
+    """Title findings, stated with the measurement rather than in place of it.
+
+    Absent when no title was supplied. The tool does not nag for a field the writer did not
+    fill in — an analysis of a body of text is still a legitimate use of it.
+    """
+    if not isinstance(title_analysis, dict) or title_analysis.get("verdict") == "empty":
+        return []
+
+    characters = int(title_analysis.get("characters") or 0)
+    verdict = title_analysis.get("verdict")
+    out: list[dict] = []
+
+    if verdict == "long":
+        out.append({
+            "metric": "title_length",
+            "issue": f"Title is {characters} characters (budget {TITLE_CHAR_BUDGET}).",
+            "suggestion": (
+                f"Trim to about {TITLE_CHAR_BUDGET} characters — search results cut the rest. "
+                f"As written it shows as: {title_analysis.get('serp_preview')}"
+            ),
+            "severity": "warn",
+        })
+    elif verdict == "short":
+        out.append({
+            "metric": "title_length",
+            "issue": f"Title is {characters} characters (under {TITLE_CHAR_MIN}).",
+            "suggestion": (
+                f"There is room to say more — titles up to about {TITLE_CHAR_BUDGET} "
+                "characters display in full."
+            ),
+            "severity": "info",
+        })
+
+    if not title_analysis.get("shared_keywords"):
+        out.append({
+            "metric": "title_focus",
+            "issue": "The title shares no terms with the article's most frequent words.",
+            "suggestion": (
+                "Check that the title names what the piece is actually about. This is a "
+                "consistency observation, not a ranking claim."
+            ),
+            "severity": "info",
+        })
+    return out
 
 
 def seo_improvement_suggestions(analysis: dict) -> list[dict]:
@@ -144,6 +271,7 @@ def seo_improvement_suggestions(analysis: dict) -> list[dict]:
     Returns a single "healthy" info item when nothing is flagged.
     """
     suggestions: list[dict] = []
+    suggestions.extend(_title_suggestions(analysis.get("title_analysis")))
     word_count = int(analysis.get("word_count") or 0)
     readability = analysis.get("readability")
     densities = analysis.get("keyword_densities") or {}
@@ -209,12 +337,17 @@ def seo_improvement_suggestions(analysis: dict) -> list[dict]:
     return suggestions
 
 
-def seo_analysis(text: str, top_n: int = 10):
+def seo_analysis(text: str, top_n: int = 10, *, title: str | None = None):
     """Performs a basic SEO analysis on given text, with improvement suggestions.
 
     ★ Analyses the WHOLE article. This used to call `prepare_input_text`, whose `limit`
     defaults to 500 words, so every metric below described only the opening ~500 words while
     being reported as though it described the article. See the note at the top of this file.
+
+    ``title`` is optional and new. The tool had no concept of a title at all — it took one
+    blob of body text — which is why it could report on a draft without ever looking at the
+    line a search result actually shows (`TITLE_AS_CONTAINER_SPEC.md` §6). Omitting it keeps
+    the previous behaviour byte for byte: no `title_analysis` key, no title suggestions.
     """
     prepared_text, full_word_count, truncated = _prepare_for_analysis(text)
     words = _tokenize_words(prepared_text)
@@ -235,6 +368,10 @@ def seo_analysis(text: str, top_n: int = 10):
         result["truncated"] = True
         result["submitted_word_count"] = full_word_count
         result["analyzed_word_count"] = word_count
+    if title and title.strip():
+        result["title_analysis"] = analyze_title(
+            title, body_keywords=result["top_keywords"]
+        )
     result["suggestions"] = seo_improvement_suggestions(result)
     return result
 
@@ -250,6 +387,7 @@ def generate_meta_description(text: str, limit: int = 160):
     cleaned = " ".join((text or "").split())  # collapse whitespace/newlines
     if len(cleaned) <= limit:
         return cleaned
+
 
     window = cleaned[:limit]
     # Prefer ending on a sentence boundary, but only if it keeps a usable length (>= 60% budget).

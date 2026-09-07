@@ -44,10 +44,13 @@ export function runLeadGen(query) {
   });
 }
 
-export function analyzeSeo(content) {
+export function analyzeSeo(content, title) {
+  // `title` is optional and omitted when blank, so the request stays byte-identical to the
+  // previous one for callers that do not pass it.
+  const body = title ? { content, title } : { content };
   return authRequest(ROUTES.SEARCH.ANALYZE_SEO, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   });
 }
 

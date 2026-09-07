@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, Request
+from typing import Optional
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from AINDY.core.execution_gate import to_envelope
@@ -59,6 +61,10 @@ def _with_execution_envelope(payload):
 
 class LegacyContentInput(BaseModel):
     content: str
+    # The client calls these compat routes, not `/analyze` — see `api-routes.test.js`, which
+    # pins ANALYZE_SEO to "/apps/seo/analyze_seo/". A new field added only to `SEOInput` would
+    # therefore be unreachable from the UI, which is the surface it exists for.
+    title: Optional[str] = None
 
 
 @router.post("/analyze")
@@ -72,7 +78,9 @@ def analyze_seo(
     from apps.analytics.public import save_calculation
     user_id = str(current_user["sub"])
 
-    results = analyze_seo_content(data.text, data.top_n, db=db, user_id=user_id)
+    results = analyze_seo_content(
+        data.text, data.top_n, db=db, user_id=user_id, title=data.title
+    )
 
     # Save key SEO metrics
     save_calculation(db, "seo_readability", results["readability"])
@@ -150,7 +158,9 @@ def analyze_seo_compat(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        return analyze_seo_content(data.content, 10, db=db, user_id=user_id)
+        return analyze_seo_content(
+            data.content, 10, db=db, user_id=user_id, title=data.title
+        )
 
     return _with_execution_envelope(
         _execute_seo(request, "seo.analyze.compat", handler, db=db, user_id=user_id)

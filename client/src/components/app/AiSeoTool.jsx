@@ -7,10 +7,25 @@ import {
 import { safeMap } from "../../utils/safe";
 import SearchHistory from "./SearchHistory";
 
+// SERP budgets, in CHARACTERS. Mirrored from `seo_services.py` so the counter can respond as
+// the writer types rather than after a round trip; the server stays authoritative and returns
+// its own `budget` with every analysis.
+const TITLE_CHAR_BUDGET = 60;
+
+// A word count that matches the server's: `re.findall(r"\b\w+\b")`. Shown live because the
+// count only appeared after Analyze was clicked, and a count you have to ask for is not much
+// use while you are still writing (TITLE_AS_CONTAINER_SPEC §6a).
+function countWords(text) {
+  const matches = (text || "").match(/[\p{L}\p{N}_]+/gu);
+  return matches ? matches.length : 0;
+}
+
 export default function AiSeoTool() {
   const [content, setContent] = useState("");
+  const [title, setTitle] = useState("");
   const [seoData, setSeoData] = useState(null);
   const [metaDescription, setMetaDescription] = useState("");
+  const [metaCharacters, setMetaCharacters] = useState(null);
   const [seoSuggestions, setSeoSuggestions] = useState("");
   const [loading, setLoading] = useState(false);
   // Bumped after a successful analyze so the "Recent SEO Analyses" panel refetches — the
@@ -21,15 +36,17 @@ export default function AiSeoTool() {
   const handleHistorySelect = (item) => {
     const stored = item.result || {};
     setContent(stored.query || item.query || "");
+    setTitle(stored.title_analysis?.title || "");
     setSeoData(stored);
     setMetaDescription("");
+    setMetaCharacters(null);
     setSeoSuggestions("");
   };
 
   const analyzeSeo = async () => {
     setLoading(true);
     try {
-      const data = await apiAnalyzeSeo(content);
+      const data = await apiAnalyzeSeo(content, title);
       setSeoData(data);
       setHistoryRefresh((n) => n + 1); // the analysis was just saved — refresh the recent list
     } catch (error) {
@@ -43,6 +60,7 @@ export default function AiSeoTool() {
     try {
       const data = await apiGenerateMeta(content);
       setMetaDescription(data.meta_description);
+      setMetaCharacters(data.characters ?? null);
     } catch (error) {
       console.error("Meta Description Error: ", error);
     }
@@ -78,9 +96,40 @@ export default function AiSeoTool() {
                 </a>.
             </p>
             
+            {/* TITLE — optional. The tool had no concept of a title at all, so it could
+                report on a draft without ever looking at the line a search result shows. */}
+            <div className="mb-4">
+                <div className="flex items-baseline justify-between mb-2">
+                    <label htmlFor="seo-title" className="block text-sm font-medium text-gray-400">
+                        Title <span className="text-gray-600">(optional)</span>
+                    </label>
+                    {title &&
+                      <span
+                        className={`text-xs ${title.length > TITLE_CHAR_BUDGET ? "text-amber-400" : "text-gray-500"}`}
+                        data-testid="title-character-count">
+                        {title.length} / {TITLE_CHAR_BUDGET} characters
+                      </span>
+                    }
+                </div>
+                <input
+          id="seo-title"
+          type="text"
+          className="w-full p-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-hidden transition-all"
+          placeholder="The headline a search result will show..."
+          value={title}
+          onChange={(e) => setTitle(e.target.value)} />
+            </div>
+
             {/* TEXTAREA SECTION */}
             <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-400 mb-2">Article Content</label>
+                <div className="flex items-baseline justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-400">Article Content</label>
+                    {content &&
+                      <span className="text-xs text-gray-500" data-testid="live-word-count">
+                        {countWords(content)} words
+                      </span>
+                    }
+                </div>
                 <textarea
           className="w-full p-4 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-hidden transition-all"
           rows="8"
@@ -104,7 +153,7 @@ export default function AiSeoTool() {
           onClick={generateMeta}
           disabled={loading || !content}>
           
-                    Generate Meta
+                    Generate Meta Description
                 </button>
                 <button
           className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
@@ -138,6 +187,28 @@ export default function AiSeoTool() {
                             )}
                         </div>
                         <div className="space-y-2 text-gray-300">
+                            {/* The verdict is always shown WITH the measurement, never instead
+                                of it — a budget that hides the number is the tool deciding for
+                                the writer (SEO_EDITING_AID_SPEC §2). */}
+                            {seoData.title_analysis &&
+                              <div className="mb-3 pb-3 border-b border-zinc-800" data-testid="title-analysis">
+                                  <p>
+                                      <strong className="text-white">Title:</strong>{" "}
+                                      <span className={seoData.title_analysis.verdict === "long" ? "text-amber-400" : "text-emerald-400"}>
+                                        {seoData.title_analysis.characters} characters
+                                      </span>
+                                      <span className="text-gray-500"> / {seoData.title_analysis.budget}</span>
+                                      {seoData.title_analysis.over_by > 0 &&
+                                        <span className="text-amber-400"> — {seoData.title_analysis.over_by} over</span>
+                                      }
+                                  </p>
+                                  {seoData.title_analysis.truncated &&
+                                    <p className="mt-1 text-sm text-gray-400">
+                                        Shows as: <span className="italic text-gray-300">{seoData.title_analysis.serp_preview}</span>
+                                    </p>
+                                  }
+                              </div>
+                            }
                             <p><strong className="text-white">Word Count:</strong> {seoData.word_count}</p>
                             <p><strong className="text-white">Readability:</strong> <span className="text-emerald-400">{seoData.readability}</span></p>
                             <p><strong className="text-white">Top Keywords:</strong> {(seoData.top_keywords || []).join(", ")}</p>
@@ -159,6 +230,11 @@ export default function AiSeoTool() {
         <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg">
                         <h2 className="text-xl font-bold mb-4 text-emerald-400 border-b border-zinc-800 pb-2">Meta Description</h2>
                         <p className="italic text-gray-300 leading-relaxed">"{metaDescription}"</p>
+                        {metaCharacters != null &&
+                          <p className="mt-2 text-xs text-gray-500" data-testid="meta-character-count">
+                              {metaCharacters} characters — search results show about 160
+                          </p>
+                        }
                         <button
             className="mt-4 text-xs text-zinc-500 hover:text-white underline"
             onClick={() => navigator.clipboard.writeText(metaDescription)}>

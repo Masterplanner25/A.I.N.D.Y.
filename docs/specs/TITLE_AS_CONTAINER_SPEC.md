@@ -164,14 +164,21 @@ it is looking at** — the corpus, not a setting, decides.
 
 Audited 2026-09-07:
 
-| | state |
-|---|---|
-| `seo_analysis(text, top_n)` | takes **body text only**. No title parameter exists. |
-| `generate_meta_description(text, limit=160)` | correct — character-budgeted, sentence-aware |
-| title generation | **does not exist** |
-| the client's button | reads **"Generate Meta"** |
-| the client's result heading | reads "Meta Description" — correct, and 50 lines further down |
-| character count shown to the user | none, for either field |
+| | state (audit) | 2026-09-07 |
+|---|---|---|
+| `seo_analysis(text, top_n)` | took **body text only**. No title parameter existed. | ✅ optional `title=` |
+| `generate_meta_description(text, limit=160)` | correct — character-budgeted, sentence-aware | unchanged |
+| title generation | **does not exist** | ❌ still open — see below |
+| the client's button | read **"Generate Meta"** | ✅ "Generate Meta Description" |
+| the client's result heading | "Meta Description" — correct, 50 lines further down | unchanged |
+| character count shown to the user | none, for either field | ✅ live title count, meta count |
+| a live word count while writing | none — only after Analyze | ✅ |
+
+**Built, and deliberately stopping short of generation.** Title *analysis* ships: character
+count against a stated budget, how far over, which words survive truncation, and whether the
+title shares any language with the body. Title *generation* does not, because it is the one
+feature here that would put the tool in the business of writing — see the paragraph below and
+open question 7.
 
 The owner's read is exact:
 
@@ -191,9 +198,10 @@ constraint the meta path already implements correctly — `generate_meta_descrip
 fixed once for confusing a word limit with a character limit — so the mechanism exists and only
 the budget differs.
 
-Consistent with `SEO_EDITING_AID_SPEC`: this is an **editing aid**. It proposes and counts; it
+Consistent with `SEO_EDITING_AID_SPEC`: this is an **editing aid**. It measures and points; it
 does not rewrite. A title generator that silently replaces the author's title would be the
-thing that spec exists to prevent.
+thing that spec exists to prevent — which is why what shipped measures the writer's title and
+returns it unchanged, and why the tool still has no way to produce one.
 
 ---
 
@@ -334,7 +342,14 @@ question 3 below, and it is a domain-ownership question, not a schema one.
    the naming should say so, because `enforce_word_limit` reads as the general answer and is
    not.
 
-6. **Does a generated title know about the container?** If the author has a series, a proposed
+6. **Should the tool generate a title at all?** ← the piece §6 deliberately did not build.
+   Everything else there was a measurement, and measurements are what an editing aid does.
+   Generation is the first feature that would have the tool write, and the SEO tool has no LLM
+   anywhere today — `generate_meta_description` is deterministic trimming, not authorship. So
+   this is two decisions at once: whether the tool writes, and whether it starts calling a
+   model. Neither follows from the other, and neither is settled by the budget work shipping.
+
+7. **Does a generated title know about the container?** If the author has a series, a proposed
    title probably belongs to it, and the container is the part that must not be regenerated.
    This is where §4 and §6 meet, and it is the reason they are one spec rather than two.
 
