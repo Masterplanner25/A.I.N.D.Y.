@@ -103,7 +103,25 @@ def build_strategies(db: Session) -> List[Dict]:
     top_platform = platform_counter.most_common(1)
     platform_value = top_platform[0][0] if top_platform else "varied"
 
-    existing = {strategy.name: strategy for strategy in db.query(StrategyDB).all()}
+    # ── Scope: RippleTrace's own strategies only ──────────────────────────────────────
+    #
+    # `strategies` is shared with the flow-engine strategy-learning path (`flow_strategy.py`),
+    # which selects on `intent_type` and updates success_count/failure_count on what it picks.
+    # Those rows are NOT ours and must never be read as stale here.
+    #
+    # `intent_type IS NULL` is the discriminator: flow_strategy filters
+    # `StrategyDB.intent_type == intent_type` for a concrete value, so a NULL row is invisible
+    # to it and a row it owns always has one. `pattern_description IS NOT NULL` is a second,
+    # redundant guard — build_strategies always sets it, the flow path never does.
+    ours = (
+        db.query(StrategyDB)
+        .filter(
+            StrategyDB.intent_type.is_(None),
+            StrategyDB.pattern_description.isnot(None),
+        )
+        .all()
+    )
+    existing = {strategy.name: strategy for strategy in ours}
     created: List[Dict] = []
     for theme, count in theme_counter.most_common(3):
         if not theme:
@@ -186,6 +204,26 @@ def build_strategies(db: Session) -> List[Dict]:
             }
         )
         existing[name] = strategy
+
+    # ── Retire strategies whose themes stopped ranking ────────────────────────────────
+    #
+    # `build_strategies` upserts by name and previously never removed anything, so every
+    # rebuild left the old rows behind. After the theme fix on 2026-09-07 the table held five
+    # momentum plays: three built from the pre-fix themes plus two new, presented side by side
+    # as though all five were current.
+    #
+    # Deleting is safe for THESE rows specifically because they are pure derivations of drops
+    # and pings — recomputed in full on every run. Nothing accumulates in them: flow_strategy
+    # is what increments success_count/failure_count, and it never selects an `intent_type IS
+    # NULL` row. `usage_count` is a rebuild counter, not learning.
+    current_names = {item["name"] for item in created}
+    retired = [row for row in ours if row.name not in current_names]
+    for row in retired:
+        db.delete(row)
+
+    # One commit for both halves: the upserts above and the retirements here are a single
+    # replacement of the current strategy set, so a crash between them must not leave the
+    # table holding both generations — which is the state this change exists to prevent.
     db.commit()
     return created
 
