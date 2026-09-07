@@ -1,6 +1,6 @@
 ---
 title: "The SEO Tool as an Editing Aid"
-last_verified: "2026-09-06"
+last_verified: "2026-09-07"
 api_version: "1.0"
 status: draft
 owner: "app-team"
@@ -42,7 +42,7 @@ confident numbers about text it never read are harder to distrust than an obviou
 
 ---
 
-## 2. Target keywords — the tool asks the wrong question today
+## 2. Target keywords — the tool asks the wrong question today ✅ BUILT 2026-09-07
 
 Today the tool answers *"what words appear most often in this text?"* — a question with a known,
 useless answer for English prose, and only slightly less useless once stopwords are removed.
@@ -79,9 +79,28 @@ verify. Existing constants — `_KEYWORD_STUFFING_PCT = 4.0`, `_WEAK_FOCUS_PCT =
 stated as thresholds and should stay visible as such: **shown with the number, not instead of
 it.** A verdict that hides the density is the tool deciding for the writer.
 
+### ★ What building it settled
+
+Three decisions the shape above did not name, each of which had a wrong answer that would have
+looked fine:
+
+- **A phrase is matched as a token sequence, not as loose words.** `"runtime framework"` is a
+  different target from `"runtime"` and `"framework"` counted separately, and substring matching
+  would find `"run time"` inside `"runtime"`. Counting the component words would report coverage
+  for a phrase the article never uses.
+- **Density counts the words a phrase occupies.** Three uses of a three-word phrase is nine
+  words of the article, not three. Reporting it any other way makes a phrase look three times
+  thinner than a single word used equally often — and the writer would read that as needing
+  *more* of it.
+- **`in_heading` is `None`, not `False`, when no headings were found.** The parser reads
+  markdown headings and deliberately nothing cleverer: a short line with no full stop is
+  usually a heading and sometimes a list item or a signature. A confident "not in any heading"
+  for an article whose headings the parser cannot see is worse than saying nothing, so the
+  response carries `headings_found` and the client renders *"no headings found"*.
+
 ---
 
-## 3. Repetition — an editing aid feature, not a separate tool
+## 3. Repetition — an editing aid feature, not a separate tool ✅ BUILT 2026-09-07
 
 The owner's second half:
 
@@ -113,6 +132,23 @@ the tool doing something a writer genuinely cannot do for themselves by re-readi
 **No rewriting, and no "suggested replacement" text.** The owner considered rewriting and rejected
 it as defeating the purpose. Slippage here is easy and would be gradual — a "suggested phrasing"
 field is a rewrite with extra steps. The tool points; the writer decides.
+
+### ★ What building it settled
+
+- **One tic must be reported once.** "It is a framework for runtimes" yields `it is a framework`,
+  `is a framework for` and `a framework for runtimes` as three distinct 4-grams, **none of which
+  contains another** — so a naive n-gram count reports one habit as six findings and buries the
+  real signal. Phrases claim their token spans widest-first, and an overlapping fragment of an
+  already-reported repetition is dropped.
+- **Overuse is measured against the article's own median**, not a fixed count. "Appears 8 times"
+  is meaningless without the length: 8 in 400 words is a tic, 8 in 8,000 is nothing.
+  `OVERUSE_RATIO` was **measured rather than guessed** — at 2.5 a flat distribution hides its own
+  outlier (five words at 4 and one at 8 gives a median of 4 and a cutoff of 10, so the word that
+  is plainly twice as common as everything else goes unreported). 2.0 catches it, and the long
+  article stays quiet because its median rises with it.
+- **Pure-stopword phrases are grammar, not habits.** `"of the"` repeating is English.
+- **Repetition is computed on every analysis**, because unlike target keywords it needs no new
+  input from the writer — and it is the half the owner called the bigger issue.
 
 ---
 

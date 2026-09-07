@@ -28,6 +28,7 @@ export default function AiSeoTool() {
   const [metaDescription, setMetaDescription] = useState("");
   const [metaCharacters, setMetaCharacters] = useState(null);
   const [titleOptions, setTitleOptions] = useState(null);
+  const [targets, setTargets] = useState("");
   const [seoSuggestions, setSeoSuggestions] = useState("");
   const [loading, setLoading] = useState(false);
   // Bumped after a successful analyze so the "Recent SEO Analyses" panel refetches — the
@@ -46,10 +47,14 @@ export default function AiSeoTool() {
     setSeoSuggestions("");
   };
 
+  // Comma-separated in, list out. Phrases are allowed and are the interesting case: "runtime
+  // framework" is a different target from "runtime" and "framework" counted separately.
+  const targetList = safeMap(targets.split(","), (term) => term.trim()).filter(Boolean);
+
   const analyzeSeo = async () => {
     setLoading(true);
     try {
-      const data = await apiAnalyzeSeo(content, title);
+      const data = await apiAnalyzeSeo(content, title, targetList);
       setSeoData(data);
       setHistoryRefresh((n) => n + 1); // the analysis was just saved — refresh the recent list
     } catch (error) {
@@ -73,7 +78,7 @@ export default function AiSeoTool() {
   const generateTitles = async () => {
     setLoading(true);
     try {
-      const data = await apiGenerateTitles(content, title);
+      const data = await apiGenerateTitles(content, title, targetList);
       setTitleOptions(data);
     } catch (error) {
       console.error("Title Generation Error: ", error);
@@ -135,6 +140,23 @@ export default function AiSeoTool() {
           placeholder="The headline a search result will show..."
           value={title}
           onChange={(e) => setTitle(e.target.value)} />
+            </div>
+
+            {/* TARGET KEYWORDS — optional. Without them the tool answers "what words appear
+                most often in this text", which for English prose has a known and largely
+                useless answer. With them it answers "am I covering what I am trying to rank
+                for" (SEO_EDITING_AID_SPEC §2). */}
+            <div className="mb-4">
+                <label htmlFor="seo-targets" className="block text-sm font-medium text-gray-400 mb-2">
+                    Target keywords <span className="text-gray-600">(optional, comma-separated)</span>
+                </label>
+                <input
+          id="seo-targets"
+          type="text"
+          className="w-full p-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-hidden transition-all"
+          placeholder="What you want this piece to be found for..."
+          value={targets}
+          onChange={(e) => setTargets(e.target.value)} />
             </div>
 
             {/* TEXTAREA SECTION */}
@@ -301,6 +323,88 @@ export default function AiSeoTool() {
                           <p className="text-gray-400" data-testid="title-options-reason">
                               No suggestions — {titleOptions.reason || "nothing was returned"}.
                           </p>
+                        }
+                    </div>
+        }
+
+                {/* COVERAGE — the verdict always beside the number that produced it, and
+                    beside the threshold that was applied. A verdict on its own is the tool
+                    deciding for the writer (SEO_EDITING_AID_SPEC §2). */}
+                {seoData?.keyword_coverage?.targets?.length > 0 &&
+        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg" data-testid="coverage">
+                        <h2 className="text-xl font-bold mb-4 text-blue-400 border-b border-zinc-800 pb-2">Target Coverage</h2>
+                        <ul className="space-y-3">
+                            {safeMap(seoData.keyword_coverage.targets, (target) =>
+                              <li key={target.term} className="text-sm">
+                                  <div className="flex items-baseline justify-between gap-3">
+                                      <span className="text-gray-200">{target.term}</span>
+                                      <span className={
+                                        target.verdict === "healthy" ? "text-emerald-400"
+                                        : target.verdict === "absent" ? "text-red-400" : "text-amber-400"
+                                      }>
+                                        {target.verdict}
+                                      </span>
+                                  </div>
+                                  <p className="text-gray-500 text-xs mt-1">
+                                      {target.occurrences}× · {target.density}% · thin below{" "}
+                                      {target.thresholds.thin_below}%, stuffed above {target.thresholds.overused_above}%
+                                  </p>
+                                  <p className="text-gray-500 text-xs">
+                                      opening: {target.in_opening ? "yes" : "no"} · heading:{" "}
+                                      {/* null means the parser found no headings at all — "we
+                                          could not look" is not the same answer as "not there". */}
+                                      {target.in_heading === null ? "no headings found" : target.in_heading ? "yes" : "no"}
+                                      {target.in_title !== null && <> · title: {target.in_title ? "yes" : "no"}</>}
+                                  </p>
+                              </li>)
+                            }
+                        </ul>
+                    </div>
+        }
+
+                {/* REPETITION — points, never rewrites. There is no suggested replacement
+                    text anywhere in this panel, on purpose: a "suggested phrasing" field is a
+                    rewrite with extra steps (SEO_EDITING_AID_SPEC §3). */}
+                {(seoData?.repetition?.repeated_phrases?.length > 0 ||
+                  seoData?.repetition?.sentence_openers?.length > 0) &&
+        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg" data-testid="repetition">
+                        <h2 className="text-xl font-bold mb-1 text-purple-400 border-b border-zinc-800 pb-2">Repetition</h2>
+                        <p className="text-xs text-gray-500 mb-4 mt-2">
+                            Hard to see in your own draft. Nothing here is rewritten for you.
+                        </p>
+                        {seoData.repetition.repeated_phrases?.length > 0 &&
+                          <>
+                              <h3 className="font-bold text-white text-sm">Repeated phrases</h3>
+                              <ul className="mt-2 space-y-1">
+                                  {safeMap(seoData.repetition.repeated_phrases.slice(0, 6), (phrase) =>
+                                    <li key={phrase.phrase} className="text-sm text-gray-300">
+                                        “{phrase.phrase}”
+                                        <span className="text-gray-500 text-xs">
+                                          {" "}— {phrase.occurrences}×
+                                          {/* Position, not just count: three uses across 4,000
+                                              words is fine; three in one paragraph is not, and
+                                              a count alone cannot tell them apart. */}
+                                          {phrase.clustered ? ", close together" : ""}
+                                        </span>
+                                    </li>)
+                                  }
+                              </ul>
+                          </>
+                        }
+                        {seoData.repetition.sentence_openers?.length > 0 &&
+                          <>
+                              <h3 className="font-bold text-white text-sm mt-4">Sentence openers</h3>
+                              <ul className="mt-2 space-y-1">
+                                  {safeMap(seoData.repetition.sentence_openers.slice(0, 5), (opener) =>
+                                    <li key={opener.opener} className="text-sm text-gray-300">
+                                        “{opener.opener}”
+                                        <span className="text-gray-500 text-xs">
+                                          {" "}— {opener.count} sentences ({opener.share}%)
+                                        </span>
+                                    </li>)
+                                  }
+                              </ul>
+                          </>
                         }
                     </div>
         }

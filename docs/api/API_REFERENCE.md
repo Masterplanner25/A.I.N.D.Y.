@@ -1920,14 +1920,25 @@ Get Trace Graph
 #### POST /apps/seo/analyze
 Analyze Seo
 
-**Body:** text: string (required), top_n: integer | null, title: string | null
+**Body:** text: string (required), top_n: integer | null, title: string | null, target_keywords: array of string | null
+
+`target_keywords` changes the question the analysis answers: without it the response carries
+`top_keywords` (what words appear most often), with it the response also carries
+`keyword_coverage` (whether the draft covers what it is aiming at). Every target reports
+`occurrences`, `density`, a `verdict` and the `thresholds` that produced it, plus placement —
+`in_opening`, `in_heading`, `in_title`. Placement fields are `null`, not `false`, when the
+answer is unknowable: no headings were found, or no title was supplied.
+
+Every analysis also carries `repetition` — `repeated_phrases` (with the paragraphs they fall in
+and whether they cluster), `sentence_openers` and `overused_words`. It needs no new input, so
+it is always computed. Nothing in it is replacement text.
 
 **Response 200:** unspecified
 
 #### POST /apps/seo/analyze_seo/
 Analyze Seo Compat
 
-**Body:** content: string (required), title: string | null
+**Body:** content: string (required), title: string | null, target_keywords: array of string | null
 
 **Response 200:** unspecified
 
