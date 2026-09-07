@@ -539,6 +539,48 @@ row. Storing a denormalised rate before anything computes one is how `strategies
 
 ---
 
+## 5b. ★ What the layer unlocks that nothing else can: attribution
+
+Added 2026-09-07. The case for this layer above is about *learning* — a failable unit. There is a
+second case, and it is more concrete.
+
+The owner, on the qualitative half of a plan:
+
+> *"You can explain things, but you still need something to actually measure/work against."*
+
+This repo already built the unit. `MasterPlan.total_wcu` — Work Complexity Units — accumulates
+the complexity of completed tasks and is live: `total_wcu = 2` on 2026-09-07, from two completed
+tasks. It is the closest thing here to a universal measure of work done.
+
+**It cannot be pointed at a goal, because work has no purpose attached to it.** `total_wcu` is a
+column on `master_plans`; a task carries `masterplan_id` and nothing else. So WCU can report that
+you worked. It can never report that you worked *on this*.
+
+That is the same gap §3 describes from the other side — a twelve-month phase and an afternoon's
+task are the same row type — expressed as a measurement failure rather than a modelling one:
+
+| with today's model | with `task -> strategy -> objective` |
+|---|---|
+| "the plan is 40% worked" | "the ethical-AI-framework objective is 40% worked" |
+| every goal reports the same number | each objective reports its own |
+| a qualitative criterion is unmeasurable | it is measurable *as the work done against it* |
+
+That last row is the useful one. "Establish a widely adopted ethical AI framework" has no natural
+number — but the work toward it does, and attributing work to purpose is the only thing standing
+between the two.
+
+**Consequence for sequencing.** Two items that look independent are downstream of this one:
+
+- Seeding `goals` from `structure_json["success_criteria"]` produces five permanently-unresolved
+  goals until attribution exists (`MASTERPLAN_GOAL_ATTAINMENT_SPEC` §4b).
+- Adding `wcu` to the goal-attainment unit registry is safe *only* while there is one goal per
+  plan; with several it reports the same plan-wide figure for each, which reads as five goals
+  progressing identically.
+
+Neither is blocked on a decision about *them*. Both are blocked on this layer.
+
+---
+
 ## 6. Open questions — these need answers before building
 
 1. **Does a strategy hang off the goal, the plan, or both?** This spec proposes both, with
