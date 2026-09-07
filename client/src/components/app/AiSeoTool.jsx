@@ -62,7 +62,21 @@ export default function AiSeoTool() {
 
   return (
     <div className="container mx-auto p-6 text-white bg-black min-h-screen">
-            <h1 className="text-3xl font-bold mb-6 text-blue-400">AI SEO Optimization Tool</h1>
+            <h1 className="text-3xl font-bold mb-2 text-blue-400">AI SEO Optimization Tool</h1>
+            {/* Neither this tool nor RippleTrace said which phase of the work it was for, so
+                a draft and a published article looked like the same kind of thing. They are
+                two stages of one lifecycle split by publication: before it you can still
+                change the piece, after it you can only measure it. Stating it here is
+                cheapest BEFORE drafts are saved, because saving is what makes the two
+                surfaces start to look alike (both listing your articles). */}
+            <p className="text-sm text-gray-400 mb-6">
+                <span className="text-gray-300">Before you publish.</span>{" "}
+                Analyse and refine a draft here. Once it is published, track what happened to
+                it in{" "}
+                <a href="/rippletrace" className="text-blue-400 hover:text-blue-300 underline">
+                    RippleTrace
+                </a>.
+            </p>
             
             {/* TEXTAREA SECTION */}
             <div className="mb-4">

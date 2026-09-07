@@ -130,13 +130,38 @@ All three surfaces compute a result, render it, and lose it on navigation. Conse
 - **Nothing accumulates.** Contrast the rest of this repo, where `search_history` and
   `research_results` persist — the SEO surface is the outlier, not the norm.
 
-### What already exists
+### ★ Correction 2026-09-06 — saving was not missing, it was broken
 
-`seo_routes.py` **already persists three metrics** via `save_calculation` — `seo_readability`,
-`seo_word_count`, `seo_avg_keyword_density`. So a fragment of the analysis is stored, into the
-analytics calculation store, while the thing the user actually wants back (the meta description,
-the suggestions, the keyword table) is not. That is the same shape as elsewhere in this repo: the
-mechanism exists, wired to the wrong half.
+This section originally said the surfaces "compute a result, render it, and lose it on
+navigation". **That was wrong about the cause.** Full persistence was wired the whole time and
+losing every write:
+
+`analyze_seo_content` → `execute_durable_search` → `persist_search_result` → `search_history`.
+The route passes `db` and `user_id`; nothing is missing from the path.
+
+What failed is that `search_memory` returned `context.items` as **`MemoryItem` objects**, and
+that dict is embedded in the result written to `search_history.result` — a **JSON column**.
+`json.dumps` cannot serialise a MemoryItem, so the INSERT raised, `persist_search_result` caught
+it, logged a warning, and returned the unpersisted result. The caller still got its answer.
+`search_history` held **0 rows**, and the "Recent SEO Analyses" panel was permanently empty.
+
+**It was conditional on recall finding something**, which is why it survived: with an empty
+memory `items` is `[]`, which serialises fine. The feature worked when the system was new and
+broke as memory filled up — and every test that recalls nothing still passes.
+
+Fixed by converting through the runtime's own `memory_items_to_dicts`, already used this way in
+`automation/flows/flow_definitions.py:361`.
+
+**What this changes for §4.** The analysis now persists. What is still genuinely absent is
+narrower than "saving":
+
+- the **meta description** and **suggestions** are separate calls whose output is not stored
+- there is no **draft** as a unit, so analyses cannot be compared over time — the before/after
+  question this section is really about
+
+`seo_routes.py` also persists three metrics via `save_calculation` (`seo_readability`,
+`seo_word_count`, `seo_avg_keyword_density`) into the analytics calculation store, which remains
+a second, partial copy of the same information.
 
 ### What saving needs to mean
 

@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 from apps.search.models import SearchHistory
-from AINDY.runtime.memory import MemoryOrchestrator
+from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 from apps.search.services.search_scoring import score_research_result, score_seo_result
 from apps.search.services.seo_services import generate_meta_description, seo_analysis
 
@@ -198,8 +198,27 @@ def search_memory(query: str, db, user_id: str | None = None, tags: list[str] | 
                 "limit": limit,
             },
         )
+        # ★ `memory_items_to_dicts`, not `context.items`. The items are `MemoryItem`
+        # OBJECTS, and this dict is embedded in every search result that
+        # `execute_durable_search` then writes to `search_history.result` — a JSON column.
+        # `json.dumps` cannot serialise a MemoryItem, so the INSERT raised, and
+        # `persist_search_result` caught it, logged a warning and returned the unpersisted
+        # result. The caller got its answer, so nothing looked wrong.
+        #
+        # Effect: EVERY SEO analysis silently failed to save. `search_history` held 0 rows
+        # on 2026-09-06, the "Recent SEO Analyses" panel was permanently empty, and the
+        # owner reported it as "there's no save button for any of it" — the save was wired
+        # the whole time and losing every write.
+        #
+        # ★ It is conditional on recall finding something, which is why it was not caught
+        # earlier: with an empty memory `items` is `[]`, which serialises fine and persists
+        # correctly. The feature broke as memory filled up, and every test that recalls
+        # nothing still passes.
+        #
+        # `memory_items_to_dicts` is the runtime's own converter and is already used this
+        # way in `automation/flows/flow_definitions.py:361`.
         return {
-            "items": context.items,
+            "items": memory_items_to_dicts(context.items),
             "ids": context.ids,
             "formatted": context.formatted,
             "count": len(context.items),
