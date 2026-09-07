@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   analyzeSeo as apiAnalyzeSeo,
   generateMeta as apiGenerateMeta,
+  generateTitles as apiGenerateTitles,
   suggestSeoImprovements as apiSuggestSeoImprovements,
 } from "../../api/search.js";
 import { safeMap } from "../../utils/safe";
@@ -26,6 +27,7 @@ export default function AiSeoTool() {
   const [seoData, setSeoData] = useState(null);
   const [metaDescription, setMetaDescription] = useState("");
   const [metaCharacters, setMetaCharacters] = useState(null);
+  const [titleOptions, setTitleOptions] = useState(null);
   const [seoSuggestions, setSeoSuggestions] = useState("");
   const [loading, setLoading] = useState(false);
   // Bumped after a successful analyze so the "Recent SEO Analyses" panel refetches — the
@@ -40,6 +42,7 @@ export default function AiSeoTool() {
     setSeoData(stored);
     setMetaDescription("");
     setMetaCharacters(null);
+    setTitleOptions(null);
     setSeoSuggestions("");
   };
 
@@ -63,6 +66,20 @@ export default function AiSeoTool() {
       setMetaCharacters(data.characters ?? null);
     } catch (error) {
       console.error("Meta Description Error: ", error);
+    }
+    setLoading(false);
+  };
+
+  const generateTitles = async () => {
+    setLoading(true);
+    try {
+      const data = await apiGenerateTitles(content, title);
+      setTitleOptions(data);
+    } catch (error) {
+      console.error("Title Generation Error: ", error);
+      // Never a fabricated fallback: a locally-assembled title would look exactly like a
+      // suggestion, and the writer could not tell a proposal from a failure.
+      setTitleOptions({ candidates: [], reason: "the title service could not be reached" });
     }
     setLoading(false);
   };
@@ -156,6 +173,13 @@ export default function AiSeoTool() {
                     Generate Meta Description
                 </button>
                 <button
+          className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
+          onClick={generateTitles}
+          disabled={loading || !content}>
+
+                    Suggest Titles
+                </button>
+                <button
           className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
           onClick={getSeoSuggestions}
           disabled={loading || !content}>
@@ -241,6 +265,43 @@ export default function AiSeoTool() {
             
                             Copy to clipboard
                         </button>
+                    </div>
+        }
+
+                {/* TITLE OPTIONS — proposals, never a replacement. There is no "apply"
+                    here on purpose: the writer copies the one they want into the field, or
+                    ignores all of them. A tool that swaps the author's title for its own has
+                    stopped being an editing aid (SEO_EDITING_AID_SPEC). */}
+                {titleOptions &&
+        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg md:col-span-2" data-testid="title-options">
+                        <h2 className="text-xl font-bold mb-1 text-amber-400 border-b border-zinc-800 pb-2">Title Options</h2>
+                        <p className="text-xs text-gray-500 mb-4">
+                            Suggestions only — copy one into the title field, or keep your own.
+                        </p>
+                        {titleOptions.candidates?.length ?
+                          <ul className="space-y-2">
+                              {safeMap(titleOptions.candidates, (candidate) =>
+                                <li key={candidate.title} className="bg-zinc-800 p-3 rounded-sm border border-zinc-700">
+                                    <p className="text-gray-200">{candidate.title}</p>
+                                    <div className="mt-1 flex items-center gap-3 text-xs">
+                                        <span className={candidate.over_by > 0 ? "text-amber-400" : "text-emerald-400"}>
+                                          {candidate.characters} / {candidate.budget} characters
+                                          {candidate.over_by > 0 ? ` — ${candidate.over_by} over` : ""}
+                                        </span>
+                                        <button
+                                          className="text-zinc-500 hover:text-white underline"
+                                          onClick={() => navigator.clipboard.writeText(candidate.title)}>
+                                          Copy
+                                        </button>
+                                    </div>
+                                </li>)
+                              }
+                          </ul>
+                        :
+                          <p className="text-gray-400" data-testid="title-options-reason">
+                              No suggestions — {titleOptions.reason || "nothing was returned"}.
+                          </p>
+                        }
                     </div>
         }
 

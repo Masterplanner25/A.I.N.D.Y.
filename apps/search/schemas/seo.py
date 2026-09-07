@@ -14,3 +14,11 @@ class SEOInput(BaseModel):
 class MetaInput(BaseModel):
     text: str
     limit: Optional[int] = 160
+
+class TitleInput(BaseModel):
+    text: str
+    count: Optional[int] = 5
+    # The writer's own title, when they have one. Input only — `generate_title_candidates`
+    # echoes it back untouched and never returns a replacement for it.
+    current_title: Optional[str] = None
+    target_keywords: Optional[list[str]] = None

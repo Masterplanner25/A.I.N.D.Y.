@@ -61,6 +61,17 @@ export function generateMeta(content) {
   });
 }
 
+export function generateTitles(content, currentTitle, targetKeywords) {
+  return authRequest(ROUTES.SEARCH.GENERATE_TITLE, {
+    method: "POST",
+    body: JSON.stringify({
+      text: content,
+      current_title: currentTitle || null,
+      target_keywords: targetKeywords || null,
+    }),
+  });
+}
+
 export function suggestSeoImprovements(content) {
   return authRequest(ROUTES.SEARCH.SUGGEST_IMPROVEMENTS, {
     method: "POST",

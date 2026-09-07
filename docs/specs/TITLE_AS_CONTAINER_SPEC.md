@@ -168,17 +168,16 @@ Audited 2026-09-07:
 |---|---|---|
 | `seo_analysis(text, top_n)` | took **body text only**. No title parameter existed. | ✅ optional `title=` |
 | `generate_meta_description(text, limit=160)` | correct — character-budgeted, sentence-aware | unchanged |
-| title generation | **does not exist** | ❌ still open — see below |
+| title generation | **does not exist** | ✅ `/apps/seo/title` — proposals only |
 | the client's button | read **"Generate Meta"** | ✅ "Generate Meta Description" |
 | the client's result heading | "Meta Description" — correct, 50 lines further down | unchanged |
 | character count shown to the user | none, for either field | ✅ live title count, meta count |
 | a live word count while writing | none — only after Analyze | ✅ |
 
-**Built, and deliberately stopping short of generation.** Title *analysis* ships: character
-count against a stated budget, how far over, which words survive truncation, and whether the
-title shares any language with the body. Title *generation* does not, because it is the one
-feature here that would put the tool in the business of writing — see the paragraph below and
-open question 7.
+**Both halves built.** Title *analysis* measures the writer's own title: character count
+against a stated budget, how far over, which words survive truncation, and whether the title
+shares any language with the body. Title *generation* proposes options and never returns a
+replacement — see §6b, which is where the interesting constraint lives.
 
 The owner's read is exact:
 
@@ -199,9 +198,7 @@ fixed once for confusing a word limit with a character limit — so the mechanis
 the budget differs.
 
 Consistent with `SEO_EDITING_AID_SPEC`: this is an **editing aid**. It measures and points; it
-does not rewrite. A title generator that silently replaces the author's title would be the
-thing that spec exists to prevent — which is why what shipped measures the writer's title and
-returns it unchanged, and why the tool still has no way to produce one.
+does not rewrite.
 
 ---
 
@@ -279,6 +276,41 @@ where the working half already lives.
 
 ---
 
+## 6b. ★ Generation, and the line it must not cross
+
+Owner's call, 2026-09-07 — *"yes and yes; the tool may not call an LLM currently, but that's
+always been in the plans."* So `/apps/seo/title` proposes titles, and it is the first model call
+this tool has ever made.
+
+**A title generator is where "editing aid" is easiest to stop being true**, quietly and in a way
+that looks like a feature. One `suggested_title` field in the response and a client is one line
+from applying it. Three properties keep the line where it is, and each is a test rather than a
+sentence:
+
+1. **The writer's title is input, never output.** It is sent as context so candidates can keep a
+   deliberate series prefix, and echoed back untouched. The response has no `title`, `best`,
+   `recommended`, `suggested_title` or `apply` key — asserted as an absence, because the failure
+   would arrive as an addition.
+2. **A list, not an answer.** There is no ranked winner. Candidates are ordered within-budget
+   first as a convenience, and over-budget ones are **kept and marked rather than dropped** — a
+   silently shortened list would hide that the model overshot, and a writer may well prefer a
+   long option they intend to trim.
+3. **No deterministic fallback.** ★ This is the one that matters. Every other generator here
+   degrades to something local; a title assembled from word frequencies would arrive in the UI
+   looking exactly like a model's proposal, and the writer would have no way to tell a
+   suggestion from a shrug. When the model is unavailable the answer is an empty list and a
+   stated reason, and a test asserts that nothing derived from the article appears in a failure
+   response.
+
+Every candidate is measured by the same `analyze_title` the scorecard uses, so a proposal and
+the writer's own title are reported on identical terms — a candidate cannot be presented with a
+friendlier scorecard than the title it is competing with.
+
+The route is rate-limited to 15/min against the analysis routes' 30, because this one costs an
+external call per request where the rest are local computation.
+
+---
+
 ## 7. ★ And this is where authorship shows up
 
 > *"And oh there it is — authorship's importance showing up lol."*
@@ -342,12 +374,11 @@ question 3 below, and it is a domain-ownership question, not a schema one.
    the naming should say so, because `enforce_word_limit` reads as the general answer and is
    not.
 
-6. **Should the tool generate a title at all?** ← the piece §6 deliberately did not build.
-   Everything else there was a measurement, and measurements are what an editing aid does.
-   Generation is the first feature that would have the tool write, and the SEO tool has no LLM
-   anywhere today — `generate_meta_description` is deterministic trimming, not authorship. So
-   this is two decisions at once: whether the tool writes, and whether it starts calling a
-   model. Neither follows from the other, and neither is settled by the budget work shipping.
+6. ~~**Should the tool generate a title at all?**~~ **RESOLVED 2026-09-07 — yes, and yes to
+   the model call with it.** Both halves of the question were answered at once: the tool writes,
+   and it calls an LLM to do it. Built as §6b describes — proposals only, no fallback.
+   `generate_meta_description` stays deterministic; nothing about this decision required
+   changing a path that already works.
 
 7. **Does a generated title know about the container?** If the author has a series, a proposed
    title probably belongs to it, and the container is the part that must not be regenerated.

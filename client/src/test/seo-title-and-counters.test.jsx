@@ -1,15 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { mockAnalyzeSeo, mockGenerateMeta, mockSuggest, mockGetHistory } = vi.hoisted(() => ({
-  mockAnalyzeSeo: vi.fn(),
-  mockGenerateMeta: vi.fn(),
-  mockSuggest: vi.fn(),
-  mockGetHistory: vi.fn(),
-}));
+const { mockAnalyzeSeo, mockGenerateMeta, mockGenerateTitles, mockSuggest, mockGetHistory } =
+  vi.hoisted(() => ({
+    mockAnalyzeSeo: vi.fn(),
+    mockGenerateMeta: vi.fn(),
+    mockGenerateTitles: vi.fn(),
+    mockSuggest: vi.fn(),
+    mockGetHistory: vi.fn(),
+  }));
 
 vi.mock("../api/search.js", () => ({
   analyzeSeo: mockAnalyzeSeo,
   generateMeta: mockGenerateMeta,
+  generateTitles: mockGenerateTitles,
   suggestSeoImprovements: mockSuggest,
   getSearchHistory: mockGetHistory,
 }));
@@ -55,6 +58,17 @@ describe("SEO tool title and character budgets", () => {
       meta_description: "A summary of the piece.",
       characters: 23,
       budget: 160,
+    });
+    mockGenerateTitles.mockReset();
+    mockGenerateTitles.mockResolvedValue({
+      candidates: [
+        { title: "How frameworks shape a runtime", characters: 29, budget: 60, over_by: 0 },
+        { title: "A longer option that runs past the budget line", characters: 46, budget: 60, over_by: 0 },
+      ],
+      count: 2,
+      budget: 60,
+      current_title: "",
+      reason: null,
     });
   });
 
@@ -197,5 +211,72 @@ describe("SEO tool title and character budgets", () => {
 
     await screen.findByText(/"A summary."/);
     expect(screen.queryByTestId("meta-character-count")).toBeNull();
+  });
+
+  // ── title generation: it proposes, it never replaces ─────────────────────────────────
+
+  it("offers a title suggestion action", () => {
+    render(<AiSeoTool />);
+    expect(screen.getByRole("button", { name: /Suggest Titles/i })).toBeTruthy();
+  });
+
+  it("sends the article and the writer's own title as context", async () => {
+    render(<AiSeoTool />);
+    typeBody("some article body");
+    typeTitle("Series: Part Four");
+    fireEvent.click(screen.getByRole("button", { name: /Suggest Titles/i }));
+
+    await waitFor(() =>
+      expect(mockGenerateTitles).toHaveBeenCalledWith("some article body", "Series: Part Four"),
+    );
+  });
+
+  it("lists options with their measurements", async () => {
+    render(<AiSeoTool />);
+    typeBody();
+    fireEvent.click(screen.getByRole("button", { name: /Suggest Titles/i }));
+
+    const panel = await screen.findByTestId("title-options");
+    expect(panel.textContent).toContain("How frameworks shape a runtime");
+    expect(panel.textContent).toMatch(/29 \/ 60 characters/);
+  });
+
+  it("★ never replaces the writer's title", async () => {
+    render(<AiSeoTool />);
+    typeBody();
+    typeTitle("My own headline");
+    fireEvent.click(screen.getByRole("button", { name: /Suggest Titles/i }));
+    await screen.findByTestId("title-options");
+
+    // No apply/use button, and the field still holds what the writer typed. A tool that swaps
+    // the author's title for its own has stopped being an editing aid.
+    expect(screen.queryByRole("button", { name: /^(Apply|Use this|Replace)/i })).toBeNull();
+    expect(screen.getByLabelText(/Title/i).value).toBe("My own headline");
+  });
+
+  it("says why when there are no suggestions, rather than inventing one", async () => {
+    mockGenerateTitles.mockResolvedValue({
+      candidates: [],
+      count: 0,
+      reason: "the title service is temporarily unavailable",
+    });
+    render(<AiSeoTool />);
+    typeBody();
+    fireEvent.click(screen.getByRole("button", { name: /Suggest Titles/i }));
+
+    const reason = await screen.findByTestId("title-options-reason");
+    expect(reason.textContent).toMatch(/temporarily unavailable/);
+  });
+
+  it("a failed request reports the failure instead of falling back", async () => {
+    mockGenerateTitles.mockRejectedValue(new Error("network down"));
+    render(<AiSeoTool />);
+    typeBody("Frameworks and relationships shape a runtime.");
+    fireEvent.click(screen.getByRole("button", { name: /Suggest Titles/i }));
+
+    // ★ A locally-assembled title would look exactly like a suggestion. Silence is honest.
+    const reason = await screen.findByTestId("title-options-reason");
+    expect(reason.textContent).toMatch(/could not be reached/);
+    expect(reason.textContent).not.toMatch(/Frameworks/);
   });
 });

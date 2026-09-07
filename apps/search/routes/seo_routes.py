@@ -5,10 +5,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
-from apps.search.schemas.seo import SEOInput, MetaInput
+from apps.search.schemas.seo import SEOInput, MetaInput, TitleInput
 from AINDY.services.auth_service import get_current_user
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
+from apps.search.services.title_generation import generate_title_candidates
 from apps.search.services.search_service import (
     analyze_seo_content,
     execute_durable_search,
@@ -126,6 +127,36 @@ def generate_meta(
 
     return _with_execution_envelope(
         _execute_seo(request, "seo.meta", handler, db=db, user_id=user_id)
+    )
+
+
+@router.post("/title")
+@limiter.limit("15/minute")
+def generate_title(
+    request: Request,
+    data: TitleInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Propose title options for an article. Never returns a replacement for the writer's own.
+
+    Rate-limited harder than the analysis routes (15/min vs 30) because this one costs an
+    external model call per request, where the rest are local computation.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        return generate_title_candidates(
+            data.text,
+            count=data.count or 5,
+            existing_title=data.current_title,
+            target_keywords=data.target_keywords,
+            user_id=user_id,
+            db=db,
+        )
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.title", handler, db=db, user_id=user_id)
     )
 
 
