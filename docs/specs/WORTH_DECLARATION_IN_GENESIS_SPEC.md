@@ -157,17 +157,18 @@ instructions. **It should be built first, not last.**
 
 ## 5. Open questions
 
-1. **Does Genesis ask proactively, or only record what is volunteered?** ← **STILL OPEN, and it
-   is the one that decides whether this feature produces data at all.** Shipped as
-   volunteered-only: Genesis records worth when the owner states it and never raises the
-   subject. That is the safe half and a strict prerequisite for the other — asking is a prompt
-   change on top of machinery that already exists, and asking first would have meant collecting
-   solicited answers before quote-or-drop was there to check them.
-   The cost of leaving it here is that a conversation which never happens to mention worth
-   yields nothing, and the Worth gate stays at 0 with the feature working exactly as designed.
-   Asking gets far more data. It also introduces the pressure that produces polite fabrication —
-   the user answering because they were asked, not because they had a view. The owner's phrasing
-   (*"where you could say"*) leans toward volunteered, which is safer and slower.
+1. ~~**Does Genesis ask proactively, or only record what is volunteered?**~~ **RESOLVED
+   2026-09-07 — ask once, accept silence.** Volunteered-only shipped first, deliberately: it is
+   the safe half and a strict prerequisite, and asking before quote-or-drop existed would have
+   meant soliciting answers with nothing in place to check them.
+
+   The ask is anchored to the readiness turn — the moment `synthesis_ready` first flips, which
+   the merge (`if llm_output.get("synthesis_ready") and not session.synthesis_ready`) makes a
+   once-only event. So "ask once" is a property of the conversation, not a rule the model has
+   to remember it already obeyed. An unanswered question leaves the field null and the plan
+   still locks.
+
+   **Asking opened a hole that volunteering had closed** (§4a).
 
 2. ~~**What is a declaration attached to?**~~ **RESOLVED 2026-09-07.** `domain` added to
    `VALID_TARGET_TYPES`. A labelled declaration targets `domain` with the lowercased domain name
@@ -193,6 +194,33 @@ instructions. **It should be built first, not last.**
 
 ---
 
+## 4a. ★ What asking broke, and the rule that closed it
+
+While worth was only ever volunteered, a user turn *was* a statement, and quoting one was safe.
+The moment Genesis asks, the likely reply is a short assent:
+
+```
+assistant  "Is the ethics framework critical to the plan?"
+user       "yeah, that one"
+```
+
+`"yeah, that one"` is 14 characters, so it clears the length floor. It traces to a genuine user
+turn, so excluding assistant turns does not catch it. And it would be recorded as
+`strategic: critical` — a declaration whose entire meaning lives in the **assistant's** question,
+which is the one thing this module exists to refuse. Asking reintroduced the failure mode
+through a door that volunteering had kept shut.
+
+The rule that closes it: **a quote made entirely of agreement and pointing words is agreement,
+not a statement.** One content word is enough to pass, because `"that one is critical"` is a
+real, brief declaration and must survive — the check rejects only the case where the user
+contributed no content at all. A bare figure counts as content: `"worth 50000"` is a
+declaration whose only content word is the number.
+
+This is why defence 3 had to exist before defence 2 rather than alongside it. The ask is four
+sentences of prompt; the thing that makes the ask safe is code, and it had to be there first.
+
+---
+
 ## 6. What shipped, 2026-09-07
 
 | piece | state |
@@ -204,7 +232,8 @@ instructions. **It should be built first, not last.**
 | accumulation across turns rather than replacement | ✅ |
 | `domain` target type | ✅ |
 | materialisation at lock, non-fatal, counts reported in the lock response | ✅ |
-| **Genesis raising the question when worth is missing** | ❌ (defence 2 — open question 1) |
+| **Genesis raising the question when worth is missing** | ✅ (defence 2) — once, on the readiness turn |
+| assent-only quotes rejected (the hole asking opened, §4a) | ✅ |
 | a UI surface showing what was declared | ❌ — `GET /apps/analytics/worth/declarations` exists |
 
 Three properties are worth stating plainly, because each is a failure that was one line away:

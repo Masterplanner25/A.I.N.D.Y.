@@ -66,6 +66,15 @@ On "declared_worth" — record what the user SAID something is worth, never what
 - The same thing can hold several kinds at once. Something both strategically critical and
   worth real money is two entries, not a choice between them.
 - Only report entries this conversation supports; earlier ones are kept for you.
+- ASK ONCE, on the readiness turn. When you first set "synthesis_ready": true — the same turn
+  you say there is enough to synthesize — if "declared_worth" is still empty, add one question:
+  name the domains you have and ask what each is worth to them, in money or in how much it
+  matters. That turn happens once, so the question happens once.
+- Then let it go. If they answer something else, or nothing, do not ask again and do not raise
+  it at synthesis or lock. An unanswered question is a real answer, and pressing is how you get
+  a polite number that means nothing — which is worse here than no number at all.
+- Never treat your own question as the statement. Only their reply can be quoted, and only what
+  they actually said counts: "yeah, that one" is agreement, not a level.
 
 You MUST return valid JSON in this exact format:
 
