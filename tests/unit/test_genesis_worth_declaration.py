@@ -470,3 +470,96 @@ def test_a_declaration_dispatched_through_the_syscall_becomes_a_row(db_session):
     assert rows[0].target_id == "ethical ai framework"
     assert rows[0].ordinal_level == "critical"
     assert "pointless without it" in (rows[0].note or "")
+
+
+# ── asking, without turning the answer into homework ───────────────────────────────────
+
+def test_the_prompt_asks_once_and_anchors_that_to_the_readiness_turn():
+    """The ask must be pinned to a moment that only happens once.
+
+    `synthesis_ready` flips exactly once — `if llm_output.get("synthesis_ready") and not
+    session.synthesis_ready`. Anchoring the question there is what makes "ask once" a property
+    of the conversation rather than a rule the model has to remember it already followed.
+    """
+    from apps.masterplan.services import genesis_ai
+
+    prompt = genesis_ai.GENESIS_SYSTEM_PROMPT
+    assert "ASK ONCE, on the readiness turn" in prompt
+    assert "do not ask again" in prompt
+
+
+def test_agreeing_with_the_question_is_not_a_declaration():
+    """★ The specific risk that asking introduces.
+
+    Once Genesis raises the subject, the likely reply is a short assent — and a model that
+    asked "is the framework critical?" will happily read "yeah, that one" as `critical`. The
+    quote then traces to a real user turn, so `user_turns` alone does not catch it; the length
+    floor does.
+    """
+    transcript = _transcript(
+        ("assistant", "What is the ethics framework worth to you — is it critical?"),
+        ("user", "yeah, that one"),
+    )
+
+    assert not quote_is_supported("yeah, that one", transcript)
+
+
+def test_the_model_cannot_quote_its_own_question_as_the_answer():
+    """Asking makes this reachable in a way it was not before.
+
+    Before Genesis asked, its turns contained reflections. Now they contain the words
+    "critical" and "worth" in question form — one substring match away from being cited as the
+    user's statement.
+    """
+    transcript = _transcript(
+        ("assistant", "Is the ethics framework critical to the plan, or merely important?"),
+        ("user", "let me think about that"),
+    )
+
+    assert not quote_is_supported("the ethics framework critical to the plan", transcript)
+
+
+def test_a_real_answer_to_the_question_still_lands():
+    """The ask has to be able to work, or it is only a risk."""
+    transcript = _transcript(
+        ("assistant", "What is the ethics framework worth to you?"),
+        ("user", "it is critical — I would not ship any of this without it"),
+    )
+    entries = merge_declared_worth(
+        [],
+        [_entry(quote="I would not ship any of this without it")],
+        transcript,
+    )
+
+    assert entries[0]["verified"] is True
+
+
+def test_a_brief_but_real_statement_still_counts():
+    """The content floor must not become a length floor in disguise.
+
+    "that one is critical" contributes exactly one content word, and it is a genuine
+    declaration. Requiring more would quietly demand that people be verbose to be believed.
+    """
+    transcript = _transcript(
+        ("assistant", "Which of these matters most?"),
+        ("user", "that one is critical"),
+    )
+
+    assert quote_is_supported("that one is critical", transcript)
+
+
+def test_a_bare_figure_counts_as_content():
+    """A number is the user's own contribution even when every other word is filler."""
+    transcript = _transcript(("user", "that one is worth 50000 to me, maybe more"))
+
+    assert quote_is_supported("that one is worth 50000", transcript)
+
+
+def test_enthusiastic_agreement_is_still_agreement():
+    """"yeah absolutely" adds emphasis, not a value."""
+    transcript = _transcript(
+        ("assistant", "So the framework is critical?"),
+        ("user", "yeah absolutely, definitely that one"),
+    )
+
+    assert not quote_is_supported("yeah absolutely, definitely that one", transcript)

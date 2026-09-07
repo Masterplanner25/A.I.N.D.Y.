@@ -57,6 +57,26 @@ WORTH_STATE_KEY = "declared_worth"
 # but real statement ("that one is critical") still qualifies.
 MIN_QUOTE_CHARS = 12
 
+# ★ Agreement is not a declaration, and this only became reachable once Genesis started ASKING.
+#
+# While worth was volunteered, a user turn was a statement and quoting it was safe. Now the
+# likely reply to "is the framework critical?" is "yeah, that one" — which is 14 characters,
+# clears MIN_QUOTE_CHARS, and traces to a genuine user turn, so `user_turns` does not catch it
+# either. The declaration's actual meaning lives in the ASSISTANT's question, which is exactly
+# what this module exists to refuse.
+#
+# The rule: a quote made entirely of agreement and pointing words is agreement, not a statement.
+# One content word is enough to pass — "that one is critical" is a real, brief declaration and
+# must survive — so this rejects only the case where the user contributed no content at all.
+_ASSENT_TOKENS = frozenset({
+    "yeah", "yes", "yep", "yup", "sure", "ok", "okay", "right", "correct", "true",
+    "exactly", "definitely", "absolutely", "agreed", "indeed", "no", "nope", "maybe",
+    "that", "this", "those", "these", "them", "they", "it", "its", "one", "ones",
+    "the", "a", "an", "both", "all", "and", "or", "too", "also", "same", "is", "are",
+    "was", "were", "be", "i", "you", "we", "of", "to", "for", "on", "in", "at", "so",
+})
+_WORD = re.compile(r"[a-z0-9$]+")
+
 # The model is told to elide with an ellipsis rather than paraphrase. Each fragment is then
 # checked independently, which keeps a genuine quote verifiable without demanding that the user
 # said one unbroken sentence.
@@ -115,8 +135,20 @@ def quote_is_supported(quote: str | None, transcript: list[dict] | None) -> bool
     if sum(len(fragment) for fragment in fragments) < MIN_QUOTE_CHARS:
         return False
 
+    if not _carries_content(fragments):
+        return False
+
     turns = [_normalize(turn) for turn in user_turns(transcript)]
     return any(all(fragment in turn for fragment in fragments) for turn in turns)
+
+
+def _carries_content(fragments: list[str]) -> bool:
+    """At least one word in the quote must be the user's own contribution.
+
+    A number counts — "worth 50000" is a declaration whose only content word is the figure.
+    """
+    words = [word for fragment in fragments for word in _WORD.findall(fragment)]
+    return any(word not in _ASSENT_TOKENS for word in words)
 
 
 def _clean_label(label: Any) -> str | None:

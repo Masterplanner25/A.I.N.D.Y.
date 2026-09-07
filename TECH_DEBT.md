@@ -667,7 +667,7 @@ Measured per gate rather than treating "soak" as one thing:
 |---|---|---|
 | Trajectory | completed tasks **with estimates** | **1 sample.** Estimates became mandatory 2026-09-06, so future tasks all count |
 | Learned calibrator | ≥30 distinct `actual_score` per decision type | `review_plan` 19/30 · `create_new_task` **1**/30 · `continue_highest_priority_task` **3**/30 · `reprioritize_tasks` **2**/30 |
-| Worth | value declarations | **0** — the defect is fixed and the Genesis entry point shipped 2026-09-07; it records only volunteered worth, so it can stay at 0 (below) |
+| Worth | value declarations | **0** — defect fixed and the Genesis entry point shipped 2026-09-07; it now asks once per plan, so this should start moving (below) |
 | Search outcome weighting | search usage | `search_history`, `search_result_feedback`, `research_results` all **0** — never exercised once |
 
 **261 `review_plan` predictions carry 19 distinct actual scores.** That ratio is the audit's
@@ -699,11 +699,15 @@ called mandatory was built first: **every declaration carries the user's words a
 unless those words are found in a user turn of the transcript** — enforced in
 `apps/masterplan/services/genesis_worth.py`, not in prompt text.
 
-**What is still not there is Genesis raising the subject.** It records worth when the owner
-states it and never asks. So a conversation that does not happen to mention worth still yields
-nothing, and the gate can stay at 0 with the feature working exactly as designed. That decision
-— defence 2, *"ask, do not guess"* — is open question 1 of the spec and is the one that decides
-whether this produces data at all.
+**Genesis now asks, once, on the readiness turn** (owner's call 2026-09-07). The question is
+anchored to the moment `synthesis_ready` first flips, which is already a once-only event, and an
+unanswered question leaves the field null and still locks the plan.
+
+Asking opened a hole that volunteering had kept shut: the likely reply to *"is the framework
+critical?"* is *"yeah, that one"* — 14 characters, from a genuine user turn, whose entire meaning
+lives in the assistant's question. Closed by rejecting quotes made **entirely** of agreement and
+pointing words; one content word passes, so *"that one is critical"* still counts. This is why
+quote-or-drop had to ship before the ask rather than alongside it.
 
 The failure mode this was built around, for the record: an LLM asked to fill in a worth field
 will fill it in, and a fabricated declaration is indistinguishable from a real one. Same shape
