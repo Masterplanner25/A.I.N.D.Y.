@@ -1,6 +1,6 @@
 ---
 title: "MasterPlan Goal Attainment Spec"
-last_verified: "2026-08-22"
+last_verified: "2026-09-07"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -135,6 +135,80 @@ underlying data does not.
 
 ---
 
+## 4b. ★ WCU — the unit that exists, is computed, and cannot be pointed at anything
+
+Added 2026-09-07 from an owner observation about the qualitative half of a plan:
+
+> *"You can explain things, but you still need something to actually measure/work against."*
+
+That is the whole problem with `structure_json["success_criteria"]`. Genesis produced five of
+them for the live plan — *"Establishment of a widely adopted ethical AI framework"* and similar.
+They are true statements of what success means and they have **no unit and no number**, so seeded
+into `goals` they would be permanently `unresolved`. The registry above cannot help: there is no
+`goal_unit` for "a framework became widely adopted".
+
+**This repo already built the answer, and it is WCU.** `MasterPlan.total_wcu` — Work Complexity
+Units — is the accumulated complexity of a plan's *completed* tasks, and it is the closest thing
+here to a universal unit of work done. Measured live 2026-09-07: `total_wcu = 2`, from
+
+```
+Task 17 "Fix Nodus Issues"   duration 1 x complexity 1 x difficulty 1 = 1
+Task 18 "Close A.I.N.D.Y. PR"  no duration -> default 1.0 x 1 x 1     = 1
+```
+
+So the machinery works. Four things stop it being usable as the proxy the owner is describing,
+and they are worth separating because only one of them is hard.
+
+### The three easy ones
+
+1. **`wcu` is not in the unit registry.** `supported_units()` returns
+   `clicks, impressions, playbooks, posts, tasks, usd`. A goal cannot be declared in the one unit
+   this repo invented for the purpose. Adding a resolver is small — `total_wcu` is a column on the
+   plan the resolver already receives.
+
+2. **Two of the formula's three terms are inert.** WCU is
+   `effort_hours x task_complexity x task_difficulty`, and **every task on the live plan has
+   `task_complexity = 1` and `task_difficulty = 1`** — the column defaults. Nothing in the create
+   path or the UI sets either. So WCU currently reduces to *estimated hours*, which `Task.duration`
+   already reports directly. The "complexity" in Work Complexity Units is not being measured.
+
+3. **`wcu_target = 3000` is a stale default**, from the same books/studio/playbooks product shape
+   as the rest of `evaluate_phase`'s thresholds (see `STRATEGY_LAYER_SPEC` §3). At ~1 WCU per
+   completed task that is roughly 3,000 tasks to advance a phase.
+
+### ★ The hard one: WCU is plan-scoped, so it cannot answer a goal
+
+`total_wcu` lives on `master_plans`. There is no way to express *"3,000 WCU toward the ethical AI
+framework"*, because **WCU has no idea which goal a task served** — a task carries
+`masterplan_id` and nothing else. The chain from work to purpose does not exist.
+
+So adding `wcu` to the registry would make every goal on a plan report the *same* number: the
+plan's total. With one goal that is a fine proxy. With five it is actively misleading — five
+goals all reading 40% because the plan is 40% worked.
+
+**Attribution is the missing piece, and it is not this spec's to solve.** It is precisely what
+`STRATEGY_LAYER_SPEC` exists for: `task -> strategy -> objective`. With that chain, WCU rolls up
+per objective and a qualitative criterion becomes measurable *as the work done against it* — which
+is the honest reading of a goal like "establish a framework", since the framework is not a number
+but the work toward it is.
+
+Without the chain, WCU can measure **that** you worked. It can never measure that you worked
+**on this**.
+
+### What follows from that
+
+- **Seeding `goals` from `success_criteria` should wait.** Five permanently-unresolved goals in a
+  table with no UI (verified 2026-09-07: nothing in `client/src` calls the goals API) is the
+  dead-surface shape this repo keeps producing.
+- **Adding `wcu` to the registry is defensible now, on its own terms**, provided the response
+  reports `scope: "plan"` the way freelance already reports `scope: "user"`. An honest plan-wide
+  number is useful; an implied per-goal one is not.
+- **Fixing the inert terms is a separate and smaller question** than either: nothing collects
+  complexity or difficulty, so the first move is deciding whether a human supplies them, an agent
+  estimates them, or the formula drops them and admits it measures hours.
+
+---
+
 ## 5. Formula change
 
 Current (`infinity_service.calculate_masterplan_progress`):
@@ -237,6 +311,8 @@ Recommend shipping the shadow phase and comparing distributions before committin
   plan a *better-fed spoke*, per the owner's call.
 - Does **not** give rippletrace or authorship a real feed. It opens the registry slot; the
   underlying signals still do not exist.
+- Does **not** make a qualitative criterion measurable. §4b is the analysis of why: the unit
+  exists (WCU) and the attribution does not, and attribution belongs to `STRATEGY_LAYER_SPEC`.
 
 ---
 
