@@ -1710,6 +1710,51 @@ Create Drop Point
 
 **Response 200:** unspecified
 
+#### GET /apps/rippletrace/containers/candidates
+List Container Candidates
+
+Phrases recurring across enough of this author's titles to be worth asking about — the project
+or series a piece belongs to (`TITLE_AS_CONTAINER_SPEC` §4).
+
+★ **Detection proposes; it never writes.** Calling this tags nothing and creates no record.
+Candidates are derived on demand rather than stored: an unanswered question is a measurement of
+the current corpus, and a stored list would drift out of step with the drops it came from. A
+candidate already confirmed or dismissed is not offered again.
+
+**Response 200:** candidates: array of {name, normalized, drop_count, corpus_size, share, examples}
+
+`name` is rendered with the casing the author used, and `examples` carries up to three of the
+titles it was drawn from — the question needs the evidence far more than it needs a percentage.
+
+#### GET /apps/rippletrace/containers
+List Containers
+
+**Response 200:** containers: array of {id, name, normalized, status, drop_count_at_decision, created_at}
+
+`status` is `confirmed` or `dismissed`. There is no `pending`: an undecided candidate has no row.
+
+#### POST /apps/rippletrace/containers/confirm
+Confirm Container
+
+Records that this is a work of yours, and writes it into `tagged_entities` on every drop whose
+title carries it. New drops join it automatically at ingest without being asked again — the
+identity was decided once.
+
+**Body:** name: string (required), note: string | null
+
+**Response 200:** the container, plus `drop_count` (how many drops were tagged)
+
+#### POST /apps/rippletrace/containers/dismiss
+Dismiss Container
+
+Records that this is **not** a container, so it stops being proposed. Drops already tagged keep
+the entity: a dismissal says "stop asking", not "pretend it was never true", and silently
+rewriting history the engines have reasoned over is the failure this feature exists to avoid.
+
+**Body:** name: string (required)
+
+**Response 200:** the container, with `status: "dismissed"`
+
 #### GET /apps/rippletrace/drop_points
 All Drop Points
 
