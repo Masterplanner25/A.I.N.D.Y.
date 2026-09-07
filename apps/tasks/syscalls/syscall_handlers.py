@@ -100,7 +100,17 @@ def _handle_task_complete(payload: dict, ctx: SyscallContext) -> dict:
     user_id = _context_user_id(ctx)
     db, owns_session = _session_from_context(ctx)
     try:
-        return {"task_result": complete_task(db=db, name=name, user_id=user_id)}
+        return {
+            "task_result": complete_task(
+                db=db,
+                name=name,
+                user_id=user_id,
+                # Optional 1-5 judgements that feed WCU. Absent for any caller that cannot
+                # judge — the service leaves the columns untouched rather than defaulting.
+                task_complexity=payload.get("task_complexity"),
+                task_difficulty=payload.get("task_difficulty"),
+            )
+        }
     finally:
         if owns_session:
             db.close()
