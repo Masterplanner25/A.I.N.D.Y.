@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, Request
+from typing import Optional
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
-from apps.search.schemas.seo import SEOInput, MetaInput
+from apps.search.schemas.seo import SEOInput, MetaInput, TitleInput
 from AINDY.services.auth_service import get_current_user
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
+from apps.search.services.title_generation import generate_title_candidates
 from apps.search.services.search_service import (
     analyze_seo_content,
     execute_durable_search,
@@ -59,6 +62,10 @@ def _with_execution_envelope(payload):
 
 class LegacyContentInput(BaseModel):
     content: str
+    # The client calls these compat routes, not `/analyze` — see `api-routes.test.js`, which
+    # pins ANALYZE_SEO to "/apps/seo/analyze_seo/". A new field added only to `SEOInput` would
+    # therefore be unreachable from the UI, which is the surface it exists for.
+    title: Optional[str] = None
 
 
 @router.post("/analyze")
@@ -72,7 +79,9 @@ def analyze_seo(
     from apps.analytics.public import save_calculation
     user_id = str(current_user["sub"])
 
-    results = analyze_seo_content(data.text, data.top_n, db=db, user_id=user_id)
+    results = analyze_seo_content(
+        data.text, data.top_n, db=db, user_id=user_id, title=data.title
+    )
 
     # Save key SEO metrics
     save_calculation(db, "seo_readability", results["readability"])
@@ -121,6 +130,36 @@ def generate_meta(
     )
 
 
+@router.post("/title")
+@limiter.limit("15/minute")
+def generate_title(
+    request: Request,
+    data: TitleInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Propose title options for an article. Never returns a replacement for the writer's own.
+
+    Rate-limited harder than the analysis routes (15/min vs 30) because this one costs an
+    external model call per request, where the rest are local computation.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        return generate_title_candidates(
+            data.text,
+            count=data.count or 5,
+            existing_title=data.current_title,
+            target_keywords=data.target_keywords,
+            user_id=user_id,
+            db=db,
+        )
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.title", handler, db=db, user_id=user_id)
+    )
+
+
 @router.post("/suggest")
 @limiter.limit("30/minute")
 def suggest_improvements(
@@ -150,7 +189,9 @@ def analyze_seo_compat(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        return analyze_seo_content(data.content, 10, db=db, user_id=user_id)
+        return analyze_seo_content(
+            data.content, 10, db=db, user_id=user_id, title=data.title
+        )
 
     return _with_execution_envelope(
         _execute_seo(request, "seo.analyze.compat", handler, db=db, user_id=user_id)

@@ -113,7 +113,9 @@ const APP_ONLY_ROUTES = {
   // (thumbs_up/thumbs_down) signals on a search result. The backend route, service and
   // ranking nudge have all existed since Search v4 §8; nothing in the client called it, so
   // `search_result_feedback` had 0 rows and AINDY_SEARCH_OUTCOME_WEIGHTING had no input.
-  SEARCH: { FEEDBACK: "/search/feedback" },
+  // `/seo/title` proposes title options for an article. App-owned and not in the ui-kit, so
+  // it carries its own `/seo` prefix here rather than going through `withPrefix`.
+  SEARCH: { FEEDBACK: "/search/feedback", GENERATE_TITLE: "/seo/title" },
 };
 
 const SUB_ROUTER_CORRECTED = {

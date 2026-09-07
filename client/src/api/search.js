@@ -44,10 +44,13 @@ export function runLeadGen(query) {
   });
 }
 
-export function analyzeSeo(content) {
+export function analyzeSeo(content, title) {
+  // `title` is optional and omitted when blank, so the request stays byte-identical to the
+  // previous one for callers that do not pass it.
+  const body = title ? { content, title } : { content };
   return authRequest(ROUTES.SEARCH.ANALYZE_SEO, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -55,6 +58,17 @@ export function generateMeta(content) {
   return authRequest(ROUTES.SEARCH.GENERATE_META, {
     method: "POST",
     body: JSON.stringify({ content }),
+  });
+}
+
+export function generateTitles(content, currentTitle, targetKeywords) {
+  return authRequest(ROUTES.SEARCH.GENERATE_TITLE, {
+    method: "POST",
+    body: JSON.stringify({
+      text: content,
+      current_title: currentTitle || null,
+      target_keywords: targetKeywords || null,
+    }),
   });
 }
 

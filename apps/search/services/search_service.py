@@ -11,7 +11,11 @@ from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 from apps.search.models import SearchHistory
 from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 from apps.search.services.search_scoring import score_research_result, score_seo_result
-from apps.search.services.seo_services import generate_meta_description, seo_analysis
+from apps.search.services.seo_services import (
+    count_characters,
+    generate_meta_description,
+    seo_analysis,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -228,8 +232,8 @@ def search_memory(query: str, db, user_id: str | None = None, tags: list[str] | 
         return {"items": [], "ids": [], "formatted": "", "count": 0}
 
 
-def search_seo(text: str, top_n: int = 10) -> dict[str, Any]:
-    results = seo_analysis(text, top_n)
+def search_seo(text: str, top_n: int = 10, *, title: str | None = None) -> dict[str, Any]:
+    results = seo_analysis(text, top_n, title=title)
     avg_density = 0.0
     if results["keyword_densities"]:
         avg_density = sum(results["keyword_densities"].values()) / len(results["keyword_densities"])
@@ -241,9 +245,16 @@ def search_seo(text: str, top_n: int = 10) -> dict[str, Any]:
     return results
 
 
-def analyze_seo_content(text: str, top_n: int = 10, *, db=None, user_id: str | None = None) -> dict[str, Any]:
+def analyze_seo_content(
+    text: str,
+    top_n: int = 10,
+    *,
+    db=None,
+    user_id: str | None = None,
+    title: str | None = None,
+) -> dict[str, Any]:
     def _build(memory: dict[str, Any]) -> dict[str, Any]:
-        analysis = search_seo(text, top_n=top_n)
+        analysis = search_seo(text, top_n=top_n, title=title)
         analysis["memory"] = memory
         return analysis
 
@@ -451,5 +462,14 @@ def unified_query(
 
 
 def generate_meta(text: str, limit: int = 160) -> dict[str, str]:
-    return {"meta_description": generate_meta_description(text, limit)}
+    meta = generate_meta_description(text, limit)
+    return {
+        "meta_description": meta,
+        # ★ Characters, and reported rather than assumed. The writer is being handed something
+        # measured against a budget they cannot see, and the budget is the whole point of the
+        # feature — the previous version of this function trimmed to 160 WORDS while its
+        # caller believed it was trimming to 160 characters.
+        "characters": count_characters(meta),
+        "budget": limit,
+    }
 
