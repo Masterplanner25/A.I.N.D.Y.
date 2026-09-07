@@ -170,6 +170,39 @@ def _handle_reasoning_recommendation(payload: dict, ctx: SyscallContext) -> dict
             db.close()
 
 
+def _handle_declare_worth(payload: dict, ctx: SyscallContext) -> dict:
+    """Record one declared-worth statement — the Worth axis's declared prior.
+
+    Exists so another domain can record a declaration without importing
+    `apps.analytics.public`. Genesis is the first caller: worth is stated in conversation
+    (`apps/masterplan/services/genesis_worth.py`) and materialised when the plan locks.
+
+    `declared_value` is interpreted by `kind`: `intrinsic` and `strategic` take an ordinal
+    LEVEL NAME, `monetary_potential` takes a number. A mismatch raises rather than coerces —
+    accepting 8 for "high" would let false precision back in silently.
+    """
+    from apps.analytics.services.scoring.value_declaration_service import (
+        record_value_declaration,
+    )
+
+    user_id = payload.get("user_id") or ctx.user_id
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return record_value_declaration(
+            db,
+            user_id=user_id,
+            target_type=payload["target_type"],
+            declared_value=payload["declared_value"],
+            target_id=payload.get("target_id"),
+            label=payload.get("label"),
+            kind=payload.get("kind") or "strategic",
+            note=payload.get("note"),
+        )
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_analytics_syscall_handlers() -> None:
     register_syscall(
         name="sys.v1.analytics.get_kpi_snapshot",
@@ -211,6 +244,32 @@ def register_analytics_syscall_handlers() -> None:
             "properties": {
                 "saved": {"type": "bool"},
                 "id": {"type": "integer"},
+            },
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.analytics.declare_worth",
+        handler=_handle_declare_worth,
+        capability="analytics.write",
+        description="Record a declared-worth statement (the Worth axis's declared prior).",
+        input_schema={
+            "required": ["target_type", "declared_value"],
+            "properties": {
+                "target_type": {"type": "string"},
+                "declared_value": {},
+                "target_id": {"type": "string"},
+                "label": {"type": "string"},
+                "kind": {"type": "string"},
+                "note": {"type": "string"},
+                "user_id": {"type": "string"},
+            },
+        },
+        output_schema={
+            "properties": {
+                "id": {"type": "string"},
+                "kind": {"type": "string"},
+                "created": {"type": "bool"},
             },
         },
         stable=False,

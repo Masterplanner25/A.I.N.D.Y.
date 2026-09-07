@@ -1,15 +1,18 @@
 ---
 title: "Declaring Worth in Genesis"
-last_verified: "2026-09-06"
+last_verified: "2026-09-07"
 api_version: "1.0"
-status: draft
+status: partially-implemented
 owner: "app-team"
 ---
 
 # Declaring worth in Genesis — the number belongs where the meaning is
 
-**Status:** DRAFT. Nothing built. The storage, scoring and API all exist and are correct as of
-2026-09-06 (#287, #289); what is missing is any way for a person to say the number.
+**Status:** BUILT 2026-09-07, in the shape §4 prescribes — defence 3 first, defence 2 not at
+all. See §7 for exactly what shipped and what did not.
+
+Originally: DRAFT, nothing built. The storage, scoring and API all existed and were correct as
+of 2026-09-06 (#287, #289); what was missing was any way for a person to say the number.
 
 **Owner's call, 2026-09-06:** *"Probably in Genesis, as that's where you could say how much each
 means to you or the actual value worth."*
@@ -154,16 +157,23 @@ instructions. **It should be built first, not last.**
 
 ## 5. Open questions
 
-1. **Does Genesis ask proactively, or only record what is volunteered?** Asking gets far more
-   data. It also introduces the pressure that produces polite fabrication — the user answering
-   because they were asked, not because they had a view. The owner's phrasing (*"where you could
-   say"*) leans toward volunteered, which is safer and slower. This is the decision that most
-   changes the feature.
+1. **Does Genesis ask proactively, or only record what is volunteered?** ← **STILL OPEN, and it
+   is the one that decides whether this feature produces data at all.** Shipped as
+   volunteered-only: Genesis records worth when the owner states it and never raises the
+   subject. That is the safe half and a strict prerequisite for the other — asking is a prompt
+   change on top of machinery that already exists, and asking first would have meant collecting
+   solicited answers before quote-or-drop was there to check them.
+   The cost of leaving it here is that a conversation which never happens to mention worth
+   yields nothing, and the Worth gate stays at 0 with the feature working exactly as designed.
+   Asking gets far more data. It also introduces the pressure that produces polite fabrication —
+   the user answering because they were asked, not because they had a view. The owner's phrasing
+   (*"where you could say"*) leans toward volunteered, which is safer and slower.
 
-2. **What is a declaration attached to?** `VALID_TARGET_TYPES` is
-   `task | masterplan | project | other`. A `core_domain` is none of those. Either add `domain`,
-   or use `other` with the domain name as `target_id`. Adding a type is cleaner and cheap
-   (`kind`/`target_type` are free strings, no enum in the DB), but it is a public contract change.
+2. ~~**What is a declaration attached to?**~~ **RESOLVED 2026-09-07.** `domain` added to
+   `VALID_TARGET_TYPES`. A labelled declaration targets `domain` with the lowercased domain name
+   as `target_id`; an unlabelled one targets `masterplan` with the plan id. `other` would have
+   lost the fact that the target is a named part of a plan, making the row unjoinable to
+   anything.
 
 3. **Can worth be declared outside Genesis, later?** Worth changes as a plan proceeds — something
    turning out to matter more is a real and important signal. If Genesis is the only entry point,
@@ -183,7 +193,45 @@ instructions. **It should be built first, not last.**
 
 ---
 
-## 6. What this spec does not claim
+## 6. What shipped, 2026-09-07
+
+| piece | state |
+|---|---|
+| `declared_worth` in the conversation + import state schemas | ✅ |
+| extraction rules — say-don't-assign, quote required, kinds and levels | ✅ (defence 1) |
+| **quote-or-drop, enforced in code** (`genesis_worth.py`) | ✅ (defence 3) |
+| verification against **user** turns only | ✅ |
+| accumulation across turns rather than replacement | ✅ |
+| `domain` target type | ✅ |
+| materialisation at lock, non-fatal, counts reported in the lock response | ✅ |
+| **Genesis raising the question when worth is missing** | ❌ (defence 2 — open question 1) |
+| a UI surface showing what was declared | ❌ — `GET /apps/analytics/worth/declarations` exists |
+
+Three properties are worth stating plainly, because each is a failure that was one line away:
+
+- **Verification happens on the turn the words arrive**, not only at lock. The stored transcript
+  is trimmed to its most recent 200 entries, so a quote from early in a long session stops being
+  findable — verifying only at lock would discard a real declaration for a reason unrelated to
+  whether it was said.
+- **`verified` cannot be self-awarded.** `normalize_entry` rebuilds each entry from
+  `label`/`kind`/`value`/`quote` only, so a model emitting `"verified": true` has it discarded
+  before anything reads it.
+- **Worth accumulates; every other state field replaces.** Each turn's extraction reports only
+  what that turn established, so a turn about anything else returns `[]`. Under the generic
+  merge that would erase every prior declaration — and a single-turn test would still pass.
+
+One structural note. Masterplan does not import `apps.analytics.*`: it reaches the declaration
+through `sys.v1.analytics.declare_worth`, matching the syscall migration that already moved its
+task and automation integrations, and pinned by
+`test_masterplan_bootstrap_keeps_only_identity_as_direct_app_dependency`. The kinds and levels
+are therefore restated in `genesis_worth`, with a test that fails if the two copies drift. The
+duplication buys local validation: an invalid kind or level is dropped on the turn it was made,
+not raised from a syscall at lock — by which point the words that would let anyone check it are
+three screens up.
+
+---
+
+## 7. What this spec does not claim
 
 It does not claim Genesis is the only workable place — only that it is where the statement is
 already being made, which makes it the place where a number is a by-product rather than a chore.

@@ -141,6 +141,32 @@ def _transcript_entry(role: str, content: str) -> dict:
     }
 
 
+def _apply_declared_worth(
+    current_state: dict, state_update: dict, transcript: list[dict]
+) -> dict:
+    """Merge this turn's worth declarations into the session state, verified.
+
+    ★ Handled apart from the generic `for key, value in state_update.items()` loop above for
+    two reasons, both of which would otherwise lose data silently:
+
+    1. That loop only copies keys **already present** in `current_state`. Sessions created
+       before this field existed have no `declared_worth` key, so every declaration made in one
+       of them would be dropped on the way in and nothing would ever say so. This is the third
+       instance of one shape in this repo — Genesis captures it and the schema drops it.
+    2. That loop **replaces**. Each turn's extraction reports only what that turn established,
+       so a turn about anything else returns `[]` — which would wipe every prior declaration.
+       Worth accumulates instead (`merge_declared_worth`).
+    """
+    from apps.masterplan.services.genesis_worth import WORTH_STATE_KEY, merge_declared_worth
+
+    current_state[WORTH_STATE_KEY] = merge_declared_worth(
+        current_state.get(WORTH_STATE_KEY),
+        state_update.get(WORTH_STATE_KEY),
+        transcript,
+    )
+    return current_state
+
+
 def _trim_transcript(entries: list[dict]) -> list[dict]:
     """Keep the most recent entries. Oldest go first — the near past is what matters."""
     if len(entries) <= MAX_TRANSCRIPT_ENTRIES_STORED:
@@ -212,7 +238,8 @@ def _handle_genesis_import_plan(payload: dict, ctx: SyscallContext) -> dict:
                 summarized_state={
                     "vision_summary": None, "time_horizon": None,
                     "mechanism_summary": None, "assets_summary": None,
-                    "inferred_domains": [], "inferred_phases": [], "confidence": 0.0,
+                    "inferred_domains": [], "inferred_phases": [],
+                    "declared_worth": [], "confidence": 0.0,
                 },
             )
             db.add(session)
@@ -220,17 +247,21 @@ def _handle_genesis_import_plan(payload: dict, ctx: SyscallContext) -> dict:
 
         llm_output = call_genesis_import_llm(content, user_id=str(user_id), db=db)
 
+        state_update = llm_output.get("state_update") or {}
         current_state = dict(session.summarized_state or {})
-        for key, value in (llm_output.get("state_update") or {}).items():
+        for key, value in state_update.items():
             if key in current_state and value is not None:
                 current_state[key] = value
         if "confidence" in current_state:
             current_state["confidence"] = max(0.0, min(current_state["confidence"], 1.0))
-        session.summarized_state = current_state
 
         reply = llm_output.get("reply", "")
         transcript = list(session.transcript or [])
         transcript.append(_transcript_entry("user", content))
+        # After the imported text joins the transcript, so a worth stated in the plan the user
+        # wrote is verifiable against their own words — an import is the user speaking.
+        current_state = _apply_declared_worth(current_state, state_update, transcript)
+        session.summarized_state = current_state
         if reply:
             transcript.append(_transcript_entry("assistant", reply))
         session.transcript = _trim_transcript(transcript)
@@ -293,6 +324,7 @@ def _handle_genesis_execute_llm(payload: dict, ctx: SyscallContext) -> dict:
         )
 
         state_update = llm_output.get("state_update", {})
+        current_state = dict(current_state)
         for key, value in state_update.items():
             if key in current_state and value is not None:
                 current_state[key] = value
@@ -300,12 +332,15 @@ def _handle_genesis_execute_llm(payload: dict, ctx: SyscallContext) -> dict:
         if "confidence" in current_state:
             current_state["confidence"] = max(0.0, min(current_state["confidence"], 1.0))
 
-        session.summarized_state = current_state
-
         reply = llm_output.get("reply", "")
         # Appended after the call, so the model saw the conversation *before* this turn
         # and the new message exactly once rather than duplicated as history.
         transcript.append(_transcript_entry("user", message))
+        # Worth is verified only after THIS turn is in the transcript. A declaration is almost
+        # always made in the message that just arrived, so verifying before the append would
+        # reject every real declaration on the turn it was made.
+        current_state = _apply_declared_worth(current_state, state_update, transcript)
+        session.summarized_state = current_state
         if reply:
             transcript.append(_transcript_entry("assistant", reply))
         # JSON column reassignment (not in-place mutation) so SQLAlchemy marks it dirty.
