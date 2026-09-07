@@ -587,6 +587,40 @@ than waiting behind a flag.
 
 ---
 
+## RIPPLETRACE-NO-CONTENT-1: five engines reason about what your work is about, from tags and title words (app-owned, P2 — Question)
+
+**Status: OPEN.** Found 2026-09-07, the night RippleTrace produced its first three strategies
+and all three said the same thing:
+
+```
+Chatgpt Momentum Play  | Combine chatgpt focus with platform Substack within 25.2 day(s)
+Case Momentum Play     | Combine case focus with platform Substack within 25.2 day(s)
+Series Momentum Play   | Combine series focus with platform Substack within 25.2 day(s)
+```
+
+`chatgpt`, `case`, `series` are the words shared by *"2025 ChatGPT Case Study Series: …"* —
+a naming convention, reported as a finding.
+
+**`drop_points` has no content column.** The feed summary reaches `derive_themes` at ingest,
+is used once and discarded. And `derive_themes` returns publisher tags when they exist, so
+for **168 of 214** drops the "themes" are labels the author typed — declared intent, not
+discovery. Only Substack (46, no tags in feed) falls through to word frequency, which returns
+the title template.
+
+**It does not stay in one field.** `influence_graph` links drops by theme overlap,
+`causal_engine` emits `"shared_themes"` as a causal reason, `playbook_engine` advises writing
+about them, `content_generator` drafts from them. A theme on nearly every piece links
+everything to everything and turns a title word into a claim about causality.
+
+**Echo detection is unaffected and works** — 205 pings from 214 drops in one night. This is
+about the layer built on top of it.
+
+Write-up and options: `docs/specs/RIPPLETRACE_CONTENT_REPRESENTATION_SPEC.md`. Filed as a
+Question because the fix is a decision about what a drop point *is* — a reference to your
+work, or a representation of it — not a tuning change.
+
+---
+
 ## SOAK-THEN-FLIP-1: five features are built, default-off, and waiting on a soak that cannot produce evidence (P1)
 
 **Status: OPEN, and it is the single largest block of built-but-not-on work in the repo.**
