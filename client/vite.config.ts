@@ -97,7 +97,11 @@ export default defineConfig(({ mode }) => {
     },
     {
       name: "vendor-ui",
-      test: /node_modules[\\/](@radix-ui[\\/]react-(slot|tooltip)|lucide-react|clsx|class-variance-authority|tailwind-merge)[\\/]/,
+      // `lucide-react` was dropped from this group 2026-09-07 along with the dependency:
+      // nothing in src/ imported it, @aindy/ui-kit does not depend on it, and `npm ls`
+      // found no other consumer — so this entry matched a package that was never bundled.
+      // What remains is exactly ui-kit's own dependency set.
+      test: /node_modules[\\/](@radix-ui[\\/]react-(slot|tooltip)|clsx|class-variance-authority|tailwind-merge)[\\/]/,
       includeDependenciesRecursively: true,
     },
     ...(buildTarget === "app"
