@@ -1,6 +1,6 @@
 ---
 title: "App HTTP REST API Reference"
-last_verified: "2026-09-06"
+last_verified: "2026-09-07"
 api_version: "1.0"
 status: current
 owner: "apps-team"
@@ -1920,14 +1920,14 @@ Get Trace Graph
 #### POST /apps/seo/analyze
 Analyze Seo
 
-**Body:** text: string (required), top_n: integer | null
+**Body:** text: string (required), top_n: integer | null, title: string | null
 
 **Response 200:** unspecified
 
 #### POST /apps/seo/analyze_seo/
 Analyze Seo Compat
 
-**Body:** content: string (required)
+**Body:** content: string (required), title: string | null
 
 **Response 200:** unspecified
 
@@ -1944,6 +1944,28 @@ Generate Meta
 **Body:** limit: integer | null, text: string (required)
 
 **Response 200:** unspecified
+
+#### POST /apps/seo/title
+Generate Title
+
+Propose title options for an article. Proposals only — the response carries no single
+"best" title and never returns a replacement for `current_title`, which is echoed back
+untouched. Each candidate is measured against the SERP character budget the scorecard uses.
+Costs a model call, so this route is rate-limited to 15/min where the analysis routes allow 30.
+
+**Body:** text: string (required), count: integer | null, current_title: string | null, target_keywords: array of string | null
+
+**Response 200:** candidates: array of {title, characters, words, budget, minimum, over_by, verdict, serp_preview, truncated, shared_keywords}, count: integer, budget: integer, current_title: string, reason: string | null
+
+`reason` is non-null exactly when `candidates` is empty — the model was unavailable, or
+returned nothing usable. There is deliberately no local fallback: a title assembled from word
+frequencies would be indistinguishable from a real suggestion.
+
+#### POST /apps/seo/analyze — note
+
+`SEOInput` and the `/analyze_seo/` compat body both accept an optional `title`. When it is
+absent the response is unchanged; when present it carries a `title_analysis` object of the
+same shape as a candidate above.
 
 #### POST /apps/seo/suggest
 Suggest Improvements
