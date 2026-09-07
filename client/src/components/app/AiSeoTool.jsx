@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   analyzeSeo as apiAnalyzeSeo,
+  analyzeDraft as apiAnalyzeDraft,
+  createDraft as apiCreateDraft,
   generateMeta as apiGenerateMeta,
   generateTitles as apiGenerateTitles,
+  getDraft as apiGetDraft,
+  listDrafts as apiListDrafts,
+  pruneDraftAnalyses as apiPruneDraftAnalyses,
+  updateDraft as apiUpdateDraft,
   suggestSeoImprovements as apiSuggestSeoImprovements,
 } from "../../api/search.js";
 import { safeMap } from "../../utils/safe";
@@ -29,6 +35,10 @@ export default function AiSeoTool() {
   const [metaCharacters, setMetaCharacters] = useState(null);
   const [titleOptions, setTitleOptions] = useState(null);
   const [targets, setTargets] = useState("");
+  const [drafts, setDrafts] = useState([]);
+  const [draftId, setDraftId] = useState(null);
+  const [draftDetail, setDraftDetail] = useState(null);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [seoSuggestions, setSeoSuggestions] = useState("");
   const [loading, setLoading] = useState(false);
   // Bumped after a successful analyze so the "Recent SEO Analyses" panel refetches — the
@@ -50,6 +60,103 @@ export default function AiSeoTool() {
   // Comma-separated in, list out. Phrases are allowed and are the interesting case: "runtime
   // framework" is a different target from "runtime" and "framework" counted separately.
   const targetList = safeMap(targets.split(","), (term) => term.trim()).filter(Boolean);
+
+  useEffect(() => {
+    let mounted = true;
+    apiListDrafts()
+      .then((data) => mounted && setDrafts(data?.drafts || []))
+      .catch((error) => console.error("Draft list error: ", error));
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const refreshDraft = async (id) => {
+    const detail = await apiGetDraft(id);
+    setDraftDetail(detail);
+    setContent(detail.content || "");
+    setTitle(detail.title || "");
+    setTargets((detail.target_keywords || []).join(", "));
+    if (detail.latest?.result) setSeoData(detail.latest.result);
+    return detail;
+  };
+
+  const openDraft = async (id) => {
+    if (!id) {
+      // "New draft" — leave what is typed alone rather than clearing the writer's work.
+      setDraftId(null);
+      setDraftDetail(null);
+      return;
+    }
+    setLoading(true);
+    try {
+      setDraftId(id);
+      await refreshDraft(id);
+    } catch (error) {
+      console.error("Draft open error: ", error);
+    }
+    setLoading(false);
+  };
+
+  const saveDraft = async () => {
+    setSavingDraft(true);
+    try {
+      const payload = { content, title, target_keywords: targetList };
+      if (draftId) {
+        await apiUpdateDraft(draftId, payload);
+        await refreshDraft(draftId);
+      } else {
+        // Named by the writer, not by a timestamp. Falling back to the title, then to a
+        // prompt, keeps a nameless draft from becoming a dated scorecard by default.
+        const name = (title || "").trim() || window.prompt("Name this draft:") || "";
+        if (!name.trim()) {
+          setSavingDraft(false);
+          return;
+        }
+        const created = await apiCreateDraft({ ...payload, name });
+        setDraftId(created.id);
+        setDrafts((prev) => [{ ...created, analysis_count: 0 }, ...prev]);
+        await refreshDraft(created.id);
+      }
+    } catch (error) {
+      console.error("Draft save error: ", error);
+    }
+    setSavingDraft(false);
+  };
+
+  const analyzeSavedDraft = async () => {
+    setLoading(true);
+    try {
+      await apiUpdateDraft(draftId, { content, title, target_keywords: targetList });
+      const data = await apiAnalyzeDraft(draftId);
+      setSeoData(data.analysis);
+      await refreshDraft(draftId);
+      setHistoryRefresh((n) => n + 1);
+    } catch (error) {
+      console.error("Draft analysis error: ", error);
+    }
+    setLoading(false);
+  };
+
+  const prune = async () => {
+    const retention = draftDetail?.retention;
+    if (!retention?.prune_suggested) return;
+    // ★ Confirmed, never automatic, and the confirmation says exactly what goes. A count on
+    // its own asks for consent to something the person cannot see.
+    const ok = window.confirm(
+      `Delete ${retention.prunable_count} older analyses of this draft?\n\n` +
+        `Keeps the first reading and the most recent ${retention.keeps_recent}.`,
+    );
+    if (!ok) return;
+    setLoading(true);
+    try {
+      await apiPruneDraftAnalyses(draftId, retention.prunable_ids);
+      await refreshDraft(draftId);
+    } catch (error) {
+      console.error("Prune error: ", error);
+    }
+    setLoading(false);
+  };
 
   const analyzeSeo = async () => {
     setLoading(true);
@@ -118,6 +225,43 @@ export default function AiSeoTool() {
                 </a>.
             </p>
             
+            {/* DRAFT PICKER — the unit that makes this a loop rather than a set of readings
+                taken once. A draft carries its own content, title and targets, so two of its
+                analyses cannot silently have been measured against different targets. */}
+            <div className="mb-4 flex flex-wrap items-end gap-3">
+                <div className="grow">
+                    <label htmlFor="seo-draft" className="block text-sm font-medium text-gray-400 mb-2">
+                        Draft
+                    </label>
+                    <select
+            id="seo-draft"
+            className="w-full p-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white outline-hidden"
+            value={draftId || ""}
+            onChange={(e) => openDraft(e.target.value)}>
+                        <option value="">New draft (unsaved)</option>
+                        {safeMap(drafts, (item) =>
+                          <option key={item.id} value={item.id}>
+                            {item.name}{item.analysis_count ? ` — ${item.analysis_count} analyses` : ""}
+                          </option>)
+                        }
+                    </select>
+                </div>
+                <button
+          className="px-5 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
+          onClick={saveDraft}
+          disabled={savingDraft || !content}>
+                    {draftId ? "Save" : "Save as draft"}
+                </button>
+                {draftId &&
+                  <button
+            className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
+            onClick={analyzeSavedDraft}
+            disabled={loading || !content}>
+                      Analyze &amp; keep
+                  </button>
+                }
+            </div>
+
             {/* TITLE — optional. The tool had no concept of a title at all, so it could
                 report on a draft without ever looking at the line a search result shows. */}
             <div className="mb-4">
@@ -323,6 +467,61 @@ export default function AiSeoTool() {
                           <p className="text-gray-400" data-testid="title-options-reason">
                               No suggestions — {titleOptions.reason || "nothing was returned"}.
                           </p>
+                        }
+                    </div>
+        }
+
+                {/* WHAT MOVED — the reason the draft unit exists. Both deltas are shown:
+                    "since last time" is what you act on during a session, "since the first
+                    reading" is what says whether the session went anywhere. A tool that
+                    reported only the former can show four improvements that net to nothing. */}
+                {draftDetail?.deltas?.available &&
+        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg md:col-span-2" data-testid="deltas">
+                        <h2 className="text-xl font-bold mb-4 text-emerald-400 border-b border-zinc-800 pb-2">
+                            What moved
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                            {safeMap(
+                              [["Since last analysis", draftDetail.deltas.since_previous],
+                               ["Since the first", draftDetail.deltas.since_baseline]],
+                              ([label, diff]) =>
+                                <div key={label}>
+                                    <h3 className="font-bold text-white">{label}</h3>
+                                    <ul className="mt-1 space-y-1 text-gray-300">
+                                        {safeMap(Object.entries(diff || {}), ([metric, value]) =>
+                                          <li key={metric}>
+                                              <span className="text-gray-500">{metric.replace(/_/g, " ")}: </span>
+                                              {/* null means the older reading did not have this
+                                                  metric at all — it has not "stayed the same". */}
+                                              {value === null
+                                                ? <span className="text-gray-600">not measured then</span>
+                                                : <span className={value > 0 ? "text-emerald-400" : value < 0 ? "text-amber-400" : "text-gray-400"}>
+                                                    {value > 0 ? "+" : ""}{value}
+                                                  </span>}
+                                          </li>)
+                                        }
+                                    </ul>
+                                </div>)
+                            }
+                        </div>
+                        <p className="mt-4 text-xs text-gray-500">
+                            {draftDetail.deltas.analyses_counted} analyses kept for this draft.
+                        </p>
+                        {draftDetail.retention?.prune_suggested &&
+                          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3" data-testid="prune-prompt">
+                              <p className="text-sm text-amber-300">
+                                  This draft has {draftDetail.retention.total} analyses.
+                                  {" "}{draftDetail.retention.prunable_count} could be cleared, keeping the
+                                  first reading and the most recent {draftDetail.retention.keeps_recent}.
+                              </p>
+                              {/* Offered, never done. Nothing is deleted unless this is clicked
+                                  and the confirmation accepted. */}
+                              <button
+                    className="mt-2 text-xs text-amber-400 hover:text-amber-200 underline"
+                    onClick={prune}>
+                                  Review and clear older analyses
+                              </button>
+                          </div>
                         }
                     </div>
         }

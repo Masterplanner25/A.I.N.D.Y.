@@ -24,6 +24,26 @@ change, without changing it for them.
 
 ---
 
+## 0. Status, 2026-09-07
+
+| section | state |
+|---|---|
+| §2 Target keywords | ✅ built (#312) |
+| §3 Repetition | ✅ built (#312) |
+| §4 Saving — the analysis persists | ✅ fixed and **verified live** (see below) |
+| §4 Saving — **the draft as a unit** | ✅ built — see §4a |
+| §4 Phase labels in the UI | ✅ shipped |
+| §4 Feeds registered so the handoff happens | ✅ 4 sources, 215 drop points |
+
+**Complete as specified, 2026-09-07.** Every section is built. §5 question 1 is answered by the
+unit (targets live on the draft), question 2 was resolved by the owner, and question 4 was
+resolved by the owner as *"every analysis with a prune/deletion every so often prompted by the
+system"*. **Question 3 — whether `search_score` should survive at all — remains genuinely open**,
+and it is a smaller question than it was: the draft unit makes the score meaningful as a delta
+even where it is not meaningful as an absolute.
+
+---
+
 ## 1. What just got fixed, and why it matters to this spec
 
 Two defects, fixed outside this spec, because they needed no design decision:
@@ -188,12 +208,31 @@ broke as memory filled up — and every test that recalls nothing still passes.
 Fixed by converting through the runtime's own `memory_items_to_dicts`, already used this way in
 `automation/flows/flow_definitions.py:361`.
 
+### ★ Verified live 2026-09-07 — the fix works, in the condition that used to break it
+
+Asserting in tests that a MemoryItem serialises is not the same as proving the write lands, so
+the path was exercised against the running stack:
+
+```
+search_history before   0 rows
+analyze_seo_content(... db, user_id) → memory count 2
+search_history after    1 row
+```
+
+**`memory count 2` is the part that matters.** The bug was conditional on recall finding
+something — with an empty memory `items` is `[]`, which serialises fine, which is exactly why it
+survived so long. A run that recalled two items and still persisted is the case that used to
+fail. (The test row was deleted afterwards; the panel is a real surface, not a scratch pad.)
+
 **What this changes for §4.** The analysis now persists. What is still genuinely absent is
 narrower than "saving":
 
 - the **meta description** and **suggestions** are separate calls whose output is not stored
 - there is no **draft** as a unit, so analyses cannot be compared over time — the before/after
   question this section is really about
+
+★ This was the last unbuilt part of the spec, and the part that turns a set of readings into a
+loop. **Built 2026-09-07 — see §4a.**
 
 `seo_routes.py` also persists three metrics via `save_calculation` (`seo_readability`,
 `seo_word_count`, `seo_avg_keyword_density`) into the analytics calculation store, which remains
@@ -245,6 +284,12 @@ Current state (2026-09-06): **0 content sources**, 1 drop point, 8 pings — so 
 exists and is unused. Registering the Medium feed is a smaller and more valuable piece of work
 than anything else in this section.
 
+**✅ Done, and it worked.** Measured 2026-09-07: **4 content sources**, **215 drop points**, **264
+pings**. The owner registered the Substack and dev.to feeds, detection was switched on, and the
+automatic path produced a corpus overnight without further action. What it has not yet produced
+is the *match* — no saved draft exists to link to a drop point, because the draft unit above is
+still unbuilt.
+
 **And it closes a loop nothing else can.** If a saved draft can be matched to the drop point it
 became — by URL, or by title — then the SEO tool's advice becomes checkable against what the
 article actually did after publication. That is the only path in this repo from "the tool said
@@ -261,25 +306,73 @@ surfaces start to look alike.
 
 ---
 
+## 4a. ★ The draft loop, and why retention is a prompt
+
+Two tables. `seo_drafts` is the unit the writer names and keeps — content, title, target
+keywords, and `published_url`. `seo_draft_analyses` is one reading of it: the full result as
+JSON, with four scalars denormalised beside it because comparing two analyses is the entire
+point of the table and unpacking JSON per read makes the common operation the expensive one.
+
+**The comparison reports both distances.** `since_previous` is what you act on during a session;
+`since_baseline` is what says whether the session went anywhere — a tool reporting only the first
+can show four consecutive improvements that net to nothing. A metric absent from the older
+reading is `null`, not `0`: title analysis, coverage and repetition all arrived after the first
+version of this tool, so old rows genuinely lack them, and `0` would read as "no change".
+
+### ★ Retention is proposed, never enforced
+
+Owner's call: *"every analysis with a prune/deletion every so often prompted by the system."*
+The same shape settled twice already here — masterplan phase advance, worth declaration in
+Genesis — and it is right for a specific reason rather than out of caution.
+
+**A silent cap would delete the earliest analyses.** Those are exactly what a before/after
+comparison is measured against, and it would do it at the moment the history first became long
+enough to be interesting. The unbounded-growth risk is real and this repo has been bitten by it
+(`HEALTH-EVENT-VOLUME-1`, 3.6 GB of health events) — the answer is a prompt, not a cap.
+
+Four properties make that real rather than stated:
+
+1. **Reading a draft never deletes anything.** Asserted directly: 60 analyses survive three
+   reads of the draft that holds them.
+2. **The proposal names ids, not a count.** *"Delete 14 old analyses"* asks for consent to
+   something the person cannot see.
+3. **Pruning uses the ids it was given**, not a recomputed set. Between a proposal and its
+   answer a new analysis may have been recorded, and re-deriving "what is prunable" would delete
+   something the person was never shown — the same consent failure as a silent cap, arriving one
+   step later.
+4. **The baseline is refused even when asked for.** Pruning it destroys the comparison the
+   pruning was making room for, so the service does not rely on the proposal having excluded it.
+
+### What it settles from §5
+
+Question 1 — *where do target keywords come from?* — is answered by the unit rather than by a
+policy: they live on the draft, and re-analysing sends no text at all. Retyping them per analysis
+is how two readings end up measured against subtly different targets, which makes them
+incomparable **while still looking comparable**.
+
+---
+
 ## 5. Open questions
 
-1. **Where do target keywords come from?** Typed per analysis, remembered per draft, or suggested
-   from the text and confirmed by the writer? The third is the most useful and the most dangerous
-   — a suggested keyword the writer accepts unread is the tool deciding what the article is about.
+1. ~~**Where do target keywords come from?**~~ **RESOLVED 2026-09-07 — remembered per draft.**
+   The unit answers it. The third option (suggested from the text and confirmed) stays
+   deliberately unbuilt: a suggested keyword the writer accepts unread is the tool deciding what
+   the article is about.
 
 2. ~~**Is a draft an SEO artefact or a RippleTrace content item?**~~ **RESOLVED 2026-09-06 (owner):
    both, split by publication** — the SEO tool is the before-work, RippleTrace is after. See §4.
-   What remains is narrower and is now the near-term work: **say so in the UI**, and register the
-   Medium feed so the handoff actually happens (0 content sources exist today).
+   Both near-term pieces are now done: the phase line ships on each surface, and 4 feeds are
+   registered (215 drop points ingested).
 
 3. **Should the scorecard's overall score survive at all?** `search_score` blends readability,
    average density and word count into one number (`search_scoring.py:291`). With targets and a
    repetition report, a single number is the least informative thing on the page — and averaging
    keyword densities was already a questionable summary before targets existed.
 
-4. **How much history?** Every analysis, or the latest per draft plus a marked baseline? Every
-   analysis is more useful and grows without bound; this repo has already been bitten once by
-   unbounded telemetry (`HEALTH-EVENT-VOLUME-1`, 3.6 GB of health events).
+4. ~~**How much history?**~~ **RESOLVED 2026-09-07 (owner): every analysis, with a prune the
+   system proposes and a person confirms.** Neither of the two options originally offered — the
+   owner named a third that keeps the full history and answers the growth risk with consent
+   rather than with a cap. See §4a.
 
 ---
 

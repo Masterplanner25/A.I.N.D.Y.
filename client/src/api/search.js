@@ -80,3 +80,49 @@ export function suggestSeoImprovements(content) {
     body: JSON.stringify({ content }),
   });
 }
+
+// ── Drafts ────────────────────────────────────────────────────────────────────────────
+//
+// A draft holds its own content, title and target keywords, so `analyzeDraft` sends no body
+// beyond the knob: two analyses of one draft are guaranteed to have been measured against the
+// same targets, which is what makes them comparable.
+
+export function listDrafts() {
+  return authRequest(ROUTES.SEARCH.DRAFTS, { method: "GET" });
+}
+
+export function createDraft(payload) {
+  return authRequest(ROUTES.SEARCH.DRAFTS, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDraft(draftId) {
+  return authRequest(`${ROUTES.SEARCH.DRAFTS}/${draftId}`, { method: "GET" });
+}
+
+export function updateDraft(draftId, payload) {
+  return authRequest(`${ROUTES.SEARCH.DRAFTS}/${draftId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteDraft(draftId) {
+  return authRequest(`${ROUTES.SEARCH.DRAFTS}/${draftId}`, { method: "DELETE" });
+}
+
+export function analyzeDraft(draftId) {
+  return authRequest(`${ROUTES.SEARCH.DRAFTS}/${draftId}/analyze`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function pruneDraftAnalyses(draftId, analysisIds) {
+  return authRequest(`${ROUTES.SEARCH.DRAFTS}/${draftId}/prune`, {
+    method: "POST",
+    body: JSON.stringify({ analysis_ids: analysisIds }),
+  });
+}

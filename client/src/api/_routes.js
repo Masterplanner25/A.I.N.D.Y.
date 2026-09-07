@@ -115,7 +115,13 @@ const APP_ONLY_ROUTES = {
   // `search_result_feedback` had 0 rows and AINDY_SEARCH_OUTCOME_WEIGHTING had no input.
   // `/seo/title` proposes title options for an article. App-owned and not in the ui-kit, so
   // it carries its own `/seo` prefix here rather than going through `withPrefix`.
-  SEARCH: { FEEDBACK: "/search/feedback", GENERATE_TITLE: "/seo/title" },
+  SEARCH: {
+    FEEDBACK: "/search/feedback",
+    GENERATE_TITLE: "/seo/title",
+    // The draft loop. App-owned and not in the ui-kit, so these carry their own `/seo`
+    // prefix rather than going through `withPrefix`.
+    DRAFTS: "/seo/drafts",
+  },
 };
 
 const SUB_ROUTER_CORRECTED = {
