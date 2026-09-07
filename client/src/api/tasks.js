@@ -19,10 +19,17 @@ export const createTask = taggedRequest("tasks", (taskData) =>
   }).then(unwrapEnvelope)
 );
 
-export const completeTask = taggedRequest("tasks", (taskName) =>
+// `judgement` carries the 1-5 complexity/difficulty recorded at completion. They feed WCU
+// (`effort x complexity x difficulty`) and were permanently 1 until this was collected.
+// Optional: a caller that omits them leaves the columns untouched rather than defaulting.
+export const completeTask = taggedRequest("tasks", (taskName, judgement = {}) =>
   authRequest(ROUTES.TASKS.COMPLETE, {
     method: "POST",
-    body: JSON.stringify({ name: taskName }),
+    body: JSON.stringify({
+      name: taskName,
+      ...(judgement.complexity ? { task_complexity: judgement.complexity } : {}),
+      ...(judgement.difficulty ? { task_difficulty: judgement.difficulty } : {}),
+    }),
   }).then(unwrapEnvelope)
 );
 

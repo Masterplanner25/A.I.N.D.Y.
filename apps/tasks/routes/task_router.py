@@ -195,7 +195,13 @@ def complete_task(
         from apps._shared.flow import run_flow_or_raise
         result = run_flow_or_raise(
             "task_completion",
-            {"task_name": task.name},
+            {
+                "task_name": task.name,
+                # 1-5 judgements that feed WCU, collected at completion because difficulty
+                # guessed up front is a guess. Optional: omitted keys leave the columns alone.
+                "task_complexity": task.task_complexity,
+                "task_difficulty": task.task_difficulty,
+            },
             db=db,
             user_id=user_id,
         )

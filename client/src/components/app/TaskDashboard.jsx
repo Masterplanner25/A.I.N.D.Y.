@@ -42,6 +42,13 @@ export default function TaskDashboard() {
   const [creating, setCreating] = useState(false);
   // Names with a delete request in flight — same single-flight reasoning as `completing`.
   const [deleting, setDeleting] = useState(() => new Set());
+  // The task whose completion judgement is being taken, and the two 1-5 values so far.
+  // Collected at COMPLETION rather than creation: difficulty guessed up front is a guess,
+  // difficulty recorded afterwards is an observation — and WCU only accrues from completed
+  // tasks, so nothing is lost by waiting. Both feed `effort x complexity x difficulty`, and
+  // both were permanently 1 because nothing ever set them.
+  const [judging, setJudging] = useState(null);
+  const [judgement, setJudgement] = useState({ complexity: null, difficulty: null });
   const { toast, showToast, clearToast } = useToast();
   const { publishProjection } = useMasterplanProjection();
   const { loading, error, data, execute: fetchTasks } = useApiCall(getTasks, {
@@ -150,7 +157,20 @@ export default function TaskDashboard() {
     }
   };
 
-  const handleComplete = async (taskName) => {
+  const openJudgement = (taskName) => {
+    setJudging(taskName);
+    // Deliberately no defaults. Pre-selecting a middle value would record a fabricated
+    // judgement for anyone who just clicks through — the same failure the worth-declaration
+    // spec is built around, and the reason these columns being 1 was so hard to notice.
+    setJudgement({ complexity: null, difficulty: null });
+  };
+
+  const cancelJudgement = () => {
+    setJudging(null);
+    setJudgement({ complexity: null, difficulty: null });
+  };
+
+  const handleComplete = async (taskName, values = {}) => {
     // Functional update + read-back: two clicks in the same tick would both see a stale
     // `completing` from the closure and both pass a plain `.has()` check.
     let alreadyInFlight = false;
@@ -166,7 +186,8 @@ export default function TaskDashboard() {
     if (alreadyInFlight) return;
 
     try {
-      const res = await completeTask(taskName);
+      const res = await completeTask(taskName, values);
+      cancelJudgement();
 
       // Push the recomputed cascade-aware MasterPlan projection to the shared
       // context so the MasterPlan surface reflects it without waiting for its
@@ -300,10 +321,13 @@ export default function TaskDashboard() {
                       ▶ Start
                     </button>
               }
+                  {/* Opens the judgement step; it no longer completes anything itself, so
+                      it keeps its label while in flight. The progress state belongs to
+                      "Complete task" below — two buttons both reading "… Completing" was
+                      ambiguous to a screen reader and to the tests. */}
                   <button
-                    onClick={() => handleComplete(task.task_name)}
+                    onClick={() => openJudgement(task.task_name)}
                     disabled={completing.has(task.task_name)}
-                    aria-busy={completing.has(task.task_name)}
                     style={{
                       ...styles.completeBtn,
                       ...(completing.has(task.task_name)
@@ -311,7 +335,7 @@ export default function TaskDashboard() {
                         : null),
                     }}
                   >
-                    {completing.has(task.task_name) ? "… Completing" : "✅ Done"}
+                    ✅ Done
                   </button>
                 </>
             }
@@ -334,6 +358,70 @@ export default function TaskDashboard() {
                 {deleting.has(task.task_name) ? "… Deleting" : "🗑 Delete"}
               </button>
             </div>
+            {/* Two questions, 1-5, asked once — at completion, where the answer is an
+                observation rather than a guess. Nothing is pre-selected and Complete stays
+                disabled until both are chosen, so a fabricated middle value cannot be
+                recorded by clicking through. Cancel leaves the task untouched. */}
+            {judging === task.task_name && (
+              <div style={styles.judgementPanel}>
+                <p style={styles.judgementIntro}>
+                  How did that turn out? Both feed the plan&apos;s work-complexity measure.
+                </p>
+                {safeMap(
+                  [
+                    { key: "complexity", label: "Complexity", hint: "how many moving parts" },
+                    { key: "difficulty", label: "Difficulty", hint: "how hard it actually was" },
+                  ],
+                  ({ key, label, hint }) => (
+                    <div key={key} style={styles.judgementRow}>
+                      <span style={styles.judgementLabel}>
+                        {label} <span style={styles.judgementHint}>{hint}</span>
+                      </span>
+                      <span>
+                        {safeMap([1, 2, 3, 4, 5], (n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            aria-pressed={judgement[key] === n}
+                            aria-label={`${label} ${n} of 5`}
+                            onClick={() => setJudgement((prev) => ({ ...prev, [key]: n }))}
+                            style={{
+                              ...styles.scaleBtn,
+                              ...(judgement[key] === n ? styles.scaleBtnActive : null),
+                            }}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </span>
+                    </div>
+                  ),
+                )}
+                <div style={styles.judgementActions}>
+                  <button
+                    type="button"
+                    onClick={() => handleComplete(task.task_name, judgement)}
+                    disabled={
+                      !judgement.complexity ||
+                      !judgement.difficulty ||
+                      completing.has(task.task_name)
+                    }
+                    aria-busy={completing.has(task.task_name)}
+                    style={{
+                      ...styles.completeBtn,
+                      ...(!judgement.complexity || !judgement.difficulty
+                        ? { opacity: 0.5, cursor: "not-allowed" }
+                        : null),
+                    }}
+                  >
+                    {completing.has(task.task_name) ? "… Completing" : "Complete task"}
+                  </button>
+                  <button type="button" onClick={cancelJudgement} style={styles.actionBtn}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>)
         }
         
@@ -381,5 +469,13 @@ const styles = {
   completeBtn: { background: "rgba(0, 255, 170, 0.2)", border: "1px solid #00ffaa", color: "#00ffaa", padding: "6px 12px", borderRadius: "4px", cursor: "pointer" },
   // Muted rather than alarming: destructive, but it is confirmed before it fires, and a
   // red button next to every task reads as a warning about the task rather than an action.
-  deleteBtn: { background: "transparent", border: "1px solid #663333", color: "#cc7777", padding: "6px 12px", borderRadius: "4px", cursor: "pointer" }
+  deleteBtn: { background: "transparent", border: "1px solid #663333", color: "#cc7777", padding: "6px 12px", borderRadius: "4px", cursor: "pointer" },
+  judgementPanel: { marginTop: 10, padding: 12, background: "#0d0d0d", border: "1px solid #262626", borderRadius: 6 },
+  judgementIntro: { fontSize: 12, color: "#9a9a9a", marginBottom: 10 },
+  judgementRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 },
+  judgementLabel: { fontSize: 12, color: "#ccc" },
+  judgementHint: { fontSize: 11, color: "#6b6b6b", marginLeft: 6 },
+  scaleBtn: { background: "#1a1a1a", border: "1px solid #333", color: "#aaa", width: 30, height: 28, marginLeft: 4, borderRadius: 4, cursor: "pointer" },
+  scaleBtnActive: { background: "rgba(0, 255, 170, 0.15)", borderColor: "#00ffaa", color: "#00ffaa" },
+  judgementActions: { display: "flex", gap: 8, marginTop: 10 }
 };

@@ -17,6 +17,28 @@ vi.mock("../api/tasks.js", () => ({
 import TaskDashboard from "../components/app/TaskDashboard";
 
 /**
+ * Completing is a TWO-STEP interaction as of 2026-09-07: "Done" opens an inline judgement
+ * step (complexity + difficulty, 1-5 each) and "Complete task" sends the request. Both feed
+ * WCU, and both were permanently 1 because nothing collected them.
+ *
+ * These helpers keep the single-flight assertions below pointed at the button that actually
+ * sends — otherwise they would assert against a button that now only opens a panel, and pass
+ * for the wrong reason.
+ */
+const openJudgement = async () => {
+  fireEvent.click(await screen.findByRole("button", { name: /Done/i }));
+};
+
+const chooseJudgement = (complexity = 3, difficulty = 4) => {
+  fireEvent.click(screen.getByRole("button", { name: `Complexity ${complexity} of 5` }));
+  fireEvent.click(screen.getByRole("button", { name: `Difficulty ${difficulty} of 5` }));
+};
+
+const completeButton = () => screen.getByRole("button", { name: /Complete task/i });
+
+
+
+/**
  * Completing a task runs the whole `task_completion` flow — memory capture, downstream
  * unlock, ETA recalc and a full Infinity re-score — which took ~14s on the live stack.
  * Until this guard the button had no disabled state and no pending label, and
@@ -47,17 +69,23 @@ describe("TaskDashboard completion is single-flight", () => {
     );
 
     render(<TaskDashboard />);
-    const doneButton = await screen.findByRole("button", { name: /Done/i });
+    await openJudgement();
+    chooseJudgement();
 
     // Three clicks while the first request is still in flight — the live pattern.
-    fireEvent.click(doneButton);
-    fireEvent.click(doneButton);
-    fireEvent.click(doneButton);
+    const send = completeButton();
+    fireEvent.click(send);
+    fireEvent.click(send);
+    fireEvent.click(send);
 
     await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
 
-    // Explicitly assert the request WAS sent, so this cannot pass by sending nothing.
-    expect(mockCompleteTask).toHaveBeenCalledWith("Fix Nodus Issues");
+    // Explicitly assert the request WAS sent, so this cannot pass by sending nothing —
+    // and that the judgement travelled with it.
+    expect(mockCompleteTask).toHaveBeenCalledWith("Fix Nodus Issues", {
+      complexity: 3,
+      difficulty: 4,
+    });
 
     resolveCompletion({ task_result: "Completed task: Fix Nodus Issues" });
     await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
@@ -70,27 +98,31 @@ describe("TaskDashboard completion is single-flight", () => {
     );
 
     render(<TaskDashboard />);
-    fireEvent.click(await screen.findByRole("button", { name: /Done/i }));
+    await openJudgement();
+    chooseJudgement();
+    fireEvent.click(completeButton());
 
     const pending = await screen.findByRole("button", { name: /Completing/i });
     expect(pending).toBeDisabled();
 
     resolveCompletion({ task_result: "Completed task: Fix Nodus Issues" });
-    await waitFor(() => expect(pending).not.toBeDisabled());
+    await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
   });
 
   it("re-enables the button after a failure so a real retry is still possible", async () => {
     mockCompleteTask.mockRejectedValueOnce(new Error("boom"));
 
     render(<TaskDashboard />);
-    const doneButton = await screen.findByRole("button", { name: /Done/i });
-    fireEvent.click(doneButton);
+    await openJudgement();
+    chooseJudgement();
+    fireEvent.click(completeButton());
 
     await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
     // The guard must not latch on error — otherwise one failure permanently bricks the row.
-    await waitFor(() => expect(doneButton).not.toBeDisabled());
+    // The panel stays open on failure, so the judgement need not be re-entered to retry.
+    await waitFor(() => expect(completeButton()).not.toBeDisabled());
 
-    fireEvent.click(doneButton);
+    fireEvent.click(completeButton());
     await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(2));
   });
 });
