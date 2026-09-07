@@ -1,6 +1,6 @@
 ---
 title: "Strategy Layer Spec"
-last_verified: "2026-09-05"
+last_verified: "2026-09-07"
 api_version: "1.0"
 status: draft
 owner: "app-team"
@@ -467,7 +467,9 @@ class PlanStrategy(Base):
     # ordinary replanning, and is exactly a `refine` under MASTERPLAN_REFINE_VS_REVISE_SPEC.
     objective_id  = Column(UUID, ForeignKey("plan_objectives.id"), nullable=True, index=True)
     phase_id      = Column(UUID, ForeignKey("plan_phases.id"), nullable=True, index=True)
-    goal_id       = Column(UUID, ForeignKey("goals.id"), nullable=True, index=True)
+    # NOTE: no `goal_id`. It was dropped 2026-09-07 (Q1) — an objective and a goal turned out to
+    # be the same statement at different grain, and carrying both invited a join table for a
+    # relationship that does not exist. `goals` stays user-scoped and above plans.
 
     name       = Column(String(255), nullable=False)
     hypothesis = Column(Text, nullable=True)   # what we believe this will do, in the user's words
@@ -581,32 +583,78 @@ Neither is blocked on a decision about *them*. Both are blocked on this layer.
 
 ---
 
-## 6. Open questions — these need answers before building
+## 6. Open questions — ALL RESOLVED as of 2026-09-07
 
-1. **Does a strategy hang off the goal, the plan, or both?** This spec proposes both, with
-   `goal_id` nullable. The alternative — goal only, plan inferred — is simpler but cannot express
-   "this strategy belongs to plan v2 and its predecessor belongs to v1".
+**Every question in this section is now answered.** The layer is specified; what remains is
+building it, and the migration in §8 is the shape of that work.
 
-2. **Can a strategy serve more than one goal?** The model above says no (single `goal_id`). A join
-   table is the honest answer if strategies routinely serve two goals, and premature otherwise.
+Two answers came from measurement rather than opinion and are worth carrying forward: Q1 was
+resolved by noticing that an objective and a goal are the same statement at different grain, and
+Q6 was blocked by facts found after it was written (qualitative criteria cannot resolve, and the
+goals table has no reader) rather than by the reconciliation it asks about.
+
+1. ~~**Does a strategy hang off the goal, the plan, or both?**~~ **RESOLVED 2026-09-07 (owner):
+   objective and phase. `goal_id` is dropped.**
+
+   The reconciliation in §5 created a collision that was easier to see than to notice: a strategy
+   carried `objective_id`, `phase_id` AND `goal_id`, and two of those are the same statement at
+   different grain.
+
+   | | source | example |
+   |---|---|---|
+   | Objective | `structure_json["core_domains"]` (3) | "Ethical AI Framework" |
+   | Goal | `structure_json["success_criteria"]` (5) -> `goals` | "Establishment of a widely adopted ethical AI framework" |
+
+   A strategy is **owned by one objective** and **scheduled into one phase**. Objectives are
+   Genesis-authored, plan-scoped, and are what attribution needs (§5b). `goals` stays the
+   user-scoped layer that outlives plan versions, and is not referenced by strategies at all.
+
+2. ~~**Can a strategy serve more than one goal?**~~ **DISSOLVED by Q1.** With `goal_id` gone the
+   question becomes "can a strategy serve more than one objective", and the answer is no —
+   ownership is what `objective_id` means, and a strategy serving two objectives is two
+   strategies. No join table, which was the outcome this question existed to avoid.
 
 3. ~~**Are phases strategies, or a tier above?**~~ **RESOLVED 2026-09-05 (owner): a tier above.**
    *"Execution of a strategy may change what phase you're in or what's required of a phase, but
    overall it should be above a strategy."* Modelled in §5 as `plan_phases` plus the
    advance/amend edges. This was the decision that would have cost a double migration.
 
-4. **What does abandoning a strategy do to its tasks?** Cascade to cancelled, orphan them back to
-   the plan, or leave them? "Failable" is only useful if abandonment is cheap and obvious.
+4. ~~**What does abandoning a strategy do to its tasks?**~~ **RESOLVED 2026-09-07 (owner):
+   completed tasks stay untouched; incomplete tasks return to the plan unattached.**
 
-5. **Does a strategy have a target?** `goal_states` already carries `progress` and
-   `success_signal`. If strategies get their own measurable target, that is a second measurement
-   surface and needs to justify itself against the one that exists.
+   Cascading to cancelled would destroy the record of work actually done — and it would
+   contradict an existing invariant: `masterplan_execution_service` already refuses to replace a
+   plan's tasks when any are completed (`masterplan_tasks_completed_cannot_replace`). Abandonment
+   has to be cheap, and destroying history is not cheap.
 
-6. **Should lock time seed `goals` from `success_criteria`?** Separable from the whole strategy
-   question, much smaller, and would put 5 rows in a table that has 0. Complicated slightly by
-   §3: the user's *actual* declared goal ("Financial Freedom", $1M, 2030-12-31) lives in scalar
-   columns on the plan, not in `goals`. Seeding from `success_criteria` without reconciling that
-   gives you a goals table that disagrees with the plan header.
+   It also matters for measurement. WCU accrues from *completed* tasks (§5b); cancelling them on
+   abandonment would retroactively reduce the work you did, which is false — you did the work,
+   the approach is what failed.
+
+5. ~~**Does a strategy have a target?**~~ **RESOLVED 2026-09-07 (owner): no.**
+
+   A strategy's outcome is **judged** — `worked` | `did_not_work` | `inconclusive` — not measured.
+   Its measurable side is inherited rather than declared: WCU rolls up through the strategy to the
+   objective (§5b), so "how much work went into this approach" is answerable without the strategy
+   owning a number.
+
+   A declared target would be a second measurement surface competing with `goal_states`, and it is
+   the surface most likely to be filled in mechanically — the same failure the worth-declaration
+   spec is built around.
+
+6. ~~**Should lock time seed `goals` from `success_criteria`?**~~ **ANSWERED 2026-09-07: not yet,
+   and not for the reason this question assumed.**
+
+   The owner settled the reconciliation — the plan's scalar goal ("Financial Freedom", $1M,
+   2030-12-31) becomes one of the seeded goals rather than competing with them. But seeding is
+   still blocked on two things found afterwards (`MASTERPLAN_GOAL_ATTAINMENT_SPEC` §4b):
+
+   * the five criteria are qualitative and would seed as **permanently unresolved** until
+     attribution exists, and
+   * **nothing in `client/src` calls the goals API** — verified 2026-09-07 — so the rows would be
+     invisible.
+
+   Both are downstream of this layer, not of any decision about goals.
 
 7. ~~**What shape is `exit_criteria`?**~~ **RESOLVED 2026-09-05 (owner):** *"Are the things that
    are supposed to be done in that phase complete — but the system should say 'you seem to be
@@ -647,7 +695,9 @@ Neither is blocked on a decision about *them*. Both are blocked on this layer.
      estimate-vs-actual pace (§3) and the live plan's first datum was 7.6% ahead — the same
      number that would trigger a review is the one already feeding the score.
 
-9. **Do the 12-month phase durations mean anything?** Genesis emitted `duration_months: 12` five
+9. ~~**Do the 12-month phase durations mean anything?**~~ **RESOLVED 2026-09-07 (owner): no —
+   ordinal only.** Phases carry order and an explicit dependency edge; dates come from actual
+   `entered_at` / `exited_at`, not from a declared duration. Original reasoning: Genesis emitted `duration_months: 12` five
    times, which reads as an even split of the 5-year horizon rather than a considered estimate.
    If phases carry dates, they inherit that arbitrariness; if they carry only order, they don't.
 
@@ -737,9 +787,10 @@ condition §3 is complaining about, added to rather than removed.
 
 ## 9. What this spec does not claim
 
-It does not claim the *proposed* layer is the right shape. Questions 3, 7 and 8 are resolved;
-1, 2, 4, 5, 6 and 9 are not, and question 6 (reconciling the plan's scalar goal columns with an
-empty `goals` table) is the one most likely to bite.
+It no longer has open questions — §6 is fully resolved as of 2026-09-07. What it still does not
+claim is that the *implementation* will survive contact: the migration in §8 moves six live rows
+by hand, and `plan_objectives` is specified in `MASTERPLAN_REFINE_VS_REVISE_SPEC` rather than
+here, so the two documents have to land together or not at all.
 
 It also no longer claims to be the primary document for this layer. `MASTERPLAN_REFINE_VS_REVISE_SPEC`
 got here first (§0); this spec supplies the live evidence, the phase axis and the migration.
