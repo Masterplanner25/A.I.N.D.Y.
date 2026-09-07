@@ -232,8 +232,14 @@ def search_memory(query: str, db, user_id: str | None = None, tags: list[str] | 
         return {"items": [], "ids": [], "formatted": "", "count": 0}
 
 
-def search_seo(text: str, top_n: int = 10, *, title: str | None = None) -> dict[str, Any]:
-    results = seo_analysis(text, top_n, title=title)
+def search_seo(
+    text: str,
+    top_n: int = 10,
+    *,
+    title: str | None = None,
+    target_keywords: list[str] | None = None,
+) -> dict[str, Any]:
+    results = seo_analysis(text, top_n, title=title, target_keywords=target_keywords)
     avg_density = 0.0
     if results["keyword_densities"]:
         avg_density = sum(results["keyword_densities"].values()) / len(results["keyword_densities"])
@@ -252,9 +258,12 @@ def analyze_seo_content(
     db=None,
     user_id: str | None = None,
     title: str | None = None,
+    target_keywords: list[str] | None = None,
 ) -> dict[str, Any]:
     def _build(memory: dict[str, Any]) -> dict[str, Any]:
-        analysis = search_seo(text, top_n=top_n, title=title)
+        analysis = search_seo(
+            text, top_n=top_n, title=title, target_keywords=target_keywords
+        )
         analysis["memory"] = memory
         return analysis
 

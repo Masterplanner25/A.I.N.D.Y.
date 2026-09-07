@@ -263,6 +263,98 @@ def _title_suggestions(title_analysis: dict | None) -> list[dict]:
     return out
 
 
+def _coverage_suggestions(coverage: dict | None) -> list[dict]:
+    """Findings about the terms the writer said they were aiming at.
+
+    ★ Every one carries its density and the threshold that produced the verdict. A verdict
+    that hides the number is the tool deciding for the writer, and these thresholds are claims
+    about search engines this tool cannot verify (SEO_EDITING_AID_SPEC §2).
+    """
+    from apps.search.services.editing_aid import OPENING_WORDS
+
+    targets = (coverage or {}).get("targets") or []
+    out: list[dict] = []
+    for target in targets:
+        term = target["term"]
+        density = target["density"]
+        limits = target["thresholds"]
+        if target["verdict"] == "absent":
+            out.append({
+                "metric": "target_coverage",
+                "issue": f"'{term}' does not appear in the article.",
+                "suggestion": "Either work it in, or drop it as a target for this piece.",
+                "severity": "warn",
+            })
+        elif target["verdict"] == "thin":
+            out.append({
+                "metric": "target_coverage",
+                "issue": f"'{term}' is at {density}% (thin below {limits['thin_below']}%).",
+                "suggestion": (
+                    f"Used {target['occurrences']} time(s). Reinforce it if this piece is "
+                    "really about that term."
+                ),
+                "severity": "info",
+            })
+        elif target["verdict"] == "overused":
+            out.append({
+                "metric": "target_coverage",
+                "issue": f"'{term}' is at {density}% (over {limits['overused_above']}%).",
+                "suggestion": f"Used {target['occurrences']} time(s) — that reads as stuffing.",
+                "severity": "warn",
+            })
+        if target["verdict"] != "absent" and target["in_opening"] is False:
+            out.append({
+                "metric": "target_placement",
+                "issue": f"'{term}' does not appear in the first {OPENING_WORDS} words.",
+                "suggestion": (
+                    "A term used only late in the article reads as a different piece from one "
+                    "that opens with it."
+                ),
+                "severity": "info",
+            })
+    return out
+
+
+def _repetition_suggestions(repetition: dict | None) -> list[dict]:
+    """Repeated phrasing and sentence openers, pointed at and never rewritten.
+
+    ★ No suggested replacement text, here or anywhere. The owner considered rewriting and
+    rejected it as defeating the purpose, and slippage would be gradual — a "suggested
+    phrasing" field is a rewrite with extra steps (SEO_EDITING_AID_SPEC §3).
+    """
+    if not isinstance(repetition, dict):
+        return []
+    out: list[dict] = []
+
+    clustered = [p for p in repetition.get("repeated_phrases") or [] if p["clustered"]]
+    if clustered:
+        worst = clustered[0]
+        out.append({
+            "metric": "repeated_phrases",
+            "issue": (
+                f"'{worst['phrase']}' appears {worst['occurrences']} times, more than once in "
+                "the same paragraph."
+            ),
+            # Position is the whole point: three uses across 4,000 words is fine, three in one
+            # paragraph is a thing to fix, and a count alone cannot tell them apart.
+            "suggestion": "Vary the phrasing where the uses sit close together.",
+            "severity": "info",
+        })
+
+    openers = repetition.get("sentence_openers") or []
+    if openers and openers[0]["share"] >= 20.0:
+        top = openers[0]
+        out.append({
+            "metric": "sentence_openers",
+            "issue": (
+                f"{top['count']} sentences ({top['share']}%) begin with '{top['opener']}'."
+            ),
+            "suggestion": "Vary how sentences open — this is hard to notice while writing.",
+            "severity": "info",
+        })
+    return out
+
+
 def seo_improvement_suggestions(analysis: dict) -> list[dict]:
     """Actionable SEO improvement suggestions derived from a ``seo_analysis`` result.
 
@@ -272,6 +364,8 @@ def seo_improvement_suggestions(analysis: dict) -> list[dict]:
     """
     suggestions: list[dict] = []
     suggestions.extend(_title_suggestions(analysis.get("title_analysis")))
+    suggestions.extend(_coverage_suggestions(analysis.get("keyword_coverage")))
+    suggestions.extend(_repetition_suggestions(analysis.get("repetition")))
     word_count = int(analysis.get("word_count") or 0)
     readability = analysis.get("readability")
     densities = analysis.get("keyword_densities") or {}
@@ -337,7 +431,13 @@ def seo_improvement_suggestions(analysis: dict) -> list[dict]:
     return suggestions
 
 
-def seo_analysis(text: str, top_n: int = 10, *, title: str | None = None):
+def seo_analysis(
+    text: str,
+    top_n: int = 10,
+    *,
+    title: str | None = None,
+    target_keywords: list[str] | None = None,
+):
     """Performs a basic SEO analysis on given text, with improvement suggestions.
 
     ★ Analyses the WHOLE article. This used to call `prepare_input_text`, whose `limit`
@@ -372,6 +472,25 @@ def seo_analysis(text: str, top_n: int = 10, *, title: str | None = None):
         result["title_analysis"] = analyze_title(
             title, body_keywords=result["top_keywords"]
         )
+
+    # Imported here rather than at module scope: `editing_aid` imports this module for the
+    # tokenizer and the density thresholds, and a top-level import would close the cycle.
+    from apps.search.services.editing_aid import keyword_coverage, repetition_report
+
+    if target_keywords:
+        # ★ The question changes when targets are supplied. `top_keywords` answers "what words
+        # appear most often", which for English prose has a known and useless answer. Coverage
+        # answers "am I covering what I am trying to rank for" — and both are reported, because
+        # what the draft is actually about is still worth seeing next to what it aims at.
+        result["keyword_coverage"] = keyword_coverage(
+            prepared_text, target_keywords, title=title
+        )
+
+    # Always computed. Repetition needs no new input from the writer, and it is the feature
+    # with the clearest use: AI-assisted prose has a repetition signature that is nearly
+    # invisible to the person who just wrote it (SEO_EDITING_AID_SPEC §3).
+    result["repetition"] = repetition_report(prepared_text)
+
     result["suggestions"] = seo_improvement_suggestions(result)
     return result
 

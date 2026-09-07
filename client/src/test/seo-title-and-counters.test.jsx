@@ -121,7 +121,7 @@ describe("SEO tool title and character budgets", () => {
     fireEvent.click(screen.getByRole("button", { name: /Analyze SEO/i }));
 
     await waitFor(() =>
-      expect(mockAnalyzeSeo).toHaveBeenCalledWith("some article body", "A concise headline"),
+      expect(mockAnalyzeSeo).toHaveBeenCalledWith("some article body", "A concise headline", []),
     );
   });
 
@@ -130,7 +130,9 @@ describe("SEO tool title and character budgets", () => {
     typeBody("some article body");
     fireEvent.click(screen.getByRole("button", { name: /Analyze SEO/i }));
 
-    await waitFor(() => expect(mockAnalyzeSeo).toHaveBeenCalledWith("some article body", ""));
+    await waitFor(() =>
+      expect(mockAnalyzeSeo).toHaveBeenCalledWith("some article body", "", []),
+    );
   });
 
   // ── the verdict never arrives without its number ─────────────────────────────────────
@@ -227,7 +229,7 @@ describe("SEO tool title and character budgets", () => {
     fireEvent.click(screen.getByRole("button", { name: /Suggest Titles/i }));
 
     await waitFor(() =>
-      expect(mockGenerateTitles).toHaveBeenCalledWith("some article body", "Series: Part Four"),
+      expect(mockGenerateTitles).toHaveBeenCalledWith("some article body", "Series: Part Four", []),
     );
   });
 
@@ -278,5 +280,115 @@ describe("SEO tool title and character budgets", () => {
     const reason = await screen.findByTestId("title-options-reason");
     expect(reason.textContent).toMatch(/could not be reached/);
     expect(reason.textContent).not.toMatch(/Frameworks/);
+  });
+
+  // ── §2 target coverage, §3 repetition ────────────────────────────────────────────────
+
+  it("offers a target keywords field", () => {
+    render(<AiSeoTool />);
+
+    // Without targets the tool answers "what words appear most often", which for English prose
+    // has a known and largely useless answer.
+    expect(screen.getByLabelText(/Target keywords/i)).toBeTruthy();
+  });
+
+  it("splits comma-separated targets and keeps phrases intact", async () => {
+    render(<AiSeoTool />);
+    typeBody("some article body");
+    fireEvent.change(screen.getByLabelText(/Target keywords/i), {
+      target: { value: " runtime framework , nodus ,, " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Analyze SEO/i }));
+
+    // "runtime framework" is a different target from "runtime" and "framework" counted apart.
+    await waitFor(() =>
+      expect(mockAnalyzeSeo).toHaveBeenCalledWith("some article body", "", [
+        "runtime framework",
+        "nodus",
+      ]),
+    );
+  });
+
+  it("shows each verdict beside the number and the threshold that produced it", async () => {
+    mockAnalyzeSeo.mockResolvedValue({
+      word_count: 900, readability: 55, top_keywords: [], keyword_densities: {},
+      keyword_coverage: {
+        count: 1,
+        targets: [{
+          term: "runtime framework", occurrences: 4, density: 1.2, verdict: "healthy",
+          thresholds: { thin_below: 0.5, overused_above: 4.0 },
+          in_opening: true, in_heading: null, in_title: false,
+        }],
+      },
+    });
+    render(<AiSeoTool />);
+    typeBody();
+    fireEvent.click(screen.getByRole("button", { name: /Analyze SEO/i }));
+
+    // ★ A verdict on its own is the tool deciding for the writer.
+    const panel = await screen.findByTestId("coverage");
+    expect(panel.textContent).toMatch(/healthy/);
+    expect(panel.textContent).toMatch(/4× · 1.2%/);
+    expect(panel.textContent).toMatch(/thin below 0.5%/);
+    expect(panel.textContent).toMatch(/stuffed above 4%/);
+  });
+
+  it("says it could not look for headings rather than saying no", async () => {
+    mockAnalyzeSeo.mockResolvedValue({
+      word_count: 900, readability: 55, top_keywords: [], keyword_densities: {},
+      keyword_coverage: {
+        count: 1,
+        targets: [{
+          term: "alpha", occurrences: 1, density: 0.1, verdict: "thin",
+          thresholds: { thin_below: 0.5, overused_above: 4.0 },
+          in_opening: false, in_heading: null, in_title: null,
+        }],
+      },
+    });
+    render(<AiSeoTool />);
+    typeBody();
+    fireEvent.click(screen.getByRole("button", { name: /Analyze SEO/i }));
+
+    // "We looked and it is not there" and "we could not look" are different answers.
+    const panel = await screen.findByTestId("coverage");
+    expect(panel.textContent).toMatch(/no headings found/);
+  });
+
+  it("reports repetition with position, and rewrites nothing", async () => {
+    mockAnalyzeSeo.mockResolvedValue({
+      word_count: 900, readability: 55, top_keywords: [], keyword_densities: {},
+      repetition: {
+        repeated_phrases: [
+          { phrase: "the runtime framework", occurrences: 4, words: 3, paragraphs: [0, 1], clustered: true },
+        ],
+        sentence_openers: [{ opener: "that", count: 6, share: 18.2 }],
+        overused_words: [],
+      },
+    });
+    render(<AiSeoTool />);
+    typeBody();
+    fireEvent.click(screen.getByRole("button", { name: /Analyze SEO/i }));
+
+    const panel = await screen.findByTestId("repetition");
+    expect(panel.textContent).toMatch(/the runtime framework/);
+    expect(panel.textContent).toMatch(/4×/);
+    // Position, not just count: three uses across an article is fine, three in a paragraph is not.
+    expect(panel.textContent).toMatch(/close together/);
+    expect(panel.textContent).toMatch(/6 sentences \(18.2%\)/);
+    // ★ Points, never rewrites. No replacement wording anywhere in the panel.
+    expect(panel.textContent).not.toMatch(/instead|try:|replace with/i);
+  });
+
+  it("shows no repetition panel when there is nothing repeated", async () => {
+    mockAnalyzeSeo.mockResolvedValue({
+      word_count: 900, readability: 55, top_keywords: [], keyword_densities: {},
+      repetition: { repeated_phrases: [], sentence_openers: [], overused_words: [] },
+    });
+    render(<AiSeoTool />);
+    typeBody();
+    fireEvent.click(screen.getByRole("button", { name: /Analyze SEO/i }));
+
+    await screen.findByText(/Word Count/i);
+    expect(screen.queryByTestId("repetition")).toBeNull();
   });
 });

@@ -44,10 +44,12 @@ export function runLeadGen(query) {
   });
 }
 
-export function analyzeSeo(content, title) {
-  // `title` is optional and omitted when blank, so the request stays byte-identical to the
-  // previous one for callers that do not pass it.
-  const body = title ? { content, title } : { content };
+export function analyzeSeo(content, title, targetKeywords) {
+  // Both extras are optional and omitted when empty, so the request stays byte-identical to
+  // the previous one for callers that do not pass them.
+  const body = { content };
+  if (title) body.title = title;
+  if (targetKeywords?.length) body.target_keywords = targetKeywords;
   return authRequest(ROUTES.SEARCH.ANALYZE_SEO, {
     method: "POST",
     body: JSON.stringify(body),

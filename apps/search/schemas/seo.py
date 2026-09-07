@@ -9,6 +9,9 @@ class SEOInput(BaseModel):
     # — so it could report on a draft without ever looking at the line a search result shows
     # (TITLE_AS_CONTAINER_SPEC §6). Omitted, every response is unchanged.
     title: Optional[str] = None
+    # The terms the writer is aiming at. Supplied, the tool answers "am I covering what I am
+    # trying to rank for" instead of "what words appear most often" (SEO_EDITING_AID_SPEC §2).
+    target_keywords: Optional[list[str]] = None
 
 
 class MetaInput(BaseModel):

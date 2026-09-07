@@ -66,6 +66,7 @@ class LegacyContentInput(BaseModel):
     # pins ANALYZE_SEO to "/apps/seo/analyze_seo/". A new field added only to `SEOInput` would
     # therefore be unreachable from the UI, which is the surface it exists for.
     title: Optional[str] = None
+    target_keywords: Optional[list[str]] = None
 
 
 @router.post("/analyze")
@@ -80,7 +81,8 @@ def analyze_seo(
     user_id = str(current_user["sub"])
 
     results = analyze_seo_content(
-        data.text, data.top_n, db=db, user_id=user_id, title=data.title
+        data.text, data.top_n, db=db, user_id=user_id, title=data.title,
+        target_keywords=data.target_keywords,
     )
 
     # Save key SEO metrics
@@ -190,7 +192,8 @@ def analyze_seo_compat(
 
     def handler(_ctx):
         return analyze_seo_content(
-            data.content, 10, db=db, user_id=user_id, title=data.title
+            data.content, 10, db=db, user_id=user_id, title=data.title,
+            target_keywords=data.target_keywords,
         )
 
     return _with_execution_envelope(
