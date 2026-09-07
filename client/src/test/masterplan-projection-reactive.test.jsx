@@ -97,6 +97,21 @@ function renderSurfaces() {
   );
 }
 
+/**
+ * Completing became a two-step interaction on 2026-09-07: "Done" opens an inline judgement
+ * step (complexity + difficulty, 1-5) and "Complete task" sends the request. Both feed WCU,
+ * which was reduced to estimated hours while nothing collected them.
+ *
+ * These tests are about the PROJECTION reacting to a completion, not about the judgement, so
+ * this helper drives the new steps and keeps their subject unchanged.
+ */
+const completeTaskFromUI = () => {
+  fireEvent.click(screen.getByRole("button", { name: /done/i }));
+  fireEvent.click(screen.getByRole("button", { name: "Complexity 3 of 5" }));
+  fireEvent.click(screen.getByRole("button", { name: "Difficulty 3 of 5" }));
+  fireEvent.click(screen.getByRole("button", { name: /Complete task/i }));
+};
+
 describe("MasterPlan projection reacts to task completion", () => {
   beforeEach(() => {
     mockGetTasks.mockReset();
@@ -136,7 +151,7 @@ describe("MasterPlan projection reacts to task completion", () => {
     expect(screen.queryByText("cascade")).not.toBeInTheDocument();
 
     // Complete the task from the task surface.
-    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+    completeTaskFromUI();
 
     // The plan panel adopts the fresh cascade projection reactively — no
     // second getMasterplanProjection call is made.
@@ -156,7 +171,7 @@ describe("MasterPlan projection reacts to task completion", () => {
 
     expect(await screen.findByText("5d ahead")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+    completeTaskFromUI();
 
     // Still the original projection; nothing published.
     expect(await screen.findByText("5d ahead")).toBeInTheDocument();

@@ -575,9 +575,47 @@ def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
 TASK_ALREADY_COMPLETED_PREFIX = "Task already completed:"
 
 
-def complete_task(db: Session, name: str, user_id: str = None):
+# Both are 1-5, matching the scale `analytics/schemas/analytics_inputs.py` already documents
+# for the same two concepts. Declared here because the Task columns carry no constraint of
+# their own — they are plain Integers defaulting to 1.
+WCU_JUDGEMENT_MIN = 1
+WCU_JUDGEMENT_MAX = 5
+
+
+def _validated_judgement(value, field: str) -> int | None:
+    """A 1-5 judgement, or None when not supplied. Out-of-range is an error, not a clamp."""
+    if value is None:
+        return None
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field} must be an integer between {WCU_JUDGEMENT_MIN} and {WCU_JUDGEMENT_MAX}")
+    if not (WCU_JUDGEMENT_MIN <= number <= WCU_JUDGEMENT_MAX):
+        raise ValueError(f"{field} must be between {WCU_JUDGEMENT_MIN} and {WCU_JUDGEMENT_MAX}, got {number}")
+    return number
+
+
+def complete_task(
+    db: Session,
+    name: str,
+    user_id: str = None,
+    *,
+    task_complexity=None,
+    task_difficulty=None,
+):
     """
     Mark task complete and persist the primary domain mutation.
+
+    ★ `task_complexity` and `task_difficulty` are collected HERE, at completion, rather than
+    at creation. Both feed WCU — `effort_hours x complexity x difficulty` — and both were
+    permanently 1 because nothing ever set them, which quietly reduced Work Complexity Units
+    to estimated hours (`MASTERPLAN_GOAL_ATTAINMENT_SPEC` §4b).
+
+    Completion is the right moment because difficulty guessed up front is a guess and
+    difficulty recorded afterwards is an observation — and WCU only accrues from completed
+    tasks, so nothing is lost by waiting. Optional on purpose: an agent-driven or scripted
+    completion that cannot judge should leave the columns alone rather than invent a middle
+    value, which is the failure mode the worth-declaration spec is built around.
     """
     owner_user_id = _user_uuid(user_id)
     task = find_task(db, name, user_id=user_id)
@@ -609,9 +647,20 @@ def complete_task(db: Session, name: str, user_id: str = None):
         db.commit()
         raise ValueError(f"task_blocked:{task.name}")
 
+    # Validate BEFORE any mutation: a bad judgement must not leave a half-completed task.
+    complexity = _validated_judgement(task_complexity, "task_complexity")
+    difficulty = _validated_judgement(task_difficulty, "task_difficulty")
+
     now = datetime.now()
     if getattr(task, "start_time", None):
         task.time_spent += (now - task.start_time).total_seconds()
+
+    # Only written when supplied — an omitted judgement leaves the existing value rather than
+    # overwriting a real one with a default.
+    if complexity is not None:
+        task.task_complexity = complexity
+    if difficulty is not None:
+        task.task_difficulty = difficulty
 
     task.status = "completed"
     task.end_time = now
