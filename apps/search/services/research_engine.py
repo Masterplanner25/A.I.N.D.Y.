@@ -27,10 +27,13 @@ def web_search(query: str) -> str:
 
     url = "https://api.perplexity.ai/search"
     resp = perform_external_call(
-        service_name="http",
+        # The second Perplexity call site in this repo — the first is rippletrace's mention
+        # detection. Both hit `/search`, both spend the same key, and both were labelled
+        # `http`, so neither was countable against the other.
+        service_name="perplexity",
         endpoint=url,
         method="POST",
-        extra={"purpose": "research_web_search", "provider": "perplexity"},
+        extra={"purpose": "research_web_search"},
         operation=lambda: requests.post(
             url,
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},

@@ -20,10 +20,10 @@ class YouTubeService:
             "key": self.api_key
         }
         r = perform_external_call(
-            service_name="http",
+            service_name="youtube",
             endpoint=url,
             method="GET",
-            extra={"purpose": "youtube_channel_data", "provider": "youtube"},
+            extra={"purpose": "youtube_channel_data"},
             operation=lambda: requests.get(url, params=params),
         )
         return r.json()
@@ -38,10 +38,10 @@ class YouTubeService:
             "key": self.api_key
         }
         r = perform_external_call(
-            service_name="http",
+            service_name="youtube",
             endpoint=url,
             method="GET",
-            extra={"purpose": "youtube_playlist_videos", "provider": "youtube"},
+            extra={"purpose": "youtube_playlist_videos"},
             operation=lambda: requests.get(url, params=params),
         )
         return r.json()
@@ -55,10 +55,10 @@ class YouTubeService:
             "key": self.api_key
         }
         r = perform_external_call(
-            service_name="http",
+            service_name="youtube",
             endpoint=url,
             method="GET",
-            extra={"purpose": "youtube_video_stats", "provider": "youtube"},
+            extra={"purpose": "youtube_video_stats"},
             operation=lambda: requests.get(url, params=params),
         )
         return r.json()

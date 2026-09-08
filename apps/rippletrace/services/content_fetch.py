@@ -283,6 +283,7 @@ def fetch_url(
     last_modified: str | None = None,
     db=None,
     user_id: str | None = None,
+    purpose: str = "rippletrace_content_ingest",
 ) -> FetchResult:
     """Fetch a user-supplied URL, validating every redirect hop.
 
@@ -310,12 +311,19 @@ def fetch_url(
             target = current
             try:
                 response = perform_external_call(
-                    service_name="http",
+                    # Not a provider — this fetches arbitrary publisher URLs — but still its
+                    # own class of outbound call, and now the busiest one: ping verification
+                    # makes up to 60 fetches per detection run.
+                    service_name="web_fetch",
                     endpoint=target,
                     method="GET",
                     db=db,
                     user_id=user_id,
-                    extra={"purpose": "rippletrace_content_ingest"},
+                    # ★ Supplied by the caller. It was hardcoded to "rippletrace_content_ingest",
+                    # so the verification fetches added 2026-09-07 were filed as content ingest
+                    # — the two are now the same function doing two different jobs at very
+                    # different volumes, and the ledger could not tell them apart.
+                    extra={"purpose": purpose},
                     operation=lambda: session.get(
                         target,
                         headers=headers,

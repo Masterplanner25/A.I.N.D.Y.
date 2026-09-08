@@ -125,7 +125,9 @@ def verify_hit(
         return UNVERIFIED, "nothing to check against"
 
     try:
-        result = fetch_url(hit_url, db=db, user_id=user_id)
+        result = fetch_url(
+            hit_url, db=db, user_id=user_id, purpose="rippletrace_ping_verification"
+        )
     except ContentFetchError as exc:
         # Includes the blocked statuses. The publisher refuses scripted requests; that is a
         # fact about them, not evidence about whether they cited you.
