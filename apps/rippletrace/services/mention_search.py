@@ -93,12 +93,20 @@ def search(
 
     try:
         response = perform_external_call(
-            service_name="http",
+            # ★ Named, not "http". Every other paid provider in this repo names itself
+            # (`openai`, `stripe`, `deepseek`, `crm`); six call sites were labelled `http`, so
+            # a Perplexity search was indistinguishable from a page fetch in the external-call
+            # ledger. The provider was already recorded — one field too deep, inside `extra`.
+            #
+            # Not an LLM client and deliberately not on the runtime's LLM seam: this is
+            # Perplexity's SEARCH API, which returns documents. There is no model, no messages
+            # and no token usage, so there is nothing for `observe_llm_usage` to count.
+            service_name="perplexity",
             endpoint=SEARCH_ENDPOINT,
             method="POST",
             db=db,
             user_id=user_id,
-            extra={"purpose": "rippletrace_mention_search", "provider": "perplexity"},
+            extra={"purpose": "rippletrace_mention_search"},
             operation=lambda: requests.post(
                 SEARCH_ENDPOINT,
                 headers={
