@@ -100,12 +100,22 @@ def _analyze_drop_point_internal(drop_point_id: str, db: Session) -> Optional[di
     if not drop_point:
         return None
 
-    pings: List[PingDB] = (
+    # ★ VERIFIED pings only (RIPPLE-PINGS-NOT-ECHOES-1). A ping records a page the search
+    # provider returned; until it has been fetched and shown to contain this drop point's URL
+    # or title, it is a page about the same subject rather than an echo. Scoring the
+    # unverified ones is what produced 18 "successful" drop points and five ranked strategies
+    # from an input that measured topical density.
+    #
+    # The consequence is intended and visible: every score computed before verification
+    # existed falls to zero until detection re-runs. A 0 that means "nothing confirmed" is
+    # better than a 24.5 that means "a search returned nine topically-related pages".
+    all_pings: List[PingDB] = (
         db.query(PingDB)
         .filter(PingDB.drop_point_id == drop_point_id)
         .order_by(PingDB.date_detected.asc())
         .all()
     )
+    pings = [p for p in all_pings if getattr(p, "verification", None) == "verified"]
 
     total_pings = len(pings)
     platforms = {ping.source_platform for ping in pings if ping.source_platform}

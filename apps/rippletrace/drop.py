@@ -36,3 +36,21 @@ class PingDB(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     strength = Column(Float, default=1.0, nullable=False)
     connection_type = Column(String, default="direct", nullable=False)
+
+    # ★ Whether this page was checked and actually cites the drop point
+    # (RIPPLE-PINGS-NOT-ECHOES-1). Detection's search provider is an answer engine: it returns
+    # the sources it used to answer, which are topically related by construction and almost
+    # never the piece searched for. Measured 2026-09-07: 1 of 256 pings pointed at a URL
+    # plausibly connected to the author.
+    #
+    #   verified    — the page was fetched and contains the drop point's URL or title
+    #   unverified  — it could not be fetched, or predates this column
+    #
+    # Only `verified` pings score. `unverified` is deliberately not "assume no": "we looked and
+    # it does not cite you" and "we could not look" are different answers, and publishers who
+    # refuse scripted requests (401/403/405/406/429/451) produce the second constantly.
+    #
+    # There is no `rejected` value in the table. A candidate that demonstrably fails
+    # verification is never written — a page that does not cite you is not a ripple.
+    verification = Column(String(16), default="unverified", nullable=False, index=True)
+    verification_note = Column(Text, nullable=True)

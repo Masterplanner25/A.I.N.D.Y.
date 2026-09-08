@@ -132,7 +132,17 @@ def test_ping_id_is_stable_across_tracking_noise():
 
 
 def test_detection_is_idempotent_and_scores_the_drop_point(monkeypatch):
-    """Re-running detection must re-find the same references without inflating spread."""
+    """Re-running detection must re-find the same references without inflating spread.
+
+    ★ Verification is stubbed to `verified` here (RIPPLE-PINGS-NOT-ECHOES-1). Since
+    2026-09-07 a ping only scores once the page has been fetched and shown to contain the drop
+    point's URL or title — so without the stub these hits would be recorded `unverified` and
+    the spread/narrative assertions below would read 0. That is the correct new behaviour and
+    is covered in `test_ripple_ping_verification.py`; what this test is about is idempotency,
+    and stubbing keeps it about that.
+    """
+    from apps.rippletrace.services.ping_verification import VERIFIED
+
     session = _build_session()
     try:
         drop_point = _drop_point(id="dp-idem", user_id=None)
@@ -144,6 +154,7 @@ def test_detection_is_idempotent_and_scores_the_drop_point(monkeypatch):
             Hit(url="https://beta.example/also", title="Beta too"),
         ]
         monkeypatch.setattr(detection, "search", lambda *a, **k: hits)
+        monkeypatch.setattr(detection, "verify_hit", lambda **kw: (VERIFIED, None))
 
         first = detection.detect_for_drop_point(session, drop_point)
         assert first["created"] == 2
@@ -214,3 +225,34 @@ def test_detection_job_needs_a_key(monkeypatch):
     monkeypatch.setenv(detection.DETECTION_FLAG, "1")
     monkeypatch.delenv(mention_search.API_KEY_ENV, raising=False)
     assert detection.detect_due_mentions() == {"skipped": True, "reason": "no_api_key"}
+
+
+def test_unstubbed_verification_leaves_a_hit_unscored(monkeypatch):
+    """★ The default is now "not evidence until checked" — the fix for RIPPLE-PINGS-NOT-ECHOES-1.
+
+    The sibling test above stubs verification so it can be about idempotency. This one does
+    not, and asserts the shape that stub is hiding: an unreachable page produces a ping that
+    exists and scores nothing. Without it, the stub could silently mask a regression that
+    turned verification back off.
+    """
+    from apps.rippletrace.models import PingDB
+
+    session = _build_session()
+    try:
+        drop_point = _drop_point(id="dp-unverified", user_id=None)
+        session.add(drop_point)
+        session.commit()
+
+        monkeypatch.setattr(
+            detection, "search",
+            lambda *a, **k: [Hit(url="https://unreachable.example/a", title="X")],
+        )
+
+        result = detection.detect_for_drop_point(session, drop_point)
+
+        assert result["created"] == 1
+        assert result["verified"] == 0
+        assert result["narrative_score"] == 0.0
+        assert session.query(PingDB).first().verification == "unverified"
+    finally:
+        session.close()

@@ -150,7 +150,48 @@ Worth stating, because the instinct is to distrust everything nearby:
 
 ---
 
-## 6. Remedies
+## 6. ★ Fixed 2026-09-07 — remedies 1 and 2, together
+
+Remedy 1 alone would have deleted evidence; remedy 2 alone would have labelled the problem
+without solving it. Built as one change:
+
+**Detection now looks.** Each surviving candidate is fetched and checked for the drop point's
+URL (in any of the forms a citing page plausibly writes it) or its title (when the title is long
+enough that a match means something). Either is sufficient — a link is the strongest evidence,
+but plenty of genuine echoes name a piece without linking it.
+
+**Three states, and the middle one is the design:**
+
+| state | meaning | scores? | written? |
+|---|---|---|---|
+| `verified` | fetched, and it contains the URL or title | yes | yes |
+| `unverified` | could not be fetched, or predates the check | **no** | yes |
+| rejected | fetched, demonstrably does not cite you | — | **never** |
+
+*"We looked and it does not cite you"* and *"we could not look"* are different answers, and only
+the first is evidence. Publishers who refuse scripted requests produce the second constantly
+(`_BLOCKED_STATUSES`), so treating a 403 as a negative would silently convert a bot policy into a
+statement about the author's reach. A rejected candidate is not written at all: a page that does
+not cite you is not a ripple, and recording it labelled would double the table with rows nothing
+consumes and leave the same ambiguity one column further down.
+
+**A per-batch verification budget**, not per drop point. A run can produce 200 candidates (10
+drop points × 20 results); an unbudgeted verifier would turn a background job into an outbound
+crawl. Overflow is recorded `unverified` rather than skipped, so the next run revisits it.
+
+### ★ The intended, visible consequence
+
+`threadweaver` counts `verified` pings only, and the migration labels all 256 existing rows
+`unverified`. **So every score in the domain falls to zero until detection re-runs.** That is the
+correct state: a 0 meaning *"nothing confirmed"* is better than a 24.5 meaning *"a search
+returned nine topically-related pages"*.
+
+The five strategies built from those scores will empty out with them. §7's reasoning stands —
+the rows are labelled, not deleted.
+
+---
+
+## 6a. Remedies as originally written
 
 Ordered by how much they actually fix, not by effort.
 

@@ -589,8 +589,14 @@ than waiting behind a flag.
 
 ## RIPPLE-PINGS-NOT-ECHOES-1: a ping records a page about the same subject, not one that cites you (app-owned, P1)
 
-**Status: OPEN, found 2026-09-07.** Full write-up:
-`docs/verification/DEFECT_RIPPLE_PINGS_ARE_NOT_ECHOES.md`.
+**Status: FIXED 2026-09-07, awaiting a detection re-run.** Full write-up:
+`docs/verification/DEFECT_RIPPLE_PINGS_ARE_NOT_ECHOES.md` §6.
+
+Detection now fetches each candidate and checks it for the drop point's URL or title. Three
+states — `verified` (scores), `unverified` (could not be fetched, or predates the check; does
+NOT score), and rejected (demonstrably not a citation; never written). Scoring counts verified
+alone. **All 256 existing pings are labelled `unverified` by the migration, so every score in
+the domain reads 0 until detection re-runs** — which is the correct state, not a regression.
 
 Found by the owner asking one question about a number that had just been quoted at them —
 *"what are we actually measuring here?"* — after being told the Case Study Series "travels five
