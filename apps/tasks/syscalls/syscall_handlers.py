@@ -49,6 +49,47 @@ def _context_user_id(ctx: SyscallContext):
     return user_id
 
 
+def _handle_task_set_phase(payload: dict, ctx: SyscallContext) -> dict:
+    """Attach the named tasks to a plan phase.
+
+    Takes explicit task ids rather than deriving them. Which tasks belong in a phase is a
+    masterplan judgement — notably, that a task whose NAME matches a phase is a phase wearing a
+    task row and must not be attached to the layer replacing it (STRATEGY_LAYER_SPEC §8). Tasks
+    owns the write; masterplan owns the decision.
+
+    Scoped to one masterplan so a stray id cannot reach across plans.
+    """
+    from apps.tasks.models import Task
+
+    masterplan_id = payload.get("masterplan_id")
+    phase_id = payload.get("phase_id")
+    task_ids = payload.get("task_ids") or []
+    if masterplan_id is None or not phase_id:
+        raise ValueError(
+            "sys.v1.task.set_phase requires 'masterplan_id' and 'phase_id'"
+        )
+    if not task_ids:
+        return {"attached": 0}
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        rows = (
+            db.query(Task)
+            .filter(
+                Task.masterplan_id == int(masterplan_id),
+                Task.id.in_([int(i) for i in task_ids]),
+            )
+            .all()
+        )
+        for task in rows:
+            task.phase_id = str(phase_id)
+        db.commit()
+        return {"attached": len(rows), "requested": len(task_ids)}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def _handle_task_release_from_strategy(payload: dict, ctx: SyscallContext) -> dict:
     """Detach INCOMPLETE tasks from a strategy; leave completed ones exactly as they are.
 
@@ -482,6 +523,31 @@ def _handle_task_delete_by_ids(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def register_task_syscall_handlers() -> None:
+    register_syscall(
+        name="sys.v1.task.set_phase",
+        handler=_handle_task_set_phase,
+        capability="task.update",
+        description=(
+            "Attach the named tasks to a plan phase. Takes explicit ids — which tasks belong "
+            "in a phase is a masterplan judgement."
+        ),
+        input_schema={
+            "required": ["masterplan_id", "phase_id", "task_ids"],
+            "properties": {
+                "masterplan_id": {"type": "integer"},
+                "phase_id": {"type": "string"},
+                "task_ids": {"type": "array"},
+            },
+        },
+        output_schema={
+            "required": ["attached"],
+            "properties": {
+                "attached": {"type": "integer"},
+                "requested": {"type": "integer"},
+            },
+        },
+        stable=False,
+    )
     register_syscall(
         name="sys.v1.task.release_from_strategy",
         handler=_handle_task_release_from_strategy,
