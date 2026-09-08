@@ -25,6 +25,8 @@ import logging
 import os
 from typing import Any
 
+from AINDY.platform_layer.llm_client import LLMCallError
+
 logger = logging.getLogger(__name__)
 
 # Default to the latest, most capable Claude model. Override with
@@ -47,21 +49,41 @@ def _planner_model() -> str:
 
 
 def _make_client():
-    """Construct an Anthropic client. Isolated for test monkeypatching."""
-    try:
-        import anthropic
-    except ImportError as exc:  # pragma: no cover - exercised when SDK absent
-        detail = (
-            "The 'anthropic' SDK is not installed; cannot use the anthropic_chat "
-            "planner backend. Install it (it is declared in pyproject)."
-        )
-        logger.error("[AnthropicPlanner] %s", detail)
-        raise AnthropicPlannerError(detail) from exc
+    """Return the runtime's Anthropic client through the LLM seam.
+
+    ★ Was `anthropic.Anthropic()` — a raw SDK client the runtime could not see. Routing
+    through `get_llm_client` buys two things this planner had neither of:
+
+    * **Token metering.** `anthropic_client.messages_create` calls `observe_llm_usage`, so a
+      plan generated here now lands in `aindy_llm_tokens_total`. The planner is the most
+      expensive LLM call this app makes and it was the only one costing nothing on paper.
+    * **The circuit breaker.** `get_llm_client` returns a breaker-wrapped client, so a provider
+      outage stops the planner instead of being retried per request.
+
+    `call_method("messages_create", ...)` rather than the seam's `chat()`: `chat()` returns a
+    string and would discard the `tool_use` block, and the forced tool call IS the mechanism
+    that guarantees the plan's shape (see the module docstring). `call_method` passes
+    `tools`/`tool_choice` through untouched.
+
+    Still isolated for test monkeypatching, and still checks the key here so a missing
+    `ANTHROPIC_API_KEY` fails with a sentence rather than a provider error.
+    """
     if not (os.environ.get("ANTHROPIC_API_KEY") or "").strip():
         detail = "ANTHROPIC_API_KEY is not set; cannot use the anthropic_chat planner backend."
         logger.error("[AnthropicPlanner] %s", detail)
         raise AnthropicPlannerError(detail)
-    return anthropic.Anthropic()
+
+    from AINDY.platform_layer.llm_client import get_llm_client
+
+    try:
+        return get_llm_client("anthropic")
+    except Exception as exc:  # pragma: no cover - exercised when the SDK is absent
+        detail = (
+            "Could not build the Anthropic client; the 'anthropic' SDK may not be installed. "
+            f"({type(exc).__name__}: {exc})"
+        )
+        logger.error("[AnthropicPlanner] %s", detail)
+        raise AnthropicPlannerError(detail) from exc
 
 
 def _plan_tool(tool_names: list[str]) -> dict[str, Any]:
@@ -130,7 +152,8 @@ def claude_planner_backend(request) -> dict[str, Any]:
     client = _make_client()
     model = _planner_model()
     try:
-        message = client.messages.create(
+        message = client.call_method(
+            "messages_create",
             model=model,
             max_tokens=4096,
             system=request.system_prompt or "",
@@ -140,6 +163,13 @@ def claude_planner_backend(request) -> dict[str, Any]:
         )
     except Exception as exc:  # surface the real cause — the runtime wraps this in a generic 500
         import anthropic
+
+        # ★ Read through the seam's wrapper. `CircuitBreakerLLMClient` raises
+        # `LLMCallError(...) from exc`, so `exc` is no longer the SDK error — without this the
+        # isinstance branches below would all miss and every provider failure would collapse
+        # into the generic message, losing the status code, error type and request id at
+        # exactly the moment an incident needs them.
+        exc = exc.__cause__ if isinstance(exc, LLMCallError) and exc.__cause__ else exc
 
         if isinstance(exc, anthropic.APIStatusError):
             detail = (
