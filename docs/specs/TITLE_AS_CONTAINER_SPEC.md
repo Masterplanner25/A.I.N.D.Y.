@@ -193,11 +193,32 @@ had **never once fired**, because `entity_counter` was always empty. A test now 
 container and asserts an Influence Spike comes out — the classification unblocking code that was
 already written and wired.
 
-**Where a container lives is still open** (§8 question 3). `ripple_containers` holds the
-*reference* side, which is what RippleTrace can reasonably own. Whether something should hold the
-work itself — a name, when it started, what belongs to it, whether it is finished — is
-unanswered, and `authorship` is still the domain named for it that holds neither works nor
-titles.
+### ★ And the ownership question turned out to be smaller than it looked
+
+§8 question 3 asked who should own a container. Checking the data before answering it changed
+the question. Measured on the live corpus 2026-09-07:
+
+```
+46 drops · avg narrative 32.4 · Feb 2025 → Jun 2025 · 87 pings
+```
+
+**Every performance question about a series is already answerable** by aggregating over the
+drops that carry its tag. So a `Work` record would not buy measurement — it would buy *intent*:
+a target ("52 planned, 46 done"), a lifecycle ("finished", so a dormant series stops reading as
+a failing one), a purpose. That is the declared-vs-measured split again, the same one behind
+worth.
+
+**Owner's call: aggregate now, decide ownership later.** `GET /containers/performance` computes
+the summary on demand and stores nothing; a stored summary is a copy of numbers that move
+whenever a ping lands, and it would be wrong more often than right.
+
+`trajectory` reports both halves rather than the delta alone — an average says whether a series
+*was* good, the halves say whether it *is working*, and "+28.4" says nothing about whether it
+started at 3 or at 40. It is unavailable-with-a-reason below six dated pieces, because with four
+"the second half is better" is two data points against two.
+
+So question 3 stays open on purpose, now with a working view to answer it against rather than
+ahead of. `authorship` is still the domain named for it that holds neither works nor titles.
 
 ---
 
@@ -413,12 +434,12 @@ question 3 below, and it is a domain-ownership question, not a schema one.
    (`RIPPLETRACE_CONTENT_REPRESENTATION_SPEC` open question 3) is the same decision arriving
    from a second direction, which is some evidence it is the right one.
 
-3. **Who owns a container?** A drop point can reference one. Something has to *hold* one — a
-   name, when it started, what belongs to it, whether it is finished. `authorship` is the
-   natural home by name and currently holds neither works nor titles. `masterplan` already
-   models named long-lived things with phases. Doing nothing and keeping the container as a
-   string on each drop is the cheapest option and the one that cannot answer *"how is the
-   series doing?"*
+3. **Who owns a container?** ← **still open, and now smaller.** *"How is the series doing?"*
+   turned out to be answerable without a record — it is an aggregation over the tag, built
+   2026-09-07 (§4b). What a `Work` record would add is **intent**: a target, a lifecycle, a
+   purpose. `authorship` is the natural home by name and currently holds neither works nor
+   titles; `masterplan` already models named long-lived things with phases. Deferred
+   deliberately, to be decided against the working view rather than ahead of it.
 
 4. **Does the SEO tool take a title at all?** Everything in §6 assumes the tool learns what the
    title is. That is a real interface change — today it takes one blob of body text — and it is

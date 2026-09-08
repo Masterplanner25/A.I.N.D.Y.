@@ -115,6 +115,13 @@ const APP_ONLY_ROUTES = {
   // `search_result_feedback` had 0 rows and AINDY_SEARCH_OUTCOME_WEIGHTING had no input.
   // `/seo/title` proposes title options for an article. App-owned and not in the ui-kit, so
   // it carries its own `/seo` prefix here rather than going through `withPrefix`.
+  // Containers — the project or series a piece belongs to. App-owned and not in the ui-kit.
+  RIPPLETRACE: {
+    CONTAINER_CANDIDATES: "/rippletrace/containers/candidates",
+    CONTAINER_PERFORMANCE: "/rippletrace/containers/performance",
+    CONTAINER_CONFIRM: "/rippletrace/containers/confirm",
+    CONTAINER_DISMISS: "/rippletrace/containers/dismiss",
+  },
   SEARCH: {
     FEEDBACK: "/search/feedback",
     GENERATE_TITLE: "/seo/title",
@@ -126,6 +133,7 @@ const APP_ONLY_ROUTES = {
 
 const SUB_ROUTER_CORRECTED = {
   ...UIKIT_ROUTES,
+  RIPPLETRACE: { ...UIKIT_ROUTES.RIPPLETRACE, ...APP_ONLY_ROUTES.RIPPLETRACE },
   ANALYTICS: withPrefix(UIKIT_ROUTES.ANALYTICS, COMPUTE_KEYS, "/compute"),
   TASKS: { ...UIKIT_ROUTES.TASKS, ...APP_ONLY_ROUTES.TASKS },
   // `withPrefix` first (the kit's SEO paths), then the app-only additions. Order matters:

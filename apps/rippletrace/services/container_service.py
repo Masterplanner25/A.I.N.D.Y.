@@ -322,3 +322,167 @@ def tag_drop_with_confirmed_containers(db: Session, row: DropPointDB) -> list[st
     if added:
         row.tagged_entities = ",".join(existing)
     return added
+
+
+# ── performance: aggregation over the tag, not a second record ────────────────────────
+#
+# ★ Owner's call, 2026-09-07: aggregate now, decide ownership later. Every performance
+# question about a series is already answerable from the drops that carry its tag — measured
+# before deciding, on the live corpus:
+#
+#     46 drops · avg narrative 32.4 · Feb 2025 → Jun 2025 · 87 pings
+#
+# So a `Work` record would not buy measurement. What it would buy is INTENT — a target ("52
+# planned, 46 done"), a lifecycle ("finished", so a dormant series stops reading as a failing
+# one), a purpose. That is the declared-vs-measured split again, and it is a decision to make
+# against a real view rather than ahead of one.
+
+# Below this a series has not been running long enough for halves to mean anything: with four
+# pieces, "the second half is better" is two data points against two.
+MIN_DROPS_FOR_TRAJECTORY = 6
+
+
+def _container_drops(db: Session, uid, normalized: str) -> list[DropPointDB]:
+    """Drops carrying this container, matched on the stored normalized form.
+
+    Matched rather than joined: `tagged_entities` is a comma-joined string, which is what the
+    three engines already read, and adding a join table would be a second source of truth for
+    membership.
+    """
+    rows = (
+        db.query(DropPointDB)
+        .filter(DropPointDB.user_id == uid)
+        .order_by(DropPointDB.date_dropped.asc())
+        .all()
+    )
+    return [
+        row
+        for row in rows
+        if any(
+            _normalize(entry) == normalized
+            for entry in (row.tagged_entities or "").split(",")
+            if entry.strip()
+        )
+    ]
+
+
+def _ping_counts(db: Session, drop_ids: list[str]) -> dict[str, int]:
+    from sqlalchemy import func
+
+    from apps.rippletrace.drop import PingDB
+
+    if not drop_ids:
+        return {}
+    rows = (
+        db.query(PingDB.drop_point_id, func.count(PingDB.id))
+        .filter(PingDB.drop_point_id.in_(drop_ids))
+        .group_by(PingDB.drop_point_id)
+        .all()
+    )
+    return {drop_id: count for drop_id, count in rows}
+
+
+def container_performance(db: Session, uid, container: ContainerDB, *, members: bool = False) -> dict:
+    """What this body of work has actually done.
+
+    Computed, never stored. A stored summary is a second copy of numbers that move every time a
+    ping lands, and it would be wrong more often than it was right.
+    """
+    drops = _container_drops(db, uid, container.normalized)
+    pings = _ping_counts(db, [d.id for d in drops])
+    scores = [d.narrative_score or 0.0 for d in drops]
+    dates = [d.date_dropped for d in drops if d.date_dropped]
+
+    payload = _serialize(container, drop_count=len(drops))
+    payload["performance"] = {
+        "drops": len(drops),
+        "pings": sum(pings.values()),
+        "avg_narrative": round(sum(scores) / len(scores), 1) if scores else 0.0,
+        "first_published": dates[0].isoformat() if dates else None,
+        "last_published": dates[-1].isoformat() if dates else None,
+        "span_days": (dates[-1] - dates[0]).days if len(dates) > 1 else 0,
+        "platforms": sorted({d.platform for d in drops if d.platform}),
+        "cadence_days": round((dates[-1] - dates[0]).days / (len(dates) - 1), 1)
+        if len(dates) > 1
+        else None,
+        "trajectory": _trajectory(drops),
+    }
+    if members:
+        # Best-travelled first: "which pieces worked" is the question a writer actually has
+        # about a series, and date order buries the answer.
+        payload["pieces"] = sorted(
+            (
+                {
+                    "id": d.id,
+                    "title": d.title,
+                    "url": d.url,
+                    "platform": d.platform,
+                    "published": d.date_dropped.isoformat() if d.date_dropped else None,
+                    "narrative_score": round(d.narrative_score or 0.0, 1),
+                    "pings": pings.get(d.id, 0),
+                }
+                for d in drops
+            ),
+            key=lambda item: (-item["pings"], -item["narrative_score"]),
+        )
+    return payload
+
+
+def _trajectory(drops: list[DropPointDB]) -> dict:
+    """Is the series getting more or less traction over time?
+
+    ★ Reported as unavailable rather than as 0 when there is not enough of it. An average
+    across a whole series answers "was it good"; the halves answer "is it working", which is
+    the question that changes what you do next — but only once there are enough pieces for a
+    half to be more than a couple of data points.
+    """
+    dated = [d for d in drops if d.date_dropped]
+    if len(dated) < MIN_DROPS_FOR_TRAJECTORY:
+        return {
+            "available": False,
+            "reason": f"needs at least {MIN_DROPS_FOR_TRAJECTORY} dated pieces",
+        }
+
+    midpoint = len(dated) // 2
+    early = [d.narrative_score or 0.0 for d in dated[:midpoint]]
+    late = [d.narrative_score or 0.0 for d in dated[midpoint:]]
+    early_avg = sum(early) / len(early)
+    late_avg = sum(late) / len(late)
+    return {
+        "available": True,
+        "early_avg": round(early_avg, 1),
+        "late_avg": round(late_avg, 1),
+        "change": round(late_avg - early_avg, 1),
+        # Both halves are shown, not just the delta: "+4.2" says nothing about whether the
+        # series started at 3 or at 40.
+        "early_count": len(early),
+        "late_count": len(late),
+    }
+
+
+def list_container_performance(db: Session, user_id: Any) -> list[dict]:
+    """Every confirmed container, with what it has done. Dismissed ones are not works."""
+    uid = parse_user_id(user_id)
+    if uid is None:
+        return []
+    rows = (
+        db.query(ContainerDB)
+        .filter(ContainerDB.user_id == uid, ContainerDB.status == CONTAINER_CONFIRMED)
+        .order_by(ContainerDB.created_at.desc())
+        .all()
+    )
+    return [container_performance(db, uid, row) for row in rows]
+
+
+def get_container_detail(db: Session, user_id: Any, container_id: str) -> dict | None:
+    uid = parse_user_id(user_id)
+    if uid is None:
+        return None
+    row = (
+        db.query(ContainerDB)
+        .filter(ContainerDB.id == str(container_id), ContainerDB.user_id == uid)
+        .first()
+    )
+    if row is None:
+        return None
+    return container_performance(db, uid, row, members=True)

@@ -867,6 +867,52 @@ async def list_containers(
     return await execute_with_pipeline(request, "rippletrace_containers_list", handler)
 
 
+@router.get("/containers/performance")
+@limiter.limit("60/minute")
+async def container_performance(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """What each confirmed container has actually done.
+
+    ★ Computed, never stored. Owner's call 2026-09-07 — aggregate over the tag rather than
+    build a second record, because every performance question about a series is already
+    answerable from the drops that carry it. A stored summary would be a copy of numbers that
+    move whenever a ping lands.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        return {"containers": container_service.list_container_performance(db, user_id)}
+
+    return await execute_with_pipeline(request, "rippletrace_containers_performance", handler)
+
+
+@router.get("/containers/{container_id}")
+@limiter.limit("60/minute")
+async def container_detail(
+    request: Request,
+    container_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """One container, with its pieces best-travelled first.
+
+    Date order buries the answer to the question a writer actually has about a series — which
+    pieces worked.
+    """
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        detail = container_service.get_container_detail(db, user_id, container_id)
+        if detail is None:
+            raise ValueError("HTTP_404:container not found")
+        return detail
+
+    return await execute_with_pipeline(request, "rippletrace_containers_detail", handler)
+
+
 @router.post("/containers/confirm")
 @limiter.limit("30/minute")
 async def confirm_container(
