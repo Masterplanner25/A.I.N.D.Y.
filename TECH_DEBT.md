@@ -587,6 +587,49 @@ than waiting behind a flag.
 
 ---
 
+## RIPPLE-PINGS-NOT-ECHOES-1: a ping records a page about the same subject, not one that cites you (app-owned, P1)
+
+**Status: OPEN, found 2026-09-07.** Full write-up:
+`docs/verification/DEFECT_RIPPLE_PINGS_ARE_NOT_ECHOES.md`.
+
+Found by the owner asking one question about a number that had just been quoted at them —
+*"what are we actually measuring here?"* — after being told the Case Study Series "travels five
+times better per piece". **That claim is not supported by anything in this system.**
+
+`ripple_detection` searches for a drop point's URL plus its distinctive title as an exact phrase.
+That method is correct. The provider is **Perplexity, an answer engine**: it does not return
+pages containing the phrase, it answers the question and returns the sources it used. Those are
+topically related by construction and are almost never the piece being searched for.
+
+```
+1 of 256 live mention-pings points at a URL plausibly connected to the author.
+openai.com 36 · arxiv.org 10 · LinkedIn 10 · Medium 9 · support.google.com 8
+```
+
+`narrative_score = pings x ln(pings+1)` (every live ping is `direct`, so both bonuses are zero),
+so `SUCCESS_NARRATIVE_THRESHOLD = 15.0` means **about 8 topical citations**. 18 drop points clear
+it, `build_strategies` selects those 18 as "what worked", and five strategies are ranked from it.
+
+**★ Why nothing caught it.** A ping row is byte-identical whether it is a real echo or a topical
+citation — no field distinguishes *"this page cites you"* from *"this page is about the same
+thing"*, and no consumer checks. `SOAK_AUDIT_2026-08-15` §3 again (a system with no real signal
+producing confident output), except the output is plausible: Substack genuinely is the highest-
+volume platform and 25 days genuinely is the cadence, so the structure being right is what kept
+the content unexamined.
+
+**Not a tuning problem.** `MIN_DISTINCTIVE_TITLE_CHARS`, `MAX_RESULTS_PER_DROP_POINT` and the
+threshold are all downstream of a wrong instrument. Remedies, in order of how much they fix:
+verify each candidate by fetching it (`content_fetch.fetch_url` exists); or record `verified` on
+`PingDB` and score only verified pings; or change provider to a search index; or accept "topically
+adjacent pages" as a different signal and stop gating `build_strategies` with it.
+
+**Unaffected:** ingestion (215 drops, correctly deduped), the container work (detection reads
+titles, confirmation is a human decision), and the detection *method*. The existing 256 rows
+should be **labelled, not deleted** — they are correctly-recorded answers to a different question,
+and silently rewriting history the engines have reasoned over is its own defect.
+
+---
+
 ## RIPPLETRACE-NO-CONTENT-1: five engines reason about what your work is about, from tags and title words (app-owned, P2 — Question)
 
 **Status: OPEN.** Found 2026-09-07, the night RippleTrace produced its first three strategies
