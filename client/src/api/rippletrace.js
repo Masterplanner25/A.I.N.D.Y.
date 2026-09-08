@@ -156,3 +156,30 @@ export function getEventDownstream(eventId) {
 export function getEventUpstream(eventId) {
   return authRequest(ROUTES.RIPPLETRACE.EVENT_UPSTREAM(eventId));
 }
+
+// ── Containers ──────────────────────────────────────────────────────────────────
+//
+// A container is the project or series a piece belongs to. ★ Confirmed, never inferred:
+// fetching candidates measures, it does not tag.
+
+export function getContainerCandidates() {
+  return authRequest(ROUTES.RIPPLETRACE.CONTAINER_CANDIDATES, { method: "GET" });
+}
+
+export function getContainerPerformance() {
+  return authRequest(ROUTES.RIPPLETRACE.CONTAINER_PERFORMANCE, { method: "GET" });
+}
+
+export function confirmContainer(name) {
+  return authRequest(ROUTES.RIPPLETRACE.CONTAINER_CONFIRM, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function dismissContainer(name) {
+  return authRequest(ROUTES.RIPPLETRACE.CONTAINER_DISMISS, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}

@@ -1733,6 +1733,32 @@ List Containers
 
 `status` is `confirmed` or `dismissed`. There is no `pending`: an undecided candidate has no row.
 
+#### GET /apps/rippletrace/containers/performance
+Container Performance
+
+What each confirmed container has actually done. ★ **Computed, never stored** — owner's call
+2026-09-07: aggregate over the tag rather than build a second record, because every performance
+question about a series is already answerable from the drops that carry it. A stored summary
+would be a copy of numbers that move whenever a ping lands.
+
+**Response 200:** containers: array of the container, each with `performance`:
+drops, pings, avg_narrative, first_published, last_published, span_days, platforms,
+cadence_days, trajectory
+
+`trajectory` compares the first half of the series against the second — `{available, early_avg,
+late_avg, change, early_count, late_count}`. Both halves are reported, not just the delta:
+"+28.4" says nothing about whether the series started at 3 or at 40. It is `available: false`
+with a stated reason on a series too short for a half to mean anything.
+
+#### GET /apps/rippletrace/containers/{container_id}
+Container Detail
+
+One container with its member pieces, **best-travelled first** — date order buries the question
+a writer actually has about a series.
+
+**Response 200:** the container and its `performance`, plus `pieces`: array of
+{id, title, url, platform, published, narrative_score, pings}
+
 #### POST /apps/rippletrace/containers/confirm
 Confirm Container
 

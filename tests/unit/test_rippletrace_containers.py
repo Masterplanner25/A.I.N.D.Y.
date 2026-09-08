@@ -348,3 +348,129 @@ def test_the_entity_reaches_the_strategy_engine(db_session):
     assert any("Influence Spike" in item["name"] for item in created), [
         item["name"] for item in created
     ]
+
+
+# ── performance: aggregation over the tag, not a second record ────────────────────────
+#
+# ★ Owner's call 2026-09-07: aggregate now, decide ownership later. Measured on the live
+# corpus before deciding — 46 drops, avg narrative 32.4, Feb→Jun 2025, 87 pings — so a `Work`
+# record would not buy measurement. What it would buy is intent, which is a separate decision.
+
+def _scored(db, title, *, score, day, entities=SERIES):
+    row = _drop(db, title, entities=entities)
+    row.narrative_score = score
+    row.date_dropped = datetime(2026, 1, day)
+    return row
+
+
+def test_a_container_reports_what_its_pieces_did(db_session):
+    for index, subject in enumerate(SUBJECTS):
+        _scored(db_session, f"{SERIES}: {subject}", score=10.0 * (index + 1), day=index + 1)
+    db_session.commit()
+    container_service.confirm_container(db_session, USER, name=SERIES)
+
+    perf = container_service.list_container_performance(db_session, USER)[0]["performance"]
+
+    assert perf["drops"] == 6
+    assert perf["avg_narrative"] == 35.0
+    assert perf["span_days"] == 5
+    assert perf["platforms"] == ["Substack"]
+
+
+def test_the_summary_is_computed_not_stored(db_session):
+    """★ A stored summary is a copy of numbers that move whenever a ping lands.
+
+    Adding a piece must change the answer without anything being re-confirmed.
+    """
+    for index, subject in enumerate(SUBJECTS):
+        _scored(db_session, f"{SERIES}: {subject}", score=20.0, day=index + 1)
+    db_session.commit()
+    container_service.confirm_container(db_session, USER, name=SERIES)
+    before = container_service.list_container_performance(db_session, USER)[0]["performance"]
+
+    fresh = _scored(db_session, f"{SERIES}: A Seventh Piece", score=90.0, day=7)
+    db_session.commit()
+    container_service.tag_drop_with_confirmed_containers(db_session, fresh)
+    db_session.commit()
+    after = container_service.list_container_performance(db_session, USER)[0]["performance"]
+
+    assert before["drops"] == 6 and after["drops"] == 7
+    assert after["avg_narrative"] > before["avg_narrative"]
+
+
+def test_a_dismissed_container_is_not_a_body_of_work(db_session):
+    _seed_series(db_session)
+    container_service.dismiss_container(db_session, USER, name=SERIES)
+
+    assert container_service.list_container_performance(db_session, USER) == []
+
+
+def test_trajectory_compares_the_halves_and_shows_both(db_session):
+    """★ An average says whether it was good; the halves say whether it is working.
+
+    Both halves are reported, not just the delta: "+30" says nothing about whether the series
+    started at 3 or at 40.
+    """
+    for index in range(6):
+        _scored(db_session, f"{SERIES}: Piece {index}", score=10.0, day=index + 1)
+    for index in range(6):
+        _scored(db_session, f"{SERIES}: Later {index}", score=40.0, day=index + 10)
+    db_session.commit()
+    container_service.confirm_container(db_session, USER, name=SERIES)
+
+    trajectory = container_service.list_container_performance(db_session, USER)[0][
+        "performance"
+    ]["trajectory"]
+
+    assert trajectory["available"] is True
+    assert trajectory["early_avg"] == 10.0
+    assert trajectory["late_avg"] == 40.0
+    assert trajectory["change"] == 30.0
+
+
+def test_trajectory_is_unavailable_rather_than_zero_on_a_short_series(db_session):
+    """With four pieces, "the second half is better" is two data points against two."""
+    for index in range(4):
+        _scored(db_session, f"{SERIES}: Piece {index}", score=10.0, day=index + 1)
+    db_session.commit()
+    container_service.confirm_container(db_session, USER, name=SERIES)
+
+    trajectory = container_service.list_container_performance(db_session, USER)[0][
+        "performance"
+    ]["trajectory"]
+
+    assert trajectory["available"] is False
+    assert trajectory["reason"]
+
+
+def test_the_detail_lists_pieces_best_travelled_first(db_session):
+    """Date order buries the question a writer actually has about a series."""
+    quiet = _scored(db_session, f"{SERIES}: Quiet One", score=5.0, day=1)
+    loud = _scored(db_session, f"{SERIES}: Loud One", score=80.0, day=2)
+    db_session.commit()
+    for index in range(4):
+        _scored(db_session, f"{SERIES}: Filler {index}", score=10.0, day=index + 3)
+    db_session.commit()
+    confirmed = container_service.confirm_container(db_session, USER, name=SERIES)
+
+    detail = container_service.get_container_detail(db_session, USER, confirmed["id"])
+
+    assert detail["pieces"][0]["title"] == loud.title
+    assert detail["pieces"][-1]["title"] == quiet.title
+
+
+def test_a_container_that_is_not_yours_has_no_detail(db_session):
+    _seed_series(db_session)
+    confirmed = container_service.confirm_container(db_session, USER, name=SERIES)
+
+    assert container_service.get_container_detail(db_session, OTHER, confirmed["id"]) is None
+
+
+def test_a_drop_carrying_a_publisher_tag_of_the_same_words_is_still_counted(db_session):
+    """Membership is matched on the normalized form, so casing and spacing do not split it."""
+    _drop(db_session, "An Off-Series Piece", entities="2025 chatgpt case study series")
+    _seed_series(db_session)
+    container_service.confirm_container(db_session, USER, name=SERIES)
+
+    perf = container_service.list_container_performance(db_session, USER)[0]["performance"]
+    assert perf["drops"] == 7

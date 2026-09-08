@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  confirmContainer,
   deleteContentSource,
   detectRipples,
   detectRipplesForDropPoint,
+  dismissContainer,
+  getContainerCandidates,
+  getContainerPerformance,
   getContentSources,
   getRippleDropPoints,
   ingestContentUrl,
@@ -45,15 +49,24 @@ export default function RippleTrace() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [suggestedFeeds, setSuggestedFeeds] = useState([]);
+  const [candidates, setCandidates] = useState([]);
+  const [containers, setContainers] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [sourceResponse, dropResponse] = await Promise.all([
-        getContentSources(),
-        getRippleDropPoints(),
-      ]);
+      const [sourceResponse, dropResponse, candidateResponse, containerResponse] =
+        await Promise.all([
+          getContentSources(),
+          getRippleDropPoints(),
+          // ★ Fetching candidates MEASURES. It does not tag anything and creates no record —
+          // which is why it is safe to run on every load.
+          getContainerCandidates().catch(() => null),
+          getContainerPerformance().catch(() => null),
+        ]);
+      setCandidates(asList(unwrap(candidateResponse, "candidates")));
+      setContainers(asList(unwrap(containerResponse, "containers")));
       setSources(asList(unwrap(sourceResponse, "sources")));
       // The drop points route returns a bare list.
       setDropPoints(
@@ -69,6 +82,24 @@ export default function RippleTrace() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function decideContainer(name, confirmed) {
+    setBusy(true);
+    setError("");
+    try {
+      await (confirmed ? confirmContainer(name) : dismissContainer(name));
+      setNotice(
+        confirmed
+          ? `Confirmed "${name}" — its pieces are now linked as one body of work.`
+          : `Dismissed "${name}" — it will not be suggested again.`,
+      );
+      await load();
+    } catch (err) {
+      setError(err.message || "Could not record that");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleIngest(event, overrideUrl) {
     event?.preventDefault();
@@ -250,7 +281,86 @@ export default function RippleTrace() {
         )}
       </form>
 
-      <section className="border border-zinc-800 rounded-lg bg-zinc-950/70 p-4">
+      {/* CONTAINERS — the project or series a piece belongs to.
+
+              ★ Confirmed, never inferred. The corpus can measure which words recur across a
+              catalogue; it cannot say that "2025 ChatGPT Case Study Series" is a work someone
+              made — and three engines (influence graph, causality, strategies) reason from
+              `tagged_entities` as though it were a fact about the author's body of work. So
+              this asks, and nothing is written until it is answered. */}
+          {candidates.length > 0 &&
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4" data-testid="container-candidates">
+              <h2 className="text-sm font-semibold text-zinc-100">Is this a series of yours?</h2>
+              <p className="mt-1 text-xs text-zinc-400">
+                These phrases recur across your titles. Confirming links the pieces as one body
+                of work; nothing is linked until you say so.
+              </p>
+              <ul className="mt-3 space-y-3">
+                {safeMap(candidates, (candidate) =>
+                  <li key={candidate.normalized} className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+                    <p className="text-sm text-zinc-100">{candidate.name}</p>
+                    <p className="mt-0.5 text-xs text-zinc-500">
+                      {candidate.drop_count} of {candidate.corpus_size} pieces ({candidate.share}%)
+                    </p>
+                    {/* The evidence, not just a percentage — the question needs the titles it
+                        was drawn from far more than it needs a number. */}
+                    <ul className="mt-2 space-y-0.5">
+                      {safeMap(candidate.examples || [], (title) =>
+                        <li key={title} className="truncate text-xs text-zinc-500">· {title}</li>)
+                      }
+                    </ul>
+                    <div className="mt-2 flex gap-3">
+                      <button
+                        className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => decideContainer(candidate.name, true)}>
+                        Yes, this is mine
+                      </button>
+                      <button
+                        className="text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => decideContainer(candidate.name, false)}>
+                        Not a series
+                      </button>
+                    </div>
+                  </li>)
+                }
+              </ul>
+            </div>
+          }
+
+          {containers.length > 0 &&
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4" data-testid="containers">
+              <h2 className="text-sm font-semibold text-zinc-100">Your series</h2>
+              <ul className="mt-3 space-y-3">
+                {safeMap(containers, (container) =>
+                  <li key={container.id} className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+                    <p className="text-sm text-zinc-100">{container.name}</p>
+                    <p className="mt-0.5 text-xs text-zinc-400">
+                      {container.performance.drops} pieces · {container.performance.pings} echoes
+                      · avg narrative {container.performance.avg_narrative}
+                      {container.performance.cadence_days
+                        ? ` · every ${container.performance.cadence_days} days`
+                        : ""}
+                    </p>
+                    {/* An average says whether it was good; the halves say whether it is
+                        working — and both are shown, because "+30" says nothing about whether
+                        the series started at 3 or at 40. */}
+                    {container.performance.trajectory?.available &&
+                      <p className="mt-1 text-xs" data-testid="container-trajectory">
+                        <span className="text-zinc-500">trajectory: </span>
+                        <span className={container.performance.trajectory.change >= 0 ? "text-emerald-400" : "text-amber-400"}>
+                          {container.performance.trajectory.early_avg} → {container.performance.trajectory.late_avg}
+                        </span>
+                      </p>
+                    }
+                  </li>)
+                }
+              </ul>
+            </div>
+          }
+
+          <section className="border border-zinc-800 rounded-lg bg-zinc-950/70 p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-sm font-semibold text-zinc-100">Sources</h2>
