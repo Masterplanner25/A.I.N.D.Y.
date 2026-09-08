@@ -40,6 +40,13 @@ from sqlalchemy.orm import Session
 
 from apps.rippletrace.models import DropPointDB, PingDB
 from apps.rippletrace.services.content_fetch import infer_platform, normalize_url
+from apps.rippletrace.services.ping_verification import (
+    MAX_VERIFICATIONS_PER_RUN,
+    REJECTED,
+    UNVERIFIED,
+    VERIFIED,
+    verify_hit,
+)
 from apps.rippletrace.services.mention_search import (
     MentionSearchUnavailable,
     SearchHit,
@@ -183,7 +190,8 @@ def _summary_for(hit: SearchHit) -> str:
 
 
 def _record_ping(
-    db: Session, *, drop_point: DropPointDB, hit: SearchHit
+    db: Session, *, drop_point: DropPointDB, hit: SearchHit,
+    verification: str = "unverified", verification_note: str | None = None,
 ) -> tuple[PingDB, bool]:
     from apps.rippletrace.services.content_fetch import _parse_timestamp
 
@@ -207,13 +215,16 @@ def _record_ping(
         user_id=drop_point.user_id,
         strength=1.0,
         connection_type=classify_connection_type(summary),
+        verification=verification,
+        verification_note=verification_note,
     )
     db.add(ping)
     return ping, True
 
 
 def detect_for_drop_point(
-    db: Session, drop_point: DropPointDB, *, user_id: str | None = None
+    db: Session, drop_point: DropPointDB, *, user_id: str | None = None,
+    verification_budget: int | None = None,
 ) -> dict[str, Any]:
     """Search for echoes of one drop point and record any new ones.
 
@@ -239,11 +250,47 @@ def detect_for_drop_point(
     )
     kept, rejected = filter_hits(hits, drop_point=drop_point)
 
+    # ★ Verify before writing (RIPPLE-PINGS-NOT-ECHOES-1). The search provider is an answer
+    # engine: it returns the sources it used, which are topically related by construction and
+    # almost never the piece searched for — 1 of 256 live pings pointed at the author. So the
+    # page is fetched and checked for the drop point's URL or title.
+    #
+    # A candidate that demonstrably fails is NOT written: a page that does not cite you is not
+    # a ripple. One that cannot be fetched is written as `unverified`, because "we looked and
+    # it does not cite you" and "we could not look" are different answers and publishers who
+    # refuse scripted requests produce the second constantly.
     created = 0
+    verified = 0
+    unverified = 0
+    budget = verification_budget if verification_budget is not None else MAX_VERIFICATIONS_PER_RUN
     for hit in kept:
-        _, was_created = _record_ping(db, drop_point=drop_point, hit=hit)
+        if budget > 0:
+            state, note = verify_hit(
+                hit_url=hit.url,
+                drop_url=drop_point.url or "",
+                drop_title=drop_point.title,
+                db=db,
+                user_id=user_id or (str(drop_point.user_id) if drop_point.user_id else None),
+            )
+            budget -= 1
+        else:
+            # Out of budget for this run rather than unverifiable in principle. Recorded as
+            # unverified so the ping exists and simply does not score; the next run can revisit.
+            state, note = UNVERIFIED, "verification budget exhausted for this run"
+
+        if state == REJECTED:
+            rejected["not_a_citation"] = rejected.get("not_a_citation", 0) + 1
+            continue
+
+        _, was_created = _record_ping(
+            db, drop_point=drop_point, hit=hit, verification=state, verification_note=note
+        )
         if was_created:
             created += 1
+            if state == VERIFIED:
+                verified += 1
+            else:
+                unverified += 1
 
     drop_point.mentions_checked_at = _utcnow()
     db.commit()
@@ -266,6 +313,10 @@ def detect_for_drop_point(
         "found": len(hits),
         "kept": len(kept),
         "created": created,
+        # Reported separately because they mean different things, and a caller that sees
+        # "created 6" has no way to tell whether any of them are evidence.
+        "verified": verified,
+        "unverified": unverified,
         "rejected": rejected,
         "narrative_score": drop_point.narrative_score or 0.0,
         "velocity_score": drop_point.velocity_score or 0.0,
@@ -304,10 +355,18 @@ def detect_batch(
         )
 
     due = _due_drop_points(db, user_id=user_id, limit=limit)
-    summary = {"checked": 0, "created": 0, "errors": 0, "results": []}
+    summary = {"checked": 0, "created": 0, "verified": 0, "errors": 0, "results": []}
+    # ★ One verification budget for the whole batch, not one per drop point. Detection can
+    # produce 200 candidates in a run (10 drop points x 20 results), and a per-drop budget
+    # would multiply into an outbound crawl. Candidates past the budget are recorded
+    # `unverified` rather than skipped, so nothing is lost — the next run revisits them.
+    budget = MAX_VERIFICATIONS_PER_RUN
     for drop_point in due:
         try:
-            outcome = detect_for_drop_point(db, drop_point, user_id=user_id)
+            outcome = detect_for_drop_point(
+                db, drop_point, user_id=user_id, verification_budget=budget
+            )
+            budget = max(0, budget - int(outcome.get("kept") or 0))
         except MentionSearchUnavailable as exc:
             # Provider-level failure (rate limit, bad key) will hit every remaining
             # drop point too — stop rather than burn the rest of the batch on it.
@@ -321,6 +380,8 @@ def detect_batch(
             continue
         summary["checked"] += 1
         summary["created"] += int(outcome.get("created") or 0)
+        # Reported separately: "created 12" says nothing about how much of it is evidence.
+        summary["verified"] += int(outcome.get("verified") or 0)
         summary["results"].append(outcome)
     return summary
 
