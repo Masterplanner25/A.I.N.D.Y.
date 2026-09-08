@@ -740,6 +740,37 @@ flags ever be turned on, and does paused work happen often enough to pay an inte
 
 ## 8. Migration shape
 
+### ★ Step 1 built 2026-09-07 — the shape, additive and unread
+
+`plan_objectives`, `plan_phases`, `plan_strategies`, and `tasks.strategy_id` / `tasks.phase_id`
+exist. **Nothing reads them**, which this section requires: until the six live rows move, a plan
+that read `plan_phases` would have five phases in one table and five phases-as-tasks in another
+— the condition §3 complains about, added to rather than removed.
+
+Three invariants are enforced in `strategy_layer_service`, not described:
+
+1. **A displaced strategy has no outcome, ever**, and displacing one clears any verdict already
+   recorded. It was never tried; inventing a judgement for it is what would make a success rate
+   over the set meaningless.
+2. **Abandoning releases INCOMPLETE tasks and leaves completed ones attached.** WCU accrues
+   from completed tasks, so cancelling or unlinking them would retroactively reduce the work
+   you did — and it would contradict `masterplan_execution_service`, which already refuses to
+   replace a plan's tasks when any are completed.
+3. **`phase_id` moves freely; `objective_id` does not.** Scheduling versus ownership, which is
+   what makes *"some things move phases"* a refine rather than a rewrite.
+
+`tasks.strategy_id` / `phase_id` are plain indexed strings rather than foreign keys, and the
+release runs through a new `sys.v1.task.release_from_strategy` rather than an import —
+masterplan reaches tasks by syscall
+(`test_masterplan_bootstrap_keeps_only_identity_as_direct_app_dependency`). An FK would also
+make abandonment a delete-ordering problem, which is the opposite of what §6 Q4 requires.
+
+`unhoused_emergent_strategies()` is the query §5's divergence table turns into a *revise*
+proposal: an emergent strategy with no home objective means the plan is aiming somewhere it does
+not say.
+
+### Steps 2 and 3, still to do
+
 Cheap on paper — **0 goals, 1 plan, 9 tasks (6 on the plan)** — with one piece that needs care.
 
 1. `plan_phases` and `plan_strategies` tables, additive, `IF NOT EXISTS` guarded per
