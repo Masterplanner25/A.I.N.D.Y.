@@ -193,6 +193,21 @@ had **never once fired**, because `entity_counter` was always empty. A test now 
 container and asserts an Influence Spike comes out — the classification unblocking code that was
 already written and wired.
 
+**★ Confirmed live 2026-09-07, and it immediately exposed something else.** The owner confirmed
+both containers; 95 of 214 drops were tagged and the top strategy became
+`2025 Chatgpt Case Study Series Influence Spike` — a claim about a body of work rather than about
+a word, which is what this reclassification was for.
+
+The *ranking* between the two series is not trustworthy, and that is a separate defect:
+`RIPPLE-PINGS-NOT-ECHOES-1`. RippleTrace's mention detection uses an answer engine, so a ping
+records a page *about the same subject* rather than one that *cites you* — 1 of 256 live pings
+points at the author. `narrative_score`, and therefore which pieces count as "successful", is
+measuring topical density rather than reach.
+
+**The classification is right; the scores it is ranked by are not.** Those are separable, and
+nothing here depends on the scores being fixed — but nothing should be concluded from the
+ordering until they are. See `docs/verification/DEFECT_RIPPLE_PINGS_ARE_NOT_ECHOES.md`.
+
 ### ★ And the ownership question turned out to be smaller than it looked
 
 §8 question 3 asked who should own a container. Checking the data before answering it changed
