@@ -49,6 +49,47 @@ def _context_user_id(ctx: SyscallContext):
     return user_id
 
 
+def _handle_task_release_from_strategy(payload: dict, ctx: SyscallContext) -> dict:
+    """Detach INCOMPLETE tasks from a strategy; leave completed ones exactly as they are.
+
+    ★ The asymmetry is the point (`STRATEGY_LAYER_SPEC` §6 Q4). Abandoning an approach must
+    not destroy the record of work actually done, and WCU accrues from completed tasks — so
+    unlinking or cancelling them would retroactively reduce the work you did, which is false.
+    You did the work; the approach is what failed.
+
+    Owned by tasks rather than by masterplan because `tasks` is a core-domain table and
+    masterplan reaches it through syscalls, never by import
+    (`test_masterplan_bootstrap_keeps_only_identity_as_direct_app_dependency`).
+    """
+    from apps.tasks.models import Task
+
+    strategy_id = payload.get("strategy_id")
+    if not strategy_id:
+        raise ValueError("sys.v1.task.release_from_strategy requires 'strategy_id'")
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        rows = (
+            db.query(Task)
+            .filter(Task.strategy_id == str(strategy_id), Task.status != "completed")
+            .all()
+        )
+        for task in rows:
+            task.strategy_id = None
+        kept = (
+            db.query(Task)
+            .filter(Task.strategy_id == str(strategy_id), Task.status == "completed")
+            .count()
+        )
+        db.commit()
+        # Both numbers are returned, because "3 released" alone does not say whether anything
+        # was preserved, and preserving is the half that matters.
+        return {"released": len(rows), "completed_kept": kept}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def _handle_task_create(payload: dict, ctx: SyscallContext) -> dict:
     from apps.tasks.services.task_service import create_task
 
@@ -441,6 +482,27 @@ def _handle_task_delete_by_ids(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def register_task_syscall_handlers() -> None:
+    register_syscall(
+        name="sys.v1.task.release_from_strategy",
+        handler=_handle_task_release_from_strategy,
+        capability="task.update",
+        description=(
+            "Detach incomplete tasks from an abandoned or displaced strategy. Completed tasks "
+            "are deliberately untouched — the work happened."
+        ),
+        input_schema={
+            "required": ["strategy_id"],
+            "properties": {"strategy_id": {"type": "string"}},
+        },
+        output_schema={
+            "required": ["released", "completed_kept"],
+            "properties": {
+                "released": {"type": "integer"},
+                "completed_kept": {"type": "integer"},
+            },
+        },
+        stable=False,
+    )
     register_syscall(
         name="sys.v1.task.create",
         handler=_handle_task_create,
