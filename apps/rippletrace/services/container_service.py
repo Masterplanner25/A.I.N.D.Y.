@@ -60,18 +60,27 @@ def _normalize(name: str) -> str:
 
 
 def _original_case(title: str, phrase_tokens: list[str]) -> str:
-    """Render a detected phrase the way the author wrote it.
+    """Render a detected phrase exactly as the author wrote it, punctuation included.
 
-    The name is an identity, and "2025 chatgpt case study series" is not what anybody called
-    their series. Falls back to the lowercased form if the span cannot be located, which only
-    happens when the title's punctuation splits differently from the token stream.
+    ★ Sliced from the original string between the first and last matched word, not rejoined
+    from the tokens. Rejoining loses whatever sat between them, and the first real candidate
+    this produced showed why: the owner's series is "2025 ChatGPT/AI The Duality Of Progress",
+    and a token rejoin proposed **"2025 ChatGPT AI The Duality Of Progress"** — a name they
+    never used, offered back to them as their own.
+
+    A name is an identity. Getting the slash wrong is not cosmetic when the question being
+    asked is "is this yours?".
+
+    Falls back to the lowercased form when the span cannot be located, which happens only if
+    the title tokenises differently from the phrase.
     """
-    words = _WORD.findall(title or "")
-    lowered = [w.lower() for w in words]
+    raw = title or ""
+    matches = list(_WORD.finditer(raw))
+    lowered = [m.group(0).lower() for m in matches]
     width = len(phrase_tokens)
     for index in range(len(lowered) - width + 1):
         if lowered[index:index + width] == phrase_tokens:
-            return " ".join(words[index:index + width])
+            return raw[matches[index].start():matches[index + width - 1].end()]
     return " ".join(phrase_tokens)
 
 
