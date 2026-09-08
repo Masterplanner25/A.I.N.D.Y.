@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import types
 
+import httpx
 import pytest
 
 from apps.agent.agents import planner_anthropic as pa
@@ -21,12 +22,21 @@ def _fake_message(plan: dict):
 
 
 class _FakeClient:
+    """Mirrors the runtime's `LLMClient`, not the raw Anthropic SDK.
+
+    ★ The planner goes through `get_llm_client("anthropic").call_method("messages_create", …)`
+    since 2026-09-07, so a fake shaped like `client.messages.create` would pass while testing
+    an interface the code no longer uses. `call_method` is also what carries `tools` and
+    `tool_choice` through untouched — the seam's `chat()` returns a string and would discard
+    the `tool_use` block the forced tool call exists to produce.
+    """
+
     def __init__(self, message, capture: dict):
         self._message = message
         self._capture = capture
-        self.messages = types.SimpleNamespace(create=self._create)
 
-    def _create(self, **kwargs):
+    def call_method(self, method_name: str, **kwargs):
+        assert method_name == "messages_create", method_name
         self._capture.update(kwargs)
         return self._message
 
@@ -97,3 +107,85 @@ def test_backend_registers_as_anthropic_chat(client):
     from AINDY.platform_layer.registry import get_agent_planner_backend
 
     assert get_agent_planner_backend("anthropic_chat") is pa.claude_planner_backend
+
+
+# ── the LLM seam ──────────────────────────────────────────────────────────────────────
+#
+# `docs/runtime/LLM_SEAM_ADOPTION_SCOPE.md` phase 1. The planner is the most expensive LLM
+# call this app makes and it was the only one the runtime could not see: a raw
+# `anthropic.Anthropic()` bypasses both the token meter and the circuit breaker.
+
+
+def test_the_client_comes_from_the_runtime_seam(monkeypatch):
+    """★ Not `anthropic.Anthropic()`.
+
+    Routing through `get_llm_client` is what puts this call in `aindy_llm_tokens_total` —
+    `anthropic_client.messages_create` calls `observe_llm_usage`, and the raw SDK path does
+    not. It also wraps the call in the provider circuit breaker.
+    """
+    from AINDY.platform_layer import llm_client as seam
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    asked: list[str] = []
+    monkeypatch.setattr(
+        seam, "get_llm_client", lambda provider="openai": asked.append(provider) or object()
+    )
+    monkeypatch.setattr(pa, "_make_client", pa._make_client)  # keep the real one
+
+    pa._make_client()
+
+    assert asked == ["anthropic"]
+
+
+def test_a_missing_key_still_fails_with_a_sentence(monkeypatch):
+    """The key check stays in the app so the message names the variable to set."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    with pytest.raises(pa.AnthropicPlannerError, match="ANTHROPIC_API_KEY"):
+        pa._make_client()
+
+
+def test_a_provider_error_survives_the_seams_wrapper(monkeypatch):
+    """★ The failure this unwrap exists to prevent.
+
+    `CircuitBreakerLLMClient` raises `LLMCallError(...) from exc`, so by the time the planner
+    sees it the SDK error is one level down. Without reading `__cause__` every provider
+    failure collapses into the generic message and the status code, error type and request id
+    are lost — at exactly the moment an incident needs them.
+    """
+    import anthropic
+    from AINDY.platform_layer.llm_client import LLMCallError
+
+    sdk_error = anthropic.APIStatusError(
+        "rate limited",
+        response=httpx.Response(429, request=httpx.Request("POST", "https://api.anthropic.com")),
+        body=None,
+    )
+    wrapped = LLMCallError("anthropic call failed")
+    wrapped.__cause__ = sdk_error
+
+    class _Failing:
+        def call_method(self, *a, **k):
+            raise wrapped
+
+    monkeypatch.setattr(pa, "_make_client", lambda: _Failing())
+
+    with pytest.raises(pa.AnthropicPlannerError) as caught:
+        pa.claude_planner_backend(_request())
+
+    detail = str(caught.value)
+    assert "429" in detail, detail
+    assert "planner call failed" not in detail, "collapsed into the generic message"
+
+
+def test_a_bare_error_is_still_reported(monkeypatch):
+    """The unwrap must not swallow errors that were never wrapped."""
+
+    class _Failing:
+        def call_method(self, *a, **k):
+            raise RuntimeError("socket exploded")
+
+    monkeypatch.setattr(pa, "_make_client", lambda: _Failing())
+
+    with pytest.raises(pa.AnthropicPlannerError, match="socket exploded"):
+        pa.claude_planner_backend(_request())
