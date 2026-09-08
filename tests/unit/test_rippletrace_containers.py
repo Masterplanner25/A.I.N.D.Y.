@@ -474,3 +474,34 @@ def test_a_drop_carrying_a_publisher_tag_of_the_same_words_is_still_counted(db_s
 
     perf = container_service.list_container_performance(db_session, USER)[0]["performance"]
     assert perf["drops"] == 7
+
+
+def test_the_proposed_name_keeps_the_punctuation_the_author_used(db_session):
+    """★ Found by running detection on the real corpus rather than on a fixture.
+
+    The owner's second series is "2025 ChatGPT/AI The Duality Of Progress". Rejoining the
+    matched tokens with spaces proposed "2025 ChatGPT AI The Duality Of Progress" — a name
+    they never used, offered back to them as their own. A name is an identity, and getting
+    the slash wrong is not cosmetic when the question is "is this yours?".
+    """
+    slashed = "2025 ChatGPT/AI The Duality Of Progress"
+    for subject in SUBJECTS:
+        _drop(db_session, f"{subject}: {slashed} Series")
+    db_session.commit()
+
+    candidate = container_service.detect_candidates(db_session, USER)[0]
+
+    assert "/" in candidate["name"]
+    assert candidate["name"].startswith("2025 ChatGPT/AI")
+
+
+def test_a_confirmed_slashed_name_still_matches_its_pieces(db_session):
+    """Matching runs on the normalized form, so the punctuation in the name cannot break it."""
+    slashed = "2025 ChatGPT/AI The Duality Of Progress"
+    for subject in SUBJECTS:
+        _drop(db_session, f"{subject}: {slashed} Series")
+    db_session.commit()
+
+    result = container_service.confirm_container(db_session, USER, name=slashed)
+
+    assert result["drop_count"] == len(SUBJECTS)
