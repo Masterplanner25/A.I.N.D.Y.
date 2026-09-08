@@ -769,7 +769,43 @@ make abandonment a delete-ordering problem, which is the opposite of what §6 Q4
 proposal: an emergent strategy with no home objective means the plan is aiming somewhere it does
 not say.
 
-### Steps 2 and 3, still to do
+### ★ Step 2 built 2026-09-07 — seed, and a correction to this section's ordering
+
+`seed_strategy_layer` derives objectives from `core_domains` and phases from `phases`, chaining
+`depends_on_phase_id` as it goes. It is idempotent by name, so the same call seeds a new plan at
+lock — wired into `create_masterplan_from_genesis` — and backfills one locked before the layer
+existed. A partial seed completes the existing chain rather than starting a second one.
+
+**★ It does not delete the five phase-as-task rows, and this section's step list is wrong to put
+that here.** The converse of the warning below is also true, and is the more dangerous half:
+
+> Nothing should read `plan_phases` until the six rows have moved — **and nothing should stop
+> reading the tasks until something reads `plan_phases`.**
+
+Those five tasks carry the chain `eta_service._scope_plan_from_graph` turns into
+`critical_depth`. Delete them while `plan_phases` is still unread and `critical_depth` collapses
+to 1, the sequential floor vanishes, and the plan projects as though all five phases could run
+at once — which is the same failure this section already warns about for the *other* reason,
+arriving through the gap between the steps rather than within one.
+
+So the delete moves to step 3, with the rewire that makes something read the new table. Between
+now and then the plan holds both, which §8 anticipated and which is harmless precisely because
+nothing reads `plan_phases`.
+
+`attach_tasks_to_phases` gives real tasks a phase and **skips any task whose name matches a
+phase** — attaching one would make the row that has to be deleted look like legitimate work
+scheduled into the layer replacing it. Everything lands on phase 1, because nothing in the data
+says otherwise: a task can be moved afterwards, whereas a wrong guess recorded silently cannot
+be noticed.
+
+### One more row than this section knew about
+
+Measured on the live plan 2026-09-07: tasks 12–16 are the five phases, 17 is *Fix Nodus Issues*
+— and **18 is *Close A.I.N.D.Y. PR***, also completed, created after this section was written.
+Both real tasks survive the migration; the count in the heading below is six only if you were
+counting on the day.
+
+### Step 3, still to do
 
 Cheap on paper — **0 goals, 1 plan, 9 tasks (6 on the plan)** — with one piece that needs care.
 

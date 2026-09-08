@@ -129,6 +129,31 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
                 masterplan_id=getattr(masterplan, "id", None),
             )
 
+    # ── Strategy layer: the plan's two axes become rows ───────────────────────────────────
+    #
+    # Genesis has always emitted both — three `core_domains` and five `phases` — and they were
+    # materialised as tasks and read-only text respectively (STRATEGY_LAYER_SPEC §3). Seeding
+    # them here is the same materialisation as phases → tasks, applied to the layer that was
+    # flattened into it.
+    #
+    # Nothing reads these yet (§8), so this is additive: a plan locked today gets its layer,
+    # and step 3 is a code change rather than a code change plus a backfill.
+    #
+    # Non-fatal, like the worth declarations above. Locking is the user's act.
+    try:
+        from apps.masterplan.services.strategy_layer_seed import seed_strategy_layer
+
+        seed_strategy_layer(db, masterplan_id=masterplan.id, user_id=user_id)
+    except Exception:
+        db.rollback()
+        emit_observability_event(
+            logger,
+            event="masterplan_strategy_layer_seed_failed",
+            session_id=session_id,
+            user_id=user_id,
+            masterplan_id=getattr(masterplan, "id", None),
+        )
+
     # Capture lock event to memory (fire-and-forget)
     if user_id:
         try:
