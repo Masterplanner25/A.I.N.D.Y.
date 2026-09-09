@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.4.1,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.9.0,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -108,8 +108,13 @@ def register() -> None:
     #   from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
     # `platform_layer.registry` exports a `register_syscall` too, and it is the wrong one —
     # it writes into a dict the SyscallDispatcher never reads. Every one of this repo's
-    # 90 registered syscalls uses the kernel path; zero use the platform_layer path, and
+    # 71 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
     # this block used to say otherwise.
+    #
+    # Measured 2026-09-08 rather than carried forward: 95 registered at app-profile boot,
+    # 24 of them the runtime's own (import `AINDY.kernel.syscall_registry` alone to see that
+    # number), so 71 are ours. The previous figure of 90 was stale, which is the same failure
+    # the runtime-floor lines above had — a number nobody re-derives is a number that drifts.
     #
     # AGENT TOOLS: use `register_run_tool_provider` (a callable returning the tool list),
     # NOT `register_agent_tool` (static registration). No app uses the static form; the
@@ -230,7 +235,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.4.1,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.9.0,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.
@@ -326,7 +331,7 @@ The Nodus worker is spawned as `subprocess.run([sys.executable, nodus_worker.py]
 `sys.path[0]` is the *worker's* directory and the inherited cwd is **not** on `sys.path`. If this
 repo is not pip-installed, the worker cannot `import apps`, `load_plugins()` raises
 `ModuleNotFoundError`, and `_ensure_tools_loaded` swallows it **at DEBUG**. The worker then runs
-with 24 runtime syscalls instead of 92 (measured 2026-09-07), and the visible symptom is
+with 24 runtime syscalls instead of 95 (measured 2026-09-08), and the visible symptom is
 three layers away:
 
 ```
@@ -417,5 +422,6 @@ Only after those three should you look at application code. Full write-ups:
 | Cross-domain coupling doc | `docs/architecture/CROSS_DOMAIN_COUPLING.md` |
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
+| Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — **half-built**, see §8 |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |
