@@ -188,6 +188,67 @@ def _scope_plan_from_graph(graph: dict, plan_id: Any) -> Optional[dict]:
     }
 
 
+def _phase_chain_depth(db, plan_id: Any) -> int:
+    """The longest remaining chain of incomplete phases, or 0 when the plan has none.
+
+    Walks `depends_on_phase_id` rather than counting rows, because the edge is what carries
+    the order — an `ordinal` is a display concern and a reordered plan would still have the
+    same count. Completed phases are excluded: the floor is about work that remains.
+    """
+    from apps.masterplan.strategy_layer import PHASE_COMPLETE, PlanPhase
+
+    rows = (
+        db.query(PlanPhase)
+        .filter(PlanPhase.masterplan_id == _as_int(plan_id))
+        .all()
+    )
+    if not rows:
+        return 0
+
+    remaining = {row.id: row for row in rows if row.status != PHASE_COMPLETE}
+    if not remaining:
+        return 0
+
+    depth_cache: dict[str, int] = {}
+
+    def _depth(phase_id: str, seen: frozenset) -> int:
+        if phase_id in depth_cache:
+            return depth_cache[phase_id]
+        row = remaining.get(phase_id)
+        if row is None or phase_id in seen:
+            # Missing, complete, or a cycle. A cycle is not expected — the seeder builds a
+            # single chain — but a malformed graph must not recurse forever.
+            return 0
+        parent = row.depends_on_phase_id
+        value = 1 + (_depth(parent, seen | {phase_id}) if parent else 0)
+        depth_cache[phase_id] = value
+        return value
+
+    return max(_depth(phase_id, frozenset()) for phase_id in remaining)
+
+
+def _apply_phase_chain_depth(db, plan, scope: Optional[dict]) -> Optional[dict]:
+    """Raise the scope's `critical_depth` to the phase chain's, when the plan has phases.
+
+    `max` rather than replacement, deliberately. Tasks can still form chains of their own
+    inside a phase, and taking the larger keeps whichever constraint actually binds. A plan
+    with no `plan_phases` rows is untouched, so nothing changes for a plan that has not been
+    seeded.
+    """
+    if scope is None:
+        return scope
+    try:
+        depth = _phase_chain_depth(db, plan.id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("phase chain depth unavailable for plan %s: %s", plan.id, exc)
+        return scope
+    if depth > int(scope.get("critical_depth") or 0):
+        scope = dict(scope)
+        scope["critical_depth"] = depth
+        scope["critical_depth_source"] = "plan_phases"
+    return scope
+
+
 def _project_days(remaining: int, velocity: float, critical_depth: int) -> float:
     """Days to finish ``remaining`` work at ``velocity`` tasks/day.
 
@@ -275,6 +336,12 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
     # Plan-scoped, cascade-aware counts from the dependency graph; fall back to
     # legacy user-wide counts when the graph is unavailable.
     scope = _scope_plan_from_graph(_graph_context(db, owner_user_id), plan.id)
+    # ★ The sequential floor moves to `plan_phases` once a plan has them
+    # (STRATEGY_LAYER_SPEC §8 step 3). It used to come from the five phases-as-TASKS and their
+    # hard-dependency chain; those rows are retired in the same change, so without this the
+    # floor would vanish and the plan would project as though all five phases could run at
+    # once. Same number, read from the layer that now owns it.
+    scope = _apply_phase_chain_depth(db, plan, scope)
     remaining_effort = 0.0
     critical_path_effort = 0.0
     work_velocity = 0.0

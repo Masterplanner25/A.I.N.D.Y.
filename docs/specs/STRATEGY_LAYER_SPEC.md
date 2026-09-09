@@ -805,7 +805,40 @@ Measured on the live plan 2026-09-07: tasks 12–16 are the five phases, 17 is *
 Both real tasks survive the migration; the count in the heading below is six only if you were
 counting on the day.
 
-### Step 3, still to do
+### ★ Step 3a built 2026-09-08 — the floor moves, then the rows go
+
+The two halves that had to be one change:
+
+**`eta_service` reads the phase chain.** `_phase_chain_depth` walks `depends_on_phase_id` among
+incomplete phases and `_apply_phase_chain_depth` raises the scope's `critical_depth` to it.
+`max`, not replacement — tasks can still form chains inside a phase, so the larger constraint
+wins. A plan with no `plan_phases` rows is untouched, so nothing changes for an unseeded plan.
+
+**`retire_phase_as_task_rows` removes the duplicates**, and refuses more than it deletes. Dry-run
+by default: `apply=False` is this section's *"read it before running it"* made mechanical. Two
+refusals, both reported rather than filtered, because either means an assumption behind the
+migration is wrong for that plan:
+
+* **a phase-named task that is completed** — real work someone did, whatever it is named, and
+  WCU accrues from completed tasks
+* **a dependent outside the retiring set** — deleting a row a real task is blocked behind would
+  silently unblock it
+
+Dependencies *among* the candidates are the chain being removed wholesale and do not block.
+`sys.v1.task.delete_many` re-checks `status != completed` at the write: the caller's refusal is
+the real guard, but a delete is irreversible and that is the last place that can say no.
+
+### Step 3b, still to do
+
+Two pieces, both separable from the migration above and neither blocking it:
+
+* **`evaluate_phase()` against `plan_phases`.** Today it returns `1` or `2` for a five-phase
+  plan and gates on threshold columns nobody chose — books, a studio, playbooks. Per Q8 it
+  should **propose and let the human confirm**, which is a semantic change to live behaviour and
+  deserves its own review rather than riding along with a migration.
+* **The WCU rollup and a UI (§5b).** The layer is real data nobody can see yet.
+
+### Original step 3 notes
 
 Cheap on paper — **0 goals, 1 plan, 9 tasks (6 on the plan)** — with one piece that needs care.
 

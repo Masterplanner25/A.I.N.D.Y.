@@ -232,7 +232,7 @@ def _dispatch_tasks(db, name: str, payload: dict, *, user_id: Any) -> dict[str, 
     ctx = SyscallContext(
         execution_unit_id=str(uuid.uuid4()),
         user_id=str(user_id) if user_id else "",
-        capabilities=["task.read", "task.update"],
+        capabilities=["task.read", "task.update", "task.delete"],
         trace_id="",
         metadata={"_db": db},
     )
@@ -246,3 +246,101 @@ def _dispatch_tasks(db, name: str, payload: dict, *, user_id: Any) -> dict[str, 
         logger.warning("[strategy] %s refused: %s", name, result.get("error"))
         return {}
     return result.get("data") or {}
+
+
+# ── Retiring the phases-as-tasks ──────────────────────────────────────────────────────
+
+def retire_phase_as_task_rows(
+    db: Session, *, masterplan_id: int, apply: bool = False
+) -> dict[str, Any]:
+    """Remove the task rows that are really phases, now that `plan_phases` owns them.
+
+    `STRATEGY_LAYER_SPEC` §8 step 3. These rows are not work — they were never actionable and
+    never completable, and leaving them keeps the exact ambiguity the layer exists to remove.
+
+    ★ **Dry-run by default, and it refuses more than it deletes.** §8 says to write this by
+    hand and read it before running it; `apply=False` is that instruction made mechanical. A
+    row is retired only when *every* one of these holds:
+
+    * the plan has `plan_phases`, so something else owns the representation now
+    * the task's name matches one of them
+    * it is **not completed** — a completed row is real work someone did, whatever it is named
+    * nothing outside the retiring set **depends on it** — deleting a row a real task is
+      blocked behind would silently unblock that task
+
+    The last two are the ones that matter. Both are refusals rather than filters: a row that
+    trips them is reported, not quietly skipped, because either means an assumption behind
+    this migration is wrong for that plan.
+    """
+    phases = (
+        db.query(PlanPhase).filter(PlanPhase.masterplan_id == int(masterplan_id)).all()
+    )
+    if not phases:
+        return {
+            "retired": 0,
+            "applied": False,
+            "reason": "plan has no phases — seed the layer before retiring the task rows",
+        }
+
+    plan = db.query(MasterPlan).filter(MasterPlan.id == int(masterplan_id)).first()
+    user_id = plan.user_id if plan is not None else None
+    if user_id is None:
+        return {"retired": 0, "applied": False, "reason": "plan has no owner to act as"}
+
+    tasks = _dispatch_tasks(
+        db, "sys.v1.task.list_for_masterplan",
+        {"masterplan_id": int(masterplan_id)}, user_id=user_id,
+    ).get("tasks") or []
+
+    phase_names = {row.name.strip().lower() for row in phases}
+    candidates = [
+        t for t in tasks if (t.get("name") or "").strip().lower() in phase_names
+    ]
+    candidate_ids = {t.get("id") for t in candidates}
+
+    completed = [t for t in candidates if t.get("status") == "completed"]
+    # A dependent OUTSIDE the set. Dependencies among the candidates themselves are the chain
+    # being retired wholesale, which is fine; a real task blocked behind one is not.
+    outside_dependents = [
+        t for t in tasks
+        if t.get("id") not in candidate_ids
+        and any(
+            (dep or {}).get("task_id") in candidate_ids
+            for dep in (t.get("depends_on") or [])
+        )
+    ]
+
+    refusals = []
+    if completed:
+        refusals.append(
+            f"{len(completed)} phase-named task(s) are completed — real work, not a phase row"
+        )
+    if outside_dependents:
+        refusals.append(
+            f"{len(outside_dependents)} task(s) outside the set depend on these rows"
+        )
+
+    report = {
+        "candidates": [
+            {"id": t.get("id"), "name": t.get("name"), "status": t.get("status")}
+            for t in candidates
+        ],
+        "candidate_count": len(candidates),
+        "refusals": refusals,
+        "applied": False,
+        "retired": 0,
+    }
+    if refusals or not candidates:
+        return report
+    if not apply:
+        report["reason"] = "dry run — pass apply=True to delete"
+        return report
+
+    deleted = _dispatch_tasks(
+        db, "sys.v1.task.delete_many",
+        {"masterplan_id": int(masterplan_id), "task_ids": sorted(candidate_ids)},
+        user_id=user_id,
+    )
+    report["retired"] = int(deleted.get("deleted") or 0)
+    report["applied"] = True
+    return report

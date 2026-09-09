@@ -49,6 +49,47 @@ def _context_user_id(ctx: SyscallContext):
     return user_id
 
 
+def _handle_task_delete_many(payload: dict, ctx: SyscallContext) -> dict:
+    """Delete the named tasks within one masterplan.
+
+    Takes explicit ids and a plan scope. Which rows are safe to delete is a masterplan
+    judgement — `retire_phase_as_task_rows` refuses completed rows and rows with outside
+    dependents before it ever gets here — and tasks owns the write.
+
+    ★ Re-checks `status != completed` anyway. The caller's refusal is the real guard, but a
+    delete is irreversible and this is the last place that can say no: a completed task is
+    work someone did, and WCU accrues from completed tasks.
+    """
+    from apps.tasks.models import Task
+
+    masterplan_id = payload.get("masterplan_id")
+    task_ids = payload.get("task_ids") or []
+    if masterplan_id is None:
+        raise ValueError("sys.v1.task.delete_many requires 'masterplan_id'")
+    if not task_ids:
+        return {"deleted": 0, "refused_completed": 0}
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        rows = (
+            db.query(Task)
+            .filter(
+                Task.masterplan_id == int(masterplan_id),
+                Task.id.in_([int(i) for i in task_ids]),
+            )
+            .all()
+        )
+        deletable = [r for r in rows if r.status != "completed"]
+        refused = len(rows) - len(deletable)
+        for row in deletable:
+            db.delete(row)
+        db.commit()
+        return {"deleted": len(deletable), "refused_completed": refused}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def _handle_task_set_phase(payload: dict, ctx: SyscallContext) -> dict:
     """Attach the named tasks to a plan phase.
 
@@ -523,6 +564,30 @@ def _handle_task_delete_by_ids(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def register_task_syscall_handlers() -> None:
+    register_syscall(
+        name="sys.v1.task.delete_many",
+        handler=_handle_task_delete_many,
+        capability="task.delete",
+        description=(
+            "Delete the named tasks within one masterplan. Refuses completed rows — that is "
+            "work someone did, and WCU accrues from it."
+        ),
+        input_schema={
+            "required": ["masterplan_id", "task_ids"],
+            "properties": {
+                "masterplan_id": {"type": "integer"},
+                "task_ids": {"type": "array"},
+            },
+        },
+        output_schema={
+            "required": ["deleted"],
+            "properties": {
+                "deleted": {"type": "integer"},
+                "refused_completed": {"type": "integer"},
+            },
+        },
+        stable=False,
+    )
     register_syscall(
         name="sys.v1.task.set_phase",
         handler=_handle_task_set_phase,
