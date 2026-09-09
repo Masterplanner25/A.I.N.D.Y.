@@ -274,3 +274,123 @@ def test_a_plan_with_no_owner_says_so_rather_than_attaching_nothing_quietly(db_s
 
     assert result["attached"] == 0
     assert "owner" in result["reason"]
+
+
+# ── ★ retiring the phases-as-tasks, and what stops it ─────────────────────────────────
+#
+# `STRATEGY_LAYER_SPEC` §8 step 3. These rows are not work — never actionable, never
+# completable — and leaving them keeps the exact ambiguity the layer exists to remove. §8 says
+# to write this by hand and read it before running it; `apply=False` is that made mechanical.
+
+from apps.masterplan.services.strategy_layer_seed import retire_phase_as_task_rows  # noqa: E402
+
+
+def _seeded_plan_with_phase_tasks(db, plan):
+    seed_strategy_layer(db, masterplan_id=plan.id)
+    return [_phase_task(db, plan, p["name"]) for p in STRUCTURE["phases"]]
+
+
+def test_retiring_is_a_dry_run_by_default(db_session, plan):
+    """★ `apply=False` is §8's "read it before running it", made mechanical."""
+    _seeded_plan_with_phase_tasks(db_session, plan)
+
+    report = retire_phase_as_task_rows(db_session, masterplan_id=plan.id)
+
+    assert report["candidate_count"] == 5
+    assert report["retired"] == 0
+    assert report["applied"] is False
+    assert db_session.query(Task).filter(Task.masterplan_id == plan.id).count() == 5
+
+
+def test_the_dry_run_names_every_row_it_would_delete(db_session, plan):
+    """A count asks for consent to something the reader cannot see."""
+    _seeded_plan_with_phase_tasks(db_session, plan)
+
+    names = {c["name"] for c in retire_phase_as_task_rows(db_session, masterplan_id=plan.id)["candidates"]}
+
+    assert names == {p["name"] for p in STRUCTURE["phases"]}
+
+
+def test_applying_removes_them(db_session, plan):
+    _seeded_plan_with_phase_tasks(db_session, plan)
+    real = _phase_task(db_session, plan, "Fix Nodus Issues", status="completed")
+
+    report = retire_phase_as_task_rows(db_session, masterplan_id=plan.id, apply=True)
+    db_session.expire_all()
+
+    assert (report["retired"], report["applied"]) == (5, True)
+    remaining = db_session.query(Task).filter(Task.masterplan_id == plan.id).all()
+    assert [t.id for t in remaining] == [real.id]
+
+
+def test_it_refuses_when_a_phase_named_task_is_completed(db_session, plan):
+    """★ A completed row is real work someone did, whatever it is named.
+
+    WCU accrues from completed tasks, so deleting one retroactively reduces the work done.
+    Reported as a refusal rather than filtered out: it means an assumption behind this
+    migration is wrong for that plan.
+    """
+    seed_strategy_layer(db_session, masterplan_id=plan.id)
+    _phase_task(db_session, plan, "Foundation Building", status="completed")
+    _phase_task(db_session, plan, "Platform Development")
+
+    report = retire_phase_as_task_rows(db_session, masterplan_id=plan.id, apply=True)
+
+    assert report["retired"] == 0
+    assert any("completed" in r for r in report["refusals"])
+    assert db_session.query(Task).filter(Task.masterplan_id == plan.id).count() == 2
+
+
+def test_it_refuses_when_a_real_task_depends_on_one(db_session, plan):
+    """★ Deleting a row a real task is blocked behind would silently unblock it.
+
+    Dependencies *among* the retiring rows are the chain being removed wholesale, which is
+    fine. A dependent outside the set is not.
+    """
+    seed_strategy_layer(db_session, masterplan_id=plan.id)
+    phase_row = _phase_task(db_session, plan, "Foundation Building")
+    real = _phase_task(db_session, plan, "Write the thing", status="blocked")
+    real.depends_on = [{"task_id": phase_row.id, "dependency_type": "hard"}]
+    db_session.commit()
+
+    report = retire_phase_as_task_rows(db_session, masterplan_id=plan.id, apply=True)
+
+    assert report["retired"] == 0
+    assert any("depend" in r for r in report["refusals"])
+    assert db_session.query(Task).filter(Task.id == phase_row.id).first() is not None
+
+
+def test_the_chain_among_the_retiring_rows_does_not_block_it(db_session, plan):
+    """The five phases depend on each other by design; that is the chain being removed."""
+    seed_strategy_layer(db_session, masterplan_id=plan.id)
+    rows = [_phase_task(db_session, plan, p["name"]) for p in STRUCTURE["phases"]]
+    for earlier, later in zip(rows, rows[1:]):
+        later.depends_on = [{"task_id": earlier.id, "dependency_type": "hard"}]
+    db_session.commit()
+
+    report = retire_phase_as_task_rows(db_session, masterplan_id=plan.id, apply=True)
+
+    assert report["refusals"] == []
+    assert report["retired"] == 5
+
+
+def test_it_refuses_before_the_layer_is_seeded(db_session, plan):
+    """★ Nothing may stop reading the tasks until something else owns the representation."""
+    for phase in STRUCTURE["phases"]:
+        _phase_task(db_session, plan, phase["name"])
+
+    report = retire_phase_as_task_rows(db_session, masterplan_id=plan.id, apply=True)
+
+    assert report["retired"] == 0
+    assert "seed" in report["reason"]
+    assert db_session.query(Task).filter(Task.masterplan_id == plan.id).count() == 5
+
+
+def test_a_task_that_merely_resembles_a_phase_is_left_alone(db_session, plan):
+    seed_strategy_layer(db_session, masterplan_id=plan.id)
+    _phase_task(db_session, plan, "Foundation Building Notes")
+
+    report = retire_phase_as_task_rows(db_session, masterplan_id=plan.id, apply=True)
+
+    assert report["candidate_count"] == 0
+    assert db_session.query(Task).filter(Task.masterplan_id == plan.id).count() == 1
