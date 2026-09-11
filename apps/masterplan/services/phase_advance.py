@@ -44,7 +44,7 @@ from sqlalchemy.orm import Session
 from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
 from apps.masterplan.masterplan import MasterPlan
 from apps.masterplan.services.strategy_layer_service import serialize_phase
-from apps.masterplan.strategy_layer import PHASE_ACTIVE, PHASE_COMPLETE, PlanPhase
+from apps.masterplan.strategy_layer import PHASE_ACTIVE, PHASE_COMPLETE, PHASE_PENDING, PlanPhase
 
 logger = logging.getLogger(__name__)
 
@@ -226,14 +226,136 @@ def propose_phase_advance(
         "phase": serialize_phase(phase),
         "next_phase": serialize_phase(successor) if successor is not None else None,
         "evidence": evidence,
+        "dismissed": None,
     }
     if evidence["work_complete"]:
-        payload["proposed"] = True
         payload["reason"] = REASON_WORK_COMPLETE
     elif evidence["window_elapsed"]:
-        payload["proposed"] = True
         payload["reason"] = REASON_WINDOW_ELAPSED
+    else:
+        return payload
+
+    # ★ The human already said "not done", and nothing about the phase's work has changed
+    # since. Re-proposing on the same evidence is nagging, not proposing. The moment a task is
+    # attached or removed the count differs, the dismissal lapses, and the question is asked
+    # again — because it is now a different question.
+    if _dismissal_stands(phase, evidence):
+        payload["dismissed"] = {
+            "at": _iso(phase.advance_dismissed_at),
+            "task_count": phase.advance_dismissed_task_count,
+        }
+        return payload
+
+    payload["proposed"] = True
     return payload
+
+
+def _dismissal_stands(phase: PlanPhase, evidence: dict[str, Any]) -> bool:
+    if phase.advance_dismissed_at is None:
+        return False
+    return int(phase.advance_dismissed_task_count or 0) == int(evidence["tasks_total"])
+
+
+# ── decline ───────────────────────────────────────────────────────────────────────────────────────
+
+def dismiss_phase_advance(
+    db: Session, *, masterplan_id: int, phase_id: str, user_id: Any
+) -> dict[str, Any]:
+    """The human's other half: "not done". A proposal that can only be accepted is not one.
+
+    The first live proposal drew exactly this — *"what if the phase isn't complete?"* — and
+    the honest reading of *Foundation Building, 2 of 2 tasks, 360 days early* was
+    under-tasked, not finished. Dismissing records the evidence the proposal was built on, so
+    it comes back when the work changes and not before. What "the work changes" usually means
+    in practice is attaching the tasks that were missing, which is the review the owner
+    asked for, arrived at from the other direction.
+
+    Refuses when nothing is proposed: there has to be something to decline.
+    """
+    plan = db.query(MasterPlan).filter(MasterPlan.id == int(masterplan_id)).first()
+    if plan is None:
+        raise ValueError(f"MasterPlan {masterplan_id} not found")
+    phases = _phases(db, plan.id)
+    phase = next((row for row in phases if row.id == str(phase_id)), None)
+    if phase is None:
+        raise ValueError(f"phase {phase_id} is not on plan {masterplan_id}")
+    frontier = frontier_phase(phases)
+    if frontier is None or frontier.id != phase.id:
+        raise ValueError(f"phase {phase.name!r} is not the plan's current phase")
+
+    tasks = _tasks_for(db, masterplan_id=plan.id, user_id=user_id or plan.user_id)
+    evidence = _evidence(plan, phases, phase, tasks, now=_now())
+    if not (evidence["work_complete"] or evidence["window_elapsed"]):
+        raise ValueError(f"nothing proposes closing {phase.name!r}; there is nothing to decline")
+
+    phase.advance_dismissed_at = _now()
+    phase.advance_dismissed_task_count = int(evidence["tasks_total"])
+    db.commit()
+    db.refresh(phase)
+    return {
+        "phase": serialize_phase(phase),
+        "dismissed": {
+            "at": _iso(phase.advance_dismissed_at),
+            "task_count": phase.advance_dismissed_task_count,
+        },
+        # The proposal returns when this number changes.
+        "returns_when": "the phase's attached tasks change",
+    }
+
+
+# ── reopen ───────────────────────────────────────────────────────────────────────────────────────
+
+def reopen_phase(
+    db: Session, *, masterplan_id: int, phase_id: str, user_id: Any
+) -> dict[str, Any]:
+    """Reverse a confirmation. The phase becomes the frontier again; its successor steps back.
+
+    Only the most recently closed phase can reopen — the one whose successor is the current
+    frontier — for the same reason `confirm` only closes the frontier: the chain is the plan's
+    sequential floor, and a hole in the middle of it is not a state the plan can be in.
+
+    Tasks are left where they are. The confirmation may have moved open work forward, and
+    moving it back would guess that the human wants the old scheduling rather than the phase;
+    the ids that moved were returned at confirmation time and a task can be moved again.
+    """
+    plan = db.query(MasterPlan).filter(MasterPlan.id == int(masterplan_id)).first()
+    if plan is None:
+        raise ValueError(f"MasterPlan {masterplan_id} not found")
+    phases = _phases(db, plan.id)
+    phase = next((row for row in phases if row.id == str(phase_id)), None)
+    if phase is None:
+        raise ValueError(f"phase {phase_id} is not on plan {masterplan_id}")
+    if phase.status != PHASE_COMPLETE:
+        raise ValueError(f"phase {phase.name!r} is not complete; there is nothing to reopen")
+
+    successor = _successor(phases, phase)
+    frontier = frontier_phase(phases)
+    # Last phase closed: no successor, and the frontier is None because everything is complete.
+    # Otherwise the successor must be the frontier, i.e. nothing after this phase has closed.
+    if successor is not None and (frontier is None or frontier.id != successor.id):
+        later = frontier.name if frontier is not None else "the later phases"
+        raise ValueError(
+            f"phase {phase.name!r} is not the most recently closed phase; reopen {later!r} first"
+        )
+
+    phase.status = PHASE_ACTIVE
+    phase.completed_at = None
+    # A reopened phase is a fresh question; the old "not done" no longer applies to it.
+    phase.advance_dismissed_at = None
+    phase.advance_dismissed_task_count = None
+    if successor is not None and successor.status == PHASE_ACTIVE:
+        successor.status = PHASE_PENDING
+        successor.started_at = None
+    plan.phase = derive_legacy_phase(phases)
+    db.commit()
+    for row in (phase, successor):
+        if row is not None:
+            db.refresh(row)
+    return {
+        "reopened": serialize_phase(phase),
+        "stepped_back": serialize_phase(successor) if successor is not None else None,
+        "plan_phase": plan.phase,
+    }
 
 
 # ── confirm ───────────────────────────────────────────────────────────────────────────

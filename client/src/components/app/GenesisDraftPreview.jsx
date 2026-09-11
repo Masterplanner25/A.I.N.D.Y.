@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { auditGenesisDraft } from "../../api/masterplan.js";
 import { safeMap } from "../../utils/safe";
+import PlanStructure from "./PlanStructure.jsx";
 
 const SEVERITY_COLORS = {
   critical: "#f87171",
@@ -19,11 +20,6 @@ export default function GenesisDraftPreview({ draft, sessionId, onLock, locking 
   const [auditError, setAuditError] = useState(null);
 
   if (!draft) return null;
-
-  const phases = draft.phases || [];
-  const domains = draft.core_domains || [];
-  const criteria = draft.success_criteria || [];
-  const risks = draft.risk_factors || [];
 
   async function handleAudit() {
     setAuditing(true);
@@ -88,64 +84,8 @@ export default function GenesisDraftPreview({ draft, sessionId, onLock, locking 
         </div>
       </div>
 
-      {/* Core fields */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
-        <Field label="Vision" value={draft.vision_statement} />
-        <Field label="Horizon" value={draft.time_horizon_years ? `${draft.time_horizon_years} years` : "—"} />
-        <Field label="Mechanism" value={draft.primary_mechanism} />
-        <Field label="Ambition" value={draft.ambition_score != null ? `${Math.round(draft.ambition_score * 100)}%` : "—"} />
-        <Field label="Confidence" value={draft.confidence_at_synthesis != null ? `${Math.round(draft.confidence_at_synthesis * 100)}%` : "—"} />
-      </div>
-
-      {/* Phases */}
-      {phases.length > 0 &&
-      <Section label="Phases">
-          {safeMap(phases, (p, i) =>
-        <div key={i} style={{ marginBottom: "8px" }}>
-              <span style={{ color: "#00ffaa", fontWeight: "600" }}>{p.name}</span>
-              {p.duration_months && <span style={{ color: "#71717a", marginLeft: "8px" }}>{p.duration_months}mo</span>}
-              {p.description && <p style={{ color: "#a1a1aa", margin: "2px 0 0 0" }}>{p.description}</p>}
-            </div>)
-        }
-        </Section>
-      }
-
-      {/* Domains */}
-      {domains.length > 0 &&
-      <Section label="Core Domains">
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-            {safeMap(domains, (d, i) =>
-          <span key={i} style={{
-            padding: "4px 10px",
-            border: "1px solid #3f3f46",
-            borderRadius: "20px",
-            color: "#a1a1aa",
-            fontSize: "12px"
-          }}>
-                {d.name}
-              </span>)
-          }
-          </div>
-        </Section>
-      }
-
-      {/* Success criteria */}
-      {criteria.length > 0 &&
-      <Section label="Success Criteria">
-          <ul style={{ margin: 0, paddingLeft: "16px", color: "#a1a1aa" }}>
-            {safeMap(criteria, (c, i) => <li key={i}>{c}</li>)}
-          </ul>
-        </Section>
-      }
-
-      {/* Risk factors */}
-      {risks.length > 0 &&
-      <Section label="Risk Factors">
-          <ul style={{ margin: 0, paddingLeft: "16px", color: "#f87171" }}>
-            {safeMap(risks, (r, i) => <li key={i}>{r}</li>)}
-          </ul>
-        </Section>
-      }
+      {/* The plan itself — the same component the dashboard renders once it is locked */}
+      <PlanStructure structure={draft} />
 
       {/* Audit error */}
       {auditError &&
@@ -231,28 +171,6 @@ export default function GenesisDraftPreview({ draft, sessionId, onLock, locking 
         }
         </div>
       }
-    </div>);
-
-}
-
-function Field({ label, value }) {
-  return (
-    <div>
-      <p style={{ margin: "0 0 2px 0", color: "#71717a", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-        {label}
-      </p>
-      <p style={{ margin: 0, color: "#f4f4f5" }}>{value || "—"}</p>
-    </div>);
-
-}
-
-function Section({ label, children }) {
-  return (
-    <div style={{ marginBottom: "16px" }}>
-      <p style={{ margin: "0 0 8px 0", color: "#71717a", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-        {label}
-      </p>
-      {children}
     </div>);
 
 }

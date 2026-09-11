@@ -140,6 +140,8 @@ def serialize_phase(row: PlanPhase) -> dict[str, Any]:
         # Carried explicitly, because the chain sets a sequential floor on the plan's ETA and
         # `ordinal` alone would not survive a reorder.
         "depends_on_phase_id": row.depends_on_phase_id,
+        "started_at": row.started_at.isoformat() if row.started_at else None,
+        "completed_at": row.completed_at.isoformat() if row.completed_at else None,
     }
 
 

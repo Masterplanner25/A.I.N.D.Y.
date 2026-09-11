@@ -23,6 +23,9 @@ const {
   mockGetStrategyLayer,
   mockGetPhaseAdvanceProposal,
   mockConfirmPhaseAdvance,
+  mockDismissPhaseAdvance,
+  mockReopenPhase,
+  mockGetMasterPlan,
 } = vi.hoisted(() => ({
   mockStartGenesisSession: vi.fn(),
   mockSendGenesisMessage: vi.fn(),
@@ -35,6 +38,9 @@ const {
   mockGetStrategyLayer: vi.fn(),
   mockGetPhaseAdvanceProposal: vi.fn(),
   mockConfirmPhaseAdvance: vi.fn(),
+  mockDismissPhaseAdvance: vi.fn(),
+  mockReopenPhase: vi.fn(),
+  mockGetMasterPlan: vi.fn(),
 }));
 
 vi.mock("../api/tasks.js", () => ({
@@ -56,6 +62,9 @@ vi.mock("../api/masterplan.js", () => ({
   getStrategyLayer: mockGetStrategyLayer,
   getPhaseAdvanceProposal: mockGetPhaseAdvanceProposal,
   confirmPhaseAdvance: mockConfirmPhaseAdvance,
+  dismissPhaseAdvance: mockDismissPhaseAdvance,
+  reopenPhase: mockReopenPhase,
+  getMasterPlan: mockGetMasterPlan,
 }));
 
 import TaskDashboard from "../components/app/TaskDashboard";

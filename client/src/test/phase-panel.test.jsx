@@ -5,16 +5,23 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 // with something the system already said, and a refused confirmation is shown as the
 // API's own sentence rather than swallowed.
 
-const { mockGetStrategyLayer, mockGetPhaseAdvanceProposal, mockConfirmPhaseAdvance } = vi.hoisted(() => ({
+const {
+  mockGetStrategyLayer, mockGetPhaseAdvanceProposal, mockConfirmPhaseAdvance,
+  mockDismissPhaseAdvance, mockReopenPhase,
+} = vi.hoisted(() => ({
   mockGetStrategyLayer: vi.fn(),
   mockGetPhaseAdvanceProposal: vi.fn(),
   mockConfirmPhaseAdvance: vi.fn(),
+  mockDismissPhaseAdvance: vi.fn(),
+  mockReopenPhase: vi.fn(),
 }));
 
 vi.mock("../api/masterplan.js", () => ({
   getStrategyLayer: mockGetStrategyLayer,
   getPhaseAdvanceProposal: mockGetPhaseAdvanceProposal,
   confirmPhaseAdvance: mockConfirmPhaseAdvance,
+  dismissPhaseAdvance: mockDismissPhaseAdvance,
+  reopenPhase: mockReopenPhase,
 }));
 
 import PhasePanel from "../components/app/PhasePanel";
@@ -38,6 +45,8 @@ describe("PhasePanel", () => {
     mockGetStrategyLayer.mockReset();
     mockGetPhaseAdvanceProposal.mockReset();
     mockConfirmPhaseAdvance.mockReset();
+    mockDismissPhaseAdvance.mockReset();
+    mockReopenPhase.mockReset();
   });
 
   it("renders nothing for a plan that predates the layer", async () => {
@@ -144,5 +153,62 @@ describe("PhasePanel", () => {
 
     expect(await screen.findByText(/is not the plan's current phase/)).toBeInTheDocument();
     expect(screen.queryByTestId("phase-advance-review")).not.toBeInTheDocument();
+  });
+
+  // ── "what if the phase isn't complete?" ───────────────────────────────────────────
+
+  it("NOT DONE dismisses the proposal and says when it will return", async () => {
+    mockGetStrategyLayer.mockResolvedValue({ phases: PHASES });
+    mockGetPhaseAdvanceProposal
+      .mockResolvedValueOnce(EARLY_PROPOSAL)
+      .mockResolvedValue({
+        ...EARLY_PROPOSAL, proposed: false,
+        dismissed: { at: "2026-09-10T20:00:00+00:00", task_count: 2 },
+      });
+    mockDismissPhaseAdvance.mockResolvedValue({
+      phase: PHASES[0], dismissed: { at: "2026-09-10T20:00:00+00:00", task_count: 2 },
+      returns_when: "the phase's attached tasks change",
+    });
+
+    render(<PhasePanel planId={10} />);
+    fireEvent.click(await screen.findByRole("button", { name: /not done/i }));
+
+    expect(mockDismissPhaseAdvance).toHaveBeenCalledWith(10, "p1");
+    expect(await screen.findByTestId("phase-advance-notice")).toHaveTextContent(
+      "Foundation Building stays open — the proposal comes back when its tasks change",
+    );
+    expect(screen.queryByTestId("phase-advance-proposal")).not.toBeInTheDocument();
+    expect(screen.getByTestId("phase-advance-dismissed")).toHaveTextContent(
+      "You said Foundation Building is not done, with 2 tasks attached.",
+    );
+    expect(screen.queryByTestId("phase-advance-review")).not.toBeInTheDocument();
+  });
+
+  it("offers REOPEN only on the most recently closed phase, and it reverses the close", async () => {
+    const closed = [
+      { ...PHASES[0], status: "complete" },
+      { ...PHASES[1], status: "complete" },
+      { ...PHASES[2], status: "active" },
+    ];
+    mockGetStrategyLayer
+      .mockResolvedValueOnce({ phases: closed })
+      .mockResolvedValue({ phases: [closed[0], { ...PHASES[1], status: "active" }, PHASES[2]] });
+    mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, phase: PHASES[2], evidence: {} });
+    mockReopenPhase.mockResolvedValue({
+      reopened: { ...PHASES[1], status: "active" }, stepped_back: PHASES[2], plan_phase: 2,
+    });
+
+    render(<PhasePanel planId={10} />);
+
+    const buttons = await screen.findAllByRole("button", { name: /reopen/i });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].closest("li")).toHaveTextContent("Platform Development");
+
+    fireEvent.click(buttons[0]);
+
+    expect(mockReopenPhase).toHaveBeenCalledWith(10, "p2");
+    expect(await screen.findByTestId("phase-advance-notice")).toHaveTextContent(
+      "Platform Development reopened. Expansion and Scaling is pending again.",
+    );
   });
 });

@@ -877,6 +877,36 @@ something the system already said — there is no "close phase" without a propos
 or the API. A refusal shows the API's own sentence. After confirming, the review is shown
 inline: what closed, what opened, how early, and what moved.
 
+### ★ The first live proposal, and what it drew (2026-09-10)
+
+Deployed, the card said what §8 predicted: *Foundation Building looks done. All 2 of its tasks
+are complete, 360 days inside its window.* The owner's response, verbatim: **"what if the phase
+isn't complete?"** — and there was no way to say so. A proposal that can only be accepted is
+not a proposal. Two things followed the same day:
+
+* **Dismissal** — `dismiss_phase_advance`, `POST /phase-advance/dismiss`, the **NOT DONE**
+  button. It records the evidence the proposal was built on (`advance_dismissed_task_count`),
+  not just when. The proposal stays quiet while the phase's attached work is unchanged and
+  returns the moment a task is added or removed — the only thing that could change the
+  answer. What "the work changes" means in practice is attaching the tasks that were
+  missing, which is the review Q8 asked for, arrived at from the other direction. Dismissal
+  silences; it does not lock — the human can still confirm the same evidence on purpose.
+* **Reopen** — `reopen_phase`, `POST /phases/{id}/reopen`, drawn only on the most recently
+  closed phase because the API refuses any other (a hole in the chain is not a state the plan
+  can be in). Tasks stay where the confirmation moved them; the ids were returned then and a
+  task can be moved again.
+
+The second thing the owner said — **"what is the actual plan? the plan itself doesn't show in
+the UI"** — was true and older than this layer. `structure_json` (vision, mechanism, domains,
+success criteria, key assets, risks, synthesis notes) had been rendered exactly once, by the
+Genesis draft preview *before* locking, and never again. `PlanStructure` is now shared by the
+preview and a **VIEW PLAN** toggle on every plan card, so the draft and the locked plan cannot
+drift apart in what they show.
+
+The honest reading of the proposal itself stands: *two tasks* is not the workload of
+"establish the ethical AI framework and initial partnerships". The phase is under-described,
+not finished, and the dismissal path exists so that can be said and acted on.
+
 ### Step 3b(iii), still to do
 
 * **The WCU rollup per objective (§5b).** WCU still cannot say *worked on this*. It needs

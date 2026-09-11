@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 import { AppProviders } from "./utils";
 
@@ -14,6 +14,9 @@ const {
   mockGetStrategyLayer,
   mockGetPhaseAdvanceProposal,
   mockConfirmPhaseAdvance,
+  mockDismissPhaseAdvance,
+  mockReopenPhase,
+  mockGetMasterPlan,
 } = vi.hoisted(() => ({
   mockStartGenesisSession: vi.fn(),
   mockSendGenesisMessage: vi.fn(),
@@ -26,6 +29,9 @@ const {
   mockGetStrategyLayer: vi.fn(),
   mockGetPhaseAdvanceProposal: vi.fn(),
   mockConfirmPhaseAdvance: vi.fn(),
+  mockDismissPhaseAdvance: vi.fn(),
+  mockReopenPhase: vi.fn(),
+  mockGetMasterPlan: vi.fn(),
 }));
 
 vi.mock("../api/masterplan.js", () => ({
@@ -40,6 +46,9 @@ vi.mock("../api/masterplan.js", () => ({
   getStrategyLayer: mockGetStrategyLayer,
   getPhaseAdvanceProposal: mockGetPhaseAdvanceProposal,
   confirmPhaseAdvance: mockConfirmPhaseAdvance,
+  dismissPhaseAdvance: mockDismissPhaseAdvance,
+  reopenPhase: mockReopenPhase,
+  getMasterPlan: mockGetMasterPlan,
 }));
 
 import MasterPlanDashboard from "../components/app/MasterPlanDashboard";
@@ -62,6 +71,7 @@ describe("MasterPlanDashboard", () => {
     mockGetMasterplanProjection.mockResolvedValue(null);
     mockGetStrategyLayer.mockResolvedValue({ phases: [] });
     mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, reason: "no_phases" });
+    mockGetMasterPlan.mockResolvedValue({ id: 1, structure_json: null });
   });
 
   it("renders without crashing on mount", async () => {
@@ -213,5 +223,44 @@ describe("MasterPlanDashboard", () => {
     expect(await screen.findByText("duration")).toBeInTheDocument();
     expect(screen.getByText("~34h")).toBeInTheDocument();
     expect(screen.getByText("12d ahead")).toBeInTheDocument();
+  });
+
+  it("VIEW PLAN shows the plan itself — the words, not just the metadata", async () => {
+    mockListMasterPlans.mockResolvedValue({
+      plans: [{ id: 10, version_label: "V1", status: "locked", is_active: true }],
+    });
+    mockGetMasterPlan.mockResolvedValue({
+      id: 10,
+      structure_json: {
+        vision_statement: "To architect a durable, AI-native ecosystem.",
+        primary_mechanism: "Develop a framework for ethical AI.",
+        time_horizon_years: 5,
+        core_domains: [{ name: "Ethical AI Framework", intent: "To establish guidelines." }],
+        success_criteria: ["Establishment of a widely adopted ethical AI framework"],
+        key_assets: ["Nodus (orchestration DSL)"],
+        risk_factors: ["Funding constraints"],
+        synthesis_notes: "The synthesis process was confident.",
+      },
+    });
+
+    render(
+      <AppProviders>
+        <MasterPlanDashboard />
+      </AppProviders>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /view plan/i }));
+
+    const detail = await screen.findByTestId("plan-detail");
+    expect(mockGetMasterPlan).toHaveBeenCalledWith(10);
+    expect(detail).toHaveTextContent("To architect a durable, AI-native ecosystem.");
+    expect(detail).toHaveTextContent("Ethical AI Framework");
+    expect(detail).toHaveTextContent("To establish guidelines.");
+    expect(detail).toHaveTextContent("Nodus (orchestration DSL)");
+    expect(detail).toHaveTextContent("Funding constraints");
+    expect(detail).toHaveTextContent("5 years");
+
+    fireEvent.click(screen.getByRole("button", { name: /hide plan/i }));
+    expect(screen.queryByTestId("plan-detail")).not.toBeInTheDocument();
   });
 });
