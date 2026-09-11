@@ -39,6 +39,7 @@ export default function TaskDashboard() {
   // row (STRATEGY_LAYER_SPEC §3); the ↑ STRATEGY button on each task is how it stops being one.
   const [strategyId, setStrategyId] = useState("");
   const [strategies, setStrategies] = useState([]);
+  const [strategyVersion, setStrategyVersion] = useState(0);
   const [promoting, setPromoting] = useState(() => new Set());
   const [velocityMessage, setVelocityMessage] = useState("");
   // Names of tasks with a completion request in flight. Completing a task runs the whole
@@ -76,6 +77,61 @@ export default function TaskDashboard() {
     const items = Array.isArray(data) ? [...data] : [];
     return items.sort((a) => (a.status === "completed" ? 1 : -1));
   }, [data]);
+
+  // Every strategy on every listed plan, by id, so the list can group tasks under the
+  // strategy they serve. A task's strategy is on the task's plan, not necessarily the one
+  // the form is pointed at, so this is separate from the form's picker state.
+  //
+  // The owner's first reaction to promotion was "all of it disappeared": the promoted rows
+  // left this list and became strategies on the plan card, with nothing here to say so.
+  // Grouping is the answer — a task's strategy is visible where the task is.
+  const [strategyIndex, setStrategyIndex] = useState({});
+  useEffect(() => {
+    if (plans.length === 0) return undefined;
+    let cancelled = false;
+    Promise.all(safeMap(plans, (plan) => getStrategyLayer(plan.id).catch(() => null)))
+      .then((layers) => {
+        if (cancelled) return;
+        const index = {};
+        layers.forEach((layer) => {
+          if (!layer) return;
+          const phaseName = {};
+          (layer.phases || []).forEach((ph) => { phaseName[ph.id] = ph.name; });
+          (layer.strategies || []).forEach((st) => {
+            index[st.id] = { id: st.id, name: st.name, status: st.status, phaseName: phaseName[st.phase_id] || null };
+          });
+        });
+        setStrategyIndex(index);
+      });
+    return () => { cancelled = true; };
+  }, [plans, strategyVersion]);
+
+  // Tasks grouped by strategy, strategies in order of first appearance, then everything
+  // with no strategy. Plan tasks with no strategy and plan-less tasks share the last group:
+  // neither serves an approach, and that is the fact worth seeing.
+  const groups = useMemo(() => {
+    const byStrategy = new Map();
+    const none = [];
+    tasks.forEach((task) => {
+      const sid = task.strategy_id;
+      if (sid) {
+        if (!byStrategy.has(sid)) byStrategy.set(sid, []);
+        byStrategy.get(sid).push(task);
+      } else {
+        none.push(task);
+      }
+    });
+    const out = [];
+    byStrategy.forEach((list, sid) => {
+      const strategy = strategyIndex[sid] || { id: sid, name: "(strategy)", phaseName: null };
+      out.push({
+        key: `s:${sid}`, label: `Strategy ${strategy.name}`, strategy, tasks: list,
+        done: list.filter((t) => t.status === "completed").length,
+      });
+    });
+    if (none.length > 0) out.push({ key: "none", label: "Tasks with no strategy", strategy: null, tasks: none, done: 0 });
+    return out;
+  }, [tasks, strategyIndex]);
 
   useEffect(() => {
     fetchTasks();
@@ -179,6 +235,7 @@ export default function TaskDashboard() {
       const result = await promoteTaskToStrategy(task.masterplan_id, task.task_id);
       setVelocityMessage(`"${result?.strategy?.name || task.task_name}" is now a strategy. Add the tasks that make it happen under it.`);
       fetchTasks();
+      setStrategyVersion((v) => v + 1);
       // The new strategy must be in the picker now, not after a page reload. If the form is
       // pointed at another plan (or none), the effect above reloads when it changes anyway.
       if (String(task.masterplan_id) === String(masterplanId)) {
@@ -420,7 +477,38 @@ export default function TaskDashboard() {
       {/* --- TASK LIST --- */}
       <div style={styles.list}>
         <DomainError domain="tasks" error={error} onRetry={fetchTasks} />
-        {loading ? <p>Syncing...</p> : safeMap(tasks, (task) =>
+        {loading ? <p>Syncing...</p> : safeMap(groups, (group) =>
+        <section key={group.key} aria-label={group.label} style={group.strategy ? styles.strategyGroup : undefined}>
+            {group.strategy &&
+          <div style={styles.strategyHeader} data-testid="strategy-group">
+                <span style={{ fontSize: "10px", color: "#71717a", fontWeight: "700", letterSpacing: "0.05em" }}>STRATEGY</span>
+                <span style={{ color: "#facc15", fontWeight: "700" }}>{group.strategy.name}</span>
+                {group.strategy.phaseName &&
+            <span style={{ color: "#71717a", fontSize: "12px" }}>· {group.strategy.phaseName}</span>
+            }
+                <span style={{ color: "#71717a", fontSize: "12px", marginLeft: "auto" }}>
+                  {group.done}/{group.tasks.length} done
+                </span>
+              </div>
+          }
+            {!group.strategy && groups.length > 1 &&
+          <div style={styles.strategyHeader}>
+                <span style={{ fontSize: "10px", color: "#52525b", fontWeight: "700", letterSpacing: "0.05em" }}>NO STRATEGY</span>
+              </div>
+          }
+            {safeMap(group.tasks, renderTask)}
+          </section>)
+        }
+
+        {!loading && !error && tasks.length === 0 &&
+        <p style={{ color: "#666", textAlign: "center" }}>No active directives.</p>
+        }
+      </div>
+      <Toast toast={toast} onDismiss={clearToast} />
+    </div>);
+
+  function renderTask(task) {
+    return (
         <div key={task.task_name} style={styles.taskCard(task.status)}>
             <div>
               <div style={styles.taskName}>{task.task_name}</div>
@@ -551,16 +639,8 @@ export default function TaskDashboard() {
                 </div>
               </div>
             )}
-          </div>)
-        }
-        
-        {!loading && !error && tasks.length === 0 &&
-        <p style={{ color: "#666", textAlign: "center" }}>No active directives.</p>
-        }
-      </div>
-      <Toast toast={toast} onDismiss={clearToast} />
-    </div>);
-
+          </div>);
+  }
 }
 
 // --- HELPERS & STYLES ---
@@ -586,6 +666,8 @@ const styles = {
   input: { flex: 1, padding: "12px", background: "#111", border: "1px solid #333", color: "#fff", borderRadius: "6px" },
   addButton: { background: "#f6f", color: "#000", border: "none", padding: "0 24px", fontWeight: "bold", borderRadius: "6px", cursor: "pointer" },
   list: { display: "flex", flexDirection: "column", gap: "12px" },
+  strategyGroup: { borderLeft: "2px solid #facc1540", paddingLeft: "10px" },
+  strategyHeader: { display: "flex", alignItems: "baseline", gap: "8px", padding: "4px 0 8px" },
   taskCard: (status) => ({
     display: "flex", justifyContent: "space-between", alignItems: "center",
     background: "#1a1a1a", border: "1px solid #333", padding: "16px", borderRadius: "8px",
