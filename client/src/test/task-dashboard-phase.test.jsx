@@ -168,8 +168,11 @@ describe("TaskDashboard — phase", () => {
 
     render(<TaskDashboard />);
 
-    const header = await screen.findByTestId("strategy-group");
-    expect(header).toHaveTextContent("STRATEGYEstablish Authority· Foundation Building1/2 done");
+    // The header appears with the tasks; the strategy's name and phase arrive with the layer a
+    // tick later, so wait on the text rather than the element.
+    await waitFor(() => expect(screen.getByTestId("strategy-group")).toHaveTextContent(
+      "STRATEGYEstablish Authority· Foundation Building1/2 done",
+    ));
     const group = screen.getByRole("region", { name: /strategy establish authority/i });
     expect(group).toHaveTextContent("Host a Live Vibe Coding Session");
     expect(group).toHaveTextContent("Write three essays");
