@@ -425,6 +425,6 @@ Only after those three should you look at application code. Full write-ups:
 | Cross-domain coupling doc | `docs/architecture/CROSS_DOMAIN_COUPLING.md` |
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
-| Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — **half-built**, see §8 |
+| Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §5b (attribution) as of 2026-09-11; §8 has the build log and what is left |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |
