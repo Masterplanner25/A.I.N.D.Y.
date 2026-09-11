@@ -109,3 +109,32 @@ def recalculate_wcu_via_syscall(masterplan_id, user_id: str, db):
     if result.get("status") != "success":
         return None
     return (result.get("data") or {}).get("wcu")
+
+
+def resolve_phase_via_syscall(masterplan_id, user_id: str, db, phase_id: str | None = None) -> str | None:
+    """The phase a new task on this plan belongs to, decided by masterplan.
+
+    ★ Non-fatal when the plan has no layer (returns None) and fatal when a *requested* phase
+    is not on the plan — the first is a plan that predates phases, the second is a caller
+    error. A task with no phase is invisible to the strategy layer, so the default is the
+    plan's current phase rather than nothing.
+    """
+    from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
+
+    ctx = SyscallContext(
+        execution_unit_id=str(uuid.uuid4()),
+        user_id=str(user_id),
+        capabilities=["masterplan.read"],
+        trace_id="",
+        metadata={"_db": db},
+    )
+    payload = {"masterplan_id": str(masterplan_id)}
+    if phase_id:
+        payload["phase_id"] = str(phase_id)
+    result = get_dispatcher().dispatch("sys.v1.masterplan.resolve_phase", payload, ctx)
+    if result["status"] != "success":
+        if phase_id:
+            raise ValueError(f"phase_not_on_plan:{phase_id}")
+        return None
+    return (result.get("data") or {}).get("phase_id")
+

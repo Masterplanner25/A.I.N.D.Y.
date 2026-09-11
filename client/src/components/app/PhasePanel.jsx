@@ -143,6 +143,11 @@ export default function PhasePanel({ planId }) {
               <span style={{ color: phase.status === "pending" ? "#71717a" : "#e4e4e7", fontWeight: isCurrent ? "700" : "400" }}>
                 {phase.ordinal}. {phase.name}
               </span>
+              {layer?.task_counts?.[phase.id] &&
+                <span title="tasks complete / attached" style={{ fontSize: "10px", color: "#71717a" }}>
+                  {layer.task_counts[phase.id].completed}/{layer.task_counts[phase.id].total}
+                </span>
+              }
               {phase.status !== "pending" &&
                 <span style={{ fontSize: "9px", color, border: `1px solid ${color}`, borderRadius: "4px", padding: "0 4px" }}>
                   {phase.status}
@@ -164,6 +169,11 @@ export default function PhasePanel({ planId }) {
           );
         })}
       </ol>
+      {layer?.task_counts?.unphased &&
+        <p style={{ margin: "6px 0 0", fontSize: "11px", color: "#71717a" }}>
+          {layer.task_counts.unphased.total} {layer.task_counts.unphased.total === 1 ? "task" : "tasks"} on this plan {layer.task_counts.unphased.total === 1 ? "has" : "have"} no phase and {layer.task_counts.unphased.total === 1 ? "does" : "do"} not count toward one.
+        </p>
+      }
 
       {proposal?.proposed &&
         <div data-testid="phase-advance-proposal" style={{ marginTop: "10px", padding: "10px", background: "rgba(250, 204, 21, 0.05)", border: "1px solid #facc1540", borderRadius: "6px" }}>

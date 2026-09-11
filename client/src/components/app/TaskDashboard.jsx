@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getTasks, createTask, completeTask, startTask, deleteTask } from "../../api/tasks.js";
-import { listMasterPlans } from "../../api/masterplan.js";
+import { listMasterPlans, getStrategyLayer } from "../../api/masterplan.js";
 import { Toast } from "../shared/Toast";
 import DomainError from "../shared/DomainError.jsx";
 import { safeMap } from "../../utils/safe";
@@ -23,6 +23,12 @@ export default function TaskDashboard() {
   // task created in the UI was permanently orphaned from every plan (walk-log item 17).
   const [masterplanId, setMasterplanId] = useState("");
   const [plans, setPlans] = useState([]);
+  // Which phase of the plan the task belongs to. Empty means "the plan's current phase" —
+  // the API resolves it — so a task is never created invisible to the strategy layer, which
+  // is what every task from this screen used to be (phase_id = NULL, so it neither counted
+  // toward a phase nor brought a dismissed advance proposal back).
+  const [phaseId, setPhaseId] = useState("");
+  const [phases, setPhases] = useState([]);
   const [velocityMessage, setVelocityMessage] = useState("");
   // Names of tasks with a completion request in flight. Completing a task runs the whole
   // `task_completion` flow — memory capture, downstream unlock, ETA recalc and a full
@@ -66,6 +72,20 @@ export default function TaskDashboard() {
 
   // The plan picker is additive: if plans can't be listed (or none exist — creation is
   // Genesis-only today) the selector simply doesn't render and task creation is unaffected.
+  useEffect(() => {
+    setPhaseId("");
+    if (!masterplanId) { setPhases([]); return undefined; }
+    let cancelled = false;
+    getStrategyLayer(masterplanId)
+      .then((layer) => {
+        if (!cancelled) setPhases(Array.isArray(layer?.phases) ? layer.phases : []);
+      })
+      .catch(() => {
+        if (!cancelled) setPhases([]);
+      });
+    return () => { cancelled = true; };
+  }, [masterplanId]);
+
   useEffect(() => {
     let cancelled = false;
     listMasterPlans()
@@ -112,6 +132,7 @@ export default function TaskDashboard() {
       // null is not the same as omitting it.
       const payload = { name: newTask, priority: "medium", estimated_hours: hours };
       if (masterplanId) payload.masterplan_id = Number.parseInt(masterplanId, 10);
+      if (masterplanId && phaseId) payload.phase_id = phaseId;
 
       await createTask(payload);
       setNewTask("");
@@ -286,6 +307,24 @@ export default function TaskDashboard() {
               <option key={plan.id} value={plan.id}>
                     {plan.version_label || `Plan ${plan.id}`}
                     {plan.is_active ? " (active)" : ""}
+                  </option>)
+              }
+              </select>
+            </label>
+          }
+
+          {masterplanId && phases.length > 0 &&
+          <label style={styles.fieldLabel}>
+              Phase
+              <select
+              style={styles.select}
+              value={phaseId}
+              onChange={(e) => setPhaseId(e.target.value)}
+              title="Leave on 'current phase' and the plan decides">
+                <option value="">— current phase —</option>
+                {safeMap(phases, (phase) =>
+              <option key={phase.id} value={phase.id}>
+                    {phase.ordinal}. {phase.name}{phase.status === "complete" ? " (complete)" : ""}
                   </option>)
               }
               </select>

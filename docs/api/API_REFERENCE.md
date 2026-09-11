@@ -1196,7 +1196,7 @@ Get Strategy Layer — objectives, phases, strategies and unhoused emergent stra
 
 **Parameters:** plan_id (path): integer
 
-**Response 200:** masterplan_id, phase: integer, objectives, phases, strategies, unhoused_emergent
+**Response 200:** masterplan_id, phase: integer, objectives, phases, task_counts: {phase_id | "unphased": {total, completed}}, strategies, unhoused_emergent
 
 ### Memory
 
@@ -2283,7 +2283,7 @@ Complete Task
 #### POST /apps/tasks/create
 Create Task
 
-**Body:** automation_config: map[unspecified] | null, automation_type: string | null, category: string | null, dependencies: array[object], dependency_type: string | null, due_date: string | null, masterplan_id: integer | null, name: string | null, parent_task_id: integer | null, priority: string | null, recurrence: string | null, reminder_time: string | null, scheduled_time: string | null, title: string | null
+**Body:** automation_config: map[unspecified] | null, automation_type: string | null, category: string | null, dependencies: array[object], dependency_type: string | null, due_date: string | null, masterplan_id: integer | null, name: string | null, parent_task_id: integer | null, phase_id: string | null, priority: string | null, recurrence: string | null, reminder_time: string | null, scheduled_time: string | null, title: string | null
 
 **Response 200:** unspecified
 

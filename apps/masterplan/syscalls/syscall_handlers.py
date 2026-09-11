@@ -437,6 +437,68 @@ def _handle_goal_create(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_resolve_phase(payload: dict, ctx: SyscallContext) -> dict:
+    """sys.v1.masterplan.resolve_phase — which phase a new task on this plan belongs to.
+
+    ★ Tasks owns the write of `tasks.phase_id`; masterplan owns the decision. A task created
+    for a plan without naming a phase lands on the plan's *current* phase — the frontier
+    `phase_advance` proposes against — because that is where new work on a plan is by
+    default, and because a task with no phase is invisible to the layer: it neither counts
+    toward the phase's completion nor brings a dismissed proposal back. Measured 2026-09-10:
+    every task created from the task screen landed with `phase_id = NULL`.
+
+    Payload keys:
+        masterplan_id  (str | int) — required
+        phase_id       (str)       — optional; when given it must be on this plan
+
+    Returns:
+        {"phase_id": str | None, "name": str | None, "ordinal": int | None,
+         "source": "requested" | "current" | "none"}
+        `None`s for a plan that predates the layer — not an error, there is simply no phase.
+
+    Raises:
+        ValueError "NOT_FOUND:" when a requested phase is not on the plan.
+    """
+    from AINDY.db.database import SessionLocal
+    from apps.masterplan.services.phase_advance import frontier_phase
+    from apps.masterplan.strategy_layer import PlanPhase
+
+    masterplan_id = int(payload["masterplan_id"])
+    requested = payload.get("phase_id")
+
+    external_db = ctx.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        phases = (
+            db.query(PlanPhase)
+            .filter(PlanPhase.masterplan_id == masterplan_id)
+            .order_by(PlanPhase.ordinal.asc(), PlanPhase.created_at.asc())
+            .all()
+        )
+        if requested:
+            phase = next((row for row in phases if row.id == str(requested)), None)
+            if phase is None:
+                raise ValueError(f"NOT_FOUND:phase {requested} is not on plan {masterplan_id}")
+            source = "requested"
+        else:
+            phase = frontier_phase(phases) if phases else None
+            # Every phase complete: new work still needs a home, and the last phase is the
+            # only one that is not "before" where the plan is.
+            if phase is None and phases:
+                phase = phases[-1]
+            source = "current" if phase is not None else "none"
+        return {
+            "phase_id": phase.id if phase is not None else None,
+            "name": phase.name if phase is not None else None,
+            "ordinal": phase.ordinal if phase is not None else None,
+            "source": source,
+        }
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_masterplan_syscall_handlers() -> None:
     """Register all masterplan domain syscall handlers.
 
@@ -460,6 +522,32 @@ def register_masterplan_syscall_handlers() -> None:
             "properties": {
                 "owned": {"type": "bool"},
                 "masterplan_id": {"type": "string"},
+            },
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.masterplan.resolve_phase",
+        handler=_handle_resolve_phase,
+        capability="masterplan.read",
+        description=(
+            "Which phase a new task on this plan belongs to: the requested one if it is on "
+            "the plan, else the plan's current phase."
+        ),
+        input_schema={
+            "required": ["masterplan_id"],
+            "properties": {
+                "masterplan_id": {"type": "string"},
+                "phase_id": {"type": "string"},
+            },
+        },
+        output_schema={
+            "required": ["phase_id", "source"],
+            "properties": {
+                "phase_id": {"type": "string"},
+                "name": {"type": "string"},
+                "ordinal": {"type": "integer"},
+                "source": {"type": "string"},
             },
         },
         stable=False,
