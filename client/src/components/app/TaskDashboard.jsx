@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { getTasks, createTask, completeTask, startTask, deleteTask } from "../../api/tasks.js";
 import { listMasterPlans, getStrategyLayer, promoteTaskToStrategy } from "../../api/masterplan.js";
 import { Toast } from "../shared/Toast";
@@ -83,24 +83,29 @@ export default function TaskDashboard() {
 
   // The plan picker is additive: if plans can't be listed (or none exist — creation is
   // Genesis-only today) the selector simply doesn't render and task creation is unaffected.
+  // The plan's phases and open strategies, for the pickers. Reloaded when the plan changes
+  // AND after a promotion — a strategy made from this screen has to be offerable from this
+  // screen without leaving it, which it was not on 2026-09-10 (the layer was fetched once,
+  // on plan selection, and the ↑ Strategy button never refetched it).
+  const loadLayer = useCallback(async (planId) => {
+    if (!planId) { setPhases([]); setStrategies([]); return; }
+    try {
+      const layer = await getStrategyLayer(planId);
+      setPhases(Array.isArray(layer?.phases) ? layer.phases : []);
+      // Only strategies still open can take new work.
+      setStrategies((Array.isArray(layer?.strategies) ? layer.strategies : [])
+        .filter((st) => st.status === "proposed" || st.status === "active"));
+    } catch {
+      setPhases([]);
+      setStrategies([]);
+    }
+  }, []);
+
   useEffect(() => {
     setPhaseId("");
     setStrategyId("");
-    if (!masterplanId) { setPhases([]); setStrategies([]); return undefined; }
-    let cancelled = false;
-    getStrategyLayer(masterplanId)
-      .then((layer) => {
-        if (cancelled) return;
-        setPhases(Array.isArray(layer?.phases) ? layer.phases : []);
-        // Only strategies still open can take new work.
-        setStrategies((Array.isArray(layer?.strategies) ? layer.strategies : [])
-          .filter((st) => st.status === "proposed" || st.status === "active"));
-      })
-      .catch(() => {
-        if (!cancelled) { setPhases([]); setStrategies([]); }
-      });
-    return () => { cancelled = true; };
-  }, [masterplanId]);
+    loadLayer(masterplanId);
+  }, [masterplanId, loadLayer]);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +179,13 @@ export default function TaskDashboard() {
       const result = await promoteTaskToStrategy(task.masterplan_id, task.task_id);
       setVelocityMessage(`"${result?.strategy?.name || task.task_name}" is now a strategy. Add the tasks that make it happen under it.`);
       fetchTasks();
+      // The new strategy must be in the picker now, not after a page reload. If the form is
+      // pointed at another plan (or none), the effect above reloads when it changes anyway.
+      if (String(task.masterplan_id) === String(masterplanId)) {
+        await loadLayer(masterplanId);
+      } else {
+        setMasterplanId(String(task.masterplan_id));
+      }
     } catch (err) {
       showToast(err?.message || "Could not promote the task.");
     } finally {

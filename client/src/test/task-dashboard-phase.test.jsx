@@ -124,4 +124,28 @@ describe("TaskDashboard — phase", () => {
     await waitFor(() => expect(mockPromote).toHaveBeenCalledWith(10, 20));
     expect(await screen.findByText(/is now a strategy/)).toBeInTheDocument();
   });
+
+  it("the promoted strategy is in the picker immediately, without leaving the page", async () => {
+    // Found live 2026-09-10: promote, then try to add a task under the new strategy — not in
+    // the dropdown until the page was left and re-entered.
+    mockGetTasks.mockResolvedValue([
+      { task_id: 21, task_name: "Build IP", status: "in_progress", time_spent: 0, masterplan_id: 10, estimated_hours: 205 },
+    ]);
+    mockGetStrategyLayer
+      .mockResolvedValueOnce({ phases: PHASES, strategies: STRATEGIES })
+      .mockResolvedValue({ phases: PHASES, strategies: [...STRATEGIES, { id: "s9", phase_id: "p1", name: "Build IP", status: "active" }] });
+    mockPromote.mockResolvedValue({ strategy: { id: "s9", name: "Build IP" }, task_deleted: true, task_id: 21 });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<TaskDashboard />);
+    await waitFor(() => expect(mockListMasterPlans).toHaveBeenCalled());
+    fireEvent.change(await screen.findByLabelText(/masterplan/i), { target: { value: "10" } });
+    await waitFor(() => expect(mockGetStrategyLayer).toHaveBeenCalledTimes(1));
+    expect(screen.getByLabelText(/^strategy$/i)).not.toHaveTextContent("Build IP");
+
+    fireEvent.click(await screen.findByRole("button", { name: /make build ip a strategy/i }));
+
+    await waitFor(() => expect(mockGetStrategyLayer).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByLabelText(/^strategy$/i)).toHaveTextContent("Build IP"));
+  });
 });
