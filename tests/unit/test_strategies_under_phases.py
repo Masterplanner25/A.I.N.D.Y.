@@ -211,3 +211,83 @@ def test_strategy_task_counts_say_worked_on_this(db_session, plan):
 def test_an_empty_phase_is_not_done_at_either_grain(db_session, plan):
     """Zero strategies and zero tasks is not "all finished"."""
     assert _propose(db_session, plan)["evidence"]["work_complete"] is False
+
+
+# ── ★ §5b closed: worked toward THIS objective ────────────────────────────────────────
+
+def _objectives(db, plan):
+    from apps.masterplan.strategy_layer import PlanObjective
+    return db.query(PlanObjective).filter(PlanObjective.masterplan_id == plan.id).order_by(PlanObjective.ordinal).all()
+
+
+@pytest.fixture
+def plan_with_objectives(db_session):
+    row = MasterPlan(start_date=START, duration_years=2.0, target_date=datetime(2028, 1, 1),
+                     user_id=USER, status="locked", structure_json={
+                         **STRUCTURE,
+                         "core_domains": [
+                             {"name": "Ethical AI Framework", "intent": "guidelines"},
+                             {"name": "Partnership Development", "intent": "alliances"},
+                         ],
+                     })
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+    seed_strategy_layer(db_session, masterplan_id=row.id)
+    return row
+
+
+def test_hours_roll_up_strategy_to_objective(db_session, plan_with_objectives):
+    """★ The number the layer was built to produce: each objective reports its own work."""
+    plan = plan_with_objectives
+    first = _phases(db_session, plan)[0]
+    ethics, partners = _objectives(db_session, plan)
+    authority = _strategy(db_session, plan, "Establish Authority", phase=first)
+    ip = _strategy(db_session, plan, "Build IP", phase=first)
+    layer.set_strategy_objective(db_session, strategy_id=authority["id"], objective_id=ethics.id)
+    layer.set_strategy_objective(db_session, strategy_id=ip["id"], objective_id=ethics.id)
+    done = create_task(db_session, "Essay", masterplan_id=plan.id, user_id=str(USER), strategy_id=authority["id"], duration=6.0)
+    create_task(db_session, "Patent search", masterplan_id=plan.id, user_id=str(USER), strategy_id=ip["id"], duration=10.0)
+    done.status = "completed"
+    db_session.commit()
+
+    rollup = pa.objective_rollup(db_session, masterplan_id=plan.id, user_id=USER)
+
+    assert rollup[ethics.id] == {
+        "strategies": 2, "strategies_by_status": {"proposed": 2},
+        "tasks": 2, "completed": 1, "hours_total": 16.0, "hours_completed": 6.0,
+    }
+    assert partners.id not in rollup, "an objective nothing serves reports nothing, not zero"
+
+
+def test_unhoused_work_is_reported_not_dropped(db_session, plan_with_objectives):
+    plan = plan_with_objectives
+    first = _phases(db_session, plan)[0]
+    st = _strategy(db_session, plan, "Establish Authority", phase=first)
+    create_task(db_session, "Essay", masterplan_id=plan.id, user_id=str(USER), strategy_id=st["id"], duration=6.0)
+
+    rollup = pa.objective_rollup(db_session, masterplan_id=plan.id, user_id=USER)
+
+    assert rollup == {"unhoused": {
+        "strategies": 1, "strategies_by_status": {"proposed": 1},
+        "tasks": 1, "completed": 0, "hours_total": 6.0, "hours_completed": 0.0,
+    }}
+
+
+def test_an_objective_from_another_plan_is_refused(db_session, plan_with_objectives, plan):
+    other_objective = _objectives(db_session, plan_with_objectives)[0]
+    st = _strategy(db_session, plan, "x", phase=_phases(db_session, plan)[0])
+
+    with pytest.raises(ValueError, match="is not on plan"):
+        layer.set_strategy_objective(db_session, strategy_id=st["id"], objective_id=other_objective.id)
+
+
+def test_unhousing_is_allowed(db_session, plan_with_objectives):
+    plan = plan_with_objectives
+    ethics = _objectives(db_session, plan)[0]
+    st = _strategy(db_session, plan, "x", phase=_phases(db_session, plan)[0])
+    layer.set_strategy_objective(db_session, strategy_id=st["id"], objective_id=ethics.id)
+
+    result = layer.set_strategy_objective(db_session, strategy_id=st["id"], objective_id=None)
+
+    assert result["objective_id"] is None

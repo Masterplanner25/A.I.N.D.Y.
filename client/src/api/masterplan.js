@@ -137,3 +137,11 @@ export function finishStrategy(planId, strategyId, verb, { outcome, note } = {})
   });
 }
 
+// Which objective a strategy serves. Ownership, not scheduling; null un-houses.
+export function setStrategyObjective(planId, strategyId, objectiveId) {
+  return authRequest(`/apps/masterplans/${planId}/strategies/${strategyId}/objective`, {
+    method: "POST",
+    body: JSON.stringify({ objective_id: objectiveId || null }),
+  });
+}
+

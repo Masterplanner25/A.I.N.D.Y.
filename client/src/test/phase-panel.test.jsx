@@ -8,7 +8,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 const {
   mockGetStrategyLayer, mockGetPhaseAdvanceProposal, mockConfirmPhaseAdvance,
   mockDismissPhaseAdvance, mockReopenPhase,
-  mockCreateStrategy, mockStartStrategy, mockFinishStrategy,
+  mockCreateStrategy, mockStartStrategy, mockFinishStrategy, mockSetStrategyObjective,
 } = vi.hoisted(() => ({
   mockGetStrategyLayer: vi.fn(),
   mockGetPhaseAdvanceProposal: vi.fn(),
@@ -18,6 +18,7 @@ const {
   mockCreateStrategy: vi.fn(),
   mockStartStrategy: vi.fn(),
   mockFinishStrategy: vi.fn(),
+  mockSetStrategyObjective: vi.fn(),
 }));
 
 vi.mock("../api/masterplan.js", () => ({
@@ -29,6 +30,7 @@ vi.mock("../api/masterplan.js", () => ({
   createStrategy: mockCreateStrategy,
   startStrategy: mockStartStrategy,
   finishStrategy: mockFinishStrategy,
+  setStrategyObjective: mockSetStrategyObjective,
 }));
 
 import PhasePanel from "../components/app/PhasePanel";
@@ -57,6 +59,7 @@ describe("PhasePanel", () => {
     mockCreateStrategy.mockReset();
     mockStartStrategy.mockReset();
     mockFinishStrategy.mockReset();
+    mockSetStrategyObjective.mockReset();
   });
 
   it("renders nothing for a plan that predates the layer", async () => {
@@ -291,5 +294,42 @@ describe("PhasePanel", () => {
     expect(await screen.findByTestId("phase-advance-notice")).toHaveTextContent(
       "Establish Authority abandoned. 2 open tasks returned to the plan; completed work stays attached.",
     );
+  });
+
+  // ── objectives: worked toward THIS ─────────────────────────────────────────────
+
+  const OBJECTIVES = [
+    { id: "o1", name: "Ethical AI Framework", intent: "guidelines", ordinal: 1 },
+    { id: "o2", name: "Partnership Development", intent: "alliances", ordinal: 2 },
+  ];
+
+  it("shows each objective's attributed work, and the work no objective can claim", async () => {
+    mockGetStrategyLayer.mockResolvedValue({
+      phases: PHASES, objectives: OBJECTIVES,
+      strategies: [{ ...STRATEGIES[0], objective_id: "o1" }, STRATEGIES[1]],
+      objective_rollup: {
+        o1: { strategies: 1, strategies_by_status: { active: 1 }, tasks: 3, completed: 1, hours_total: 16, hours_completed: 6 },
+        unhoused: { strategies: 1, strategies_by_status: { proposed: 1 }, tasks: 1, completed: 0, hours_total: 8, hours_completed: 0 },
+      },
+    });
+    mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, phase: PHASES[0], evidence: {} });
+
+    render(<PhasePanel planId={10} />);
+
+    const box = await screen.findByTestId("plan-objectives");
+    expect(box).toHaveTextContent("Ethical AI Framework1 strategy · 6h of 2 d");
+    expect(box).toHaveTextContent("Partnership Developmentnothing serves this yet");
+    expect(box).toHaveTextContent("1 strategy serves no objective — 0h of 1 d that no objective can claim.");
+  });
+
+  it("housing a strategy under an objective is one picker on the strategy", async () => {
+    mockGetStrategyLayer.mockResolvedValue({ phases: PHASES, objectives: OBJECTIVES, strategies: [STRATEGIES[1]] });
+    mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, phase: PHASES[0], evidence: {} });
+    mockSetStrategyObjective.mockResolvedValue({ ...STRATEGIES[1], objective_id: "o2" });
+
+    render(<PhasePanel planId={10} />);
+    fireEvent.change(await screen.findByLabelText("Build IP serves"), { target: { value: "o2" } });
+
+    await waitFor(() => expect(mockSetStrategyObjective).toHaveBeenCalledWith(10, "s2", "o2"));
   });
 });

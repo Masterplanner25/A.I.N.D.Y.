@@ -1245,6 +1245,15 @@ Move Strategy — reschedule to another phase; its tasks follow
 
 **Response 200:** the strategy
 
+#### POST /apps/masterplans/{plan_id}/strategies/{strategy_id}/objective
+Set Strategy Objective — which objective the strategy serves (null un-houses); ownership, not scheduling, and what lets hours roll up to purpose (`STRATEGY_LAYER_SPEC` §5b)
+
+**Parameters:** plan_id (path): integer, strategy_id (path): string
+
+**Body:** objective_id: string | null
+
+**Response 200:** the strategy; 409 when the objective is not on the plan
+
 #### POST /apps/masterplans/{plan_id}/strategies/{strategy_id}/start
 Start Strategy — proposed → active
 
@@ -1266,7 +1275,7 @@ Get Strategy Layer — objectives, phases, strategies and unhoused emergent stra
 
 **Parameters:** plan_id (path): integer
 
-**Response 200:** masterplan_id, phase: integer, objectives, phases, task_counts: {phase_id | "unphased": {total, completed}}, strategy_task_counts: {strategy_id: {total, completed, hours_total, hours_completed}}, strategies, unhoused_emergent
+**Response 200:** masterplan_id, phase: integer, objectives, phases, task_counts: {phase_id | "unphased": {total, completed}}, strategy_task_counts: {strategy_id: {total, completed, hours_total, hours_completed}}, objective_rollup: {objective_id | "unhoused": {strategies, strategies_by_status, tasks, completed, hours_total, hours_completed}}, strategies, unhoused_emergent
 
 ### Memory
 
