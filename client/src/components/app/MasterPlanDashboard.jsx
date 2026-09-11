@@ -12,6 +12,7 @@ import { EmptyState } from "../shared/EmptyState";
 import { safeMap } from "../../utils/safe";
 import { useToast } from "../../utils/useToast";
 import { useMasterplanProjection } from "../../context/MasterplanProjectionContext.jsx";
+import PhasePanel from "./PhasePanel.jsx";
 
 const STATUS_BADGE = {
   active: { label: "ACTIVE", color: "#00ffaa" },
@@ -370,6 +371,9 @@ export default function MasterPlanDashboard() {
 
                 {/* ETA Projection — shown for active plans */}
                 {plan.is_active && <ETAProjectionPanel planId={plan.id} />}
+
+                {/* Phases and the phase-advance proposal — any plan with a strategy layer */}
+                {(plan.is_active || plan.status === "locked") && <PhasePanel planId={plan.id} />}
 
                 {/* Anchor button — available on active or locked plans */}
                 {(plan.is_active || plan.status === "locked") &&

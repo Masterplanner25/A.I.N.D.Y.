@@ -867,10 +867,22 @@ Not done: what "opens a refine" writes. There is no refinement record yet
 the caller rather than recorded. That is the right order — the record's shape should follow
 from what a real review turned out to contain.
 
-### Step 3b(ii), still to do
+### ★ Step 3b(ii) built 2026-09-10 — the layer is visible, and the proposal has a button
 
-* **The WCU rollup per objective (§5b), and a UI.** `GET /strategy-layer` exists; nothing
-  renders it, and WCU still cannot say *worked on this*.
+`client/src/components/app/PhasePanel.jsx`, on every locked or active plan card. It lists the
+phases with their status, marks the current one, and when `GET /phase-advance` proposes, shows
+the card: *"Foundation Building looks done. All 2 of its tasks are complete, 360 days inside
+its window. Confirming opens Platform Development."* One button, and it only agrees with
+something the system already said — there is no "close phase" without a proposal, in the UI
+or the API. A refusal shows the API's own sentence. After confirming, the review is shown
+inline: what closed, what opened, how early, and what moved.
+
+### Step 3b(iii), still to do
+
+* **The WCU rollup per objective (§5b).** WCU still cannot say *worked on this*. It needs
+  strategies to exist — `task → strategy → objective` — and the live plan has none, so the
+  first useful rollup is probably per **phase** (tasks already carry `phase_id`) with the
+  per-objective one following once a strategy has been recorded.
 
 ### Original step 3 notes
 

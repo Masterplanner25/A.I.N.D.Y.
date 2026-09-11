@@ -11,6 +11,9 @@ const {
   mockActivateMasterPlan,
   mockSetMasterplanAnchor,
   mockGetMasterplanProjection,
+  mockGetStrategyLayer,
+  mockGetPhaseAdvanceProposal,
+  mockConfirmPhaseAdvance,
 } = vi.hoisted(() => ({
   mockStartGenesisSession: vi.fn(),
   mockSendGenesisMessage: vi.fn(),
@@ -20,6 +23,9 @@ const {
   mockActivateMasterPlan: vi.fn(),
   mockSetMasterplanAnchor: vi.fn(),
   mockGetMasterplanProjection: vi.fn(),
+  mockGetStrategyLayer: vi.fn(),
+  mockGetPhaseAdvanceProposal: vi.fn(),
+  mockConfirmPhaseAdvance: vi.fn(),
 }));
 
 vi.mock("../api/masterplan.js", () => ({
@@ -31,6 +37,9 @@ vi.mock("../api/masterplan.js", () => ({
   activateMasterPlan: mockActivateMasterPlan,
   setMasterplanAnchor: mockSetMasterplanAnchor,
   getMasterplanProjection: mockGetMasterplanProjection,
+  getStrategyLayer: mockGetStrategyLayer,
+  getPhaseAdvanceProposal: mockGetPhaseAdvanceProposal,
+  confirmPhaseAdvance: mockConfirmPhaseAdvance,
 }));
 
 import MasterPlanDashboard from "../components/app/MasterPlanDashboard";
@@ -51,6 +60,8 @@ describe("MasterPlanDashboard", () => {
     mockActivateMasterPlan.mockResolvedValue({});
     mockSetMasterplanAnchor.mockResolvedValue({});
     mockGetMasterplanProjection.mockResolvedValue(null);
+    mockGetStrategyLayer.mockResolvedValue({ phases: [] });
+    mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, reason: "no_phases" });
   });
 
   it("renders without crashing on mount", async () => {
