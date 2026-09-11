@@ -357,6 +357,7 @@ async def get_strategy_layer(
     def handler(ctx):
         from apps.masterplan.services import strategy_layer_service as layer
         from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.phase_advance import phase_task_counts
 
         plan = assert_masterplan_owned(db, plan_id, user_id)
         return {
@@ -364,6 +365,7 @@ async def get_strategy_layer(
             "phase": plan.phase,
             "objectives": layer.list_objectives(db, masterplan_id=plan.id),
             "phases": layer.list_phases(db, masterplan_id=plan.id),
+            "task_counts": phase_task_counts(db, masterplan_id=plan.id, user_id=user_id),
             "strategies": layer.list_strategies(db, masterplan_id=plan.id),
             "unhoused_emergent": layer.unhoused_emergent_strategies(db, masterplan_id=plan.id),
         }

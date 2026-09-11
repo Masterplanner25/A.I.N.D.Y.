@@ -451,3 +451,103 @@ def test_reopening_clears_an_old_dismissal(db_session, plan, monkeypatch):
     pa.reopen_phase(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
 
     assert pa.propose_phase_advance(db_session, masterplan_id=plan.id, user_id=USER, now=MID_PHASE_ONE)["proposed"] is True
+
+
+# ── ★ how work reaches a phase ────────────────────────────────────────────────────────
+# A task with no phase is invisible to the layer: it neither counts toward a phase's
+# completion nor brings a dismissed proposal back. Measured 2026-09-10: every task created
+# from the task screen landed with phase_id = NULL.
+
+from apps.tasks.services import task_service  # noqa: E402
+from apps.tasks.services.task_service import create_task  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _owned(monkeypatch):
+    # `assert_masterplan_owned` compares the UUID column against a str, which Postgres casts
+    # and SQLite does not. Ownership has its own tests; these are about the phase.
+    monkeypatch.setattr(task_service, "assert_masterplan_owned_via_syscall", lambda *a, **k: None)
+
+
+def test_a_new_plan_task_lands_on_the_current_phase(db_session, plan):
+    """★ Masterplan decides (`sys.v1.masterplan.resolve_phase`), tasks writes."""
+    first = _phases(db_session, plan)[0]
+
+    task = create_task(db_session, "Write the framework", masterplan_id=plan.id, user_id=str(USER))
+
+    assert task.phase_id == first.id
+
+
+def test_a_new_plan_task_lands_on_the_frontier_not_phase_one(db_session, plan):
+    first, second, _ = _phases(db_session, plan)
+    first.status = PHASE_COMPLETE
+    db_session.commit()
+
+    task = create_task(db_session, "Build the platform", masterplan_id=plan.id, user_id=str(USER))
+
+    assert task.phase_id == second.id
+
+
+def test_a_named_phase_is_honoured_when_it_is_on_the_plan(db_session, plan):
+    third = _phases(db_session, plan)[2]
+
+    task = create_task(
+        db_session, "Scale it", masterplan_id=plan.id, user_id=str(USER), phase_id=third.id
+    )
+
+    assert task.phase_id == third.id
+
+
+def test_a_phase_from_another_plan_is_refused(db_session, plan):
+    other = MasterPlan(start_date=START, duration_years=3.0, target_date=datetime(2029, 1, 1),
+                       user_id=USER, status="locked", structure_json=STRUCTURE)
+    db_session.add(other)
+    db_session.commit()
+    seed_strategy_layer(db_session, masterplan_id=other.id)
+    foreign = _phases(db_session, other)[0]
+
+    with pytest.raises(ValueError, match="phase_not_on_plan"):
+        create_task(db_session, "x", masterplan_id=plan.id, user_id=str(USER), phase_id=foreign.id)
+
+
+def test_a_task_on_an_unlayered_plan_simply_has_no_phase(db_session):
+    row = MasterPlan(start_date=START, duration_years=1.0, target_date=datetime(2027, 1, 1),
+                     user_id=USER, status="locked", structure_json={})
+    db_session.add(row)
+    db_session.commit()
+
+    task = create_task(db_session, "x", masterplan_id=row.id, user_id=str(USER))
+
+    assert task.phase_id is None
+
+
+def test_a_phase_without_a_plan_is_refused(db_session, plan):
+    first = _phases(db_session, plan)[0]
+    with pytest.raises(ValueError, match="requires a masterplan_id"):
+        create_task(db_session, "x", user_id=str(USER), phase_id=first.id)
+
+
+def test_new_work_brings_a_dismissed_proposal_back(db_session, plan):
+    """★ The whole point. NOT DONE said "under-described"; describing it is the answer."""
+    first = _phases(db_session, plan)[0]
+    _task(db_session, plan, "Fix Nodus Issues", phase=first, status="completed")
+    pa.dismiss_phase_advance(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+    create_task(db_session, "Draft the ethical AI framework", masterplan_id=plan.id, user_id=str(USER))
+    counts = pa.phase_task_counts(db_session, masterplan_id=plan.id, user_id=USER)
+    proposal = pa.propose_phase_advance(db_session, masterplan_id=plan.id, user_id=USER, now=MID_PHASE_ONE)
+
+    assert counts[first.id] == {"total": 2, "completed": 1}
+    assert proposal["proposed"] is False and proposal["dismissed"] is None, "open work, so no proposal and no stale dismissal"
+
+
+def test_task_counts_name_the_work_the_layer_cannot_see(db_session, plan):
+    first = _phases(db_session, plan)[0]
+    _task(db_session, plan, "attached", phase=first, status="completed")
+    db_session.add(Task(name="orphan", user_id=USER, status="pending", priority="medium",
+                        masterplan_id=plan.id, duration=1.0))
+    db_session.commit()
+
+    counts = pa.phase_task_counts(db_session, masterplan_id=plan.id, user_id=USER)
+
+    assert counts == {first.id: {"total": 1, "completed": 1}, "unphased": {"total": 1, "completed": 0}}

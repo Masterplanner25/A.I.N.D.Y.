@@ -907,6 +907,29 @@ The honest reading of the proposal itself stands: *two tasks* is not the workloa
 "establish the ethical AI framework and initial partnerships". The phase is under-described,
 not finished, and the dismissal path exists so that can be said and acted on.
 
+### ★ How work reaches a phase (2026-09-10, after the first NOT DONE)
+
+The owner pressed NOT DONE on *Foundation Building* (recorded: 03:15:58, task count 2). The
+next question was mechanical: **how does a task get attached to a phase at all?** Answer,
+measured: it did not. Every task created from the task screen landed with `phase_id = NULL` —
+on the plan, invisible to the layer, neither counting toward a phase nor able to bring the
+dismissed proposal back. Ten new Foundation Building tasks would have changed nothing.
+
+* **`sys.v1.masterplan.resolve_phase`** — masterplan decides which phase a new plan task
+  belongs to: the requested one if it is on the plan, else the plan's current phase (the
+  frontier; the last phase once everything is complete). Tasks calls it from `create_task`
+  and writes the answer. Tasks owns the write; masterplan owns the decision — the same split
+  as `set_phase`. A plan with no layer resolves to nothing, which is not an error.
+* **`phase_id`** on `POST /apps/tasks/create` and on the task screen: a *Phase* picker that
+  appears once a plan is chosen, defaulting to *current phase*.
+* **`task_counts`** on `GET /strategy-layer`, rendered as `completed/total` beside each phase,
+  with a line for **unphased** work — visible on purpose, because a task the layer cannot see
+  is exactly the thing that stops a dismissal ever lapsing.
+
+So the loop the owner was in now closes: NOT DONE → attach the tasks that constitute the
+phase → the count changes → the dismissal lapses → the proposal returns when *that* work is
+done. Which is Q8's review, arrived at from the other direction.
+
 ### Step 3b(iii), still to do
 
 * **The WCU rollup per objective (§5b).** WCU still cannot say *worked on this*. It needs

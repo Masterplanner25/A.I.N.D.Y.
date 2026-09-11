@@ -195,6 +195,22 @@ def _evidence(
     }
 
 
+def phase_task_counts(
+    db: Session, *, masterplan_id: int, user_id: Any
+) -> dict[str, dict[str, int]]:
+    """`{phase_id: {"total", "completed"}}` for every phase that has work, plus
+    `"unphased"` for plan tasks that carry no phase — visible on purpose, because a task the
+    layer cannot see is the thing that stops a dismissed proposal ever coming back."""
+    counts: dict[str, dict[str, int]] = {}
+    for task in _tasks_for(db, masterplan_id=masterplan_id, user_id=user_id):
+        key = str(task.get("phase_id") or "") or "unphased"
+        bucket = counts.setdefault(key, {"total": 0, "completed": 0})
+        bucket["total"] += 1
+        if str(task.get("status") or "") == TASK_COMPLETE:
+            bucket["completed"] += 1
+    return counts
+
+
 # ── propose ───────────────────────────────────────────────────────────────────────────
 
 def propose_phase_advance(

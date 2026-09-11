@@ -211,4 +211,18 @@ describe("PhasePanel", () => {
       "Platform Development reopened. Expansion and Scaling is pending again.",
     );
   });
+
+  it("shows each phase's attached work, and names the work the layer cannot see", async () => {
+    mockGetStrategyLayer.mockResolvedValue({
+      phases: PHASES,
+      task_counts: { p1: { total: 3, completed: 2 }, unphased: { total: 1, completed: 0 } },
+    });
+    mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, phase: PHASES[0], evidence: {} });
+
+    render(<PhasePanel planId={10} />);
+
+    const first = (await screen.findByText(/1\. Foundation Building/)).closest("li");
+    expect(first).toHaveTextContent("2/3");
+    expect(screen.getByText(/1 task on this plan has no phase/)).toBeInTheDocument();
+  });
 });

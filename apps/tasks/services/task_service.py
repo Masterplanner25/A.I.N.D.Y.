@@ -22,6 +22,7 @@ from apps.tasks.services.masterplan_bridge import (
     get_active_masterplan_via_syscall,
     get_eta_via_syscall,
     recalculate_wcu_via_syscall,
+    resolve_phase_via_syscall,
 )
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,7 @@ def build_task_graph(tasks: list[Task]) -> dict[str, Any]:
             "depends_on": _dependency_ids(task),
             "automation_type": getattr(task, "automation_type", None),
             "masterplan_id": getattr(task, "masterplan_id", None),
+        "phase_id": getattr(task, "phase_id", None),
             "duration": _as_effort_hours(getattr(task, "duration", 0.0)),
             # WCU inputs (Work Complexity Units) — additive; consumed by the masterplan
             # wcu_service via the sys.v1.tasks.get_graph_context syscall (no cross-app import).
@@ -442,6 +444,7 @@ def create_task(
     reminder_time=None,
     recurrence=None,
     user_id: str | uuid.UUID | None = None,
+    phase_id: str | None = None,
 ):
     """Creates a new task entry in the database."""
     owner_user_id = _user_uuid(user_id)
@@ -449,6 +452,16 @@ def create_task(
         raise ValueError("user_id is required to create a task")
     if masterplan_id is not None:
         assert_masterplan_owned_via_syscall(masterplan_id, str(owner_user_id), db)
+        # ★ A plan task lands on the plan's current phase unless the caller names one.
+        # Masterplan decides which (`sys.v1.masterplan.resolve_phase`); tasks writes it. A
+        # task with no phase is invisible to the strategy layer — it neither counts toward a
+        # phase's completion nor brings a dismissed advance proposal back — and until now
+        # every task created from the task screen was exactly that.
+        phase_id = resolve_phase_via_syscall(
+            masterplan_id, str(owner_user_id), db, phase_id=phase_id
+        )
+    elif phase_id:
+        raise ValueError("phase_id requires a masterplan_id")
     normalized_dependencies = _normalize_dependencies(dependencies)
     _validate_dependencies(db, owner_user_id, normalized_dependencies, parent_task_id)
     task = Task(
@@ -457,6 +470,7 @@ def create_task(
         priority=priority,
         due_date=due_date,
         masterplan_id=masterplan_id,
+        phase_id=phase_id,
         parent_task_id=parent_task_id,
         depends_on=normalized_dependencies,
         dependency_type=dependency_type or "hard",
