@@ -502,9 +502,12 @@ does not have to rebuild it.
 
 ---
 
-## POSTGRES-CRASH-RESIDUAL-1: the cluster still crash-restarts after PR #234 (undiagnosed, P2)
+## POSTGRES-CRASH-RESIDUAL-1: the cluster crash-restarts under host memory pressure, on a machine whose RAM cannot be upgraded (environmental, P2)
 
-**Status: OPEN (found 2026-08-22).** PR #234 fixed mongo's `mongosh` healthcheck, which was
+**Status: DIAGNOSED as host-bound 2026-09-08/10 — see the last observation. Not fixable by code.
+Kept open as an operating constraint, not a bug.** Originally found 2026-08-22.
+
+PR #234 fixed mongo's `mongosh` healthcheck, which was
 driving the Docker VM into OOM and taking postgres with it. It helped a great deal — cluster
 reinitialisations fell from **76/day** to roughly **11/day** — but it did **not** end them, and
 the claim that it did should not be relied on. Reinits per day with the fix demonstrably live:
@@ -555,6 +558,93 @@ a backend `SIGQUIT` handler rather than a kernel OOM-kill. Carry the memory-pres
 **Sharper next step than "catch a burst":** sample `Available MBytes` alongside the reinit count
 over a normal working day. If reinits only ever appear below some availability floor, that floor
 is the actionable number — and it is a host-capacity fact, not a postgres bug.
+
+### ★ Observation 2026-09-08 → 2026-09-10 — the floor, measured across a reboot
+
+The step above asked for availability alongside reinits. This is that, from three windows, with
+the thing that reframes the whole entry at the end.
+
+**09-08, uptime 15.8 days, 11 reinits that day (`exit code 2`, the usual shape).** Sampled with
+the containers **already down**, so this is the host's idle baseline, not the stack's load:
+
+```
+physical               7.7 GB
+private commit        25.1 GB   (374 processes; 3.2x physical)
+resident               4.5 GB   → ~15 GB living in the page file
+available               457 MB
+standby cache           190 MB   (squeezed to nothing)
+hard page reads      1,738/sec  sustained, at idle
+page file             23 GB allocated
+```
+
+**09-10, 27 hours after a reboot, containers still down:**
+
+```
+private commit        10.3 GB
+available             1,178 MB
+standby cache           889 MB
+hard page reads          4.6/sec   ← down 99.7%
+processes              274
+```
+
+**Three points on the availability curve now:**
+
+| date | available | hard reads/s | reinits |
+|---|---|---|---|
+| 09-02 | 104–126 MB | (pages/s 40–58k) | burst of 4 in 14 min |
+| 09-08 | 457 MB | 1,738 | 11 that day |
+| 09-05 | 726 MB | (pages/s 22k) | **0** in 6h38m |
+| 09-10 | 1,178 MB | 4.6 | (stack down; no container to count) |
+
+The 09-05 refinement holds: it is availability, not paging rate, that tracks the reinits. On this
+evidence the floor sits somewhere between **457 MB and 726 MB**. Below it, the cluster reinits;
+above it, it does not.
+
+**What was eating the 25 GB on 09-08 — and none of it was the stack:**
+
+| | commit | note |
+|---|---|---|
+| `vmmemWSL` + Docker Desktop | 3.8 GB | with zero containers running; `.wslconfig`'s 3 GB cap **is working** — the VM was pinned to it, not the 3.85 GB default |
+| stray `node` ×4 | 2.0 GB | two Vite dev servers, 3.5 and 3.1 days old, 30 MB resident — paged out and doing nothing |
+| `explorer` | 1.1 GB | one process; a 15.8-day leak |
+| browsers + VS Code + webview hosts | ~4 GB | 11 Chrome, 11 Code, 24 `msedgewebview2` |
+| `claude` ×3 | 2.0 GB | |
+
+### ★ The fact that reframes the entry: the RAM is soldered
+
+```
+Controller0-ChannelA/B/C/D     2 GB each, LPDDR5-8400
+slots 4/4 populated · platform max capacity 8 GB
+```
+
+Four channels, all populated, max capacity equal to what is installed, and `Controller0-Channel`
+naming rather than `DIMM`/`SODIMM`. **This machine is permanently 7.7 GB.** The one remedy that
+would actually close this entry — more memory — does not exist for this hardware.
+
+So the entry changes character. It is not a bug in postgres, in the stack, or in `.wslconfig`
+(which is correct and doing its job). It is an operating constraint: **this workload on this
+machine will reinit the cluster whenever host availability falls below roughly 500 MB**, and
+the levers are all about what else is running.
+
+**What is still genuinely unknown, and does not matter for action:** why the backends die with
+`exit code 2` (the `SIGQUIT` handler) rather than `signal 9`. The original puzzle stands. But
+the trigger condition is now measured well enough to act on without resolving it.
+
+### Operating rules, since there is no fix
+
+- **Stop Vite when done.** Two forgotten dev servers were 2 GB of commit doing nothing.
+- **Quit Docker Desktop when the stack is down.** 3.8 GB idle, and it autostarts (`HKCU\...\Run`).
+- **Reboot on a cadence.** 15.8 days produced a 1.1 GB Explorer process; the reboot alone took
+  hard faults from 1,738/s to 4.6/s.
+- **Know the budget.** Chrome + VS Code + Docker + one Claude session is roughly this machine's
+  entire working set. A second browser or a second stack tips it under the floor.
+- **Reclaim Docker disk, but never `--volumes`.** `docker builder prune` + `docker image prune -a`
+  returned 13.65 GB on 09-08. The 1.17 GB of volumes reads "100% reclaimable" only because the
+  containers are down — `aindy-apps-monolith_postgres_data` is in there.
+
+**Consequence for measurement work:** anything measured while availability is under the floor is
+suspect. The first ping-verification numbers (`RIPPLE-PINGS-NOT-ECHOES-1`, 59 checked / 0
+verified) were taken during the 09-08 window and should be re-run before being read.
 
 ---
 
