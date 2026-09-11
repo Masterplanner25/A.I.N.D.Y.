@@ -19,6 +19,9 @@ class TaskCreate(BaseModel):
     # Which plan phase the task belongs to. Optional: a plan task with no phase named lands
     # on the plan's current phase (masterplan decides, via sys.v1.masterplan.resolve_phase).
     phase_id: Optional[str] = None
+    # Which strategy the task serves. Optional; when given the task is scheduled on the
+    # strategy's phase, whatever phase_id says.
+    strategy_id: Optional[str] = None
     parent_task_id: Optional[int] = None
     dependency_type: Optional[str] = "hard"
     dependencies: List[TaskDependency] = Field(default_factory=list)

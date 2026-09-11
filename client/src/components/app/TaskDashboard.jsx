@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getTasks, createTask, completeTask, startTask, deleteTask } from "../../api/tasks.js";
-import { listMasterPlans, getStrategyLayer } from "../../api/masterplan.js";
+import { listMasterPlans, getStrategyLayer, promoteTaskToStrategy } from "../../api/masterplan.js";
 import { Toast } from "../shared/Toast";
 import DomainError from "../shared/DomainError.jsx";
 import { safeMap } from "../../utils/safe";
@@ -34,6 +34,12 @@ export default function TaskDashboard() {
   // toward a phase nor brought a dismissed advance proposal back).
   const [phaseId, setPhaseId] = useState("");
   const [phases, setPhases] = useState([]);
+  // Which strategy the task serves. A task under a strategy is scheduled where the strategy
+  // is, so picking one overrides the phase. A months-long "task" is a strategy wearing a task
+  // row (STRATEGY_LAYER_SPEC §3); the ↑ STRATEGY button on each task is how it stops being one.
+  const [strategyId, setStrategyId] = useState("");
+  const [strategies, setStrategies] = useState([]);
+  const [promoting, setPromoting] = useState(() => new Set());
   const [velocityMessage, setVelocityMessage] = useState("");
   // Names of tasks with a completion request in flight. Completing a task runs the whole
   // `task_completion` flow — memory capture, downstream unlock, ETA recalc and a full
@@ -79,14 +85,19 @@ export default function TaskDashboard() {
   // Genesis-only today) the selector simply doesn't render and task creation is unaffected.
   useEffect(() => {
     setPhaseId("");
-    if (!masterplanId) { setPhases([]); return undefined; }
+    setStrategyId("");
+    if (!masterplanId) { setPhases([]); setStrategies([]); return undefined; }
     let cancelled = false;
     getStrategyLayer(masterplanId)
       .then((layer) => {
-        if (!cancelled) setPhases(Array.isArray(layer?.phases) ? layer.phases : []);
+        if (cancelled) return;
+        setPhases(Array.isArray(layer?.phases) ? layer.phases : []);
+        // Only strategies still open can take new work.
+        setStrategies((Array.isArray(layer?.strategies) ? layer.strategies : [])
+          .filter((st) => st.status === "proposed" || st.status === "active"));
       })
       .catch(() => {
-        if (!cancelled) setPhases([]);
+        if (!cancelled) { setPhases([]); setStrategies([]); }
       });
     return () => { cancelled = true; };
   }, [masterplanId]);
@@ -138,6 +149,7 @@ export default function TaskDashboard() {
       const payload = { name: newTask, priority: "medium", estimated_hours: hours };
       if (masterplanId) payload.masterplan_id = Number.parseInt(masterplanId, 10);
       if (masterplanId && phaseId) payload.phase_id = phaseId;
+      if (masterplanId && strategyId) payload.strategy_id = strategyId;
 
       await createTask(payload);
       setNewTask("");
@@ -148,6 +160,24 @@ export default function TaskDashboard() {
     } finally {
       // `finally`, so a failed create can be retried — only an in-flight submit is blocked.
       setCreating(false);
+    }
+  };
+
+  const handlePromote = async (task) => {
+    // The task row goes and a strategy takes its place on the same phase; the estimate is
+    // kept in the strategy's description. Irreversible in the sense that the task is gone,
+    // so it is confirmed. A completed task cannot be promoted — it was work.
+    if (!task.masterplan_id || !task.task_id) return;
+    if (!window.confirm(`Make "${task.task_name}" a strategy of its phase? The task row is replaced.`)) return;
+    setPromoting((prev) => new Set(prev).add(task.task_name));
+    try {
+      const result = await promoteTaskToStrategy(task.masterplan_id, task.task_id);
+      setVelocityMessage(`"${result?.strategy?.name || task.task_name}" is now a strategy. Add the tasks that make it happen under it.`);
+      fetchTasks();
+    } catch (err) {
+      showToast(err?.message || "Could not promote the task.");
+    } finally {
+      setPromoting((prev) => { const next = new Set(prev); next.delete(task.task_name); return next; });
     }
   };
 
@@ -350,6 +380,22 @@ export default function TaskDashboard() {
               </select>
             </label>
           }
+
+          {masterplanId && strategies.length > 0 &&
+          <label style={styles.fieldLabel}>
+              Strategy
+              <select
+              style={styles.select}
+              value={strategyId}
+              onChange={(e) => setStrategyId(e.target.value)}
+              title="A task under a strategy is scheduled where the strategy is">
+                <option value="">— none —</option>
+                {safeMap(strategies, (st) =>
+              <option key={st.id} value={st.id}>{st.name}</option>)
+              }
+              </select>
+            </label>
+          }
         </div>
 
         <p style={styles.formHint}>
@@ -400,6 +446,16 @@ export default function TaskDashboard() {
                   </button>
                 </>
             }
+              {task.masterplan_id && task.status !== "completed" && task.task_id &&
+                <button
+                  onClick={() => handlePromote(task)}
+                  disabled={promoting.has(task.task_name)}
+                  aria-label={`Make ${task.task_name} a strategy`}
+                  title="This is how a phase gets done, not something done in a sitting. Make it a strategy and put the hours-sized tasks under it."
+                  style={styles.actionBtn}>
+                  {promoting.has(task.task_name) ? "…" : "↑ Strategy"}
+                </button>
+              }
               {/* Outside the not-completed guard on purpose: a task completed by mistake
                   is exactly the one you want to remove, so Delete stays available for
                   every status. */}

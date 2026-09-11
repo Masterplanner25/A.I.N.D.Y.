@@ -106,3 +106,34 @@ export function dismissPhaseAdvance(planId, phaseId) {
 export function reopenPhase(planId, phaseId) {
   return authRequest(`/apps/masterplans/${planId}/phases/${phaseId}/reopen`, { method: "POST" });
 }
+
+// ── Strategies — how a phase gets done (STRATEGY_LAYER_SPEC §5) ──────────────────
+// proposed → active → concluded | abandoned | displaced. Every transition is a human verb.
+
+export function createStrategy(planId, body) {
+  return authRequest(`/apps/masterplans/${planId}/strategies`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// A task that is really a strategy becomes one. The task row goes.
+export function promoteTaskToStrategy(planId, taskId) {
+  return authRequest(`/apps/masterplans/${planId}/strategies/promote`, {
+    method: "POST",
+    body: JSON.stringify({ task_id: taskId }),
+  });
+}
+
+export function startStrategy(planId, strategyId) {
+  return authRequest(`/apps/masterplans/${planId}/strategies/${strategyId}/start`, { method: "POST" });
+}
+
+// verb: "conclude" (needs an outcome) | "abandon" | "displace"
+export function finishStrategy(planId, strategyId, verb, { outcome, note } = {}) {
+  return authRequest(`/apps/masterplans/${planId}/strategies/${strategyId}/${verb}`, {
+    method: "POST",
+    body: JSON.stringify({ outcome: outcome ?? null, note: note ?? null }),
+  });
+}
+

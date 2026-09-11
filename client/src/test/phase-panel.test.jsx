@@ -8,12 +8,16 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 const {
   mockGetStrategyLayer, mockGetPhaseAdvanceProposal, mockConfirmPhaseAdvance,
   mockDismissPhaseAdvance, mockReopenPhase,
+  mockCreateStrategy, mockStartStrategy, mockFinishStrategy,
 } = vi.hoisted(() => ({
   mockGetStrategyLayer: vi.fn(),
   mockGetPhaseAdvanceProposal: vi.fn(),
   mockConfirmPhaseAdvance: vi.fn(),
   mockDismissPhaseAdvance: vi.fn(),
   mockReopenPhase: vi.fn(),
+  mockCreateStrategy: vi.fn(),
+  mockStartStrategy: vi.fn(),
+  mockFinishStrategy: vi.fn(),
 }));
 
 vi.mock("../api/masterplan.js", () => ({
@@ -22,6 +26,9 @@ vi.mock("../api/masterplan.js", () => ({
   confirmPhaseAdvance: mockConfirmPhaseAdvance,
   dismissPhaseAdvance: mockDismissPhaseAdvance,
   reopenPhase: mockReopenPhase,
+  createStrategy: mockCreateStrategy,
+  startStrategy: mockStartStrategy,
+  finishStrategy: mockFinishStrategy,
 }));
 
 import PhasePanel from "../components/app/PhasePanel";
@@ -47,6 +54,9 @@ describe("PhasePanel", () => {
     mockConfirmPhaseAdvance.mockReset();
     mockDismissPhaseAdvance.mockReset();
     mockReopenPhase.mockReset();
+    mockCreateStrategy.mockReset();
+    mockStartStrategy.mockReset();
+    mockFinishStrategy.mockReset();
   });
 
   it("renders nothing for a plan that predates the layer", async () => {
@@ -81,7 +91,7 @@ describe("PhasePanel", () => {
 
     const card = await screen.findByTestId("phase-advance-proposal");
     expect(card).toHaveTextContent("Foundation Building looks done.");
-    expect(card).toHaveTextContent("All 2 of its tasks are complete, 360 days inside its window.");
+    expect(card).toHaveTextContent("All of its work is done — 2 of 2 tasks complete, 360 days inside its window.");
     expect(card).toHaveTextContent("Confirming opens Platform Development.");
   });
 
@@ -128,7 +138,7 @@ describe("PhasePanel", () => {
 
     render(<PhasePanel planId={10} />);
     expect(await screen.findByTestId("phase-advance-proposal")).toHaveTextContent(
-      "Its window has ended with 1 task still open (1 of 2 complete).",
+      "Its window has ended with 1 thing still open (1 of 2 tasks complete).",
     );
     fireEvent.click(screen.getByRole("button", { name: /confirm/i }));
 
@@ -224,5 +234,62 @@ describe("PhasePanel", () => {
     const first = (await screen.findByText(/1\. Foundation Building/)).closest("li");
     expect(first).toHaveTextContent("2/3");
     expect(screen.getByText(/1 task on this plan has no phase/)).toBeInTheDocument();
+  });
+
+  // ── strategies: how the current phase gets done ────────────────────────────────
+
+  const STRATEGIES = [
+    { id: "s1", phase_id: "p1", name: "Establish Authority", status: "active", outcome: null },
+    { id: "s2", phase_id: "p1", name: "Build IP", status: "proposed", outcome: null },
+    { id: "s3", phase_id: "p1", name: "Guest posts", status: "abandoned", outcome: "did_not_work" },
+  ];
+
+  it("lists the current phase's strategies with status, attribution and the right verbs", async () => {
+    mockGetStrategyLayer.mockResolvedValue({
+      phases: PHASES, strategies: STRATEGIES,
+      strategy_task_counts: { s1: { total: 3, completed: 1, hours_total: 16, hours_completed: 6 } },
+    });
+    mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, phase: PHASES[0], evidence: {} });
+
+    render(<PhasePanel planId={10} />);
+
+    const box = await screen.findByTestId("phase-strategies");
+    expect(box).toHaveTextContent("Establish Authority");
+    expect(box).toHaveTextContent("1/3 tasks · 6h of 2 d");
+    expect(box).toHaveTextContent("abandoned · did not work");
+    expect(screen.getAllByRole("button", { name: /^start$/i })).toHaveLength(1);     // only the proposed one
+    expect(screen.getAllByRole("button", { name: /finish/i })).toHaveLength(2);      // not the abandoned one
+  });
+
+  it("adds a strategy to the current phase", async () => {
+    mockGetStrategyLayer.mockResolvedValue({ phases: PHASES, strategies: [] });
+    mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, phase: PHASES[0], evidence: {} });
+    mockCreateStrategy.mockResolvedValue({ id: "s9", name: "Establish Authority", phase_id: "p1", status: "proposed" });
+
+    render(<PhasePanel planId={10} />);
+    fireEvent.change(await screen.findByLabelText(/new strategy/i), { target: { value: "Establish Authority" } });
+    fireEvent.click(screen.getByRole("button", { name: /^add$/i }));
+
+    await waitFor(() => expect(mockCreateStrategy).toHaveBeenCalledWith(10, { name: "Establish Authority", phase_id: "p1" }));
+  });
+
+  it("finishing offers the four verdicts, and abandoning says what was released", async () => {
+    mockGetStrategyLayer.mockResolvedValue({ phases: PHASES, strategies: [STRATEGIES[0]] });
+    mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, phase: PHASES[0], evidence: {} });
+    mockFinishStrategy.mockResolvedValue({ ...STRATEGIES[0], status: "abandoned", outcome: "did_not_work", tasks_released: 2 });
+
+    render(<PhasePanel planId={10} />);
+    fireEvent.click(await screen.findByRole("button", { name: /finish/i }));
+
+    const menu = screen.getByTestId("strategy-verdict");
+    expect(menu).toHaveTextContent("WORKED");
+    expect(menu).toHaveTextContent("DID NOT WORK");
+    expect(menu).toHaveTextContent("DISPLACED");
+    fireEvent.click(screen.getByRole("button", { name: /did not work/i }));
+
+    await waitFor(() => expect(mockFinishStrategy).toHaveBeenCalledWith(10, "s1", "abandon", { outcome: undefined }));
+    expect(await screen.findByTestId("phase-advance-notice")).toHaveTextContent(
+      "Establish Authority abandoned. 2 open tasks returned to the plan; completed work stays attached.",
+    );
   });
 });

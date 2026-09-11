@@ -1191,12 +1191,82 @@ Get Masterplan Projection
 
 **Response 200:** unspecified
 
+#### POST /apps/masterplans/{plan_id}/strategies
+Create Strategy — how a phase gets done; weeks or months, finishes with a verdict (`STRATEGY_LAYER_SPEC` §5)
+
+**Parameters:** plan_id (path): integer
+
+**Body:** description: string | null, name: string, objective_id: string | null, origin: string | null, phase_id: string | null
+
+**Response 200:** the strategy; 409 when the phase is not on the plan
+
+#### POST /apps/masterplans/{plan_id}/strategies/promote
+Promote Task — a task that is really a strategy becomes one on its phase; the task row is deleted and its estimate kept in the description; a completed task is refused
+
+**Parameters:** plan_id (path): integer
+
+**Body:** objective_id: string | null, task_id: integer
+
+**Response 200:** strategy, task_deleted: boolean, task_id: integer
+
+#### POST /apps/masterplans/{plan_id}/strategies/{strategy_id}/abandon
+Abandon Strategy — tried it, it did not work: a RESULT; incomplete tasks are released, completed ones stay attached
+
+**Parameters:** plan_id (path): integer, strategy_id (path): string
+
+**Body:** note: string | null, outcome: string | null
+
+**Response 200:** the strategy, tasks_released: integer
+
+#### POST /apps/masterplans/{plan_id}/strategies/{strategy_id}/conclude
+Conclude Strategy — judge how it went: worked | did_not_work | inconclusive
+
+**Parameters:** plan_id (path): integer, strategy_id (path): string
+
+**Body:** note: string | null, outcome: string | null
+
+**Response 200:** the strategy; 409 without an outcome or for a displaced strategy
+
+#### POST /apps/masterplans/{plan_id}/strategies/{strategy_id}/displace
+Displace Strategy — never tried, something else was done instead: a CHOICE, no outcome ever
+
+**Parameters:** plan_id (path): integer, strategy_id (path): string
+
+**Body:** note: string | null, outcome: string | null
+
+**Response 200:** the strategy, tasks_released: integer
+
+#### POST /apps/masterplans/{plan_id}/strategies/{strategy_id}/move
+Move Strategy — reschedule to another phase; its tasks follow
+
+**Parameters:** plan_id (path): integer, strategy_id (path): string
+
+**Body:** phase_id: string | null
+
+**Response 200:** the strategy
+
+#### POST /apps/masterplans/{plan_id}/strategies/{strategy_id}/start
+Start Strategy — proposed → active
+
+**Parameters:** plan_id (path): integer, strategy_id (path): string
+
+**Response 200:** the strategy; 409 for a finished strategy
+
+#### POST /apps/masterplans/{plan_id}/strategies/{strategy_id}/tasks
+Attach Tasks — existing tasks join the strategy and move to its phase
+
+**Parameters:** plan_id (path): integer, strategy_id (path): string
+
+**Body:** task_ids: array[integer]
+
+**Response 200:** attached: integer, requested: integer
+
 #### GET /apps/masterplans/{plan_id}/strategy-layer
 Get Strategy Layer — objectives, phases, strategies and unhoused emergent strategies for one plan
 
 **Parameters:** plan_id (path): integer
 
-**Response 200:** masterplan_id, phase: integer, objectives, phases, task_counts: {phase_id | "unphased": {total, completed}}, strategies, unhoused_emergent
+**Response 200:** masterplan_id, phase: integer, objectives, phases, task_counts: {phase_id | "unphased": {total, completed}}, strategy_task_counts: {strategy_id: {total, completed, hours_total, hours_completed}}, strategies, unhoused_emergent
 
 ### Memory
 
@@ -2283,7 +2353,7 @@ Complete Task
 #### POST /apps/tasks/create
 Create Task
 
-**Body:** automation_config: map[unspecified] | null, automation_type: string | null, category: string | null, dependencies: array[object], dependency_type: string | null, due_date: string | null, masterplan_id: integer | null, name: string | null, parent_task_id: integer | null, phase_id: string | null, priority: string | null, recurrence: string | null, reminder_time: string | null, scheduled_time: string | null, title: string | null
+**Body:** automation_config: map[unspecified] | null, automation_type: string | null, category: string | null, dependencies: array[object], dependency_type: string | null, due_date: string | null, masterplan_id: integer | null, name: string | null, parent_task_id: integer | null, phase_id: string | null, priority: string | null, recurrence: string | null, reminder_time: string | null, scheduled_time: string | null, strategy_id: string | null, title: string | null
 
 **Response 200:** unspecified
 
