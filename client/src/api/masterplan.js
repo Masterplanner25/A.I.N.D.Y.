@@ -73,3 +73,23 @@ export function setMasterplanAnchor(planId, anchorData) {
 export function getMasterplanProjection(planId) {
   return authRequest(ROUTES.MASTERPLAN.PLAN_PROJECTION(planId), { method: "GET" });
 }
+
+// ── Strategy layer (STRATEGY_LAYER_SPEC §8 step 3b) ─────────────────────────────
+// Routes newer than the ui-kit ROUTES map, so the full /apps paths are written directly.
+
+export function getStrategyLayer(planId) {
+  return authRequest(`/apps/masterplans/${planId}/strategy-layer`, { method: "GET" });
+}
+
+// What the system proposes about the plan's current phase. Reads only — the proposal is
+// the system's half; confirming it is the human's.
+export function getPhaseAdvanceProposal(planId) {
+  return authRequest(`/apps/masterplans/${planId}/phase-advance`, { method: "GET" });
+}
+
+export function confirmPhaseAdvance(planId, phaseId) {
+  return authRequest(`/apps/masterplans/${planId}/phase-advance/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ phase_id: phaseId }),
+  });
+}
