@@ -192,7 +192,7 @@ describe("TaskDashboard requires an estimate", () => {
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. 1\.5/i), { target: { value: "0" } });
     fireEvent.submit(container.querySelector("form"));
 
-    await waitFor(() => expect(screen.getByText(/Estimated hours is required/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/An estimate is required/i)).toBeTruthy());
     expect(mockCreateTask).not.toHaveBeenCalled();
   });
 
