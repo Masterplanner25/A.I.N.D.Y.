@@ -828,15 +828,49 @@ Dependencies *among* the candidates are the chain being removed wholesale and do
 `sys.v1.task.delete_many` re-checks `status != completed` at the write: the caller's refusal is
 the real guard, but a delete is irreversible and that is the last place that can say no.
 
-### Step 3b, still to do
+### ★ Step 3b(i) built 2026-09-10 — phase advance is a proposal
 
-Two pieces, both separable from the migration above and neither blocking it:
+`services/phase_advance.py`. Q8 made mechanical: **the system detects and proposes; the human
+confirms; the confirmation hands back what the review should look at.**
 
-* **`evaluate_phase()` against `plan_phases`.** Today it returns `1` or `2` for a five-phase
-  plan and gates on threshold columns nobody chose — books, a studio, playbooks. Per Q8 it
-  should **propose and let the human confirm**, which is a semantic change to live behaviour and
-  deserves its own review rather than riding along with a migration.
-* **The WCU rollup and a UI (§5b).** The layer is real data nobody can see yet.
+The evidence is the plan's own phases, not `evaluate_phase`'s threshold columns:
+
+| reason | when | what the proposal carries |
+|---|---|---|
+| `work_complete` | every task attached to the frontier phase is done, and there is at least one | `early_by_days` when it landed before the phase's window ended — the owner's own trigger, *"especially if you finish some things quicker than you thought"* |
+| `window_elapsed` | the phase's scheduled window (`start_date` + earlier durations) has passed | `open_task_ids` — the work that did not happen when the plan said it would |
+
+Zero of zero is not "all done": an empty phase inside its window proposes nothing.
+
+`propose_phase_advance` writes nothing. `confirm_phase_advance` refuses anything but the
+frontier phase (closing out of order would punch a hole in the chain the ETA floor walks) and
+refuses without evidence (confirming is agreeing with a proposal; there has to be one). On
+confirmation: the phase closes, its successor opens, **open work moves to the successor** — the
+mechanical half of *"maybe some things move phases"*; a closed phase cannot hold open work and a
+task can be moved again — and the moved ids come back in `review` so the conversation starts
+with them.
+
+`master_plans.phase`, the integer that predates the layer, is now **derived from the layer** for
+any plan that has one (`derive_legacy_phase`; `wcu_service` reads it there instead of calling
+`evaluate_phase`). The threshold gate survives only for plans with no `plan_phases` rows, where
+it is the only reading there is.
+
+Routes: `GET /{plan_id}/phase-advance`, `POST /{plan_id}/phase-advance/confirm`, and
+`GET /{plan_id}/strategy-layer` — the first thing that reads the layer out to a client.
+
+**On the live plan** this proposes closing *Foundation Building* now: its two attached tasks
+(17, 18) are both complete and the phase's twelve-month window runs to 2027-09-05 — roughly 360 days early, which is exactly the number the review should open with. That is the first time
+the system has had anything to say about where the plan is.
+
+Not done: what "opens a refine" writes. There is no refinement record yet
+(`MASTERPLAN_REFINE_VS_REVISE_SPEC` §4 sketches `POST /refine`), so the review is returned to
+the caller rather than recorded. That is the right order — the record's shape should follow
+from what a real review turned out to contain.
+
+### Step 3b(ii), still to do
+
+* **The WCU rollup per objective (§5b), and a UI.** `GET /strategy-layer` exists; nothing
+  renders it, and WCU still cannot say *worked on this*.
 
 ### Original step 3 notes
 

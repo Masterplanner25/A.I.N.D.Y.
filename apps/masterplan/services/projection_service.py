@@ -73,6 +73,14 @@ def _flag_met(required: bool, achieved: bool) -> bool:
 
 
 def evaluate_phase(plan):
+    """The threshold gate, for plans that predate the strategy layer.
+
+    ★ A plan with `plan_phases` rows never reaches this. `wcu_service` reads its phase off the
+    layer instead, and the layer moves only when the human confirms a proposal
+    (`phase_advance.confirm_phase_advance`, STRATEGY_LAYER_SPEC §6 Q8). This returns 1 or 2
+    for a five-phase plan and gates on columns no plan ever declared, which is why it was
+    demoted rather than fixed.
+    """
     phase_end = _as_naive_utc(plan.start_date + timedelta(days=plan.duration_years * 365))
     now = _as_naive_utc(datetime.now(timezone.utc))
 
