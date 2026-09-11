@@ -54,6 +54,9 @@ def _serialize_task(task) -> dict:
         "priority": task.priority,
         "status": getattr(task, "status", "unknown"),
         "time_spent": task.time_spent,
+        # The estimate, in hours — the unit the math wants. The client shows it back in
+        # the unit it was entered in (`effort.js`); hours is the wire format, not the UI.
+        "estimated_hours": float(getattr(task, "duration", 0.0) or 0.0),
         "masterplan_id": getattr(task, "masterplan_id", None),
         "phase_id": getattr(task, "phase_id", None),
         "parent_task_id": getattr(task, "parent_task_id", None),

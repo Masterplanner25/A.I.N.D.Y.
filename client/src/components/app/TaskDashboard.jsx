@@ -4,6 +4,7 @@ import { listMasterPlans, getStrategyLayer } from "../../api/masterplan.js";
 import { Toast } from "../shared/Toast";
 import DomainError from "../shared/DomainError.jsx";
 import { safeMap } from "../../utils/safe";
+import { EFFORT_UNITS, toHours, describeHours } from "../../utils/effort.js";
 import { useToast } from "../../utils/useToast";
 import { useApiCall } from "../../lib/useApiCall.js";
 import {
@@ -18,6 +19,10 @@ export default function TaskDashboard() {
   // send only {name, priority}, so duration was always 0 — every three-axis shadow
   // record came back with volume_score = 0 regardless of how much work was completed.
   const [estimatedHours, setEstimatedHours] = useState("");
+  // The unit the estimate is typed in. Stored as hours (the math's unit) — see effort.js.
+  // A months-long "task" is usually a strategy wearing a task row (STRATEGY_LAYER_SPEC §3),
+  // but the entry should not be the thing that makes that hard to say.
+  const [effortUnit, setEffortUnit] = useState("hours");
   // Task.masterplan_id drives ETA/WCU recalculation and the completion cascade. It was
   // reachable by the API and by agent tools but never set from this screen, so every
   // task created in the UI was permanently orphaned from every plan (walk-log item 17).
@@ -114,9 +119,9 @@ export default function TaskDashboard() {
     // left `effort_hours`, `volume_score`, `trajectory_score` and `mean_pace_ratio` byte-
     // identical. Real work was done and two of the three axes did not register it — the
     // exact measurement SOAK-THEN-FLIP-1 is blocked on.
-    const hours = Number.parseFloat(estimatedHours);
+    const hours = toHours(estimatedHours, effortUnit);
     if (!Number.isFinite(hours) || hours <= 0) {
-      showToast("Estimated hours is required — a task without one is invisible to scoring.");
+      showToast("An estimate is required — a task without one is invisible to scoring.");
       return;
     }
 
@@ -281,18 +286,33 @@ export default function TaskDashboard() {
 
         <div style={styles.formRow}>
           <label style={styles.fieldLabel}>
-            Est. hours *
-            <input
-              style={styles.smallInput}
-              type="number"
-              min="0.25"
-              step="0.25"
-              required
-              aria-required="true"
-              placeholder="e.g. 1.5"
-              title="Required — tasks without an estimate are excluded from Volume and Trajectory scoring"
-              value={estimatedHours}
-              onChange={(e) => setEstimatedHours(e.target.value)} />
+            Estimate *
+            <span style={{ display: "inline-flex", gap: "6px" }}>
+              <input
+                style={styles.smallInput}
+                type="number"
+                min="0.25"
+                step="0.25"
+                required
+                aria-required="true"
+                placeholder="e.g. 1.5"
+                title="Required — tasks without an estimate are excluded from Volume and Trajectory scoring"
+                value={estimatedHours}
+                onChange={(e) => setEstimatedHours(e.target.value)} />
+              <select
+                aria-label="Estimate unit"
+                style={styles.select}
+                value={effortUnit}
+                onChange={(e) => setEffortUnit(e.target.value)}
+                title="8h day, 5-day week, ~21.7 working days a month">
+                {safeMap(EFFORT_UNITS, (u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+              </select>
+            </span>
+            {effortUnit !== "hours" && toHours(estimatedHours, effortUnit) > 0 &&
+              <span style={{ fontSize: "11px", color: "#71717a", marginLeft: "6px" }}>
+                = {toHours(estimatedHours, effortUnit)}h
+              </span>
+            }
           </label>
 
           {plans.length > 0 &&
@@ -333,8 +353,9 @@ export default function TaskDashboard() {
         </div>
 
         <p style={styles.formHint}>
-          Estimated hours feeds the MasterPlan ETA and the Infinity Volume axis; leaving it
-          empty records the task as zero effort.
+          The estimate feeds the MasterPlan ETA and the Infinity Volume axis. It is stored in
+          hours (8h day, 5-day week, ~21.7 working days a month). Something that takes months
+          is usually a strategy, not a task.
         </p>
       </form>
 
@@ -347,6 +368,7 @@ export default function TaskDashboard() {
               <div style={styles.taskName}>{task.task_name}</div>
               <div style={styles.taskMeta}>
                 Status: <span style={{ color: getStatusColor(task.status) }}>{task.status.toUpperCase()}</span>
+                {describeHours(task.estimated_hours) && ` • Est: ${describeHours(task.estimated_hours)}`}
                 {task.time_spent > 0 && ` • Time: ${(task.time_spent / 60).toFixed(1)}m`}
                 {task.masterplan_id ? ` • Plan ${task.masterplan_id}` : ""}
               </div>
