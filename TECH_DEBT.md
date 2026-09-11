@@ -644,7 +644,8 @@ the trigger condition is now measured well enough to act on without resolving it
 
 **Consequence for measurement work:** anything measured while availability is under the floor is
 suspect. The first ping-verification numbers (`RIPPLE-PINGS-NOT-ECHOES-1`, 59 checked / 0
-verified) were taken during the 09-08 window and should be re-run before being read.
+verified) were taken during the 09-08 window. Re-run 09-10 on the rebooted host: still 0, so
+the zero was the web's answer and not the host's.
 
 ---
 
@@ -679,7 +680,9 @@ than waiting behind a flag.
 
 ## RIPPLE-PINGS-NOT-ECHOES-1: a ping records a page about the same subject, not one that cites you (app-owned, P1)
 
-**Status: FIXED 2026-09-07, awaiting a detection re-run.** Full write-up:
+**Status: FIXED 2026-09-07; clean-host re-run 2026-09-10 confirmed 0 verified of 135 kept
+(33 fetched and demonstrably not citations) and exposed that budget-exhausted pings were never
+revisited — fixed the same day, §6b.** Full write-up:
 `docs/verification/DEFECT_RIPPLE_PINGS_ARE_NOT_ECHOES.md` §6.
 
 Detection now fetches each candidate and checks it for the drop point's URL or title. Three
