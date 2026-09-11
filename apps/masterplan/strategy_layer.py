@@ -146,6 +146,15 @@ class PlanPhase(Base):
 
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # ★ The human said "not done" to an advance proposal (§6 Q8: the system proposes, the human
+    # confirms — and *declines*). The count is the evidence the proposal was built on: the
+    # proposal stays quiet while the phase's attached work is unchanged, and comes back the
+    # moment a task is added or removed, because that is the only thing that could make the
+    # answer different. A bare timestamp would either nag forever or go silent forever.
+    advance_dismissed_at = Column(DateTime(timezone=True), nullable=True)
+    advance_dismissed_task_count = Column(Integer, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

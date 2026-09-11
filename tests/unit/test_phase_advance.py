@@ -309,3 +309,145 @@ def test_the_legacy_integer_is_derived_from_the_layer(db_session, plan):
         row.status = PHASE_COMPLETE
     assert pa.derive_legacy_phase(phases) == 3
     assert pa.derive_legacy_phase([]) == 1
+
+
+# ── ★ declining: "what if the phase isn't complete?" ──────────────────────────────────
+
+def test_dismissing_records_the_evidence_and_silences_the_proposal(db_session, plan):
+    """★ The first live proposal drew exactly this question. A proposal that can only be
+    accepted is not a proposal."""
+    first = _phases(db_session, plan)[0]
+    _task(db_session, plan, "Write the framework", phase=first, status="completed")
+    assert pa.propose_phase_advance(db_session, masterplan_id=plan.id, user_id=USER, now=MID_PHASE_ONE)["proposed"]
+
+    result = pa.dismiss_phase_advance(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+    after = pa.propose_phase_advance(db_session, masterplan_id=plan.id, user_id=USER, now=MID_PHASE_ONE)
+
+    assert result["dismissed"]["task_count"] == 1
+    assert after["proposed"] is False
+    assert after["reason"] == pa.REASON_WORK_COMPLETE, "the evidence is still reported"
+    assert after["dismissed"]["task_count"] == 1
+
+
+def test_the_proposal_returns_when_the_phases_work_changes(db_session, plan):
+    """★ Not on a timer — on the only thing that could change the answer. Attaching the task
+    that was missing is the review, arrived at from the other direction."""
+    first = _phases(db_session, plan)[0]
+    _task(db_session, plan, "Write the framework", phase=first, status="completed")
+    pa.dismiss_phase_advance(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+    _task(db_session, plan, "Publish it", phase=first)
+    with_open_work = pa.propose_phase_advance(db_session, masterplan_id=plan.id, user_id=USER, now=MID_PHASE_ONE)
+    assert with_open_work["proposed"] is False
+    assert with_open_work["dismissed"] is None, "the dismissal lapsed; there is simply no proposal"
+
+    db_session.query(Task).filter(Task.name == "Publish it").update({"status": "completed"})
+    db_session.commit()
+    done_again = pa.propose_phase_advance(db_session, masterplan_id=plan.id, user_id=USER, now=MID_PHASE_ONE)
+    assert done_again["proposed"] is True, "two tasks is a different question from one"
+
+
+def test_dismissing_without_a_proposal_is_refused(db_session, plan):
+    first = _phases(db_session, plan)[0]
+    _task(db_session, plan, "Publish it", phase=first)
+
+    with pytest.raises(ValueError, match="nothing to decline"):
+        pa.dismiss_phase_advance(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+
+def test_a_dismissed_proposal_cannot_be_confirmed_by_accident_but_can_on_purpose(db_session, plan, monkeypatch):
+    """Dismissal silences the proposal; it does not lock the phase. The human may change
+    their mind, and confirming is an explicit act against the same evidence."""
+    monkeypatch.setattr(pa, "_now", lambda: MID_PHASE_ONE)
+    first = _phases(db_session, plan)[0]
+    _task(db_session, plan, "Write the framework", phase=first, status="completed")
+    pa.dismiss_phase_advance(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+    result = pa.confirm_phase_advance(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+    assert result["completed"]["status"] == PHASE_COMPLETE
+
+
+# ── ★ reopening: the confirmation was a mistake ───────────────────────────────────────
+
+def _confirm_first(db, plan, monkeypatch):
+    monkeypatch.setattr(pa, "_now", lambda: MID_PHASE_ONE)
+    first = _phases(db, plan)[0]
+    _task(db, plan, "Write the framework", phase=first, status="completed")
+    return pa.confirm_phase_advance(db, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+
+def test_reopening_reverses_the_confirmation(db_session, plan, monkeypatch):
+    _confirm_first(db_session, plan, monkeypatch)
+    first, second, _ = _phases(db_session, plan)
+    assert (first.status, second.status) == (PHASE_COMPLETE, PHASE_ACTIVE)
+
+    result = pa.reopen_phase(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+    db_session.expire_all()
+    first, second, _ = _phases(db_session, plan)
+
+    assert (first.status, second.status) == (PHASE_ACTIVE, PHASE_PENDING)
+    assert first.completed_at is None and second.started_at is None
+    assert result["plan_phase"] == 1
+    assert db_session.query(MasterPlan).get(plan.id).phase == 1
+    assert pa.frontier_phase(_phases(db_session, plan)) is first
+
+
+def test_reopening_leaves_moved_tasks_where_they_are(db_session, plan, monkeypatch):
+    """Moving them back would guess the human wants the old scheduling rather than the phase.
+    The ids were returned at confirmation and a task can be moved again."""
+    monkeypatch.setattr(pa, "_now", lambda: AFTER_PHASE_ONE)
+    first, second, _ = _phases(db_session, plan)
+    late = _task(db_session, plan, "Publish it", phase=first)
+    pa.confirm_phase_advance(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+    assert db_session.query(Task).get(late.id).phase_id == second.id
+
+    pa.reopen_phase(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+    assert db_session.query(Task).get(late.id).phase_id == second.id
+
+
+def test_only_the_most_recently_closed_phase_can_reopen(db_session, plan):
+    """A hole in the middle of the chain is not a state the plan can be in."""
+    first, second, third = _phases(db_session, plan)
+    first.status = PHASE_COMPLETE
+    second.status = PHASE_COMPLETE
+    third.status = PHASE_ACTIVE
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="reopen 'Expansion and Scaling' first"):
+        pa.reopen_phase(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+    result = pa.reopen_phase(db_session, masterplan_id=plan.id, phase_id=second.id, user_id=USER)
+    assert result["stepped_back"]["status"] == PHASE_PENDING
+
+
+def test_the_last_phase_can_reopen_after_the_plan_completes(db_session, plan):
+    phases = _phases(db_session, plan)
+    for row in phases:
+        row.status = PHASE_COMPLETE
+    db_session.commit()
+
+    result = pa.reopen_phase(db_session, masterplan_id=plan.id, phase_id=phases[2].id, user_id=USER)
+
+    assert result["stepped_back"] is None
+    assert result["plan_phase"] == 3
+
+
+def test_reopening_a_phase_that_is_not_complete_is_refused(db_session, plan):
+    first = _phases(db_session, plan)[0]
+    with pytest.raises(ValueError, match="nothing to reopen"):
+        pa.reopen_phase(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+
+def test_reopening_clears_an_old_dismissal(db_session, plan, monkeypatch):
+    """A reopened phase is a fresh question."""
+    monkeypatch.setattr(pa, "_now", lambda: MID_PHASE_ONE)
+    first = _phases(db_session, plan)[0]
+    _task(db_session, plan, "Write the framework", phase=first, status="completed")
+    pa.dismiss_phase_advance(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+    pa.confirm_phase_advance(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+    pa.reopen_phase(db_session, masterplan_id=plan.id, phase_id=first.id, user_id=USER)
+
+    assert pa.propose_phase_advance(db_session, masterplan_id=plan.id, user_id=USER, now=MID_PHASE_ONE)["proposed"] is True

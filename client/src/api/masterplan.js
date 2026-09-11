@@ -93,3 +93,16 @@ export function confirmPhaseAdvance(planId, phaseId) {
     body: JSON.stringify({ phase_id: phaseId }),
   });
 }
+
+// "Not done." The proposal returns when the phase's attached tasks change.
+export function dismissPhaseAdvance(planId, phaseId) {
+  return authRequest(`/apps/masterplans/${planId}/phase-advance/dismiss`, {
+    method: "POST",
+    body: JSON.stringify({ phase_id: phaseId }),
+  });
+}
+
+// Reverse a confirmation. Only the most recently closed phase can reopen.
+export function reopenPhase(planId, phaseId) {
+  return authRequest(`/apps/masterplans/${planId}/phases/${phaseId}/reopen`, { method: "POST" });
+}

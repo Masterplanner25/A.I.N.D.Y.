@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   listMasterPlans,
+  getMasterPlan,
   activateMasterPlan,
   setMasterplanAnchor,
   getMasterplanProjection,
@@ -13,6 +14,7 @@ import { safeMap } from "../../utils/safe";
 import { useToast } from "../../utils/useToast";
 import { useMasterplanProjection } from "../../context/MasterplanProjectionContext.jsx";
 import PhasePanel from "./PhasePanel.jsx";
+import PlanStructure from "./PlanStructure.jsx";
 
 const STATUS_BADGE = {
   active: { label: "ACTIVE", color: "#00ffaa" },
@@ -148,6 +150,56 @@ function AnchorModal({ planId, onClose, onSaved }) {
       </div>
     </div>);
 
+}
+
+// The plan itself. The list endpoint carries metadata only; `structure_json` — the vision,
+// the mechanism, the domains, the success criteria, the owner's own words for what the plan
+// is — comes from the single-plan GET and, until this, was never shown after locking.
+function PlanDetail({ planId }) {
+  const [open, setOpen] = useState(false);
+  const [structure, setStructure] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const toggle = async () => {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (structure) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const plan = await getMasterPlan(planId);
+      setStructure(plan?.structure_json || plan?.masterplan_get_result?.structure_json || null);
+    } catch (err) {
+      setError(err?.message || "Could not load the plan.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: "8px" }}>
+      <button
+        onClick={toggle}
+        aria-expanded={open}
+        style={{
+          width: "100%", padding: "7px", backgroundColor: "transparent", color: "#71717a",
+          border: "1px solid #27272a", borderRadius: "6px", cursor: "pointer",
+          fontWeight: "600", fontSize: "11px",
+        }}>
+        {open ? "HIDE PLAN" : "VIEW PLAN"}
+      </button>
+      {open &&
+        <div data-testid="plan-detail" style={{ marginTop: "10px", padding: "12px", background: "#111113", borderRadius: "6px", border: "1px solid #27272a" }}>
+          {loading && <p style={{ margin: 0, fontSize: "12px", color: "#52525b" }}>Loading the plan...</p>}
+          {error && <p style={{ margin: 0, fontSize: "12px", color: "#f87171" }}>{error}</p>}
+          {!loading && !error && !structure &&
+            <p style={{ margin: 0, fontSize: "12px", color: "#52525b" }}>This plan has no structure recorded.</p>
+          }
+          {structure && <PlanStructure structure={structure} compact />}
+        </div>
+      }
+    </div>);
 }
 
 function ETAProjectionPanel({ planId }) {
@@ -374,6 +426,9 @@ export default function MasterPlanDashboard() {
 
                 {/* Phases and the phase-advance proposal — any plan with a strategy layer */}
                 {(plan.is_active || plan.status === "locked") && <PhasePanel planId={plan.id} />}
+
+                {/* The plan itself — vision, mechanism, domains, criteria */}
+                <PlanDetail planId={plan.id} />
 
                 {/* Anchor button — available on active or locked plans */}
                 {(plan.is_active || plan.status === "locked") &&

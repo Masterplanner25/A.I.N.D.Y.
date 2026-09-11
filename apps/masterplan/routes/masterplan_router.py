@@ -430,11 +430,7 @@ async def confirm_phase_advance_route(
                 db, masterplan_id=plan.id, phase_id=body.phase_id, user_id=user_id
             )
         except ValueError as exc:
-            # Not the current phase, or nothing proposes closing it. The state is what it
-            # was; the caller asked for something the plan cannot do right now.
-            raise HTTPException(
-                status_code=409, detail={"error": "phase_advance_refused", "message": str(exc)}
-            ) from exc
+            raise _refused(exc) from exc
 
     result = await execute_with_pipeline(
         request=request,
@@ -442,6 +438,82 @@ async def confirm_phase_advance_route(
         handler=handler,
         user_id=user_id,
         input_payload={"plan_id": plan_id, "phase_id": body.phase_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+def _refused(exc: ValueError) -> HTTPException:
+    # Not the current phase, nothing to decline, nothing to reopen. The state is what it was;
+    # the caller asked for something the plan cannot do right now.
+    return HTTPException(
+        status_code=409, detail={"error": "phase_advance_refused", "message": str(exc)}
+    )
+
+
+@router.post("/{plan_id}/phase-advance/dismiss")
+@limiter.limit("30/minute")
+async def dismiss_phase_advance_route(
+    request: Request,
+    plan_id: int,
+    body: PhaseAdvanceConfirmRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """The human's other half: "not done". The proposal returns when the phase's work changes."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.phase_advance import dismiss_phase_advance
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        try:
+            return dismiss_phase_advance(
+                db, masterplan_id=plan.id, phase_id=body.phase_id, user_id=user_id
+            )
+        except ValueError as exc:
+            raise _refused(exc) from exc
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.phase_advance.dismiss",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id, "phase_id": body.phase_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+@router.post("/{plan_id}/phases/{phase_id}/reopen")
+@limiter.limit("30/minute")
+async def reopen_phase_route(
+    request: Request,
+    plan_id: int,
+    phase_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Reverse a confirmation. Only the most recently closed phase can reopen."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.phase_advance import reopen_phase
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        try:
+            return reopen_phase(db, masterplan_id=plan.id, phase_id=phase_id, user_id=user_id)
+        except ValueError as exc:
+            raise _refused(exc) from exc
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.phase.reopen",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id, "phase_id": phase_id},
         metadata={"db": db},
     )
     return _with_execution_envelope(result)

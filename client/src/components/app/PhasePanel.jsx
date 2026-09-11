@@ -3,6 +3,8 @@ import {
   getStrategyLayer,
   getPhaseAdvanceProposal,
   confirmPhaseAdvance,
+  dismissPhaseAdvance,
+  reopenPhase,
 } from "../../api/masterplan.js";
 import { safeMap } from "../../utils/safe";
 
@@ -10,8 +12,11 @@ import { safeMap } from "../../utils/safe";
 //
 // STRATEGY_LAYER_SPEC §8 step 3b. The layer was real data nobody could see; this is the first
 // thing that renders it. The proposal card is the house pattern — system proposes, human
-// confirms — so the only button here agrees with something the system already said. There is
-// deliberately no "close phase" button without a proposal behind it: the API refuses that too.
+// confirms — or declines. The first live proposal drew "what if the phase isn't complete?", so
+// the card has two buttons, and "not done" is the one that records something the plan did
+// not know: that its phase is under-described. There is deliberately no "close phase" button
+// without a proposal behind it — the API refuses that too — and the only undo is reopening
+// the most recently closed phase.
 
 const PHASE_COLOR = {
   complete: "#00ffaa",
@@ -49,8 +54,9 @@ export default function PhasePanel({ planId }) {
   const [layer, setLayer] = useState(null);
   const [proposal, setProposal] = useState(null);
   const [review, setReview] = useState(null);
-  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(null);   // "confirm" | "dismiss" | "reopen" | null
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   const load = async () => {
     try {
@@ -73,20 +79,49 @@ export default function PhasePanel({ planId }) {
   const phases = layer?.phases || [];
   if (phases.length === 0) return null;
 
-  const handleConfirm = async () => {
-    if (!proposal?.phase?.id) return;
-    setConfirming(true);
+  const act = async (kind, call) => {
+    setBusy(kind);
     setError(null);
+    setNotice(null);
     try {
-      const result = await confirmPhaseAdvance(planId, proposal.phase.id);
-      setReview(result);
+      const result = await call();
       await load();
+      return result;
     } catch (err) {
       setError(refusalMessage(err));
+      return null;
     } finally {
-      setConfirming(false);
+      setBusy(null);
     }
   };
+
+  const handleConfirm = async () => {
+    if (!proposal?.phase?.id) return;
+    const result = await act("confirm", () => confirmPhaseAdvance(planId, proposal.phase.id));
+    if (result) setReview(result);
+  };
+
+  const handleDismiss = async () => {
+    if (!proposal?.phase?.id) return;
+    const result = await act("dismiss", () => dismissPhaseAdvance(planId, proposal.phase.id));
+    if (result) {
+      setNotice(`Noted. ${proposal.phase.name} stays open — the proposal comes back when its tasks change, so attach the work that is missing.`);
+    }
+  };
+
+  const handleReopen = async (phase) => {
+    const result = await act("reopen", () => reopenPhase(planId, phase.id));
+    if (result) {
+      setReview(null);
+      setNotice(`${phase.name} reopened.${result.stepped_back ? ` ${result.stepped_back.name} is pending again.` : ""}`);
+    }
+  };
+
+  // The one phase that can be reopened: the most recently closed one. The API refuses any
+  // other, so the button is only drawn where it would work.
+  const lastClosed = [...phases].reverse().find((p) => p.status === "complete");
+  const nothingClosedAfter = lastClosed && !phases.some((p) => p.ordinal > lastClosed.ordinal && p.status === "complete");
+  const reopenable = nothingClosedAfter ? lastClosed : null;
 
   return (
     <div style={{ marginTop: "12px", padding: "10px", background: "#111113", borderRadius: "6px", border: "1px solid #27272a" }}>
@@ -116,6 +151,15 @@ export default function PhasePanel({ planId }) {
               {isCurrent && phase.status === "pending" &&
                 <span style={{ fontSize: "9px", color: "#a1a1aa" }}>current</span>
               }
+              {reopenable?.id === phase.id &&
+                <button
+                  onClick={() => handleReopen(phase)}
+                  disabled={busy !== null}
+                  title="Reverse the confirmation. Tasks stay where they are."
+                  style={{ marginLeft: "auto", background: "transparent", color: "#71717a", border: "1px solid #3f3f46", borderRadius: "4px", fontSize: "9px", padding: "1px 6px", cursor: "pointer" }}>
+                  {busy === "reopen" ? "..." : "REOPEN"}
+                </button>
+              }
             </li>
           );
         })}
@@ -130,20 +174,43 @@ export default function PhasePanel({ planId }) {
             {describeEvidence(proposal)}
             {proposal.next_phase && ` Confirming opens ${proposal.next_phase.name}.`}
           </p>
-          <button
-            onClick={handleConfirm}
-            disabled={confirming}
-            style={{
-              width: "100%", padding: "7px", backgroundColor: "#18181b", color: "#facc15",
-              border: "1px solid #facc1560", borderRadius: "6px", cursor: "pointer",
-              fontWeight: "700", fontSize: "11px",
-            }}>
-            {confirming ? "CONFIRMING..." : "CONFIRM — CLOSE PHASE"}
-          </button>
-          {error &&
-            <p style={{ margin: "8px 0 0", fontSize: "11px", color: "#f87171" }}>{error}</p>
-          }
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={handleConfirm}
+              disabled={busy !== null}
+              style={{
+                flex: 1, padding: "7px", backgroundColor: "#18181b", color: "#facc15",
+                border: "1px solid #facc1560", borderRadius: "6px", cursor: "pointer",
+                fontWeight: "700", fontSize: "11px",
+              }}>
+              {busy === "confirm" ? "CONFIRMING..." : "CONFIRM — CLOSE PHASE"}
+            </button>
+            <button
+              onClick={handleDismiss}
+              disabled={busy !== null}
+              title="The phase is not done. The proposal comes back when its tasks change."
+              style={{
+                flex: 1, padding: "7px", backgroundColor: "transparent", color: "#a1a1aa",
+                border: "1px solid #3f3f46", borderRadius: "6px", cursor: "pointer",
+                fontWeight: "700", fontSize: "11px",
+              }}>
+              {busy === "dismiss" ? "..." : "NOT DONE"}
+            </button>
+          </div>
         </div>
+      }
+
+      {proposal?.dismissed && !proposal.proposed &&
+        <p data-testid="phase-advance-dismissed" style={{ margin: "8px 0 0", fontSize: "11px", color: "#71717a" }}>
+          You said {proposal.phase.name} is not done, with {proposal.dismissed.task_count} {proposal.dismissed.task_count === 1 ? "task" : "tasks"} attached. The question returns when that changes.
+        </p>
+      }
+
+      {notice &&
+        <p data-testid="phase-advance-notice" style={{ margin: "8px 0 0", fontSize: "11px", color: "#a1a1aa" }}>{notice}</p>
+      }
+      {error &&
+        <p style={{ margin: "8px 0 0", fontSize: "11px", color: "#f87171" }}>{error}</p>
       }
 
       {review &&

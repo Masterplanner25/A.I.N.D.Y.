@@ -1168,6 +1168,22 @@ Confirm Phase Advance — the human's half: closes the proposed phase, opens the
 
 **Response 200:** completed, activated, plan_phase: integer, review; 409 when the phase is not current or nothing proposes closing it
 
+#### POST /apps/masterplans/{plan_id}/phase-advance/dismiss
+Dismiss Phase Advance — the human's other half, "not done"; the proposal returns when the phase's attached tasks change
+
+**Parameters:** plan_id (path): integer
+
+**Body:** phase_id: string
+
+**Response 200:** phase, dismissed: {at, task_count}, returns_when; 409 when nothing is proposed
+
+#### POST /apps/masterplans/{plan_id}/phases/{phase_id}/reopen
+Reopen Phase — reverse a confirmation; only the most recently closed phase can reopen, and tasks stay where they are
+
+**Parameters:** plan_id (path): integer, phase_id (path): string
+
+**Response 200:** reopened, stepped_back, plan_phase: integer; 409 when the phase is not complete or not the most recently closed
+
 #### GET /apps/masterplans/{plan_id}/projection
 Get Masterplan Projection
 
