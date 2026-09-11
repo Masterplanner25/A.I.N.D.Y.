@@ -101,7 +101,12 @@ def calculate_wcu(db: Session, masterplan_id: int, user_id: str) -> dict:
 
     prior_phase = plan.phase
     try:
-        plan.phase = evaluate_phase(plan)
+        # ★ A plan with a strategy layer is not flipped by a threshold. Its phase is whatever
+        # `plan_phases` says, and it moves only when the human confirms a proposal
+        # (`phase_advance.confirm_phase_advance`, STRATEGY_LAYER_SPEC §6 Q8). The threshold
+        # gate stays for plans that predate the layer, where it is the only reading there is.
+        layer_phase = _phase_from_layer(db, plan.id)
+        plan.phase = layer_phase if layer_phase is not None else evaluate_phase(plan)
     except Exception as exc:  # pragma: no cover - defensive; WCU write must not break on phase
         logger.warning("[WCU] evaluate_phase failed for plan %s (WCU still persisted): %s", plan.id, exc)
 
@@ -115,6 +120,22 @@ def calculate_wcu(db: Session, masterplan_id: int, user_id: str) -> dict:
         "phase": plan.phase,
         "phase_advanced": bool(plan.phase != prior_phase),
     }
+
+
+def _phase_from_layer(db: Session, masterplan_id: int) -> int | None:
+    """The legacy integer read off `plan_phases`; `None` when the plan has no layer."""
+    from apps.masterplan.services.phase_advance import derive_legacy_phase
+    from apps.masterplan.strategy_layer import PlanPhase
+
+    phases = (
+        db.query(PlanPhase)
+        .filter(PlanPhase.masterplan_id == int(masterplan_id))
+        .order_by(PlanPhase.ordinal.asc(), PlanPhase.created_at.asc())
+        .all()
+    )
+    if not phases:
+        return None
+    return derive_legacy_phase(phases)
 
 
 def recalculate_all_wcu(db: Session) -> int:

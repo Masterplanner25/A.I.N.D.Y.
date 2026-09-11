@@ -1,6 +1,6 @@
 ---
 title: "App HTTP REST API Reference"
-last_verified: "2026-09-07"
+last_verified: "2026-09-10"
 api_version: "1.0"
 status: current
 owner: "apps-team"
@@ -1152,12 +1152,35 @@ Lock Plan
 
 **Response 200:** unspecified
 
+#### GET /apps/masterplans/{plan_id}/phase-advance
+Get Phase Advance Proposal — what the system proposes about the plan's current phase; writes nothing (`STRATEGY_LAYER_SPEC` §6 Q8)
+
+**Parameters:** plan_id (path): integer
+
+**Response 200:** proposed: boolean, reason: string | null, phase, next_phase, evidence
+
+#### POST /apps/masterplans/{plan_id}/phase-advance/confirm
+Confirm Phase Advance — the human's half: closes the proposed phase, opens the next, carries open work forward and returns the review
+
+**Parameters:** plan_id (path): integer
+
+**Body:** phase_id: string
+
+**Response 200:** completed, activated, plan_phase: integer, review; 409 when the phase is not current or nothing proposes closing it
+
 #### GET /apps/masterplans/{plan_id}/projection
 Get Masterplan Projection
 
 **Parameters:** plan_id (path): integer
 
 **Response 200:** unspecified
+
+#### GET /apps/masterplans/{plan_id}/strategy-layer
+Get Strategy Layer — objectives, phases, strategies and unhoused emergent strategies for one plan
+
+**Parameters:** plan_id (path): integer
+
+**Response 200:** masterplan_id, phase: integer, objectives, phases, strategies, unhoused_emergent
 
 ### Memory
 

@@ -330,3 +330,118 @@ async def activate_masterplan_cascade(
         metadata={"db": db},
     )
     return _with_execution_envelope(result)
+
+
+# ------------------------------
+# STRATEGY LAYER — read, propose, confirm
+# ------------------------------
+# STRATEGY_LAYER_SPEC §8 step 3b. The layer was real data nobody could see; these are the
+# first routes that read it. Phase advance is a PROPOSAL the human confirms (§6 Q8), which is
+# why it is two routes and not a status field on the plan.
+
+
+class PhaseAdvanceConfirmRequest(BaseModel):
+    phase_id: str
+
+
+@router.get("/{plan_id}/strategy-layer")
+@limiter.limit("60/minute")
+async def get_strategy_layer(
+    request: Request,
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services import strategy_layer_service as layer
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        return {
+            "masterplan_id": plan.id,
+            "phase": plan.phase,
+            "objectives": layer.list_objectives(db, masterplan_id=plan.id),
+            "phases": layer.list_phases(db, masterplan_id=plan.id),
+            "strategies": layer.list_strategies(db, masterplan_id=plan.id),
+            "unhoused_emergent": layer.unhoused_emergent_strategies(db, masterplan_id=plan.id),
+        }
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.strategy_layer",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+@router.get("/{plan_id}/phase-advance")
+@limiter.limit("60/minute")
+async def get_phase_advance_proposal(
+    request: Request,
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """What the system proposes about the plan's current phase. Reads only."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.phase_advance import propose_phase_advance
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        return propose_phase_advance(db, masterplan_id=plan.id, user_id=user_id)
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.phase_advance.propose",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+@router.post("/{plan_id}/phase-advance/confirm")
+@limiter.limit("30/minute")
+async def confirm_phase_advance_route(
+    request: Request,
+    plan_id: int,
+    body: PhaseAdvanceConfirmRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """The human's half: close the proposed phase, open the next, get the review back."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.phase_advance import confirm_phase_advance
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        try:
+            return confirm_phase_advance(
+                db, masterplan_id=plan.id, phase_id=body.phase_id, user_id=user_id
+            )
+        except ValueError as exc:
+            # Not the current phase, or nothing proposes closing it. The state is what it
+            # was; the caller asked for something the plan cannot do right now.
+            raise HTTPException(
+                status_code=409, detail={"error": "phase_advance_refused", "message": str(exc)}
+            ) from exc
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.phase_advance.confirm",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id, "phase_id": body.phase_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
