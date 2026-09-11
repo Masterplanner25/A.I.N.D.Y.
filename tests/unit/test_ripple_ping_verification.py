@@ -483,3 +483,81 @@ def test_the_batch_charges_for_fetches_not_for_candidates(db_session, monkeypatc
         row.verification_note != pv.BUDGET_EXHAUSTED_NOTE
         for row in db_session.query(PingDB).all()
     )
+
+
+# ── ★ debts are paid off the table, not off the search ─────────────────────────────────
+
+def test_settlement_pays_debts_oldest_first_without_a_search(db_session, monkeypatch):
+    """★ #327 paid a debt only when the search returned the same URL again, which an answer
+    engine mostly does not. Measured 2026-09-11: 158 → 233 stranded rows with detection
+    running. Settlement reads them off the table."""
+    from apps.rippletrace.services import ripple_detection as rd
+
+    drop = _drop(db_session)
+    urls = [f"https://blog.example/{n}" for n in range(3)]
+    for n, url in enumerate(urls):
+        hit = rd.SearchHit(url=url, title="X", snippet="", published=None)
+        ping, _ = rd._record_ping(
+            db_session, drop_point=drop, hit=hit,
+            verification=pv.UNVERIFIED, verification_note=pv.BUDGET_EXHAUSTED_NOTE,
+        )
+        ping.date_detected = datetime(2026, 1, 1 + n)
+    db_session.commit()
+    verdicts = {urls[0]: (pv.VERIFIED, None), urls[1]: (pv.REJECTED, "no"), urls[2]: (pv.UNVERIFIED, "HTTP 403")}
+    fetched = []
+    monkeypatch.setattr(rd, "verify_hit", lambda **kw: fetched.append(kw["hit_url"]) or verdicts[kw["hit_url"]])
+    monkeypatch.setattr(rd, "analyze_drop_point", lambda *a, **k: None)
+
+    result = rd.settle_verification_debts(db_session, user_id=str(USER), budget=2)
+    rows = {r.external_url: r for r in db_session.query(PingDB).filter(PingDB.drop_point_id == drop.id).all()}
+
+    assert fetched == urls[:2], "oldest first, and only as many as the budget"
+    assert result == {"settled": 2, "verified": 1, "unverified": 0, "removed": 1, "remaining": 0}
+    assert rows[urls[0]].verification == "verified"
+    assert urls[1] not in rows
+    assert rows[urls[2]].verification_note == pv.BUDGET_EXHAUSTED_NOTE, "still owed; next run"
+
+
+def test_the_batch_settles_debts_first_and_charges_them_to_the_budget(db_session, monkeypatch):
+    from apps.rippletrace.services import ripple_detection as rd
+
+    drop = _drop(db_session)
+    owed = rd.SearchHit(url="https://blog.example/owed", title="X", snippet="", published=None)
+    rd._record_ping(db_session, drop_point=drop, hit=owed,
+                    verification=pv.UNVERIFIED, verification_note=pv.BUDGET_EXHAUSTED_NOTE)
+    db_session.commit()
+    fresh = rd.SearchHit(url="https://blog.example/fresh", title="X", snippet="", published=None)
+    monkeypatch.setattr(rd, "search", lambda *a, **k: [fresh])
+    monkeypatch.setattr(rd, "verify_hit", lambda **kw: (pv.VERIFIED, None))
+    monkeypatch.setattr(rd, "is_configured", lambda: True)
+    monkeypatch.setattr(rd, "_due_drop_points", lambda *a, **k: [drop])
+    monkeypatch.setattr(rd, "MAX_VERIFICATIONS_PER_RUN", 2)
+
+    summary = rd.detect_batch(db_session, user_id=str(USER))
+
+    assert summary["settled"] == {"settled": 1, "verified": 1, "unverified": 0, "removed": 0}
+    assert summary["verified"] == 2, "one settled, one new"
+    assert summary["results"][0]["fetched"] == 1
+
+
+def test_settlement_leaves_the_search_path_its_share(db_session, monkeypatch):
+    """Half the budget for debts, whatever is owed. A run that only ever paid debts would
+    never check a new drop point."""
+    from apps.rippletrace.services import ripple_detection as rd
+
+    drop = _drop(db_session)
+    for n in range(5):
+        hit = rd.SearchHit(url=f"https://blog.example/owed{n}", title="X", snippet="", published=None)
+        rd._record_ping(db_session, drop_point=drop, hit=hit,
+                        verification=pv.UNVERIFIED, verification_note=pv.BUDGET_EXHAUSTED_NOTE)
+    db_session.commit()
+    monkeypatch.setattr(rd, "search", lambda *a, **k: [])
+    monkeypatch.setattr(rd, "verify_hit", lambda **kw: (pv.VERIFIED, None))
+    monkeypatch.setattr(rd, "is_configured", lambda: True)
+    monkeypatch.setattr(rd, "_due_drop_points", lambda *a, **k: [])
+    monkeypatch.setattr(rd, "MAX_VERIFICATIONS_PER_RUN", 4)
+
+    summary = rd.detect_batch(db_session, user_id=str(USER))
+
+    assert summary["settled"]["settled"] == 2
+

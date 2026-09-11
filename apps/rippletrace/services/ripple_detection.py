@@ -42,6 +42,7 @@ from apps.rippletrace.models import DropPointDB, PingDB
 from apps.rippletrace.services.content_fetch import infer_platform, normalize_url
 from apps.rippletrace.services.ping_verification import (
     BUDGET_EXHAUSTED_NOTE,
+    DEBT_SETTLEMENT_SHARE,
     MAX_VERIFICATIONS_PER_RUN,
     REJECTED,
     UNVERIFIED,
@@ -366,6 +367,71 @@ def detect_for_drop_point(
     }
 
 
+def settle_verification_debts(
+    db: Session, *, user_id: str | None, budget: int
+) -> dict[str, Any]:
+    """Pay budget debts directly: fetch the stranded pings, oldest first, up to `budget`.
+
+    ★ #327 made a debt payable — but only when a later search returned the same URL for the
+    same drop point, which an answer engine mostly does not. Measured 2026-09-11: the debt
+    grew from 158 to 233 with detection running. This reads the debts off the table instead,
+    so paying one never depends on the search. Each is fetched and then upgraded, left
+    unverified with the real reason, or deleted — the same three outcomes as at detection.
+
+    Returns the settlement counts and, as `remaining`, what is left of the budget for new
+    candidates.
+    """
+    result = {"settled": 0, "verified": 0, "unverified": 0, "removed": 0, "remaining": budget}
+    if budget <= 0:
+        return result
+
+    query = (
+        db.query(PingDB, DropPointDB)
+        .join(DropPointDB, DropPointDB.id == PingDB.drop_point_id)
+        .filter(PingDB.verification_note == BUDGET_EXHAUSTED_NOTE)
+    )
+    if user_id:
+        import uuid as _uuid
+
+        try:
+            query = query.filter(DropPointDB.user_id == _uuid.UUID(str(user_id)))
+        except (TypeError, ValueError):
+            return result
+    rows = query.order_by(PingDB.date_detected.asc()).limit(budget).all()
+
+    touched: set[str] = set()
+    for ping, drop_point in rows:
+        state, note = verify_hit(
+            hit_url=ping.external_url or "",
+            drop_url=drop_point.url or "",
+            drop_title=drop_point.title,
+            db=db,
+            user_id=user_id or (str(drop_point.user_id) if drop_point.user_id else None),
+        )
+        result["settled"] += 1
+        if state == REJECTED:
+            db.delete(ping)
+            result["removed"] += 1
+        else:
+            ping.verification = state
+            ping.verification_note = note
+            result[state] += 1
+            if state == VERIFIED:
+                touched.add(drop_point.id)
+    db.commit()
+
+    # A newly verified ping changes a score; nothing else here does.
+    for drop_point_id in touched:
+        try:
+            analyze_drop_point(drop_point_id, db)
+        except Exception as exc:
+            logger.warning(
+                "[rippletrace] scoring failed after settlement for %s: %s", drop_point_id, exc
+            )
+    result["remaining"] = max(0, budget - result["settled"])
+    return result
+
+
 def _due_drop_points(db: Session, *, user_id: str | None, limit: int) -> list[DropPointDB]:
     cutoff = _utcnow() - MIN_DETECTION_INTERVAL
     query = db.query(DropPointDB).filter(DropPointDB.url.isnot(None))
@@ -406,7 +472,15 @@ def detect_batch(
     # `unverified` rather than skipped, so nothing is lost — the next run revisits them,
     # which is why the budget is charged for fetches actually made and not for `kept`:
     # a candidate already decided on an earlier run is skipped for free.
-    budget = MAX_VERIFICATIONS_PER_RUN
+    #
+    # Debts first, up to their share; the search-path revisit below still applies to any
+    # that remain and happen to be returned again.
+    settlement = settle_verification_debts(
+        db, user_id=user_id, budget=int(MAX_VERIFICATIONS_PER_RUN * DEBT_SETTLEMENT_SHARE)
+    )
+    summary["settled"] = {k: v for k, v in settlement.items() if k != "remaining"}
+    summary["verified"] += settlement["verified"]
+    budget = MAX_VERIFICATIONS_PER_RUN - settlement["settled"]
     for drop_point in due:
         try:
             outcome = detect_for_drop_point(
