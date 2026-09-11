@@ -680,10 +680,17 @@ than waiting behind a flag.
 
 ## RIPPLE-PINGS-NOT-ECHOES-1: a ping records a page about the same subject, not one that cites you (app-owned, P1)
 
-**Status: FIXED 2026-09-07; clean-host re-run 2026-09-10 confirmed 0 verified of 135 kept
-(33 fetched and demonstrably not citations) and exposed that budget-exhausted pings were never
-revisited — fixed the same day, §6b.** Full write-up:
-`docs/verification/DEFECT_RIPPLE_PINGS_ARE_NOT_ECHOES.md` §6.
+**Status: the CODE is fixed; the INSTRUMENT is the open question, and it is a decision.**
+Verification shipped 2026-09-07 (§6); budget debts made payable 09-10 (§6b) and then actually
+paid — off the table, not off the search — on 09-11 (§6c), after the debt was measured
+*growing* under the 09-10 fix. Three measurements on three different days, the last one a
+200-fetch run on a quiet host: **0 verified of 620.** 117 pages fetched and read that run
+demonstrably do not cite the work; 146 rows across the table are publishers that refuse
+scripted fetches (403). The pipeline is no longer the suspect. The answer engine's citations
+do not point at these pieces, and search-then-verify has found no echo of any of the 214
+drops. **Next step is remedy 3 — a different instrument, one that indexes pages containing a
+phrase — which is a provider/cost decision for the owner, not a code change.** Full write-up:
+`docs/verification/DEFECT_RIPPLE_PINGS_ARE_NOT_ECHOES.md` §6–§6c.
 
 Detection now fetches each candidate and checks it for the drop point's URL or title. Three
 states — `verified` (scores), `unverified` (could not be fetched, or predates the check; does
