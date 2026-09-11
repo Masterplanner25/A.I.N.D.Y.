@@ -220,6 +220,27 @@ noticed it. The batch now charges its budget by fetches made, not by candidates 
 The cap itself stays at 60. It is doing its job; it just needed to be a queue rather than a
 verdict.
 
+### ★ 6c. It was not a queue either (2026-09-11)
+
+The morning after: **233 stranded rows, up from 158**, with detection running twice overnight
+(a 6-hourly job; each run ~60 fetches in ~2 minutes, ~2 s each). Still 0 verified of 602.
+
+Two things §6b got wrong, both measured rather than reasoned:
+
+1. **Capacity was below production.** A run keeps ~135 candidates and had 60 fetches. No
+   queue discipline drains a queue that fills faster than it empties.
+2. **§6b's revisit depended on the search.** A debt was paid only when a later search returned
+   the same URL for the same drop point — which an answer engine, by construction, mostly
+   does not. Most debts were never *eligible* to be paid.
+
+Fixed: `settle_verification_debts` reads stranded pings **off the table**, oldest first, and
+fetches them directly — same three outcomes as at detection — taking up to half of each run's
+budget so new drop points are still checked. The budget is 200 (~7 minutes per run; ~65 to
+spare over production). `MAX_RESULTS_PER_DROP_POINT` stays at 20: search cost is per request,
+and with 0 verified of 602 nobody yet knows whether the tail of the results is where a real
+citation would sit. At 233 owed and ~100 settled per run, the backlog clears in about a day of
+runs — and then the number this whole document is waiting for is finally a number.
+
 ### ★ The intended, visible consequence
 
 `threadweaver` counts `verified` pings only, and the migration labels all 256 existing rows

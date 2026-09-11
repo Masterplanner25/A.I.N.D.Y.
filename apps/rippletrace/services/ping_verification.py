@@ -60,7 +60,18 @@ MIN_TITLE_MATCH_CHARS = 25
 # candidates per run (10 drop points x 20 results). This bounds a single run so verification
 # cannot turn a background job into an outbound crawl. Anything beyond it is left `unverified`
 # rather than skipped, so the ping still exists and simply does not score.
-MAX_VERIFICATIONS_PER_RUN = 60
+#
+# ★ Was 60. Measured 2026-09-11: a run produces ~135 kept candidates and each fetch takes
+# ~2 s, so 60 fetches was ~2 minutes of a 6-hourly job and the budget debt GREW — 158 stranded
+# rows on 09-10, 233 the next morning — because capacity was below production and #327's
+# revisit only fired when the search happened to return the same URL again. 200 is ~7 minutes
+# per run: production is covered with ~65 to spare for settling old debts.
+MAX_VERIFICATIONS_PER_RUN = 200
+
+# How much of a run's budget the debt-settlement pass may take before new candidates get a
+# look. Half: old evidence is not more important than new, it is only older, and a run that
+# only ever paid debts would never check a new drop point.
+DEBT_SETTLEMENT_SHARE = 0.5
 
 # ★ The one `verification_note` that means "not looked at yet" rather than "looked and could
 # not see". A 403 is a fact about the publisher and re-fetching it every run would spend the
