@@ -211,7 +211,7 @@ def test_confirming_closes_the_phase_opens_the_next_and_moves_the_legacy_integer
     assert db_session.query(MasterPlan).get(plan.id).phase == 2
     assert result["review"] == {
         "reason": pa.REASON_WORK_COMPLETE, "early_by_days": 113,
-        "moved_task_ids": [], "moved_to_phase_id": None,
+        "moved_task_ids": [], "moved_strategy_ids": [], "moved_to_phase_id": None,
     }
 
 
@@ -523,7 +523,7 @@ def test_a_task_on_an_unlayered_plan_simply_has_no_phase(db_session):
 
 def test_a_phase_without_a_plan_is_refused(db_session, plan):
     first = _phases(db_session, plan)[0]
-    with pytest.raises(ValueError, match="requires a masterplan_id"):
+    with pytest.raises(ValueError, match="require a masterplan_id"):
         create_task(db_session, "x", user_id=str(USER), phase_id=first.id)
 
 

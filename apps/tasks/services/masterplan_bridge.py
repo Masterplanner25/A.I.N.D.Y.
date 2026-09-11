@@ -111,13 +111,16 @@ def recalculate_wcu_via_syscall(masterplan_id, user_id: str, db):
     return (result.get("data") or {}).get("wcu")
 
 
-def resolve_phase_via_syscall(masterplan_id, user_id: str, db, phase_id: str | None = None) -> str | None:
-    """The phase a new task on this plan belongs to, decided by masterplan.
+def resolve_phase_via_syscall(
+    masterplan_id, user_id: str, db, phase_id: str | None = None, strategy_id: str | None = None,
+) -> tuple[str | None, str | None]:
+    """`(phase_id, strategy_id)` a new task on this plan belongs to, decided by masterplan.
 
-    ★ Non-fatal when the plan has no layer (returns None) and fatal when a *requested* phase
-    is not on the plan — the first is a plan that predates phases, the second is a caller
-    error. A task with no phase is invisible to the strategy layer, so the default is the
-    plan's current phase rather than nothing.
+    ★ Non-fatal when the plan has no layer (returns Nones) and fatal when a *requested* phase
+    or strategy is not on the plan — the first is a plan that predates phases, the second is a
+    caller error. A task with no phase is invisible to the strategy layer, so the default is
+    the plan's current phase rather than nothing; a task under a strategy is scheduled where
+    the strategy is.
     """
     from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
 
@@ -131,10 +134,15 @@ def resolve_phase_via_syscall(masterplan_id, user_id: str, db, phase_id: str | N
     payload = {"masterplan_id": str(masterplan_id)}
     if phase_id:
         payload["phase_id"] = str(phase_id)
+    if strategy_id:
+        payload["strategy_id"] = str(strategy_id)
     result = get_dispatcher().dispatch("sys.v1.masterplan.resolve_phase", payload, ctx)
     if result["status"] != "success":
+        if strategy_id:
+            raise ValueError(f"strategy_not_on_plan:{strategy_id}")
         if phase_id:
             raise ValueError(f"phase_not_on_plan:{phase_id}")
-        return None
-    return (result.get("data") or {}).get("phase_id")
+        return None, None
+    data = result.get("data") or {}
+    return data.get("phase_id"), data.get("strategy_id")
 

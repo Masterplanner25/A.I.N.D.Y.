@@ -43,8 +43,17 @@ from sqlalchemy.orm import Session
 
 from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
 from apps.masterplan.masterplan import MasterPlan
-from apps.masterplan.services.strategy_layer_service import serialize_phase
-from apps.masterplan.strategy_layer import PHASE_ACTIVE, PHASE_COMPLETE, PHASE_PENDING, PlanPhase
+from apps.masterplan.services.strategy_layer_service import (
+    TERMINAL_STATUSES,
+    serialize_phase,
+)
+from apps.masterplan.strategy_layer import (
+    PHASE_ACTIVE,
+    PHASE_COMPLETE,
+    PHASE_PENDING,
+    PlanPhase,
+    PlanStrategy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +161,7 @@ def _dispatch_tasks(db: Session, name: str, payload: dict, *, user_id: Any) -> d
     ctx = SyscallContext(
         execution_unit_id=str(uuid.uuid4()),
         user_id=str(user_id) if user_id else "",
-        capabilities=["task.read", "task.update"],
+        capabilities=["task.read", "task.update", "task.delete"],
         trace_id="",
         metadata={"_db": db},
     )
@@ -168,16 +177,41 @@ def _dispatch_tasks(db: Session, name: str, payload: dict, *, user_id: Any) -> d
     return result.get("data") or {}
 
 
+def _strategies(db: Session, masterplan_id: int) -> list[PlanStrategy]:
+    return (
+        db.query(PlanStrategy)
+        .filter(PlanStrategy.masterplan_id == int(masterplan_id))
+        .order_by(PlanStrategy.created_at.asc())
+        .all()
+    )
+
+
 def _evidence(
     plan: MasterPlan, phases: list[PlanPhase], phase: PlanPhase, tasks: list[dict[str, Any]],
-    *, now: datetime,
+    *, now: datetime, strategies: list[PlanStrategy] | None = None,
 ) -> dict[str, Any]:
-    attached = [t for t in tasks if str(t.get("phase_id") or "") == phase.id]
+    """What the phase's work looks like: its strategies, and its direct tasks.
+
+    ★ A phase's work has two grains. A **strategy** is how the phase gets done — weeks or
+    months, and it finishes with a verdict (concluded, abandoned, displaced). A **direct
+    task** is an hours-sized thing attached to the phase with no strategy over it. Tasks
+    under a strategy count toward the strategy, not here; the strategy's verdict is what
+    the phase sees. So "work complete" is: every strategy has finished, and every direct
+    task is done, and there was at least one of either.
+    """
+    own = [st for st in (strategies or []) if st.phase_id == phase.id]
+    finished = [st for st in own if st.status in TERMINAL_STATUSES]
+    open_strategies = [st for st in own if st not in finished]
+
+    attached = [
+        t for t in tasks
+        if str(t.get("phase_id") or "") == phase.id and not t.get("strategy_id")
+    ]
     completed = [t for t in attached if str(t.get("status") or "") == TASK_COMPLETE]
     open_tasks = [t for t in attached if t not in completed]
     start, end = phase_window(plan, phases, phase)
 
-    work_complete = bool(attached) and not open_tasks
+    work_complete = bool(attached or own) and not open_tasks and not open_strategies
     window_elapsed = end is not None and now >= end
     early_by_days = None
     if work_complete and end is not None and now < end:
@@ -187,6 +221,11 @@ def _evidence(
         "tasks_total": len(attached),
         "tasks_completed": len(completed),
         "open_task_ids": [int(t["id"]) for t in open_tasks if t.get("id") is not None],
+        "strategies_total": len(own),
+        "strategies_finished": len(finished),
+        "open_strategy_ids": [st.id for st in open_strategies],
+        # What a dismissal is measured against: the count of things the phase is made of.
+        "work_units": len(attached) + len(own),
         "window_start": _iso(start),
         "window_end": _iso(end),
         "work_complete": work_complete,
@@ -197,17 +236,43 @@ def _evidence(
 
 def phase_task_counts(
     db: Session, *, masterplan_id: int, user_id: Any
-) -> dict[str, dict[str, int]]:
+) -> dict[str, dict[str, Any]]:
     """`{phase_id: {"total", "completed"}}` for every phase that has work, plus
     `"unphased"` for plan tasks that carry no phase — visible on purpose, because a task the
     layer cannot see is the thing that stops a dismissed proposal ever coming back."""
-    counts: dict[str, dict[str, int]] = {}
+    counts: dict[str, dict[str, Any]] = {}
     for task in _tasks_for(db, masterplan_id=masterplan_id, user_id=user_id):
         key = str(task.get("phase_id") or "") or "unphased"
         bucket = counts.setdefault(key, {"total": 0, "completed": 0})
         bucket["total"] += 1
         if str(task.get("status") or "") == TASK_COMPLETE:
             bucket["completed"] += 1
+    return counts
+
+
+def strategy_task_counts(
+    db: Session, *, masterplan_id: int, user_id: Any
+) -> dict[str, dict[str, Any]]:
+    """`{strategy_id: {"total", "completed", "hours_total", "hours_completed"}}`.
+
+    ★ This is the first thing that can say *worked on this* rather than *worked*
+    (STRATEGY_LAYER_SPEC §5b). Hours are the task's estimate, the same number the ETA and
+    WCU read — a strategy's measurable side is inherited from its tasks, never declared.
+    """
+    counts: dict[str, dict[str, Any]] = {}
+    for task in _tasks_for(db, masterplan_id=masterplan_id, user_id=user_id):
+        key = str(task.get("strategy_id") or "")
+        if not key:
+            continue
+        bucket = counts.setdefault(
+            key, {"total": 0, "completed": 0, "hours_total": 0.0, "hours_completed": 0.0}
+        )
+        hours = float(task.get("duration") or 0.0)
+        bucket["total"] += 1
+        bucket["hours_total"] = round(bucket["hours_total"] + hours, 2)
+        if str(task.get("status") or "") == TASK_COMPLETE:
+            bucket["completed"] += 1
+            bucket["hours_completed"] = round(bucket["hours_completed"] + hours, 2)
     return counts
 
 
@@ -234,7 +299,9 @@ def propose_phase_advance(
 
     moment = now or _now()
     tasks = _tasks_for(db, masterplan_id=plan.id, user_id=user_id or plan.user_id)
-    evidence = _evidence(plan, phases, phase, tasks, now=moment)
+    evidence = _evidence(
+        plan, phases, phase, tasks, now=moment, strategies=_strategies(db, plan.id)
+    )
     successor = _successor(phases, phase)
 
     payload = {
@@ -269,7 +336,7 @@ def propose_phase_advance(
 def _dismissal_stands(phase: PlanPhase, evidence: dict[str, Any]) -> bool:
     if phase.advance_dismissed_at is None:
         return False
-    return int(phase.advance_dismissed_task_count or 0) == int(evidence["tasks_total"])
+    return int(phase.advance_dismissed_task_count or 0) == int(evidence["work_units"])
 
 
 # ── decline ───────────────────────────────────────────────────────────────────────────────────────
@@ -300,12 +367,15 @@ def dismiss_phase_advance(
         raise ValueError(f"phase {phase.name!r} is not the plan's current phase")
 
     tasks = _tasks_for(db, masterplan_id=plan.id, user_id=user_id or plan.user_id)
-    evidence = _evidence(plan, phases, phase, tasks, now=_now())
+    evidence = _evidence(
+        plan, phases, phase, tasks, now=_now(), strategies=_strategies(db, plan.id)
+    )
     if not (evidence["work_complete"] or evidence["window_elapsed"]):
         raise ValueError(f"nothing proposes closing {phase.name!r}; there is nothing to decline")
 
     phase.advance_dismissed_at = _now()
-    phase.advance_dismissed_task_count = int(evidence["tasks_total"])
+    # Strategies and direct tasks alike: adding either is new evidence.
+    phase.advance_dismissed_task_count = int(evidence["work_units"])
     db.commit()
     db.refresh(phase)
     return {
@@ -315,7 +385,7 @@ def dismiss_phase_advance(
             "task_count": phase.advance_dismissed_task_count,
         },
         # The proposal returns when this number changes.
-        "returns_when": "the phase's attached tasks change",
+        "returns_when": "the phase's strategies or attached tasks change",
     }
 
 
@@ -410,12 +480,14 @@ def confirm_phase_advance(
 
     owner = user_id or plan.user_id
     tasks = _tasks_for(db, masterplan_id=plan.id, user_id=owner)
-    evidence = _evidence(plan, phases, phase, tasks, now=_now())
+    strategies = _strategies(db, plan.id)
+    evidence = _evidence(plan, phases, phase, tasks, now=_now(), strategies=strategies)
     if not (evidence["work_complete"] or evidence["window_elapsed"]):
         raise ValueError(
             f"nothing proposes closing {phase.name!r}: "
-            f"{evidence['tasks_completed']} of {evidence['tasks_total']} tasks complete "
-            f"and the window has not ended"
+            f"{evidence['strategies_finished']} of {evidence['strategies_total']} strategies "
+            f"finished, {evidence['tasks_completed']} of {evidence['tasks_total']} tasks "
+            f"complete, and the window has not ended"
         )
 
     successor = _successor(phases, phase)
@@ -423,10 +495,35 @@ def confirm_phase_advance(
     phase.status = PHASE_COMPLETE
     phase.completed_at = moment
     moved = 0
+    moved_strategies: list[str] = []
     if successor is not None:
         successor.status = PHASE_ACTIVE
         if successor.started_at is None:
             successor.started_at = moment
+        # ★ An unfinished strategy moves with the phase boundary the same way open work does:
+        # `phase_id` is scheduling, and rescheduling is a refine, not a rewrite. Its tasks
+        # follow it, so they are not in `open_task_ids` — a task under a strategy is
+        # scheduled where the strategy is.
+        for st in strategies:
+            if st.id in evidence["open_strategy_ids"]:
+                st.phase_id = successor.id
+                moved_strategies.append(st.id)
+        if moved_strategies:
+            strategy_task_ids = [
+                int(t["id"]) for t in tasks
+                if str(t.get("strategy_id") or "") in moved_strategies
+                and t.get("id") is not None
+            ]
+            if strategy_task_ids:
+                _dispatch_tasks(
+                    db, "sys.v1.task.set_phase",
+                    {
+                        "masterplan_id": plan.id,
+                        "phase_id": successor.id,
+                        "task_ids": strategy_task_ids,
+                    },
+                    user_id=owner,
+                )
         if evidence["open_task_ids"]:
             moved = int(
                 _dispatch_tasks(
@@ -456,8 +553,71 @@ def confirm_phase_advance(
             "reason": REASON_WORK_COMPLETE if evidence["work_complete"] else REASON_WINDOW_ELAPSED,
             "early_by_days": evidence["early_by_days"],
             "moved_task_ids": evidence["open_task_ids"] if moved else [],
-            "moved_to_phase_id": successor.id if (successor is not None and moved) else None,
+            "moved_strategy_ids": moved_strategies,
+            "moved_to_phase_id": (
+                successor.id if (successor is not None and (moved or moved_strategies)) else None
+            ),
         },
+    }
+
+
+# ── promote ────────────────────────────────────────────────────────────────────────────────────────
+
+def promote_task_to_strategy(
+    db: Session, *, masterplan_id: int, task_id: int, user_id: Any,
+    objective_id: str | None = None,
+) -> dict[str, Any]:
+    """A task that is really a strategy becomes one.
+
+    ★ The owner's three ~200-hour "tasks" on Foundation Building — *Establish Authority*,
+    *Build Intellectual Property*, *Build a working technical prototype* — are how the phase
+    gets done, not things done in a sitting. That is a strategy (§3: *"a twelve-month phase
+    and an afternoon's task are the same row type"*, one tier down). Promotion creates the
+    strategy on the task's phase with the task's name, then deletes the task row: it was a
+    placeholder for the approach, not work, and keeping it would count the same thing twice.
+
+    The estimate is not carried as a number — a strategy's measurable side is inherited from
+    its tasks, never declared (§6 Q5) — but it is not thrown away either: it goes into the
+    description, where the human can see what they thought it would take when they break it
+    into tasks. A completed task is refused; it was work, and work stays.
+    """
+    from apps.masterplan.services.strategy_layer_service import create_strategy
+
+    plan = db.query(MasterPlan).filter(MasterPlan.id == int(masterplan_id)).first()
+    if plan is None:
+        raise ValueError(f"MasterPlan {masterplan_id} not found")
+    owner = user_id or plan.user_id
+    tasks = _tasks_for(db, masterplan_id=plan.id, user_id=owner)
+    task = next((t for t in tasks if int(t.get("id") or 0) == int(task_id)), None)
+    if task is None:
+        raise ValueError(f"task {task_id} is not on plan {masterplan_id}")
+    if str(task.get("status") or "") == TASK_COMPLETE:
+        raise ValueError(f"task {task_id} is complete; it was work, and work stays a task")
+
+    hours = float(task.get("duration") or 0.0)
+    description = f"Promoted from task {task_id}."
+    if hours > 0:
+        description += f" Estimated at {hours:g} hours when it was a task."
+
+    strategy = create_strategy(
+        db, user_id=owner, masterplan_id=plan.id, name=str(task.get("name") or ""),
+        phase_id=str(task.get("phase_id") or "") or None,
+        objective_id=objective_id, description=description,
+    )
+    # Started if the task was: the human already began this approach.
+    if str(task.get("status") or "") == "in_progress":
+        from apps.masterplan.services.strategy_layer_service import start_strategy
+        strategy = start_strategy(db, strategy_id=strategy["id"]) or strategy
+
+    deleted = _dispatch_tasks(
+        db, "sys.v1.task.delete_many",
+        {"masterplan_id": plan.id, "task_ids": [int(task_id)]},
+        user_id=owner,
+    )
+    return {
+        "strategy": strategy,
+        "task_deleted": int(deleted.get("deleted") or 0) == 1,
+        "task_id": int(task_id),
     }
 
 

@@ -930,12 +930,52 @@ So the loop the owner was in now closes: NOT DONE → attach the tasks that cons
 phase → the count changes → the dismissal lapses → the proposal returns when *that* work is
 done. Which is Q8's review, arrived at from the other direction.
 
-### Step 3b(iii), still to do
+### ★ Strategies, made real (2026-09-10, the same evening)
 
-* **The WCU rollup per objective (§5b).** WCU still cannot say *worked on this*. It needs
-  strategies to exist — `task → strategy → objective` — and the live plan has none, so the
-  first useful rollup is probably per **phase** (tasks already carry `phase_id`) with the
-  per-objective one following once a strategy has been recorded.
+The owner added three tasks to Foundation Building — *Establish Authority*, *Build
+Intellectual Property*, *Build a working technical prototype* — at ~200 hours each, and then:
+**"each one I just added could be days, weeks or months long, hell someone else's could be
+years."** Those are not tasks. They are how the phase gets done: strategies, wearing task
+rows — §3's flattening, one tier down. The layer had the table and the vocabulary since step
+1; nothing created a row from the UI, nothing attached a task to one, and phase evidence
+never read them. Now:
+
+* **A phase's work has two grains.** Its **strategies** (weeks/months, finish with a verdict)
+  and its **direct tasks** (hours, no strategy over them). Tasks under a strategy count toward
+  the strategy; the strategy's verdict is what the phase sees. *Work complete* = every
+  strategy finished (`concluded | abandoned | displaced`) and every direct task done, with at
+  least one of either. A dismissal is measured against the count of both.
+* **A task under a strategy is scheduled where the strategy is.** `sys.v1.masterplan.
+  resolve_phase` takes `strategy_id`; `create_task` takes it; `sys.v1.task.set_strategy`
+  attaches existing tasks. When a phase closes with a strategy unfinished, the strategy moves
+  to the successor and its tasks follow — rescheduling is a refine (§5).
+* **Promotion.** `POST /strategies/promote {task_id}`: the task becomes a strategy on its
+  phase (started, if the task was); the row is deleted — it was a placeholder for the
+  approach, not work, and keeping it would count the same thing twice. The estimate is not
+  carried as a number (§6 Q5: a strategy's measurable side is inherited, never declared) but
+  it is kept in the description so the human sees what they thought it would take when they
+  break it into tasks. A completed task is refused: it was work.
+* **Verbs as routes:** create, start, conclude (with outcome), abandon, displace, move,
+  attach tasks. The UI draws them on the current phase: a strategy list with status and
+  attribution, START, FINISH… → WORKED / INCONCLUSIVE / DID NOT WORK / DISPLACED, and *Add a
+  strategy*. On the task screen: a Strategy picker (open strategies only) and **↑ Strategy**
+  on any plan task that is not complete.
+* **§5b's first number.** `strategy_task_counts` on `/strategy-layer`: tasks and hours,
+  total and completed, per strategy. Rendered as *1/3 tasks · 6h of 2 d*. It is the first
+  thing in the system that can say *worked on this* rather than *worked*. The per-objective
+  rollup is one join away (`strategy.objective_id`) and is not built yet.
+
+The effort unit picker (#332) landed alongside: estimates are typed in hours / days / weeks /
+months on a working calendar (8h day, 5-day week, ~21.7 working days a month) and stored in
+hours, which is the unit every consumer wants. The form now says the other half out loud:
+*something that takes months is usually a strategy, not a task.*
+
+### Step 3b(iv), still to do
+
+* **WCU / hours per objective (§5b).** `strategy_task_counts` × `strategy.objective_id`.
+  Blocked only on strategies having objectives, which the create form does not yet ask for.
+* **Strategy-level proposals.** "All of this strategy's tasks are done — conclude it?" is the
+  same shape as phase advance, one tier down. Not built; the human concludes by hand.
 
 ### Original step 3 notes
 

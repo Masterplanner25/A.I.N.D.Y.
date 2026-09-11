@@ -131,6 +131,50 @@ def _handle_task_set_phase(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_task_set_strategy(payload: dict, ctx: SyscallContext) -> dict:
+    """Attach the named tasks to a strategy, and to the strategy's phase.
+
+    The mirror of `set_phase` one tier down, with the same split: tasks owns the write,
+    masterplan owns the decision (which strategy, and that it is on this plan). A task
+    under a strategy is scheduled where the strategy is, so `phase_id` comes along — the
+    caller passes it rather than this handler looking it up, because tasks does not read
+    `plan_strategies`.
+
+    Completed tasks are attached too: attributing work already done to the approach it was
+    done under is the point (STRATEGY_LAYER_SPEC §5b).
+    """
+    from apps.tasks.models import Task
+
+    masterplan_id = payload.get("masterplan_id")
+    strategy_id = payload.get("strategy_id")
+    phase_id = payload.get("phase_id")
+    task_ids = payload.get("task_ids") or []
+    if masterplan_id is None or not strategy_id:
+        raise ValueError("sys.v1.task.set_strategy requires 'masterplan_id' and 'strategy_id'")
+    if not task_ids:
+        return {"attached": 0}
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        rows = (
+            db.query(Task)
+            .filter(
+                Task.masterplan_id == int(masterplan_id),
+                Task.id.in_([int(i) for i in task_ids]),
+            )
+            .all()
+        )
+        for task in rows:
+            task.strategy_id = str(strategy_id)
+            if phase_id:
+                task.phase_id = str(phase_id)
+        db.commit()
+        return {"attached": len(rows), "requested": len(task_ids)}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def _handle_task_release_from_strategy(payload: dict, ctx: SyscallContext) -> dict:
     """Detach INCOMPLETE tasks from a strategy; leave completed ones exactly as they are.
 
@@ -188,6 +232,7 @@ def _handle_task_create(payload: dict, ctx: SyscallContext) -> dict:
             duration=payload.get("estimated_hours"),
             masterplan_id=payload.get("masterplan_id"),
             phase_id=payload.get("phase_id"),
+            strategy_id=payload.get("strategy_id"),
             parent_task_id=payload.get("parent_task_id"),
             dependency_type=payload.get("dependency_type"),
             dependencies=payload.get("dependencies"),
@@ -207,6 +252,7 @@ def _handle_task_create(payload: dict, ctx: SyscallContext) -> dict:
             "time_spent": getattr(task, "time_spent", 0),
             "masterplan_id": getattr(task, "masterplan_id", None),
             "phase_id": getattr(task, "phase_id", None),
+            "strategy_id": getattr(task, "strategy_id", None),
             "parent_task_id": getattr(task, "parent_task_id", None),
             "depends_on": getattr(task, "depends_on", []) or [],
             "dependency_type": getattr(task, "dependency_type", "hard"),
@@ -587,6 +633,26 @@ def register_task_syscall_handlers() -> None:
                 "deleted": {"type": "integer"},
                 "refused_completed": {"type": "integer"},
             },
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.task.set_strategy",
+        handler=_handle_task_set_strategy,
+        capability="task.update",
+        description="Attach tasks to a plan strategy (and its phase). Masterplan decides; tasks writes.",
+        input_schema={
+            "required": ["masterplan_id", "strategy_id", "task_ids"],
+            "properties": {
+                "masterplan_id": {"type": "integer"},
+                "strategy_id": {"type": "string"},
+                "phase_id": {"type": "string"},
+                "task_ids": {"type": "array"},
+            },
+        },
+        output_schema={
+            "required": ["attached"],
+            "properties": {"attached": {"type": "integer"}, "requested": {"type": "integer"}},
         },
         stable=False,
     )

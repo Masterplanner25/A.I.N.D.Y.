@@ -449,22 +449,27 @@ def _handle_resolve_phase(payload: dict, ctx: SyscallContext) -> dict:
 
     Payload keys:
         masterplan_id  (str | int) — required
+        strategy_id    (str)       — optional; when given it must be on this plan, and the
+                                     task lands on the strategy's phase (a task under a
+                                     strategy is scheduled where the strategy is)
         phase_id       (str)       — optional; when given it must be on this plan
 
     Returns:
         {"phase_id": str | None, "name": str | None, "ordinal": int | None,
-         "source": "requested" | "current" | "none"}
+         "strategy_id": str | None,
+         "source": "strategy" | "requested" | "current" | "none"}
         `None`s for a plan that predates the layer — not an error, there is simply no phase.
 
     Raises:
-        ValueError "NOT_FOUND:" when a requested phase is not on the plan.
+        ValueError "NOT_FOUND:" when a requested phase or strategy is not on the plan.
     """
     from AINDY.db.database import SessionLocal
     from apps.masterplan.services.phase_advance import frontier_phase
-    from apps.masterplan.strategy_layer import PlanPhase
+    from apps.masterplan.strategy_layer import PlanPhase, PlanStrategy
 
     masterplan_id = int(payload["masterplan_id"])
     requested = payload.get("phase_id")
+    strategy_id = payload.get("strategy_id")
 
     external_db = ctx.metadata.get("_db")
     owns_session = external_db is None
@@ -476,6 +481,27 @@ def _handle_resolve_phase(payload: dict, ctx: SyscallContext) -> dict:
             .order_by(PlanPhase.ordinal.asc(), PlanPhase.created_at.asc())
             .all()
         )
+        if strategy_id:
+            strategy = (
+                db.query(PlanStrategy)
+                .filter(
+                    PlanStrategy.id == str(strategy_id),
+                    PlanStrategy.masterplan_id == masterplan_id,
+                )
+                .first()
+            )
+            if strategy is None:
+                raise ValueError(
+                    f"NOT_FOUND:strategy {strategy_id} is not on plan {masterplan_id}"
+                )
+            phase = next((row for row in phases if row.id == strategy.phase_id), None)
+            return {
+                "phase_id": phase.id if phase is not None else None,
+                "name": phase.name if phase is not None else None,
+                "ordinal": phase.ordinal if phase is not None else None,
+                "strategy_id": strategy.id,
+                "source": "strategy",
+            }
         if requested:
             phase = next((row for row in phases if row.id == str(requested)), None)
             if phase is None:
@@ -492,6 +518,7 @@ def _handle_resolve_phase(payload: dict, ctx: SyscallContext) -> dict:
             "phase_id": phase.id if phase is not None else None,
             "name": phase.name if phase is not None else None,
             "ordinal": phase.ordinal if phase is not None else None,
+            "strategy_id": None,
             "source": source,
         }
     finally:
@@ -539,6 +566,7 @@ def register_masterplan_syscall_handlers() -> None:
             "properties": {
                 "masterplan_id": {"type": "string"},
                 "phase_id": {"type": "string"},
+                "strategy_id": {"type": "string"},
             },
         },
         output_schema={

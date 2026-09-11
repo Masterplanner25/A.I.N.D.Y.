@@ -357,7 +357,10 @@ async def get_strategy_layer(
     def handler(ctx):
         from apps.masterplan.services import strategy_layer_service as layer
         from apps.masterplan.services.masterplan_service import assert_masterplan_owned
-        from apps.masterplan.services.phase_advance import phase_task_counts
+        from apps.masterplan.services.phase_advance import (
+            phase_task_counts,
+            strategy_task_counts,
+        )
 
         plan = assert_masterplan_owned(db, plan_id, user_id)
         return {
@@ -366,6 +369,9 @@ async def get_strategy_layer(
             "objectives": layer.list_objectives(db, masterplan_id=plan.id),
             "phases": layer.list_phases(db, masterplan_id=plan.id),
             "task_counts": phase_task_counts(db, masterplan_id=plan.id, user_id=user_id),
+            "strategy_task_counts": strategy_task_counts(
+                db, masterplan_id=plan.id, user_id=user_id
+            ),
             "strategies": layer.list_strategies(db, masterplan_id=plan.id),
             "unhoused_emergent": layer.unhoused_emergent_strategies(db, masterplan_id=plan.id),
         }
@@ -519,3 +525,290 @@ async def reopen_phase_route(
         metadata={"db": db},
     )
     return _with_execution_envelope(result)
+
+
+# ------------------------------
+# STRATEGIES — how a phase gets done
+# ------------------------------
+# STRATEGY_LAYER_SPEC §5. A strategy is weeks or months, finishes with a verdict, and holds the
+# hours-sized tasks. The lifecycle is proposed → active → concluded | abandoned | displaced,
+# and `abandoned` (a result) is never collapsed into `displaced` (a choice). Every transition
+# is a human verb; nothing here is inferred.
+
+
+class StrategyCreateRequest(BaseModel):
+    name: str
+    phase_id: Optional[str] = None
+    objective_id: Optional[str] = None
+    description: Optional[str] = None
+    origin: Optional[str] = "planned"
+
+
+class StrategyVerdictRequest(BaseModel):
+    outcome: Optional[str] = None     # conclude: worked | did_not_work | inconclusive
+    note: Optional[str] = None
+
+
+class StrategyMoveRequest(BaseModel):
+    phase_id: Optional[str] = None
+
+
+class StrategyPromoteRequest(BaseModel):
+    task_id: int
+    objective_id: Optional[str] = None
+
+
+class StrategyAttachRequest(BaseModel):
+    task_ids: list[int]
+
+
+async def _strategy_route(request, plan_id, user_id, db, route_name, input_payload, body_fn):
+    """One shape for every strategy verb: owner check, the service call, 404/409 mapping."""
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        try:
+            result = body_fn(plan)
+        except ValueError as exc:
+            raise _refused(exc) from exc
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "strategy_not_found", "message": "Strategy not found"},
+            )
+        return result
+
+    result = await execute_with_pipeline(
+        request=request, route_name=route_name, handler=handler, user_id=user_id,
+        input_payload=input_payload, metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+def _owned_strategy(db, plan_id: int, strategy_id: str):
+    """A strategy id is only meaningful on its own plan; a stray id must not reach across."""
+    from apps.masterplan.strategy_layer import PlanStrategy
+
+    return (
+        db.query(PlanStrategy)
+        .filter(PlanStrategy.id == str(strategy_id), PlanStrategy.masterplan_id == int(plan_id))
+        .first()
+    )
+
+
+def _phase_on_plan(db, plan_id: int, phase_id: str | None) -> None:
+    from apps.masterplan.services import strategy_layer_service as layer
+
+    if phase_id and not any(
+        p["id"] == phase_id for p in layer.list_phases(db, masterplan_id=plan_id)
+    ):
+        raise ValueError(f"phase {phase_id} is not on plan {plan_id}")
+
+
+@router.post("/{plan_id}/strategies")
+@limiter.limit("30/minute")
+async def create_strategy_route(
+    request: Request, plan_id: int, body: StrategyCreateRequest,
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def act(plan):
+        from apps.masterplan.services import strategy_layer_service as layer
+
+        _phase_on_plan(db, plan.id, body.phase_id)
+        return layer.create_strategy(
+            db, user_id=user_id, masterplan_id=plan.id, name=body.name,
+            phase_id=body.phase_id, objective_id=body.objective_id,
+            description=body.description, origin=body.origin or "planned",
+        )
+
+    return await _strategy_route(
+        request, plan_id, user_id, db, "masterplan.strategy.create",
+        {"plan_id": plan_id, "name": body.name}, act,
+    )
+
+
+@router.post("/{plan_id}/strategies/promote")
+@limiter.limit("30/minute")
+async def promote_task_route(
+    request: Request, plan_id: int, body: StrategyPromoteRequest,
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+):
+    """A task that is really a strategy becomes one. The task row goes; its estimate is kept
+    in the strategy's description."""
+    user_id = str(current_user["sub"])
+
+    def act(plan):
+        from apps.masterplan.services.phase_advance import promote_task_to_strategy
+
+        return promote_task_to_strategy(
+            db, masterplan_id=plan.id, task_id=body.task_id, user_id=user_id,
+            objective_id=body.objective_id,
+        )
+
+    return await _strategy_route(
+        request, plan_id, user_id, db, "masterplan.strategy.promote",
+        {"plan_id": plan_id, "task_id": body.task_id}, act,
+    )
+
+
+@router.post("/{plan_id}/strategies/{strategy_id}/start")
+@limiter.limit("30/minute")
+async def start_strategy_route(
+    request: Request, plan_id: int, strategy_id: str,
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def act(plan):
+        from apps.masterplan.services import strategy_layer_service as layer
+
+        if _owned_strategy(db, plan.id, strategy_id) is None:
+            return None
+        return layer.start_strategy(db, strategy_id=strategy_id)
+
+    return await _strategy_route(
+        request, plan_id, user_id, db, "masterplan.strategy.start",
+        {"plan_id": plan_id, "strategy_id": strategy_id}, act,
+    )
+
+
+@router.post("/{plan_id}/strategies/{strategy_id}/conclude")
+@limiter.limit("30/minute")
+async def conclude_strategy_route(
+    request: Request, plan_id: int, strategy_id: str, body: StrategyVerdictRequest,
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+):
+    """Judge how it went: worked | did_not_work | inconclusive. Judged, never measured."""
+    user_id = str(current_user["sub"])
+
+    def act(plan):
+        from apps.masterplan.services import strategy_layer_service as layer
+
+        if _owned_strategy(db, plan.id, strategy_id) is None:
+            return None
+        if not body.outcome:
+            raise ValueError("concluding needs an outcome: worked, did_not_work or inconclusive")
+        return layer.conclude_strategy(
+            db, strategy_id=strategy_id, outcome=body.outcome, note=body.note
+        )
+
+    return await _strategy_route(
+        request, plan_id, user_id, db, "masterplan.strategy.conclude",
+        {"plan_id": plan_id, "strategy_id": strategy_id, "outcome": body.outcome}, act,
+    )
+
+
+@router.post("/{plan_id}/strategies/{strategy_id}/abandon")
+@limiter.limit("30/minute")
+async def abandon_strategy_route(
+    request: Request, plan_id: int, strategy_id: str, body: StrategyVerdictRequest,
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+):
+    """Tried it; it did not work. A RESULT. Incomplete tasks return to the plan; completed
+    ones stay attached, so the record of work done is not destroyed."""
+    user_id = str(current_user["sub"])
+
+    def act(plan):
+        from apps.masterplan.services import strategy_layer_service as layer
+
+        if _owned_strategy(db, plan.id, strategy_id) is None:
+            return None
+        return layer.abandon_strategy(
+            db, strategy_id=strategy_id, note=body.note, outcome=body.outcome
+        )
+
+    return await _strategy_route(
+        request, plan_id, user_id, db, "masterplan.strategy.abandon",
+        {"plan_id": plan_id, "strategy_id": strategy_id}, act,
+    )
+
+
+@router.post("/{plan_id}/strategies/{strategy_id}/displace")
+@limiter.limit("30/minute")
+async def displace_strategy_route(
+    request: Request, plan_id: int, strategy_id: str, body: StrategyVerdictRequest,
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+):
+    """Never tried; something else was done instead. A CHOICE: no outcome, ever."""
+    user_id = str(current_user["sub"])
+
+    def act(plan):
+        from apps.masterplan.services import strategy_layer_service as layer
+
+        if _owned_strategy(db, plan.id, strategy_id) is None:
+            return None
+        return layer.displace_strategy(db, strategy_id=strategy_id, note=body.note)
+
+    return await _strategy_route(
+        request, plan_id, user_id, db, "masterplan.strategy.displace",
+        {"plan_id": plan_id, "strategy_id": strategy_id}, act,
+    )
+
+
+@router.post("/{plan_id}/strategies/{strategy_id}/move")
+@limiter.limit("30/minute")
+async def move_strategy_route(
+    request: Request, plan_id: int, strategy_id: str, body: StrategyMoveRequest,
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+):
+    """Reschedule to another phase. Ordinary replanning; its tasks follow it."""
+    user_id = str(current_user["sub"])
+
+    def act(plan):
+        from apps.masterplan.services import strategy_layer_service as layer
+        from apps.masterplan.services.phase_advance import _dispatch_tasks, _tasks_for
+
+        if _owned_strategy(db, plan.id, strategy_id) is None:
+            return None
+        _phase_on_plan(db, plan.id, body.phase_id)
+        moved = layer.move_strategy_to_phase(db, strategy_id=strategy_id, phase_id=body.phase_id)
+        if body.phase_id:
+            ids = [
+                int(t["id"]) for t in _tasks_for(db, masterplan_id=plan.id, user_id=user_id)
+                if str(t.get("strategy_id") or "") == strategy_id and t.get("id") is not None
+            ]
+            if ids:
+                _dispatch_tasks(
+                    db, "sys.v1.task.set_phase",
+                    {"masterplan_id": plan.id, "phase_id": body.phase_id, "task_ids": ids},
+                    user_id=user_id,
+                )
+        return moved
+
+    return await _strategy_route(
+        request, plan_id, user_id, db, "masterplan.strategy.move",
+        {"plan_id": plan_id, "strategy_id": strategy_id, "phase_id": body.phase_id}, act,
+    )
+
+
+@router.post("/{plan_id}/strategies/{strategy_id}/tasks")
+@limiter.limit("30/minute")
+async def attach_tasks_route(
+    request: Request, plan_id: int, strategy_id: str, body: StrategyAttachRequest,
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+):
+    """Attach existing tasks to a strategy. They move to the strategy's phase."""
+    user_id = str(current_user["sub"])
+
+    def act(plan):
+        from apps.masterplan.services.phase_advance import _dispatch_tasks
+
+        row = _owned_strategy(db, plan.id, strategy_id)
+        if row is None:
+            return None
+        return _dispatch_tasks(
+            db, "sys.v1.task.set_strategy",
+            {
+                "masterplan_id": plan.id, "strategy_id": row.id,
+                "phase_id": row.phase_id, "task_ids": body.task_ids,
+            },
+            user_id=user_id,
+        ) or {"attached": 0}
+
+    return await _strategy_route(
+        request, plan_id, user_id, db, "masterplan.strategy.attach_tasks",
+        {"plan_id": plan_id, "strategy_id": strategy_id, "task_ids": body.task_ids}, act,
+    )

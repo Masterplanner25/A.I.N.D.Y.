@@ -4,11 +4,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 // one picked here. Until 2026-09-10 every task from this screen was created with
 // phase_id = NULL: on the plan, invisible to the strategy layer.
 
-const { mockGetTasks, mockCreateTask, mockListMasterPlans, mockGetStrategyLayer } = vi.hoisted(() => ({
+const { mockGetTasks, mockCreateTask, mockListMasterPlans, mockGetStrategyLayer, mockPromote } = vi.hoisted(() => ({
   mockGetTasks: vi.fn(),
   mockCreateTask: vi.fn(),
   mockListMasterPlans: vi.fn(),
   mockGetStrategyLayer: vi.fn(),
+  mockPromote: vi.fn(),
 }));
 
 vi.mock("../api/tasks.js", () => ({
@@ -22,6 +23,7 @@ vi.mock("../api/tasks.js", () => ({
 vi.mock("../api/masterplan.js", () => ({
   listMasterPlans: mockListMasterPlans,
   getStrategyLayer: mockGetStrategyLayer,
+  promoteTaskToStrategy: mockPromote,
 }));
 
 import TaskDashboard from "../components/app/TaskDashboard";
@@ -29,6 +31,10 @@ import TaskDashboard from "../components/app/TaskDashboard";
 const PHASES = [
   { id: "p1", ordinal: 1, name: "Foundation Building", status: "pending" },
   { id: "p2", ordinal: 2, name: "Platform Development", status: "pending" },
+];
+const STRATEGIES = [
+  { id: "s1", phase_id: "p1", name: "Establish Authority", status: "active" },
+  { id: "s2", phase_id: "p1", name: "Guest posts", status: "abandoned" },
 ];
 
 async function fillAndPickPlan() {
@@ -51,7 +57,8 @@ describe("TaskDashboard — phase", () => {
     mockGetTasks.mockResolvedValue([]);
     mockCreateTask.mockResolvedValue({});
     mockListMasterPlans.mockResolvedValue({ plans: [{ id: 10, version_label: "V1", is_active: true }] });
-    mockGetStrategyLayer.mockResolvedValue({ phases: PHASES });
+    mockPromote.mockReset();
+    mockGetStrategyLayer.mockResolvedValue({ phases: PHASES, strategies: STRATEGIES });
   });
 
   it("leaves the phase to the plan by default — no phase_id is sent", async () => {
@@ -85,5 +92,36 @@ describe("TaskDashboard — phase", () => {
     fireEvent.change(await screen.findByLabelText(/masterplan/i), { target: { value: "10" } });
     await waitFor(() => expect(mockGetStrategyLayer).toHaveBeenCalled());
     expect(screen.queryByLabelText(/phase/i)).not.toBeInTheDocument();
+  });
+
+  it("offers only open strategies, and sends the picked one", async () => {
+    await fillAndPickPlan();
+    const picker = await screen.findByLabelText(/strategy/i);
+    expect(picker).toHaveTextContent("Establish Authority");
+    expect(picker).not.toHaveTextContent("Guest posts");
+    fireEvent.change(picker, { target: { value: "s1" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalled());
+    expect(mockCreateTask.mock.calls[0][0].strategy_id).toBe("s1");
+  });
+
+  it("promotes a plan task to a strategy, after confirming", async () => {
+    mockGetTasks.mockResolvedValue([
+      { task_id: 20, task_name: "Establish Authority", status: "in_progress", time_spent: 0, masterplan_id: 10, estimated_hours: 201.75 },
+      { task_id: 17, task_name: "Fix Nodus Issues", status: "completed", time_spent: 0, masterplan_id: 10, estimated_hours: 1 },
+      { task_id: 30, task_name: "Buy milk", status: "pending", time_spent: 0 },
+    ]);
+    mockPromote.mockResolvedValue({ strategy: { id: "s9", name: "Establish Authority" }, task_deleted: true, task_id: 20 });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<TaskDashboard />);
+    const buttons = await screen.findAllByRole("button", { name: /make .* a strategy/i });
+    expect(buttons).toHaveLength(1);   // not the completed one, not the plan-less one
+    fireEvent.click(buttons[0]);
+
+    await waitFor(() => expect(mockPromote).toHaveBeenCalledWith(10, 20));
+    expect(await screen.findByText(/is now a strategy/)).toBeInTheDocument();
   });
 });

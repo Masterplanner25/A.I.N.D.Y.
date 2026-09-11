@@ -5,8 +5,12 @@ import {
   confirmPhaseAdvance,
   dismissPhaseAdvance,
   reopenPhase,
+  createStrategy,
+  startStrategy,
+  finishStrategy,
 } from "../../api/masterplan.js";
 import { safeMap } from "../../utils/safe";
+import { describeHours } from "../../utils/effort.js";
 
 // The plan's phases, and what the system has to say about the current one.
 //
@@ -24,6 +28,19 @@ const PHASE_COLOR = {
   pending: "#3f3f46",
 };
 
+// A strategy is how a phase gets done: weeks or months, and it finishes with a verdict.
+// `abandoned` (tried, did not work — a result) and `displaced` (never tried, did something
+// else — a choice) are different colours on purpose; collapsing them is the thing the layer
+// exists to prevent.
+const STRATEGY_COLOR = {
+  proposed: "#71717a",
+  active: "#facc15",
+  concluded: "#00ffaa",
+  abandoned: "#f87171",
+  displaced: "#a78bfa",
+};
+const FINISHED = new Set(["concluded", "abandoned", "displaced"]);
+
 // The API's 409 arrives as ApiError with the raw body; the useful sentence is in
 // detail.message. Fall back to whatever message there is.
 function refusalMessage(err) {
@@ -35,17 +52,27 @@ function refusalMessage(err) {
   }
 }
 
+function miniBtn(color) {
+  return {
+    background: "transparent", color, border: `1px solid ${color}60`, borderRadius: "4px",
+    fontSize: "9px", padding: "1px 6px", cursor: "pointer", fontWeight: "700",
+  };
+}
+
 function describeEvidence(proposal) {
   const ev = proposal.evidence || {};
+  const parts = [];
+  if (ev.strategies_total > 0) parts.push(`${ev.strategies_finished} of ${ev.strategies_total} ${ev.strategies_total === 1 ? "strategy" : "strategies"} finished`);
+  if (ev.tasks_total > 0) parts.push(`${ev.tasks_completed} of ${ev.tasks_total} ${ev.tasks_total === 1 ? "task" : "tasks"} complete`);
+  const summary = parts.join(", ");
   if (proposal.reason === "work_complete") {
     const early = ev.early_by_days;
     const when = typeof early === "number" && early > 0 ? `, ${early} days inside its window` : "";
-    return `All ${ev.tasks_total} of its tasks are complete${when}.`;
+    return `All of its work is done — ${summary}${when}.`;
   }
   if (proposal.reason === "window_elapsed") {
-    const open = (ev.open_task_ids || []).length;
-    const work = open === 1 ? "1 task still open" : `${open} tasks still open`;
-    return `Its window has ended with ${work} (${ev.tasks_completed} of ${ev.tasks_total} complete).`;
+    const open = (ev.open_task_ids || []).length + (ev.open_strategy_ids || []).length;
+    return `Its window has ended with ${open} ${open === 1 ? "thing" : "things"} still open (${summary}).`;
   }
   return "";
 }
@@ -54,9 +81,11 @@ export default function PhasePanel({ planId }) {
   const [layer, setLayer] = useState(null);
   const [proposal, setProposal] = useState(null);
   const [review, setReview] = useState(null);
-  const [busy, setBusy] = useState(null);   // "confirm" | "dismiss" | "reopen" | null
+  const [busy, setBusy] = useState(null);   // "confirm" | "dismiss" | "reopen" | "strategy" | null
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [newStrategy, setNewStrategy] = useState("");
+  const [verdictFor, setVerdictFor] = useState(null);   // strategy id with the verdict menu open
 
   const load = async () => {
     try {
@@ -117,6 +146,26 @@ export default function PhasePanel({ planId }) {
     }
   };
 
+  const handleAddStrategy = async (phase) => {
+    const name = newStrategy.trim();
+    if (!name) return;
+    const result = await act("strategy", () => createStrategy(planId, { name, phase_id: phase.id }));
+    if (result) setNewStrategy("");
+  };
+
+  const handleStart = (st) => act("strategy", () => startStrategy(planId, st.id));
+
+  const handleVerdict = async (st, verb, outcome) => {
+    setVerdictFor(null);
+    const result = await act("strategy", () => finishStrategy(planId, st.id, verb, { outcome }));
+    if (result && typeof result.tasks_released === "number" && result.tasks_released > 0) {
+      setNotice(`${st.name} ${verb === "abandon" ? "abandoned" : "displaced"}. ${result.tasks_released} open ${result.tasks_released === 1 ? "task" : "tasks"} returned to the plan; completed work stays attached.`);
+    }
+  };
+
+  const strategiesOf = (phase) => (layer?.strategies || []).filter((st) => st.phase_id === phase.id);
+  const stCounts = (st) => layer?.strategy_task_counts?.[st.id];
+
   // The one phase that can be reopened: the most recently closed one. The API refuses any
   // other, so the button is only drawn where it would work.
   const lastClosed = [...phases].reverse().find((p) => p.status === "complete");
@@ -169,6 +218,65 @@ export default function PhasePanel({ planId }) {
           );
         })}
       </ol>
+
+      {/* Strategies of the current phase — how it gets done */}
+      {proposal?.phase &&
+        <div data-testid="phase-strategies" style={{ marginTop: "10px", paddingLeft: "16px", borderLeft: "1px solid #27272a" }}>
+          <div style={{ fontSize: "10px", color: "#71717a", fontWeight: "700", letterSpacing: "0.05em", marginBottom: "4px" }}>
+            STRATEGIES — {proposal.phase.name}
+          </div>
+          {strategiesOf(proposal.phase).length === 0 &&
+            <p style={{ margin: "0 0 6px", fontSize: "11px", color: "#52525b" }}>
+              None yet. A strategy is how this phase gets done — weeks or months, and it finishes with a verdict.
+            </p>
+          }
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, fontSize: "12px" }}>
+            {safeMap(strategiesOf(proposal.phase), (st) => {
+              const color = STRATEGY_COLOR[st.status] || STRATEGY_COLOR.proposed;
+              const c = stCounts(st);
+              return (
+                <li key={st.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "3px 0", flexWrap: "wrap" }}>
+                  <span style={{ color: FINISHED.has(st.status) ? "#71717a" : "#e4e4e7" }}>{st.name}</span>
+                  <span style={{ fontSize: "9px", color, border: `1px solid ${color}`, borderRadius: "4px", padding: "0 4px" }}>
+                    {st.status}{st.outcome ? ` · ${st.outcome.replace(/_/g, " ")}` : ""}
+                  </span>
+                  {c &&
+                    <span title="tasks complete / attached · hours done / estimated" style={{ fontSize: "10px", color: "#71717a" }}>
+                      {c.completed}/{c.total} tasks{c.hours_total > 0 ? ` · ${describeHours(c.hours_completed) || "0h"} of ${describeHours(c.hours_total)}` : ""}
+                    </span>
+                  }
+                  {st.status === "proposed" &&
+                    <button onClick={() => handleStart(st)} disabled={busy !== null} style={miniBtn("#facc15")}>START</button>
+                  }
+                  {!FINISHED.has(st.status) && verdictFor !== st.id &&
+                    <button onClick={() => setVerdictFor(st.id)} disabled={busy !== null} style={miniBtn("#a1a1aa")}>FINISH…</button>
+                  }
+                  {verdictFor === st.id &&
+                    <span data-testid="strategy-verdict" style={{ display: "inline-flex", gap: "4px", flexWrap: "wrap" }}>
+                      <button onClick={() => handleVerdict(st, "conclude", "worked")} style={miniBtn("#00ffaa")} title="Tried it; it worked">WORKED</button>
+                      <button onClick={() => handleVerdict(st, "conclude", "inconclusive")} style={miniBtn("#a1a1aa")} title="Tried it; cannot say">INCONCLUSIVE</button>
+                      <button onClick={() => handleVerdict(st, "abandon")} style={miniBtn("#f87171")} title="Tried it; it did not work. A result.">DID NOT WORK</button>
+                      <button onClick={() => handleVerdict(st, "displace")} style={miniBtn("#a78bfa")} title="Never tried; did something else instead. A choice, not a result.">DISPLACED</button>
+                      <button onClick={() => setVerdictFor(null)} style={miniBtn("#52525b")}>×</button>
+                    </span>
+                  }
+                </li>
+              );
+            })}
+          </ul>
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleAddStrategy(proposal.phase); }}
+            style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+            <input
+              aria-label="New strategy"
+              placeholder="Add a strategy…"
+              value={newStrategy}
+              onChange={(e) => setNewStrategy(e.target.value)}
+              style={{ flex: 1, padding: "5px 8px", background: "#18181b", border: "1px solid #27272a", borderRadius: "4px", color: "#fff", fontSize: "11px" }} />
+            <button type="submit" disabled={busy !== null || !newStrategy.trim()} style={miniBtn("#00ffaa")}>ADD</button>
+          </form>
+        </div>
+      }
       {layer?.task_counts?.unphased &&
         <p style={{ margin: "6px 0 0", fontSize: "11px", color: "#71717a" }}>
           {layer.task_counts.unphased.total} {layer.task_counts.unphased.total === 1 ? "task" : "tasks"} on this plan {layer.task_counts.unphased.total === 1 ? "has" : "have"} no phase and {layer.task_counts.unphased.total === 1 ? "does" : "do"} not count toward one.

@@ -170,6 +170,7 @@ def build_task_graph(tasks: list[Task]) -> dict[str, Any]:
             "automation_type": getattr(task, "automation_type", None),
             "masterplan_id": getattr(task, "masterplan_id", None),
         "phase_id": getattr(task, "phase_id", None),
+        "strategy_id": getattr(task, "strategy_id", None),
             "duration": _as_effort_hours(getattr(task, "duration", 0.0)),
             # WCU inputs (Work Complexity Units) — additive; consumed by the masterplan
             # wcu_service via the sys.v1.tasks.get_graph_context syscall (no cross-app import).
@@ -445,6 +446,7 @@ def create_task(
     recurrence=None,
     user_id: str | uuid.UUID | None = None,
     phase_id: str | None = None,
+    strategy_id: str | None = None,
 ):
     """Creates a new task entry in the database."""
     owner_user_id = _user_uuid(user_id)
@@ -457,11 +459,11 @@ def create_task(
         # task with no phase is invisible to the strategy layer — it neither counts toward a
         # phase's completion nor brings a dismissed advance proposal back — and until now
         # every task created from the task screen was exactly that.
-        phase_id = resolve_phase_via_syscall(
-            masterplan_id, str(owner_user_id), db, phase_id=phase_id
+        phase_id, strategy_id = resolve_phase_via_syscall(
+            masterplan_id, str(owner_user_id), db, phase_id=phase_id, strategy_id=strategy_id
         )
-    elif phase_id:
-        raise ValueError("phase_id requires a masterplan_id")
+    elif phase_id or strategy_id:
+        raise ValueError("phase_id and strategy_id require a masterplan_id")
     normalized_dependencies = _normalize_dependencies(dependencies)
     _validate_dependencies(db, owner_user_id, normalized_dependencies, parent_task_id)
     task = Task(
@@ -471,6 +473,7 @@ def create_task(
         due_date=due_date,
         masterplan_id=masterplan_id,
         phase_id=phase_id,
+        strategy_id=strategy_id,
         parent_task_id=parent_task_id,
         depends_on=normalized_dependencies,
         dependency_type=dependency_type or "hard",
