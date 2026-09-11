@@ -386,6 +386,37 @@ def list_strategies(
     ]
 
 
+def set_strategy_objective(
+    db: Session, *, strategy_id: str, objective_id: str | None
+) -> dict[str, Any] | None:
+    """House a strategy under an objective, or un-house it.
+
+    ★ Invariant 3 says `objective_id` does not move freely: changing it changes what the
+    strategy is FOR. That is a statement about how often, not whether — and every strategy
+    on the live plan was created with no objective at all, because nothing asked. Housing
+    them is the act that makes §5b's attribution possible: hours roll up strategy →
+    objective, and only a housed strategy rolls up anywhere.
+    """
+    row = _strategy(db, strategy_id)
+    if row is None:
+        return None
+    if objective_id is not None:
+        home = (
+            db.query(PlanObjective)
+            .filter(
+                PlanObjective.id == str(objective_id),
+                PlanObjective.masterplan_id == row.masterplan_id,
+            )
+            .first()
+        )
+        if home is None:
+            raise ValueError(f"objective {objective_id} is not on plan {row.masterplan_id}")
+    row.objective_id = objective_id
+    db.commit()
+    db.refresh(row)
+    return serialize_strategy(row)
+
+
 def unhoused_emergent_strategies(db: Session, *, masterplan_id: int) -> list[dict[str, Any]]:
     """Emergent strategies with no objective — the signal a *revise* is derived from.
 

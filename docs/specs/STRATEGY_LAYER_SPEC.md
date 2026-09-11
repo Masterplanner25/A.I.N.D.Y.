@@ -970,12 +970,29 @@ months on a working calendar (8h day, 5-day week, ~21.7 working days a month) an
 hours, which is the unit every consumer wants. The form now says the other half out loud:
 *something that takes months is usually a strategy, not a task.*
 
-### Step 3b(iv), still to do
+### ★ §5b closed (2026-09-10, late): worked toward THIS
 
-* **WCU / hours per objective (§5b).** `strategy_task_counts` × `strategy.objective_id`.
-  Blocked only on strategies having objectives, which the create form does not yet ask for.
+`objective_rollup` on `GET /strategy-layer`: per objective, its strategies (by status), tasks,
+and hours total / completed, through `task → strategy → objective`. *"Establish a widely
+adopted ethical AI framework"* has no natural number; the work toward it now does. An
+objective nothing serves reports nothing rather than zero, and **unhoused** work — strategies
+with no objective — is reported rather than dropped, for the same reason unphased tasks are.
+
+Housing is one act: `POST /strategies/{id}/objective` and a *serves:* picker on every strategy
+and on the add-strategy form. Every strategy on the live plan was created with no objective,
+because nothing asked. Invariant 3 (`objective_id` does not move freely) is about how often,
+not whether.
+
+The plan card now shows OBJECTIVES above PHASES: *Ethical AI Framework · 1 strategy · 6h of
+2 d*, *Partnership Development · nothing serves this yet*, and the unhoused line.
+
+### Step 3b(v), still to do
+
 * **Strategy-level proposals.** "All of this strategy's tasks are done — conclude it?" is the
   same shape as phase advance, one tier down. Not built; the human concludes by hand.
+* **Feeding the algorithm.** `objective_rollup` is the first per-objective measurement. Whether
+  it enters goal attainment (`MASTERPLAN_GOAL_ATTAINMENT_SPEC` §4b, the *wcu* unit) is the
+  decision that spec deferred until attribution existed. It exists now.
 
 ### Original step 3 notes
 

@@ -8,6 +8,7 @@ import {
   createStrategy,
   startStrategy,
   finishStrategy,
+  setStrategyObjective,
 } from "../../api/masterplan.js";
 import { safeMap } from "../../utils/safe";
 import { describeHours } from "../../utils/effort.js";
@@ -85,6 +86,7 @@ export default function PhasePanel({ planId }) {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [newStrategy, setNewStrategy] = useState("");
+  const [newStrategyObjective, setNewStrategyObjective] = useState("");
   const [verdictFor, setVerdictFor] = useState(null);   // strategy id with the verdict menu open
 
   const load = async () => {
@@ -149,9 +151,19 @@ export default function PhasePanel({ planId }) {
   const handleAddStrategy = async (phase) => {
     const name = newStrategy.trim();
     if (!name) return;
-    const result = await act("strategy", () => createStrategy(planId, { name, phase_id: phase.id }));
+    const body = { name, phase_id: phase.id };
+    if (newStrategyObjective) body.objective_id = newStrategyObjective;
+    const result = await act("strategy", () => createStrategy(planId, body));
     if (result) setNewStrategy("");
   };
+
+  // Which objective a strategy serves. The act that lets hours roll up to purpose — without
+  // it the strategy's work lands in "unhoused" and no objective can report it.
+  const handleServes = (st, objectiveId) =>
+    act("strategy", () => setStrategyObjective(planId, st.id, objectiveId || null));
+
+  const objectives = layer?.objectives || [];
+  const rollup = layer?.objective_rollup || {};
 
   const handleStart = (st) => act("strategy", () => startStrategy(planId, st.id));
 
@@ -174,6 +186,36 @@ export default function PhasePanel({ planId }) {
 
   return (
     <div style={{ marginTop: "12px", padding: "10px", background: "#111113", borderRadius: "6px", border: "1px solid #27272a" }}>
+      {objectives.length > 0 &&
+        <div data-testid="plan-objectives" style={{ marginBottom: "10px" }}>
+          <div style={{ fontSize: "11px", color: "#71717a", fontWeight: "700", letterSpacing: "0.05em", marginBottom: "6px" }}>
+            OBJECTIVES
+          </div>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, fontSize: "12px" }}>
+            {safeMap(objectives, (o) => {
+              const r = rollup[o.id];
+              return (
+                <li key={o.id} title={o.intent || undefined} style={{ display: "flex", alignItems: "baseline", gap: "8px", padding: "2px 0" }}>
+                  <span style={{ color: "#e4e4e7" }}>{o.name}</span>
+                  {r ?
+                    <span style={{ fontSize: "10px", color: "#71717a" }}>
+                      {r.strategies} {r.strategies === 1 ? "strategy" : "strategies"}
+                      {r.hours_total > 0 ? ` · ${describeHours(r.hours_completed) || "0h"} of ${describeHours(r.hours_total)}` : ""}
+                    </span> :
+                    <span style={{ fontSize: "10px", color: "#52525b" }}>nothing serves this yet</span>
+                  }
+                </li>
+              );
+            })}
+          </ul>
+          {rollup.unhoused &&
+            <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#71717a" }}>
+              {rollup.unhoused.strategies} {rollup.unhoused.strategies === 1 ? "strategy serves" : "strategies serve"} no objective{rollup.unhoused.hours_total > 0 ? ` — ${describeHours(rollup.unhoused.hours_completed) || "0h"} of ${describeHours(rollup.unhoused.hours_total)} that no objective can claim` : ""}.
+            </p>
+          }
+        </div>
+      }
+
       <div style={{ fontSize: "11px", color: "#71717a", fontWeight: "700", letterSpacing: "0.05em", marginBottom: "8px" }}>
         PHASES
       </div>
@@ -245,6 +287,18 @@ export default function PhasePanel({ planId }) {
                       {c.completed}/{c.total} tasks{c.hours_total > 0 ? ` · ${describeHours(c.hours_completed) || "0h"} of ${describeHours(c.hours_total)}` : ""}
                     </span>
                   }
+                  {objectives.length > 0 &&
+                    <select
+                      aria-label={`${st.name} serves`}
+                      value={st.objective_id || ""}
+                      onChange={(e) => handleServes(st, e.target.value)}
+                      disabled={busy !== null}
+                      title="Which objective this strategy serves. Its hours roll up there."
+                      style={{ background: "#18181b", color: st.objective_id ? "#a1a1aa" : "#facc15", border: "1px solid #27272a", borderRadius: "4px", fontSize: "9px", padding: "1px 4px" }}>
+                      <option value="">serves: —</option>
+                      {safeMap(objectives, (o) => <option key={o.id} value={o.id}>serves: {o.name}</option>)}
+                    </select>
+                  }
                   {st.status === "proposed" &&
                     <button onClick={() => handleStart(st)} disabled={busy !== null} style={miniBtn("#facc15")}>START</button>
                   }
@@ -273,6 +327,16 @@ export default function PhasePanel({ planId }) {
               value={newStrategy}
               onChange={(e) => setNewStrategy(e.target.value)}
               style={{ flex: 1, padding: "5px 8px", background: "#18181b", border: "1px solid #27272a", borderRadius: "4px", color: "#fff", fontSize: "11px" }} />
+            {objectives.length > 0 &&
+              <select
+                aria-label="New strategy serves"
+                value={newStrategyObjective}
+                onChange={(e) => setNewStrategyObjective(e.target.value)}
+                style={{ background: "#18181b", color: "#a1a1aa", border: "1px solid #27272a", borderRadius: "4px", fontSize: "10px", padding: "1px 4px" }}>
+                <option value="">serves: —</option>
+                {safeMap(objectives, (o) => <option key={o.id} value={o.id}>serves: {o.name}</option>)}
+              </select>
+            }
             <button type="submit" disabled={busy !== null || !newStrategy.trim()} style={miniBtn("#00ffaa")}>ADD</button>
           </form>
         </div>

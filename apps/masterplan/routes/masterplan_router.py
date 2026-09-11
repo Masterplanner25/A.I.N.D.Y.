@@ -358,6 +358,7 @@ async def get_strategy_layer(
         from apps.masterplan.services import strategy_layer_service as layer
         from apps.masterplan.services.masterplan_service import assert_masterplan_owned
         from apps.masterplan.services.phase_advance import (
+            objective_rollup,
             phase_task_counts,
             strategy_task_counts,
         )
@@ -372,6 +373,7 @@ async def get_strategy_layer(
             "strategy_task_counts": strategy_task_counts(
                 db, masterplan_id=plan.id, user_id=user_id
             ),
+            "objective_rollup": objective_rollup(db, masterplan_id=plan.id, user_id=user_id),
             "strategies": layer.list_strategies(db, masterplan_id=plan.id),
             "unhoused_emergent": layer.unhoused_emergent_strategies(db, masterplan_id=plan.id),
         }
@@ -551,6 +553,10 @@ class StrategyVerdictRequest(BaseModel):
 
 class StrategyMoveRequest(BaseModel):
     phase_id: Optional[str] = None
+
+
+class StrategyObjectiveRequest(BaseModel):
+    objective_id: Optional[str] = None   # null un-houses
 
 
 class StrategyPromoteRequest(BaseModel):
@@ -745,6 +751,31 @@ async def displace_strategy_route(
     return await _strategy_route(
         request, plan_id, user_id, db, "masterplan.strategy.displace",
         {"plan_id": plan_id, "strategy_id": strategy_id}, act,
+    )
+
+
+@router.post("/{plan_id}/strategies/{strategy_id}/objective")
+@limiter.limit("30/minute")
+async def set_strategy_objective_route(
+    request: Request, plan_id: int, strategy_id: str, body: StrategyObjectiveRequest,
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+):
+    """Which objective the strategy serves. Ownership, not scheduling: rare, and the act that
+    lets hours roll up to purpose."""
+    user_id = str(current_user["sub"])
+
+    def act(plan):
+        from apps.masterplan.services import strategy_layer_service as layer
+
+        if _owned_strategy(db, plan.id, strategy_id) is None:
+            return None
+        return layer.set_strategy_objective(
+            db, strategy_id=strategy_id, objective_id=body.objective_id
+        )
+
+    return await _strategy_route(
+        request, plan_id, user_id, db, "masterplan.strategy.objective",
+        {"plan_id": plan_id, "strategy_id": strategy_id, "objective_id": body.objective_id}, act,
     )
 
 

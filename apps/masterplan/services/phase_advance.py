@@ -276,6 +276,43 @@ def strategy_task_counts(
     return counts
 
 
+def objective_rollup(
+    db: Session, *, masterplan_id: int, user_id: Any
+) -> dict[str, dict[str, Any]]:
+    """`{objective_id | "unhoused": {strategies, strategies_by_status, tasks, completed,
+    hours_total, hours_completed}}` — work attributed to purpose (STRATEGY_LAYER_SPEC §5b).
+
+    ★ This is the number the layer was built to produce. `master_plans.total_wcu` can say
+    the plan was worked; a task carries `masterplan_id` and nothing else, so it could never
+    say worked *on what*. Through `task → strategy → objective` each objective now reports
+    its own hours, and a qualitative criterion — *"establish a widely adopted ethical AI
+    framework"* — becomes measurable as the work done against it.
+
+    `"unhoused"` is the work the plan cannot attribute: strategies with no objective. It is
+    reported rather than dropped, for the same reason unphased tasks are.
+    """
+    per_strategy = strategy_task_counts(db, masterplan_id=masterplan_id, user_id=user_id)
+    rollup: dict[str, dict[str, Any]] = {}
+    for st in _strategies(db, masterplan_id):
+        key = st.objective_id or "unhoused"
+        bucket = rollup.setdefault(key, {
+            "strategies": 0, "strategies_by_status": {},
+            "tasks": 0, "completed": 0, "hours_total": 0.0, "hours_completed": 0.0,
+        })
+        bucket["strategies"] += 1
+        by = bucket["strategies_by_status"]
+        by[st.status] = by.get(st.status, 0) + 1
+        counts = per_strategy.get(st.id)
+        if counts:
+            bucket["tasks"] += counts["total"]
+            bucket["completed"] += counts["completed"]
+            bucket["hours_total"] = round(bucket["hours_total"] + counts["hours_total"], 2)
+            bucket["hours_completed"] = round(
+                bucket["hours_completed"] + counts["hours_completed"], 2
+            )
+    return rollup
+
+
 # ── propose ───────────────────────────────────────────────────────────────────────────
 
 def propose_phase_advance(
