@@ -62,6 +62,15 @@ MIN_TITLE_MATCH_CHARS = 25
 # rather than skipped, so the ping still exists and simply does not score.
 MAX_VERIFICATIONS_PER_RUN = 60
 
+# ★ The one `verification_note` that means "not looked at yet" rather than "looked and could
+# not see". A 403 is a fact about the publisher and re-fetching it every run would spend the
+# budget on the same refusal; this note is a fact about *us*, and the next run that has budget
+# left owes the candidate a look. Detection matches on it exactly, so it is a constant.
+#
+# Measured 2026-09-10 on a quiet host: 135 kept candidates against a budget of 60 left 158
+# rows carrying this note across the table, and nothing ever revisited them.
+BUDGET_EXHAUSTED_NOTE = "verification budget exhausted for this run"
+
 _WHITESPACE = re.compile(r"\s+")
 
 

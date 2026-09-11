@@ -179,6 +179,47 @@ consumes and leave the same ambiguity one column further down.
 drop points × 20 results); an unbudgeted verifier would turn a background job into an outbound
 crawl. Overflow is recorded `unverified` rather than skipped, so the next run revisits it.
 
+### ★ 6b. The first clean reading, and what it showed about the budget (2026-09-10)
+
+The 09-07 numbers (59 drops checked, 0 verified) were taken while PostgreSQL was reinitialising
+under host memory pressure, so they were set aside. Re-run after a reboot with 0 reinits and
+1.2 GB available:
+
+```
+checked=10 drops   found=200   kept=135   verified=0
+written unverified=102   rejected (fetched, does not cite)=33
+```
+
+**Still zero verified**, and the 33 rejections are the fix working: fetched, read, and they do
+not cite the piece. The host was not the reason for the 09-07 zero.
+
+But the 102 written `unverified` were mostly not checked at all. Across the whole table:
+
+| `verification_note` | rows |
+|---|---|
+| pre-fix rows (never checked, by design) | 265 |
+| **verification budget exhausted for this run** | **158** |
+| HTTP 403 | 63 |
+| 2 MB cap / 404 / 401 / connection | 16 |
+
+135 kept candidates against `MAX_VERIFICATIONS_PER_RUN = 60` makes the budget, not the web,
+the dominant reason a ping lands `unverified`. And the sentence *"the next run revisits it"*
+— written in this doc, in two code comments and in a test docstring — was never true:
+`_record_ping` returned early on any existing id, so a ping written past the budget was
+permanently unverified after one unlucky run and indistinguishable from a 403 without reading
+its note.
+
+**Fixed the same day.** `BUDGET_EXHAUSTED_NOTE` is now a constant and the only note that means
+*"not looked at yet"*. On each run, a candidate whose ping carries it is fetched if budget
+remains and then upgraded to `verified`, left `unverified` with the publisher's real reason, or
+deleted — it never scored, so nothing the engines computed depended on it. Every other existing
+ping is skipped for free: a 403 re-fetched every run is the same refusal at the price of a
+fetch, and until this change every already-known ping *was* re-fetched before the early return
+noticed it. The batch now charges its budget by fetches made, not by candidates kept.
+
+The cap itself stays at 60. It is doing its job; it just needed to be a queue rather than a
+verdict.
+
 ### ★ The intended, visible consequence
 
 `threadweaver` counts `verified` pings only, and the migration labels all 256 existing rows

@@ -341,8 +341,145 @@ def test_the_verification_budget_downgrades_rather_than_skips(db_session, monkey
     ]
 
     assert result["created"] == 3
+    assert result["fetched"] == 1
     assert sorted(states) == ["unverified", "unverified", "verified"]
-    assert any(
-        "budget" in (row.verification_note or "")
+    assert [
+        row.verification_note
         for row in db_session.query(PingDB).filter(PingDB.drop_point_id == drop.id).all()
+        if row.verification == "unverified"
+    ] == [pv.BUDGET_EXHAUSTED_NOTE, pv.BUDGET_EXHAUSTED_NOTE]
+
+
+# ── ★ and the next run actually revisits them ──────────────────────────────────────────────
+
+def _budget_debt(db, drop, url="https://blog.example/owed"):
+    """A ping a previous run wrote past its budget: exists, does not score, never looked at."""
+    from apps.rippletrace.services import ripple_detection as rd
+
+    hit = rd.SearchHit(url=url, title="X", snippet="", published=None)
+    rd._record_ping(
+        db, drop_point=drop, hit=hit,
+        verification=pv.UNVERIFIED, verification_note=pv.BUDGET_EXHAUSTED_NOTE,
+    )
+    db.commit()
+    return hit
+
+
+def test_a_budget_debt_is_paid_on_the_next_run_with_budget(db_session, monkeypatch):
+    """★ The sentence "the next run revisits them" was in two comments and one docstring
+    before any code made it true.
+
+    Measured 2026-09-10: 158 rows carried the budget note and `_record_ping` returned early
+    on every one of them, forever. A ping written past the budget is a debt, and this is the
+    run that pays it.
+    """
+    from apps.rippletrace.services import ripple_detection as rd
+
+    drop = _drop(db_session)
+    hit = _budget_debt(db_session, drop)
+    monkeypatch.setattr(rd, "search", lambda *a, **k: [hit])
+    monkeypatch.setattr(rd, "verify_hit", lambda **kw: (pv.VERIFIED, None))
+
+    result = rd.detect_for_drop_point(db_session, drop)
+    row = db_session.query(PingDB).filter(PingDB.drop_point_id == drop.id).one()
+
+    assert result["created"] == 0
+    assert result["revisited"] == {"verified": 1, "unverified": 0, "removed": 0}
+    assert (row.verification, row.verification_note) == ("verified", None)
+
+
+def test_a_budget_debt_that_turns_out_not_to_cite_you_is_removed(db_session, monkeypatch):
+    """It never scored, so deleting it rewrites nothing the engines reasoned over."""
+    from apps.rippletrace.services import ripple_detection as rd
+
+    drop = _drop(db_session)
+    hit = _budget_debt(db_session, drop)
+    monkeypatch.setattr(rd, "search", lambda *a, **k: [hit])
+    monkeypatch.setattr(rd, "verify_hit", lambda **kw: (pv.REJECTED, "not a citation"))
+
+    result = rd.detect_for_drop_point(db_session, drop)
+
+    assert result["revisited"]["removed"] == 1
+    assert result["rejected"]["not_a_citation"] == 1
+    assert db_session.query(PingDB).filter(PingDB.drop_point_id == drop.id).count() == 0
+
+
+def test_a_budget_debt_that_cannot_be_fetched_keeps_the_real_reason(db_session, monkeypatch):
+    """Still unverified — but now for the publisher's reason, so it is not revisited again."""
+    from apps.rippletrace.services import ripple_detection as rd
+
+    drop = _drop(db_session)
+    hit = _budget_debt(db_session, drop)
+    monkeypatch.setattr(rd, "search", lambda *a, **k: [hit])
+    monkeypatch.setattr(rd, "verify_hit", lambda **kw: (pv.UNVERIFIED, "HTTP 403"))
+
+    result = rd.detect_for_drop_point(db_session, drop)
+    row = db_session.query(PingDB).filter(PingDB.drop_point_id == drop.id).one()
+
+    assert result["revisited"]["unverified"] == 1
+    assert (row.verification, row.verification_note) == ("unverified", "HTTP 403")
+
+
+def test_a_decided_ping_costs_nothing_on_later_runs(db_session, monkeypatch):
+    """★ Only the budget note means "not looked at yet".
+
+    A 403 re-fetched every run is the same refusal at the price of a fetch, and a verified
+    ping re-fetched every run spends the budget proving what is already known. Both used to
+    be fetched before `_record_ping` noticed the row existed.
+    """
+    from apps.rippletrace.services import ripple_detection as rd
+
+    drop = _drop(db_session)
+    decided = [
+        rd.SearchHit(url="https://blocked.example/post", title="X", snippet="", published=None),
+        rd.SearchHit(url="https://blog.example/known", title="X", snippet="", published=None),
+    ]
+    rd._record_ping(
+        db_session, drop_point=drop, hit=decided[0],
+        verification=pv.UNVERIFIED, verification_note="HTTP 403",
+    )
+    rd._record_ping(db_session, drop_point=drop, hit=decided[1], verification=pv.VERIFIED)
+    db_session.commit()
+    calls = []
+    monkeypatch.setattr(rd, "search", lambda *a, **k: decided)
+    monkeypatch.setattr(
+        rd, "verify_hit", lambda **kw: calls.append(kw["hit_url"]) or (pv.VERIFIED, None)
+    )
+
+    result = rd.detect_for_drop_point(db_session, drop, verification_budget=5)
+
+    assert calls == []
+    assert result["fetched"] == 0
+    assert result["revisited"] == {"verified": 0, "unverified": 0, "removed": 0}
+
+
+def test_the_batch_charges_for_fetches_not_for_candidates(db_session, monkeypatch):
+    """Two drop points, one budget. The first's candidates are all already decided, so the
+    second still has the whole budget to spend."""
+    from apps.rippletrace.services import ripple_detection as rd
+
+    first = _drop(db_session, url="https://masterplanner25.substack.com/p/one")
+    second = _drop(db_session, url="https://masterplanner25.substack.com/p/two")
+    known = rd.SearchHit(url="https://blog.example/known", title="X", snippet="", published=None)
+    rd._record_ping(db_session, drop_point=first, hit=known, verification=pv.VERIFIED)
+    db_session.commit()
+    fresh = rd.SearchHit(url="https://blog.example/fresh", title="X", snippet="", published=None)
+
+    monkeypatch.setattr(rd, "search", lambda *a, **k: [known, fresh])
+    monkeypatch.setattr(rd, "verify_hit", lambda **kw: (pv.VERIFIED, None))
+    monkeypatch.setattr(rd, "is_configured", lambda: True)
+    monkeypatch.setattr(rd, "_due_drop_points", lambda *a, **k: [first, second])
+    # Budget 3. Charged by `kept`, the first drop point's two candidates would leave one for
+    # the second and its second candidate would land as a budget debt.
+    monkeypatch.setattr(rd, "MAX_VERIFICATIONS_PER_RUN", 3)
+
+    summary = rd.detect_batch(db_session, user_id=str(USER))
+    per_drop = {r["drop_point_id"]: r for r in summary["results"]}
+
+    assert per_drop[first.id]["fetched"] == 1
+    assert per_drop[second.id]["fetched"] == 2
+    assert summary["verified"] == 3
+    assert all(
+        row.verification_note != pv.BUDGET_EXHAUSTED_NOTE
+        for row in db_session.query(PingDB).all()
     )

@@ -41,6 +41,7 @@ from sqlalchemy.orm import Session
 from apps.rippletrace.models import DropPointDB, PingDB
 from apps.rippletrace.services.content_fetch import infer_platform, normalize_url
 from apps.rippletrace.services.ping_verification import (
+    BUDGET_EXHAUSTED_NOTE,
     MAX_VERIFICATIONS_PER_RUN,
     REJECTED,
     UNVERIFIED,
@@ -189,6 +190,11 @@ def _summary_for(hit: SearchHit) -> str:
     return " — ".join(parts)[:1000]
 
 
+def _existing_ping(db: Session, *, drop_point: DropPointDB, hit: SearchHit) -> PingDB | None:
+    identifier = ping_id_for(drop_point.id, hit.url)
+    return db.query(PingDB).filter(PingDB.id == identifier).first()
+
+
 def _record_ping(
     db: Session, *, drop_point: DropPointDB, hit: SearchHit,
     verification: str = "unverified", verification_note: str | None = None,
@@ -262,40 +268,71 @@ def detect_for_drop_point(
     created = 0
     verified = 0
     unverified = 0
+    fetched = 0
+    # ★ A ping written past the budget is a debt, not a decision. It carries
+    # `BUDGET_EXHAUSTED_NOTE` and the next run with budget left pays it: fetch, then upgrade
+    # to verified, leave it unverified with the real reason, or delete it because the page
+    # turned out not to cite you. Every other existing ping is already decided and costs
+    # nothing — a 403 re-fetched every run is the same refusal at the price of a fetch.
+    revisited = {"verified": 0, "unverified": 0, "removed": 0}
     budget = verification_budget if verification_budget is not None else MAX_VERIFICATIONS_PER_RUN
     for hit in kept:
-        if budget > 0:
-            state, note = verify_hit(
-                hit_url=hit.url,
-                drop_url=drop_point.url or "",
-                drop_title=drop_point.title,
-                db=db,
-                user_id=user_id or (str(drop_point.user_id) if drop_point.user_id else None),
-            )
-            budget -= 1
-        else:
+        existing = _existing_ping(db, drop_point=drop_point, hit=hit)
+        if existing is not None and existing.verification_note != BUDGET_EXHAUSTED_NOTE:
+            continue
+
+        if budget <= 0:
             # Out of budget for this run rather than unverifiable in principle. Recorded as
-            # unverified so the ping exists and simply does not score; the next run can revisit.
-            state, note = UNVERIFIED, "verification budget exhausted for this run"
+            # unverified so the ping exists and simply does not score; a later run revisits
+            # it — the branch above is what makes that sentence true.
+            if existing is None:
+                _record_ping(
+                    db, drop_point=drop_point, hit=hit,
+                    verification=UNVERIFIED, verification_note=BUDGET_EXHAUSTED_NOTE,
+                )
+                created += 1
+                unverified += 1
+            continue
+
+        state, note = verify_hit(
+            hit_url=hit.url,
+            drop_url=drop_point.url or "",
+            drop_title=drop_point.title,
+            db=db,
+            user_id=user_id or (str(drop_point.user_id) if drop_point.user_id else None),
+        )
+        budget -= 1
+        fetched += 1
+
+        if existing is not None:
+            if state == REJECTED:
+                # It never scored, so nothing the engines computed depended on it.
+                db.delete(existing)
+                revisited["removed"] += 1
+                rejected["not_a_citation"] = rejected.get("not_a_citation", 0) + 1
+            else:
+                existing.verification = state
+                existing.verification_note = note
+                revisited[state] += 1
+            continue
 
         if state == REJECTED:
             rejected["not_a_citation"] = rejected.get("not_a_citation", 0) + 1
             continue
 
-        _, was_created = _record_ping(
+        _record_ping(
             db, drop_point=drop_point, hit=hit, verification=state, verification_note=note
         )
-        if was_created:
-            created += 1
-            if state == VERIFIED:
-                verified += 1
-            else:
-                unverified += 1
+        created += 1
+        if state == VERIFIED:
+            verified += 1
+        else:
+            unverified += 1
 
     drop_point.mentions_checked_at = _utcnow()
     db.commit()
 
-    if created:
+    if created or revisited["verified"]:
         # Recompute narrative/velocity/spread once for the batch rather than per ping.
         # Best-effort: the pings are already durable, and a scoring failure must not
         # undo the detection that produced them.
@@ -318,6 +355,11 @@ def detect_for_drop_point(
         "verified": verified,
         "unverified": unverified,
         "rejected": rejected,
+        # Debts from earlier runs settled this run, and what it cost to settle them. The
+        # batch decrements its budget by `fetched`, not by `kept` — a candidate that was
+        # already decided was skipped for free.
+        "revisited": revisited,
+        "fetched": fetched,
         "narrative_score": drop_point.narrative_score or 0.0,
         "velocity_score": drop_point.velocity_score or 0.0,
         "spread_score": drop_point.spread_score or 0.0,
@@ -355,18 +397,22 @@ def detect_batch(
         )
 
     due = _due_drop_points(db, user_id=user_id, limit=limit)
-    summary = {"checked": 0, "created": 0, "verified": 0, "errors": 0, "results": []}
+    summary = {
+        "checked": 0, "created": 0, "verified": 0, "revisited": {}, "errors": 0, "results": [],
+    }
     # ★ One verification budget for the whole batch, not one per drop point. Detection can
     # produce 200 candidates in a run (10 drop points x 20 results), and a per-drop budget
     # would multiply into an outbound crawl. Candidates past the budget are recorded
-    # `unverified` rather than skipped, so nothing is lost — the next run revisits them.
+    # `unverified` rather than skipped, so nothing is lost — the next run revisits them,
+    # which is why the budget is charged for fetches actually made and not for `kept`:
+    # a candidate already decided on an earlier run is skipped for free.
     budget = MAX_VERIFICATIONS_PER_RUN
     for drop_point in due:
         try:
             outcome = detect_for_drop_point(
                 db, drop_point, user_id=user_id, verification_budget=budget
             )
-            budget = max(0, budget - int(outcome.get("kept") or 0))
+            budget = max(0, budget - int(outcome.get("fetched") or 0))
         except MentionSearchUnavailable as exc:
             # Provider-level failure (rate limit, bad key) will hit every remaining
             # drop point too — stop rather than burn the rest of the batch on it.
@@ -382,6 +428,8 @@ def detect_batch(
         summary["created"] += int(outcome.get("created") or 0)
         # Reported separately: "created 12" says nothing about how much of it is evidence.
         summary["verified"] += int(outcome.get("verified") or 0)
+        for key, value in (outcome.get("revisited") or {}).items():
+            summary["revisited"][key] = summary["revisited"].get(key, 0) + int(value)
         summary["results"].append(outcome)
     return summary
 
