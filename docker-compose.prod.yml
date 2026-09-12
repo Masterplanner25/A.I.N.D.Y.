@@ -131,6 +131,11 @@ services:
       # Behaviour-changing paths — deliberately listed so they are visible and
       # overridable, but default off.
       AINDY_REASONING_NODUS_NATIVE: "${AINDY_REASONING_NODUS_NATIVE:-}"
+      # Attainment (MASTERPLAN_GOAL_ATTAINMENT_SPEC §6). The shadow records and moves nothing;
+      # it defaults ON in code, so leaving this unset keeps recording. The live flag is the
+      # Phase 3 flip, default off; set it only after the shadow ledger has said something.
+      AINDY_MASTERPLAN_GOAL_ATTAINMENT_SHADOW: "${AINDY_MASTERPLAN_GOAL_ATTAINMENT_SHADOW:-}"
+      AINDY_MASTERPLAN_GOAL_ATTAINMENT: "${AINDY_MASTERPLAN_GOAL_ATTAINMENT:-}"
       # NOTE: AINDY_NEXT_ACTION_ACTING is a TYPED pydantic Settings field (bool), not an
       # os.environ read like the others here. An empty string fails validation and the
       # container crash-loops at `aindy-runtime bootstrap-schema` before it ever serves.

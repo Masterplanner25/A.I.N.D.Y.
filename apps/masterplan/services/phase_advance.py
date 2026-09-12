@@ -313,6 +313,56 @@ def objective_rollup(
     return rollup
 
 
+def objective_attainment(
+    db: Session, *, masterplan_id: int, user_id: Any
+) -> dict[str, Any]:
+    """Per-objective attainment as *work done against it* — the reading the attainment spec
+    could not produce until attribution existed (MASTERPLAN_GOAL_ATTAINMENT_SPEC §4b).
+
+    `attainment_pct` is `hours_completed / hours_total` over the objective's strategies' tasks,
+    `None` when nothing is planned under it — an objective with no work is not 0% attained, it
+    is unmeasured, and reporting zero would be the confident-wrong number this repo keeps
+    catching. The plan figure is hours-weighted over housed work only; unhoused hours are
+    reported beside it, never folded in, because no objective can claim them.
+    """
+    from apps.masterplan.services.strategy_layer_service import list_objectives
+
+    rollup = objective_rollup(db, masterplan_id=masterplan_id, user_id=user_id)
+    objectives = []
+    housed_total = housed_done = 0.0
+    for o in list_objectives(db, masterplan_id=masterplan_id):
+        r = rollup.get(o["id"]) or {}
+        total = float(r.get("hours_total") or 0.0)
+        done = float(r.get("hours_completed") or 0.0)
+        housed_total += total
+        housed_done += done
+        objectives.append({
+            "id": o["id"],
+            "name": o["name"],
+            "strategies": int(r.get("strategies") or 0),
+            "hours_total": total,
+            "hours_completed": done,
+            "attainment_pct": (min(1.0, done / total) if total > 0 else None),
+        })
+    unhoused = rollup.get("unhoused") or {}
+    return {
+        "supported": bool(objectives),
+        "masterplan_id": int(masterplan_id),
+        "objectives": objectives,
+        "plan": {
+            "hours_total": round(housed_total, 2),
+            "hours_completed": round(housed_done, 2),
+            "attainment_pct": (min(1.0, housed_done / housed_total) if housed_total > 0 else None),
+            "objectives_measured": sum(1 for o in objectives if o["attainment_pct"] is not None),
+        },
+        "unhoused": {
+            "strategies": int(unhoused.get("strategies") or 0),
+            "hours_total": float(unhoused.get("hours_total") or 0.0),
+            "hours_completed": float(unhoused.get("hours_completed") or 0.0),
+        },
+    }
+
+
 # ── propose ───────────────────────────────────────────────────────────────────────────
 
 def propose_phase_advance(

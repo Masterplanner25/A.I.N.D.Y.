@@ -108,13 +108,13 @@ def register() -> None:
     #   from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
     # `platform_layer.registry` exports a `register_syscall` too, and it is the wrong one —
     # it writes into a dict the SyscallDispatcher never reads. Every one of this repo's
-    # 73 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
+    # 74 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
     # this block used to say otherwise.
     #
-    # Measured 2026-09-10 rather than carried forward: 97 registered at app-profile boot,
+    # Measured 2026-09-11 rather than carried forward: 98 registered at app-profile boot,
     # 24 of them the runtime's own (import `AINDY.kernel.syscall_registry` alone to see that
-    # number), so 73 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
-    # `sys.v1.task.set_strategy`). The previous
+    # number), so 74 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
+    # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`). The previous
     # figure of 90 was stale, which is the same failure the runtime-floor lines above had —
     # a number nobody re-derives is a number that drifts. To re-derive: boot the app profile,
     # then `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())`.
@@ -334,7 +334,7 @@ The Nodus worker is spawned as `subprocess.run([sys.executable, nodus_worker.py]
 `sys.path[0]` is the *worker's* directory and the inherited cwd is **not** on `sys.path`. If this
 repo is not pip-installed, the worker cannot `import apps`, `load_plugins()` raises
 `ModuleNotFoundError`, and `_ensure_tools_loaded` swallows it **at DEBUG**. The worker then runs
-with 24 runtime syscalls instead of 97 (measured 2026-09-10), and the visible symptom is
+with 24 runtime syscalls instead of 98 (measured 2026-09-11), and the visible symptom is
 three layers away:
 
 ```

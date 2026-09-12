@@ -427,6 +427,32 @@ async def get_three_axis_shadow_report(
     return _with_execution_envelope(result)
 
 
+@router.get("/goal-attainment/shadow")
+@limiter.limit("60/minute")
+async def get_goal_attainment_shadow_report(
+    request: Request,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Attainment shadow soak report (MASTERPLAN_GOAL_ATTAINMENT_SPEC §6 Phase 2): what
+    plan_progress would have been with attribution-based attainment blended in, next to what
+    it was, per score event; plus mean divergence. Records accrue while
+    AINDY_MASTERPLAN_GOAL_ATTAINMENT_SHADOW is on (default on); nothing here moves a score."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.analytics.services.integration.goal_attainment import attainment_shadow_report
+
+        return attainment_shadow_report(db, user_id=user_id, limit=limit)
+
+    result = await execute_with_pipeline(
+        request=request, route_name="analytics.goal_attainment.shadow", handler=handler,
+        user_id=user_id, metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
 @router.get("/three-axis/advisory")
 @limiter.limit("60/minute")
 async def get_three_axis_advisory_preview(

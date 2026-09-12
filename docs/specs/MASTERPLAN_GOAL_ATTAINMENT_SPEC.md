@@ -248,10 +248,21 @@ default):
    scoring. Exposed read-only on the projection payload so it is inspectable. Shipped #173.
 2. ✅ **Phase 1 — new syscalls.** `freelance` and `social` `get_goal_metric`, plus `rippletrace`
    (#178). Still unwired. Four of the five unit families now resolve.
-3. **Phase 2 — shadow.** Compute the blended score alongside the live one, record both, change
-   nothing. Flag `AINDY_MASTERPLAN_GOAL_ATTAINMENT_SHADOW`.
-4. **Phase 3 — flip.** Blend becomes live behind
-   `AINDY_MASTERPLAN_GOAL_ATTAINMENT`, default off, after a real soak.
+3. ✅ **Phase 2 — shadow. Shipped 2026-09-11, and not in the form this section expected.**
+   The blend's attainment term is **attribution-based**, not a declared goal: hours completed
+   against each objective through `task → strategy → objective` (§4b's missing chain, built
+   by `STRATEGY_LAYER_SPEC` §5b), hours-weighted to a plan figure. Masterplan answers
+   `sys.v1.masterplan.get_objective_attainment`; analytics reads it by syscall, blends it with
+   the §5 weights, and records `live_score` next to `shadow_score` in
+   `goal_attainment_shadow_records` on every score event. **`AINDY_MASTERPLAN_GOAL_ATTAINMENT_
+   SHADOW` defaults ON** — recording changes no score, and a shadow nobody records cannot end a
+   soak. An objective with no planned work is unmeasured (`NULL`), not 0%, and a plan with
+   nothing measured records a shadow equal to live — the mandatory fallback, by construction.
+   Report: `GET /apps/analytics/goal-attainment/shadow` (`mean_divergence` is the signal).
+   Owner's call: *"yes, as a shadow first."*
+4. **Phase 3 — flip.** The blend becomes live behind `AINDY_MASTERPLAN_GOAL_ATTAINMENT`,
+   default off, after a real soak. The code path exists (same resolver, same blend); the flag
+   is the decision, and the decision waits on the ledger.
 
 Phases 0–1 were safe to merge immediately because nothing observes them — and nothing does
 today, which is why the resolvers exist but no plan is measured by them yet.

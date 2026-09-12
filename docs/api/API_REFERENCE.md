@@ -2451,6 +2451,18 @@ formula applies. Only the `tasks` unit resolves today; `supported_units` reports
 
 **Response 200:** unspecified
 
+#### GET /apps/analytics/goal-attainment/shadow
+Get Goal Attainment Shadow Report — what `masterplan_progress` would have been with
+attribution-based attainment (hours completed against each objective, `task → strategy →
+objective`) blended in by the §5 formula, next to what it was, per score event; plus
+`mean_divergence` over rows where attainment was measurable. Records accrue while
+`AINDY_MASTERPLAN_GOAL_ATTAINMENT_SHADOW` is on (default on). Nothing here moves a score;
+`AINDY_MASTERPLAN_GOAL_ATTAINMENT` (default off) is the flip.
+
+**Parameters:** limit (query): integer
+
+**Response 200:** shadow_enabled, live_enabled, count, measured, mean_divergence, records[]
+
 #### GET /apps/analytics/three-axis
 Get Three Axis Snapshot — observability snapshot of the Volume / Worth / Trajectory axes
 alongside the (unchanged) `master_score` (three-axis score model, Phase A; measurement only,

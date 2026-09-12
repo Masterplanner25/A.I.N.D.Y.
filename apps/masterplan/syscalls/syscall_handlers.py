@@ -526,6 +526,54 @@ def _handle_resolve_phase(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_get_objective_attainment(payload: dict, ctx: SyscallContext) -> dict:
+    """sys.v1.masterplan.get_objective_attainment — work done against each objective.
+
+    The attainment spec's §4b gap, closed from the masterplan side: hours roll up
+    task → strategy → objective, so each objective reports its own fraction. Analytics reads
+    this by syscall for the attainment shadow (never by import).
+
+    Payload keys:
+        user_id        (str)       — required
+        masterplan_id  (str | int) — optional; the user's active plan when omitted
+
+    Returns:
+        {"supported": bool, "masterplan_id": int | None, "objectives": [...],
+         "plan": {hours_total, hours_completed, attainment_pct, objectives_measured},
+         "unhoused": {strategies, hours_total, hours_completed}}
+        `supported: False` with no objectives is a normal answer, not an error.
+    """
+    from AINDY.db.database import SessionLocal
+    from apps.masterplan.masterplan import MasterPlan
+    from apps.masterplan.services.phase_advance import objective_attainment
+
+    user_id = payload["user_id"]
+    masterplan_id = payload.get("masterplan_id")
+
+    external_db = ctx.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        query = db.query(MasterPlan).filter(MasterPlan.user_id == _as_uuid(user_id))
+        if masterplan_id is not None:
+            plan = query.filter(MasterPlan.id == int(masterplan_id)).first()
+        else:
+            plan = query.filter(MasterPlan.is_active.is_(True)).first()
+        if plan is None:
+            return {"supported": False, "masterplan_id": None, "objectives": [], "plan": {}, "unhoused": {}}
+        return objective_attainment(db, masterplan_id=plan.id, user_id=user_id)
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _as_uuid(value):
+    try:
+        return UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def register_masterplan_syscall_handlers() -> None:
     """Register all masterplan domain syscall handlers.
 
@@ -576,6 +624,33 @@ def register_masterplan_syscall_handlers() -> None:
                 "name": {"type": "string"},
                 "ordinal": {"type": "integer"},
                 "source": {"type": "string"},
+            },
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.masterplan.get_objective_attainment",
+        handler=_handle_get_objective_attainment,
+        capability="masterplan.read",
+        description=(
+            "Work done against each of a plan's objectives: hours completed / hours planned "
+            "through task -> strategy -> objective. The attainment shadow's input."
+        ),
+        input_schema={
+            "required": ["user_id"],
+            "properties": {
+                "user_id": {"type": "string"},
+                "masterplan_id": {"type": "string"},
+            },
+        },
+        output_schema={
+            "required": ["supported", "objectives", "plan"],
+            "properties": {
+                "supported": {"type": "bool"},
+                "masterplan_id": {"type": "integer"},
+                "objectives": {"type": "array"},
+                "plan": {"type": "object"},
+                "unhoused": {"type": "object"},
             },
         },
         stable=False,
