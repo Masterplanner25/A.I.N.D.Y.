@@ -131,21 +131,64 @@ describe("TaskDashboard — phase", () => {
     mockGetTasks.mockResolvedValue([
       { task_id: 21, task_name: "Build IP", status: "in_progress", time_spent: 0, masterplan_id: 10, estimated_hours: 205 },
     ]);
-    mockGetStrategyLayer
-      .mockResolvedValueOnce({ phases: PHASES, strategies: STRATEGIES })
-      .mockResolvedValue({ phases: PHASES, strategies: [...STRATEGIES, { id: "s9", phase_id: "p1", name: "Build IP", status: "active" }] });
-    mockPromote.mockResolvedValue({ strategy: { id: "s9", name: "Build IP" }, task_deleted: true, task_id: 21 });
+    // The layer is what the server says at the moment of the call: the strategy exists only
+    // after promotion. (The list also loads the layer for grouping, so calls are not counted.)
+    let promoted = false;
+    mockGetStrategyLayer.mockImplementation(async () => ({
+      phases: PHASES,
+      strategies: promoted ? [...STRATEGIES, { id: "s9", phase_id: "p1", name: "Build IP", status: "active" }] : STRATEGIES,
+    }));
+    mockPromote.mockImplementation(async () => {
+      promoted = true;
+      return { strategy: { id: "s9", name: "Build IP" }, task_deleted: true, task_id: 21 };
+    });
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<TaskDashboard />);
     await waitFor(() => expect(mockListMasterPlans).toHaveBeenCalled());
     fireEvent.change(await screen.findByLabelText(/masterplan/i), { target: { value: "10" } });
-    await waitFor(() => expect(mockGetStrategyLayer).toHaveBeenCalledTimes(1));
+    await screen.findByLabelText(/^strategy$/i);
     expect(screen.getByLabelText(/^strategy$/i)).not.toHaveTextContent("Build IP");
 
     fireEvent.click(await screen.findByRole("button", { name: /make build ip a strategy/i }));
 
-    await waitFor(() => expect(mockGetStrategyLayer).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockPromote).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByLabelText(/^strategy$/i)).toHaveTextContent("Build IP"));
+  });
+
+  it("groups tasks under the strategy they serve, with the phase and a done count", async () => {
+    // The owner's first reaction to promotion was "all of it disappeared": the promoted rows
+    // left this list with nothing to say where they went.
+    mockGetTasks.mockResolvedValue([
+      { task_id: 24, task_name: "Host a Live Vibe Coding Session", status: "pending", time_spent: 0, masterplan_id: 10, strategy_id: "s1", estimated_hours: 1 },
+      { task_id: 26, task_name: "Write three essays", status: "completed", time_spent: 0, masterplan_id: 10, strategy_id: "s1", estimated_hours: 6 },
+      { task_id: 22, task_name: "Build a working technical prototype", status: "in_progress", time_spent: 0, masterplan_id: 10, estimated_hours: 194 },
+      { task_id: 30, task_name: "Buy milk", status: "pending", time_spent: 0 },
+    ]);
+
+    render(<TaskDashboard />);
+
+    // The header appears with the tasks; the strategy's name and phase arrive with the layer a
+    // tick later, so wait on the text rather than the element.
+    await waitFor(() => expect(screen.getByTestId("strategy-group")).toHaveTextContent(
+      "STRATEGYEstablish Authority· Foundation Building1/2 done",
+    ));
+    const group = screen.getByRole("region", { name: /strategy establish authority/i });
+    expect(group).toHaveTextContent("Host a Live Vibe Coding Session");
+    expect(group).toHaveTextContent("Write three essays");
+    expect(group).not.toHaveTextContent("Buy milk");
+    const none = screen.getByRole("region", { name: /tasks with no strategy/i });
+    expect(none).toHaveTextContent("NO STRATEGY");
+    expect(none).toHaveTextContent("Build a working technical prototype");
+    expect(none).toHaveTextContent("Buy milk");
+  });
+
+  it("does not draw a NO STRATEGY header when nothing has a strategy", async () => {
+    mockGetTasks.mockResolvedValue([{ task_id: 30, task_name: "Buy milk", status: "pending", time_spent: 0 }]);
+
+    render(<TaskDashboard />);
+
+    expect(await screen.findByText("Buy milk")).toBeInTheDocument();
+    expect(screen.queryByText("NO STRATEGY")).not.toBeInTheDocument();
   });
 });
