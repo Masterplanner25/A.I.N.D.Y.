@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 from apps.search.models import SearchHistory
 from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
-from apps.search.services.search_scoring import score_research_result, score_seo_result
+from apps.search.services.search_scoring import score_research_result
 from apps.search.services.seo_services import (
     count_characters,
     generate_meta_description,
@@ -239,16 +239,13 @@ def search_seo(
     title: str | None = None,
     target_keywords: list[str] | None = None,
 ) -> dict[str, Any]:
-    results = seo_analysis(text, top_n, title=title, target_keywords=target_keywords)
-    avg_density = 0.0
-    if results["keyword_densities"]:
-        avg_density = sum(results["keyword_densities"].values()) / len(results["keyword_densities"])
-    results["search_score"] = score_seo_result(
-        readability=results["readability"],
-        avg_keyword_density=avg_density,
-        word_count=results["word_count"],
-    )
-    return results
+    # ★ No blended `search_score` (SEO_EDITING_AID_SPEC §5 Q3, owner 2026-09-11: drop it).
+    # It averaged readability, mean keyword density and word count into one number. With
+    # target-keyword coverage and the repetition report on the same page, a single averaged
+    # figure was the least informative thing there — and averaging densities across whatever
+    # keywords happened to be frequent was a questionable summary before targets existed.
+    # The measurements it blended are all still returned individually.
+    return seo_analysis(text, top_n, title=title, target_keywords=target_keywords)
 
 
 def analyze_seo_content(

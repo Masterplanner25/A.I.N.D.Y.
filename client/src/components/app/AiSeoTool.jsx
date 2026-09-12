@@ -370,11 +370,9 @@ export default function AiSeoTool() {
         <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg">
                         <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-2">
                             <h2 className="text-xl font-bold text-blue-400">SEO Scorecard</h2>
-                            {seoData.search_score != null && (
-                              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
-                                score {Math.round(Number(seoData.search_score) * 100)}
-                              </span>
-                            )}
+                            {/* No single blended score up here, on purpose (spec §5 Q3). The
+                                measurements below are the scorecard; one averaged number over
+                                them was the least informative thing on the page. */}
                         </div>
                         <div className="space-y-2 text-gray-300">
                             {/* The verdict is always shown WITH the measurement, never instead

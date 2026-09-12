@@ -241,6 +241,18 @@ and with 0 verified of 602 nobody yet knows whether the tail of the results is w
 citation would sit. At 233 owed and ~100 settled per run, the backlog clears in about a day of
 runs — and then the number this whole document is waiting for is finally a number.
 
+### ★ 6d. Paused (owner, 2026-09-11 evening)
+
+The settlement pass ran once on the rebuilt stack: 100 debts settled (53 deleted as not citing,
+47 left unverified for the publisher's reason), 100 new candidates fetched, **0 verified of 620.**
+Three measurements on three days, the last with 200 pages actually read. The pipeline is no
+longer the suspect; the instrument is.
+
+The owner's call: **pause the sweep, choose a provider later.** `AINDY_RIPPLE_MENTION_DETECTION`
+is off. Everything built stays and resumes on the flag. Remedy 3 (§6a) — a search that indexes
+pages containing a phrase rather than answering a question — is the path, and it needs a key and a
+cost decision, which is why it is deferred rather than built on speculation.
+
 ### ★ The intended, visible consequence
 
 `threadweaver` counts `verified` pings only, and the migration labels all 256 existing rows

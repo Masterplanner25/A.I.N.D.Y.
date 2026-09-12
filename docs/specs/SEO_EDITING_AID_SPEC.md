@@ -364,10 +364,15 @@ incomparable **while still looking comparable**.
    Both near-term pieces are now done: the phase line ships on each surface, and 4 feeds are
    registered (215 drop points ingested).
 
-3. **Should the scorecard's overall score survive at all?** `search_score` blends readability,
-   average density and word count into one number (`search_scoring.py:291`). With targets and a
-   repetition report, a single number is the least informative thing on the page — and averaging
-   keyword densities was already a questionable summary before targets existed.
+3. ~~**Should the scorecard's overall score survive at all?**~~ **RESOLVED 2026-09-11 (owner):
+   dropped.** `search_score` blended readability, average density and word count into one number;
+   with targets and a repetition report it was the least informative thing on the page, and
+   averaging densities across whatever keywords happened to be frequent was a questionable summary
+   before targets existed. Removed from the SEO analysis, the draft loop's tracked metrics and the
+   scorecard header. `seo_draft_analyses.search_score` stays as a nullable, unwritten column
+   (additive-only migration policy); older analyses keep the value they recorded. The `search_score`
+   on lead and research results is a *ranking* composite and is untouched. **With this, every
+   question in §5 is resolved and the spec is complete.**
 
 4. ~~**How much history?**~~ **RESOLVED 2026-09-07 (owner): every analysis, with a prune the
    system proposes and a person confirms.** Neither of the two options originally offered — the
