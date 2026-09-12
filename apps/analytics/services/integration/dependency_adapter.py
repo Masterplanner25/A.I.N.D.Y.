@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import case
@@ -10,7 +11,11 @@ from AINDY.platform_layer.registry import get_symbol
 from AINDY.platform_layer.system_state_service import compute_current_state
 from AINDY.platform_layer.user_ids import parse_user_id, require_user_id
 
+from apps._shared.syscall import failed, swallowed
+
 from .tasks_bridge import get_task_graph_context_via_syscall
+
+logger = logging.getLogger(__name__)
 
 
 class RecordDict(dict):
@@ -41,8 +46,11 @@ def _dispatch_syscall(name: str, payload: dict[str, Any], *, user_id: str | None
     if db is not None:
         ctx.metadata["_db"] = db
     result = get_dispatcher().dispatch(name, payload, ctx)
-    if result.get("status") != "success":
-        return {}
+    if failed(result):
+        # Every analytics syscall funnels through here, and every failure used to become an
+        # empty dict with no trace — `update_loop_adjustment` among them
+        # (SYSCALL-SILENT-ERRORS-1). Same return; now it says why.
+        return swallowed(name, result, default={}, log=logger, caller="dependency_adapter")
     return result.get("data") or {}
 
 

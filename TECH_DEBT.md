@@ -306,7 +306,19 @@ handler/outcome contract violation.
 
 Reproduce under concurrency — every successful reproduction so far was a quiet single call, and
 the failures appear on a loaded system. Then read the envelope's `error` string, which carries the
-exact message and is currently thrown away by the caller.
+exact message and ~~is currently thrown away by the caller~~.
+
+**★ 2026-09-11 — the caller no longer throws it away.** `apps/_shared/syscall.py`: `failed()` +
+`swallowed()` keep every early return exactly as it was (a zero is still a zero) and add one
+WARNING with the syscall name, the envelope status, and the `error` string. Applied at the two
+app-owned sites — `identity_boot_service` (`count_runs`, `list_recent_runs`) and
+`dependency_adapter._dispatch_syscall`, which is the funnel for *every* analytics syscall
+including `update_loop_adjustment`. `sys.v1.agent.list_recent_durations` has no caller in
+`apps/` at all; that one is dispatched by the runtime and is FR-25's alone.
+
+So the mechanism no longer has to be found from outside: the next occurrence on live traffic
+writes its own reason to the api log. Grep for `[syscall]` after a busy session. The remaining
+twelve `!= "success"` swallows in `apps/` either already log or raise; they were left alone.
 
 Worth noting the caller is not at fault: `identity_boot_service` returning `0` on non-success is
 correct defensive code. It is the combination of a correct swallow with a silent dispatcher that
