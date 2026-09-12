@@ -1,6 +1,6 @@
 ---
 title: "Runtime Dependency"
-last_verified: "2026-07-18"
+last_verified: "2026-09-11"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -19,18 +19,26 @@ published contracts.
 Recommended dependency range:
 
 ```toml
-aindy-runtime>=2.4.1,<3.0
+aindy-runtime>=2.11.0,<3.0
 ```
 
 The upper bound is required. The apps repo should not accept unbounded runtime
 upgrades.
 
-Validated on `2026-08-15`:
+Validated on `2026-09-11`:
 
-- installed runtime version: `2.1.0`
-- apps repo dependency (pinned in `pyproject.toml`): `aindy-runtime>=2.4.1,<3.0`
-- runtime `/api/version` recommendation: `>=2.0,<3.0`
-- app-profile boot smoke on 2.1.0: `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16`
+- installed runtime version: `2.11.0` (checked by **import**, not `pip show` — the
+  dist-info of an editable install reports whatever was recorded at install time; on this
+  machine it said `2.0.1` while `AINDY._version.__version__` said `2.11.0`)
+- apps repo dependency: range `aindy-runtime>=2.11.0,<3.0` in `pyproject.toml`, build pin
+  `aindy-runtime==2.11.0` in `constraints.txt`, asserted equal by
+  `tests/unit/test_runtime_dependency_contract.py`
+- app-profile boot smoke on 2.11.0: `boot_profile=default-apps`, `app_plugins_loaded=True`,
+  `app_plugin_count=16`
+
+**This block had said 2.4.1 / 2.1.0 since 2026-08-15 while the pin moved through 2.6, 2.8 and
+2.9.** A number nobody re-derives is a number that drifts; the upgrade doc for each release is
+the record, and this file is only a pointer to the current one.
 
 ## 2.0.0 — a major bump, and the pin cannot move alone
 
@@ -133,7 +141,7 @@ live, published dependency contract — not a pre-publication staging arrangemen
 
 `aindy-runtime` is installed from PyPI as a normal pinned dependency:
 
-- the declared dependency in `pyproject.toml` is `aindy-runtime>=2.4.1,<3.0`
+- the declared dependency in `pyproject.toml` is `aindy-runtime>=2.11.0,<3.0`
 - CI installs it via `pip install -e .[test]` (no runtime-repo checkout, no source
   install)
 - CI verifies the installed runtime version and that `/api/version` reports the
