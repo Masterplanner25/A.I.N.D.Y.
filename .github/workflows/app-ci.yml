@@ -156,12 +156,26 @@ jobs:
       - name: Validate bootstrap dependency declarations
         run: python -c "from apps._bootstrap_validator import validate_bootstrap_deps; validate_bootstrap_deps('apps'); print('Bootstrap deps OK')"
 
-      - name: Run app-profile suite
+      # Coverage is a FLOOR (.coveragerc `fail_under`), measured here and nowhere else. It is
+      # only ever raised — see .coveragerc and TEST-INFRA-GAPS-1 for the ratchet rule.
+      - name: Run app-profile suite (with coverage floor)
         run: >
           python -m pytest
           tests
           -m app_profile
           -q
+          --cov=apps
+          --cov-config=.coveragerc
+          --cov-report=term
+          --cov-report=xml:coverage.xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 14
 
   frontend-quality:
     name: Frontend Unit Tests

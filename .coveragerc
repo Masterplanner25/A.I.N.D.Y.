@@ -1,0 +1,29 @@
+# Coverage is measured in CI only (app-ci.yml, "Run app-profile suite") and enforced as a
+# FLOOR, not a target — TEST-INFRA-GAPS-1 item 1. The floor is set just under the last
+# measured value and only ever raised: when a run reports more, raise `fail_under` to one
+# point below it. Never lower it to make a PR pass; that is the ratchet slipping.
+#
+# Measured 2026-09-11 on `pytest tests -m app_profile`: 56% of apps/ (23,658 statements).
+# Per-app spread is in TECH_DEBT.md under TEST-INFRA-GAPS-1 — that table is what to raise.
+#
+# Not in pytest.ini's addopts on purpose: `--cov` slows a local run and pytest-cov is a test
+# extra that a paired-repo venv may not have. Run it by hand with
+#   python -m pytest tests -m app_profile --cov=apps --cov-report=term-missing:skip-covered
+
+[run]
+source = apps
+branch = False
+omit =
+    */__pycache__/*
+    apps/*/nodus/*
+
+[report]
+fail_under = 55
+precision = 0
+show_missing = False
+skip_covered = True
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    if __name__ == .__main__.:
+    raise NotImplementedError
