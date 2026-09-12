@@ -669,10 +669,44 @@ the zero was the web's answer and not the host's.
 
 ---
 
-## IDEMPOTENCY-CONTENTION-UNVERIFIED-1: the effect gate is on, and unmeasured under load (P2)
+## IDEMPOTENCY-CONTENTION-UNVERIFIED-1: the effect gate is on, and unmeasured under load (P2 → runtime-owned)
 
-**Status: OPEN — unverified, which is not the same as clean.** Registered 2026-08-23 with the
-runtime 2.6.0 adoption.
+**Status: MEASURED 2026-09-11 — at-most-once does not hold under contention AT ALL, and the
+runtime already says so. Filed as FR-27; nothing to change here until it ships.**
+
+Measured on the live stack (runtime 2.11.0, PostgreSQL, the test account), `sys.v1.event.emit`
+(`EXACTLY_ONCE`) with one run scope and one payload, N callers released on a barrier:
+
+| callers | reserved | degraded | rows written |
+|---|---|---|---|
+| 2 | 1 | 1 | **2** |
+| 4 | 1 | 3 | **4** |
+| 8 | 1 | 7 | **8** |
+| 8 | 1 | 7 | **8** |
+| 16 | 1 | 15 | **16** |
+
+And sequentially, the same call four times: `reserved 1, replayed 3, rows written 1`.
+
+So the gate is exactly what the runtime documents and nothing more: **a replay cache for
+sequential duplicates, and no protection at all for concurrent ones.** Every caller that loses
+the insert race is downgraded to `AT_LEAST_ONCE` and runs the effect; `degraded` is not "a
+meaningful fraction of reserved" — under contention it is N−1 of N, every time. The runtime's
+own measurement (8 callers → handler ran twice) understated it; on this stack it ran eight
+times.
+
+**What this means for us, concretely:** any app path that can issue the same effect
+concurrently under one run scope — a double-submitted completion, a retried flow node, two
+scheduler ticks overlapping — gets no dedup from the gate. The app-side single-flight guards
+(`task_orchestrate`'s repeat check, the task screen's in-flight set) are the protection that
+actually holds, which is why they exist. `AINDY_SYSCALL_IDEMPOTENCY=0` changes nothing for
+this case and is not recommended.
+
+**The fix is the advisory lock the runtime already names** (`syscall_dispatcher.py:223`,
+"strict at-most-once needs advisory locking, which has not landed"). Filed as **FR-27** with
+the table above. Closes on the release that ships it, re-measured with the same probe.
+
+*Original entry, 2026-08-23, retained:* **OPEN — unverified, which is not the same as clean.**
+Registered with the runtime 2.6.0 adoption.
 
 `AINDY_SYSCALL_IDEMPOTENCY` defaulted **on** in runtime 2.5.0 and now dedups 8 syscalls —
 `memory.write`, `memory.link`, `event.emit`, `flow.run`, `flow.execute_intent`, `nodus.execute`,
