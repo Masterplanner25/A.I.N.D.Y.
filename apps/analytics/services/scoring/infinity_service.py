@@ -402,6 +402,12 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
         return 50.0, 0
 
 
+# The components of the last `calculate_masterplan_progress` call per user, so the attainment
+# shadow (recorded at score-persist time, after the KPI is computed) can blend without
+# recomputing the plan read. Process-local and best-effort; a missing entry means no row.
+_LAST_PROGRESS_COMPONENTS: dict = {}
+
+
 def calculate_masterplan_progress(user_id: str, db: Session) -> tuple:
     """
     MasterPlan Progress Score (0-100).
@@ -447,7 +453,30 @@ def calculate_masterplan_progress(user_id: str, db: Session) -> tuple:
             )
 
         score = round((completion_pct * 100 * 0.6) + (schedule_score * 0.4), 2)
-        return min(100.0, score), total
+        live = min(100.0, score)
+
+        # ★ Attainment (MASTERPLAN_GOAL_ATTAINMENT_SPEC §6). Phase 2 is the SHADOW: the §5
+        # blend is recorded next to `live` and changes nothing. Phase 3 is the flip, behind
+        # AINDY_MASTERPLAN_GOAL_ATTAINMENT, default off. Both paths are non-fatal: a broken
+        # attainment read leaves the live number exactly as it was.
+        from apps.analytics.services.integration import goal_attainment as ga
+
+        _LAST_PROGRESS_COMPONENTS[str(user_id)] = {
+            "masterplan_id": plan.id,
+            "completion_pct": completion_pct,
+            "schedule_score": schedule_score,
+            "live_score": live,
+        }
+        if ga.live_enabled():
+            try:
+                att = ga.resolve_objective_attainment(db, user_id=str(user_id), masterplan_id=plan.id)
+                pct = (att.get("plan") or {}).get("attainment_pct") if att.get("supported") else None
+                return ga.blend_with_attainment(
+                    completion_pct=completion_pct, schedule_score=schedule_score, attainment_pct=pct,
+                ), total
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("[GoalAttainment] live blend failed, using live formula: %s", exc)
+        return live, total
 
     except Exception as e:
         logger.warning("masterplan_progress calc failed: %s", e)
@@ -685,6 +714,19 @@ def calculate_infinity_score(
             shadow_log_three_axes(db, user_id=user_id, master_score=master, trigger_event=trigger_event)
         except Exception as _shadow_exc:  # pragma: no cover - defensive
             logger.debug("[three_axis] shadow hook skipped: %s", _shadow_exc)
+        # Attainment shadow (MASTERPLAN_GOAL_ATTAINMENT_SPEC §6 Phase 2): what plan_progress
+        # would have been with attribution-based attainment blended in, recorded next to what
+        # it was. Drives nothing. Same non-fatal contract as the three-axis hook.
+        try:
+            from apps.analytics.services.integration import goal_attainment as _ga
+
+            _components = _LAST_PROGRESS_COMPONENTS.pop(str(user_id), None)
+            if _components is not None:
+                _ga.shadow_log_attainment(
+                    db, user_id=user_id, trigger_event=trigger_event, **_components,
+                )
+        except Exception as _att_exc:  # pragma: no cover - defensive
+            logger.debug("[GoalAttainment] shadow hook skipped: %s", _att_exc)
         emit_event(
             SystemEventTypes.ANALYTICS_SCORE_UPDATED,
             {

@@ -22,6 +22,7 @@ from apps.analytics.metrics_models import (
     RevenueScaling,
 )
 from apps.analytics.score_snapshot import ScoreSnapshotDB
+from apps.analytics.goal_attainment_shadow import GoalAttainmentShadowRecord
 from apps.analytics.three_axis_shadow import ThreeAxisShadowRecord
 from apps.analytics.value_declaration import IntentValueDeclaration
 from apps.analytics.user_score import (
@@ -62,6 +63,7 @@ __all__ = [
     "RevenueScaling",
     "ScoreHistory",
     "ScoreSnapshotDB",
+    "GoalAttainmentShadowRecord",
     "ThreeAxisShadowRecord",
     "UserKpiWeights",
     "UserPolicyThresholds",

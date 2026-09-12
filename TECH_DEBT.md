@@ -811,6 +811,7 @@ advisory → soak → flip*:
 | `AINDY_INFINITY_LEARNED_ADVISORY` | Learned REFLECT calibrator (Phase 2) |
 | `AINDY_SEARCH_OUTCOME_WEIGHTING` | Outcome-weighted search ranking |
 | `AINDY_REASONING_NODUS_NATIVE` | Reasoning via the Nodus VM (behaviour-neutral) |
+| `AINDY_MASTERPLAN_GOAL_ATTAINMENT_SHADOW` / `AINDY_MASTERPLAN_GOAL_ATTAINMENT` | Attribution-based attainment in `masterplan_progress` (added 2026-09-11). **The shadow half defaults ON** — it records and moves nothing — so this one accrues evidence without anyone flipping anything. Gate: `mean_divergence` on `GET /analytics/goal-attainment/shadow` over real score events |
 | `AINDY_NEXT_ACTION_ACTING` | Bounded autonomous dispatch (FR-3) |
 
 All five flags were verified present in `apps/` on 2026-08-22, read from the environment and

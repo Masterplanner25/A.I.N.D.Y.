@@ -263,3 +263,167 @@ def resolve_for_active_plan(db, user_id: str) -> dict[str, Any]:
     result["masterplan_id"] = plan.id
     result["goal_description"] = plan.goal_description
     return result
+
+
+# ── ★ Attribution-based attainment, and the shadow (§6 Phase 2) ─────────────────────────────────────
+#
+# §4b said WCU could measure THAT you worked, never that you worked ON THIS, because a task
+# carried a plan and nothing else. `STRATEGY_LAYER_SPEC` §5b built the chain (#333, #335), and
+# masterplan now answers `sys.v1.masterplan.get_objective_attainment`: hours completed against
+# each objective, and a plan figure weighted over housed work. This is that answer, read by
+# syscall, blended by the §5 formula, and RECORDED — never applied. Owner, 2026-09-11: "yes, as
+# a shadow first."
+
+SHADOW_FLAG = "AINDY_MASTERPLAN_GOAL_ATTAINMENT_SHADOW"
+LIVE_FLAG = "AINDY_MASTERPLAN_GOAL_ATTAINMENT"
+_TRUTHY = {"1", "true", "yes", "on"}
+
+# §5 weights. A starting value, not a derived one (§7 is the open calibration question).
+ATTAINMENT_WEIGHT = 0.40
+COMPLETION_WEIGHT = 0.35
+SCHEDULE_WEIGHT = 0.25
+
+
+def shadow_enabled() -> bool:
+    """Record the blend next to the live score. Default ON: recording changes no score, and a
+    shadow nobody records cannot end a soak. Set the flag to 0 to stop recording."""
+    import os
+
+    raw = os.environ.get(SHADOW_FLAG)
+    if raw is None or not raw.strip():
+        return True
+    return raw.strip().lower() in _TRUTHY
+
+
+def live_enabled() -> bool:
+    """Let the blend BE the score. Default OFF, and stays off until the shadow ledger says
+    something. This is the flip; it is not this PR's to make."""
+    import os
+
+    return (os.environ.get(LIVE_FLAG) or "").strip().lower() in _TRUTHY
+
+
+def resolve_objective_attainment(db, *, user_id: str, masterplan_id: Any = None) -> dict[str, Any]:
+    """Work done against each objective, from masterplan by syscall. Never raises.
+
+    `supported: False` when the plan has no objectives (or the syscall failed — logged by the
+    dispatcher's own path or by `_dispatch`, and reported here as unsupported rather than as
+    zero attainment).
+    """
+    payload: dict[str, Any] = {"user_id": str(user_id)}
+    if masterplan_id is not None:
+        payload["masterplan_id"] = str(masterplan_id)
+    try:
+        data = _dispatch(
+            "sys.v1.masterplan.get_objective_attainment", payload,
+            user_id=str(user_id), capability="masterplan.read", db=db,
+        )
+    except Exception as exc:  # pragma: no cover - defensive; scoring must not break
+        logger.warning("[GoalAttainment] objective attainment failed: %s", exc)
+        return {"supported": False, "reason": "syscall_failed"}
+    if not data or not data.get("supported"):
+        return {"supported": False, "reason": "no_objectives", **({k: v for k, v in data.items() if k != "supported"})}
+    return data
+
+
+def blend_with_attainment(
+    *, completion_pct: float, schedule_score: float, attainment_pct: float | None
+) -> float:
+    """The §5 formula. With no measurable attainment it collapses to the live formula — the
+    fallback is total, by construction rather than by branch."""
+    if attainment_pct is None:
+        return round(min(100.0, completion_pct * 100 * 0.6 + schedule_score * 0.4), 2)
+    score = (
+        min(1.0, float(attainment_pct)) * 100 * ATTAINMENT_WEIGHT
+        + completion_pct * 100 * COMPLETION_WEIGHT
+        + schedule_score * SCHEDULE_WEIGHT
+    )
+    return round(min(100.0, score), 2)
+
+
+def shadow_log_attainment(
+    db, *, user_id, live_score: float, completion_pct: float, schedule_score: float,
+    masterplan_id: Any = None, trigger_event: str | None = None,
+) -> dict[str, Any] | None:
+    """Record the blend next to the live score. No-op when the flag is off; non-fatal always.
+
+    Returns the row's inputs (for the caller's own reporting) or None.
+    """
+    if not shadow_enabled():
+        return None
+    try:
+        from AINDY.platform_layer.user_ids import parse_user_id
+        from apps.analytics.goal_attainment_shadow import GoalAttainmentShadowRecord
+
+        uid = parse_user_id(user_id)
+        if uid is None:
+            return None
+        att = resolve_objective_attainment(db, user_id=str(user_id), masterplan_id=masterplan_id)
+        plan = att.get("plan") or {}
+        attainment_pct = plan.get("attainment_pct") if att.get("supported") else None
+        shadow = blend_with_attainment(
+            completion_pct=completion_pct, schedule_score=schedule_score, attainment_pct=attainment_pct,
+        )
+        row = GoalAttainmentShadowRecord(
+            user_id=uid,
+            masterplan_id=att.get("masterplan_id") or (int(masterplan_id) if masterplan_id is not None else None),
+            live_score=float(live_score),
+            shadow_score=shadow,
+            attainment_pct=attainment_pct,
+            completion_pct=completion_pct,
+            schedule_score=schedule_score,
+            hours_completed=plan.get("hours_completed"),
+            hours_total=plan.get("hours_total"),
+            objectives_measured=plan.get("objectives_measured"),
+            objectives=att.get("objectives") or None,
+            trigger_event=trigger_event,
+        )
+        db.add(row)
+        db.flush()
+        return {"live_score": float(live_score), "shadow_score": shadow, "attainment_pct": attainment_pct}
+    except Exception as exc:  # pragma: no cover - defensive; scoring must not break
+        logger.warning("[GoalAttainment] shadow log failed (non-fatal): %s", exc)
+        return None
+
+
+def attainment_shadow_report(db, *, user_id=None, limit: int = 50) -> dict[str, Any]:
+    """Soak report: recent rows and the divergence signal — mean(shadow - live) over rows where
+    attainment was measurable. A mean near zero says attainment would not have changed the
+    score; a consistent sign says which way it pulls."""
+    from AINDY.platform_layer.user_ids import parse_user_id
+    from apps.analytics.goal_attainment_shadow import GoalAttainmentShadowRecord
+
+    q = db.query(GoalAttainmentShadowRecord)
+    if user_id is not None:
+        uid = parse_user_id(user_id)
+        if uid is not None:
+            q = q.filter(GoalAttainmentShadowRecord.user_id == uid)
+    rows = q.order_by(GoalAttainmentShadowRecord.created_at.desc()).limit(int(limit)).all()
+    measured = [r for r in rows if r.attainment_pct is not None and r.live_score is not None]
+    divergence = (
+        round(sum(r.shadow_score - r.live_score for r in measured) / len(measured), 2)
+        if measured else None
+    )
+    return {
+        "shadow_enabled": shadow_enabled(),
+        "live_enabled": live_enabled(),
+        "count": len(rows),
+        "measured": len(measured),
+        "mean_divergence": divergence,
+        "records": [
+            {
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "masterplan_id": r.masterplan_id,
+                "live_score": r.live_score,
+                "shadow_score": r.shadow_score,
+                "attainment_pct": r.attainment_pct,
+                "hours_completed": r.hours_completed,
+                "hours_total": r.hours_total,
+                "objectives_measured": r.objectives_measured,
+                "objectives": r.objectives,
+                "trigger_event": r.trigger_event,
+            }
+            for r in rows
+        ],
+    }
+
