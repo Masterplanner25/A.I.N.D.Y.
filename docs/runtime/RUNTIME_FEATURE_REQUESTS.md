@@ -1,13 +1,29 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-11"
+last_verified: "2026-09-12"
 api_version: "1.0"
 status: current
 owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
-## FR-27 — the idempotency gate degrades every concurrent duplicate; measured N−1 of N 🔴 correctness
+## FR-27 — the idempotency gate degrades every concurrent duplicate; measured N−1 of N ✅ SHIPPED in 2.12.0 (opt-in, off here)
+
+**Closed upstream 2026-09-12, one day after filing.** 2.12.0 ships the advisory lock this asked
+for — `AINDY_SYSCALL_IDEMPOTENCY_STRICT`, **default off, PostgreSQL only**: a concurrent
+duplicate blocks on `pg_advisory_xact_lock` until the winner completes, then takes `replayed`.
+`degraded` now means "lock not attempted" (non-PG or flag off); a new label
+`degraded_lock_timeout` means the handler outran the wait. Stated limit, as asked: not
+exactly-once across a winner-process crash.
+
+**Adopted with the flag off** (`RUNTIME_2_12_0_UPGRADE.md` §3): a blocked duplicate holds a
+pooled connection for the wait (300 s default), and on this host's pool and memory floor that
+is a cost paid on every duplicate the app-side guards already prevent. `IDEMPOTENCY-CONTENTION-
+UNVERIFIED-1` therefore stays open on our side as a flip decision, not a runtime defect; the
+09-11 probe is the acceptance test when it flips.
+
+### Original entry (2026-09-11) — retained
+
 
 > **The docstring says "strict at-most-once needs advisory locking, which has not landed."
 > Measured: without it, at-most-once does not hold under contention at all.**
@@ -58,7 +74,18 @@ five lines of threading and we will re-run it against the release that ships thi
 
 ---
 
-## FR-26 — the execution pipeline mints a second trace id instead of adopting the request's 🔴 observability
+## FR-26 — the execution pipeline mints a second trace id instead of adopting the request's ✅ SHIPPED in 2.12.0
+
+**Closed 2026-09-12, one day after filing.** `ExecutionContext.from_request` now prefers the id
+the middleware already assigned; an enveloped `/apps/*` body's `trace_id` **equals** its
+`X-Trace-ID` header. The runtime deliberately did *not* start honouring a client-sent
+`X-Trace-ID` — the trust-boundary decision this entry left to them. Re-measured here with the
+same request (`POST /apps/tasks/create`), now permanent as
+`tests/unit/test_trace_id_envelope_contract.py`: fails on 2.11.0 with two ids, passes on
+2.12.0. `TRACE-ID-DUAL-1` closed.
+
+### Original entry (2026-09-11) — retained
+
 
 > **One line, verified against 2.9.0 and still present at v2.11.0.** Every `/apps/*` response
 > carries two different trace ids, and they resolve to two different event graphs.
@@ -128,7 +155,21 @@ Tracked on our side as `TRACE-ID-DUAL-1` (found 2026-07-22, root-caused 2026-09-
 
 ---
 
-## FR-25 — three places a runtime failure is less legible than it needs to be 🔴 observability
+## FR-25 — three places a runtime failure is less legible than it needs to be ✅ SHIPPED in 2.12.0 (all three)
+
+**Closed 2026-09-12.** (a) a dispatcher error now logs once at WARNING with the message it was
+already returning; (c) a plugin-load failure in the Nodus worker is a WARNING naming the
+manifest, not a swallowed DEBUG (`tool_registry.last_plugin_load_failure()` also exposes it);
+(b) the runtime-owned routes with unvalidated `str` ids (`coordination`, `keys`,
+`admin/users/…/promote`) answer 422 through a typed `routes/path_params.py` — measured upstream
+by probing every served route on SQLite and Postgres; those were the only 500s.
+
+What this changes for us: **new WARNING lines appear only where something was already failing
+silently.** `SYSCALL-SILENT-ERRORS-1`'s three syscalls, if still failing, will now say why in
+the api log — that item's next step is to read them, not to instrument.
+
+### Original entry (2026-09-05/06) — retained
+
 
 > **Three independent asks, filed together because they are the same shape and none is large.**
 > **(a)** is the original: a syscall failure that leaves no trace anywhere. **(b)** was found
@@ -398,7 +439,19 @@ merging past a red gate.
 transitively from the runtime. That is our bug regardless of how this FR lands, and it is
 why the CVE is reachable from app code at all. Tracked separately.
 
-## FR-23 — `/observability/system` reports 0 syscalls and 0 tools while 90 and 16 are live 🔴 observability
+## FR-23 — `/observability/system` reports 0 syscalls and 0 tools while 90 and 16 are live ✅ SHIPPED in 2.12.0
+
+**Closed 2026-09-12.** The route now counts `SYSCALL_REGISTRY` and `TOOL_REGISTRY` — the
+registries the dispatcher and the run actually read — and adds `run_tool_provider_run_types`
+(new `registry.list_run_tool_provider_run_types()`). The two seams that caused it,
+`platform_layer.register_syscall` and `register_agent_tool`, now emit `DeprecationWarning`
+naming the live replacement; nothing in `apps/` calls either (0 warnings at boot). Expect the
+operator dashboard to jump from 0 to the live totals (~98 / 16) after the rebuild — verify in
+the container, the route is admin-gated and not served by the unit fixture
+(`RUNTIME_2_12_0_UPGRADE.md` §5).
+
+### Original entry (2026-08-22) — retained
+
 
 **apps-monolith ref:** found 2026-08-22 while measuring the syscall vocabulary for a CLI-ownership
 question. Two separate causes, one visible symptom, and the symptom is a confident wrong number on

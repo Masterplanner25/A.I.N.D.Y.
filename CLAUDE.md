@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.11.0,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.12.0,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -206,10 +206,10 @@ merge rules): `docs/operations/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime>=2.11.0,<3.0    # pyproject.toml — the COMPATIBILITY range
+aindy-runtime>=2.12.0,<3.0    # pyproject.toml — the COMPATIBILITY range
 ```
 ```
-aindy-runtime==2.11.0         # constraints.txt — the BUILD pin
+aindy-runtime==2.12.0         # constraints.txt — the BUILD pin
 ```
 
 The upper bound is required. Never widen to an unbounded range.
@@ -238,7 +238,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.11.0,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.12.0,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.

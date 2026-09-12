@@ -15,7 +15,7 @@ def test_apps_repo_declares_bounded_runtime_dependency():
     requirements = [Requirement(item) for item in pyproject["project"]["dependencies"]]
     runtime_requirement = next(req for req in requirements if req.name == "aindy-runtime")
 
-    assert str(runtime_requirement.specifier) == "<3.0,>=2.11.0"
+    assert str(runtime_requirement.specifier) == "<3.0,>=2.12.0"
     assert any(spec.operator == "<" for spec in runtime_requirement.specifier)
     assert any(spec.operator == ">=" for spec in runtime_requirement.specifier)
 
@@ -118,3 +118,32 @@ def test_build_paths_install_with_the_constraints_file():
                 if "-c constraints.txt" not in stripped:
                     unpinned.append(f"{path.name}: {stripped}")
     assert not unpinned, "CI installs this package without the runtime pin:\n" + "\n".join(unpinned)
+
+
+def test_the_interpreter_runs_a_runtime_inside_the_declared_range():
+    """The runtime that actually IMPORTS must satisfy the range, not just two strings in two files.
+
+    The 2.9.0 and 2.11.0 adoption passes both ran their suites against a stale published
+    2.6.0 in the dev venv while the docs said otherwise (APP_HANDOFF_v2.12.0 opening box).
+    Every other test here compares files to files; this one asks the interpreter. Range, not
+    the exact pin, so a sibling checkout a few commits past the tag still passes — the point
+    is to catch a venv BELOW the floor, which is the failure that actually happened.
+
+    `pip show` / `importlib.metadata` are the wrong instrument (they report install-time
+    metadata, and an editable install never re-reads it); `AINDY._version` is what runs.
+    """
+    from packaging.version import Version
+
+    import AINDY
+    from AINDY._version import __version__
+
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    requirements = [Requirement(item) for item in pyproject["project"]["dependencies"]]
+    runtime_requirement = next(req for req in requirements if req.name == "aindy-runtime")
+
+    assert runtime_requirement.specifier.contains(Version(__version__), prereleases=True), (
+        f"the interpreter imports aindy-runtime {__version__} from {list(AINDY.__path__)}, "
+        f"outside the declared {runtime_requirement.specifier} — every test in this session "
+        "is exercising a runtime nobody adopted. Reinstall: "
+        "python -m pip install -e .[test] -c constraints.txt --no-build-isolation"
+    )
