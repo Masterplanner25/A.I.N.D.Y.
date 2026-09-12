@@ -158,6 +158,16 @@ services:
       # limit". Widened + env-overridable. See docs/operations/DEPLOYMENT.md.
       AINDY_NODUS_MAX_EXECUTION_MS: "${AINDY_NODUS_MAX_EXECUTION_MS:-120000}"
       AINDY_NODUS_BOOT_ALLOWANCE_MS: "${AINDY_NODUS_BOOT_ALLOWANCE_MS:-60000}"
+      # Runtime 2.11.0: nodus's workflow framework keeps its own run records, which used to
+      # land in the worker's cwd (/home/aindy, no volume) and vanish on every recreate.
+      # Pointing them at a volume makes them durable. Use this variable, not the legacy
+      # NODUS_WORKFLOW_STORE_ROOT (which relocates only half). Local storage only: the store
+      # is SQLite in WAL mode. It grows and nothing prunes it — with
+      # AINDY_REASONING_NODUS_NATIVE off (the soak gate) nothing writes here yet.
+      # See docs/runtime/RUNTIME_2_11_0_UPGRADE.md §2.
+      NODUS_RUN_STATE_ROOT: /var/lib/aindy/nodus-state
+    volumes:
+      - nodus_state:/var/lib/aindy/nodus-state
     ports:
       - "8000:8000"
     healthcheck:
@@ -237,4 +247,5 @@ services:
 
 volumes:
   postgres_data:
+  nodus_state:
   # mongo_data:

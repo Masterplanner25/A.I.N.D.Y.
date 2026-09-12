@@ -1,6 +1,6 @@
 # Reproducible-build constraints — RUNTIME-PIN-FLOAT-1.
 #
-# `pyproject.toml` declares a RANGE (`aindy-runtime>=2.9.0,<3.0`). A range is the right
+# `pyproject.toml` declares a RANGE (`aindy-runtime>=2.11.0,<3.0`). A range is the right
 # thing to publish — it says what this app is compatible with — but it is the wrong thing
 # to BUILD against, because pip resolves it to whatever is newest on PyPI at build time.
 # That made an image depend on the date it was built: rebuilding on 2026-08-22 silently
@@ -41,4 +41,4 @@
 # editable install (`pip install -e ../aindy-runtime --no-deps`) is the point there, and a
 # constraint would defeat it. See CLAUDE.md, "Runtime dependency contract".
 
-aindy-runtime==2.9.0
+aindy-runtime==2.11.0
