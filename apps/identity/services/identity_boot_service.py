@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -9,6 +10,9 @@ from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.memory.memory_persistence import MemoryNodeModel
 from AINDY.platform_layer.user_ids import parse_user_id
+from apps._shared.syscall import failed, swallowed
+
+logger = logging.getLogger(__name__)
 
 
 _BOOT_MEMORY_LIMIT = 20
@@ -65,8 +69,12 @@ def _count_user_agent_runs(user_id: str | UUID, db: Session) -> int:
         db=db,
         user_id=str(user_id),
     )
-    if result.get("status") != "success":
-        return 0
+    if failed(result):
+        # A failing count renders as a legitimate-looking zero on the identity boot surface
+        # (SYSCALL-SILENT-ERRORS-1). Still zero; now the log says why.
+        return swallowed(
+            "sys.v1.agent.count_runs", result, default=0, log=logger, caller="identity_boot",
+        )
     return int(result.get("data", {}).get("count", 0))
 
 
@@ -98,8 +106,10 @@ def get_recent_agent_runs(
         db=db,
         user_id=str(user_id),
     )
-    if result.get("status") != "success":
-        return []
+    if failed(result):
+        return swallowed(
+            "sys.v1.agent.list_recent_runs", result, default=[], log=logger, caller="identity_boot",
+        )
     rows = list(result.get("data", {}).get("runs", []))
     for row in rows:
         row["goal"] = row.get("objective")
