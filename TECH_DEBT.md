@@ -1517,6 +1517,31 @@ report's fourteen recommendations are done and one was superseded; these three a
 `--cov` flags across every workflow, and no `.coveragerc` exists. The repo has 95 test files and no
 idea what they cover. Starting point is a floor (say 40%) ratcheted upward, not a target.
 
+**★ Item 1 CLOSED 2026-09-11 — measured, and a floor set.** First measurement, `pytest tests
+-m app_profile` (the CI suite), 23,658 statements under `apps/`: **56%**. `.coveragerc` sets
+`fail_under = 55`; `app-ci.yml` enforces it on the same step and uploads `coverage.xml`. The
+ratchet rule is in `.coveragerc`: raise the floor to one point under any higher measurement,
+never lower it to make a PR pass. The spread is the useful number — it is not one repo at 56%,
+it is:
+
+| app | covered | app | covered |
+|---|---|---|---|
+| `_shared` | 100% | `authorship` | 54% |
+| `autonomy` | 94% | `masterplan` | 51% |
+| `dashboard` | 79% | `freelance` | 50% |
+| `network_bridge` | 73% | `social` | 50% |
+| `search` | 72% | `agent` | 48% |
+| `analytics` | 62% | `tasks` | **46%** |
+| `identity` | 61% | `automation` | **43%** |
+| `arm` | 58% | `_bootstrap_validator.py` | **0%** |
+| `memory` | 56% | `rippletrace` | 56% |
+
+`tasks` at 46% is a core domain (startup fails without it) and the one this week's work leaned
+on hardest; `automation` at 43% owns the loop-adjustment path `SYSCALL-SILENT-ERRORS-1` is
+watching. Those two are where a raised floor should come from. `_bootstrap_validator.py` at 0%
+is a validator CI runs directly (`validate_bootstrap_deps`) rather than through pytest, so it
+is exercised, just not counted.
+
 **2. `alembic upgrade head` is never run in CI — found during this audit, and the narrowest of the
 three.** There are **154 app-owned revisions** and nothing replays them. `deploy-bootstrap-guard.yml`
 does exercise a real pgvector service on any PR touching `alembic/**`, but it mirrors
