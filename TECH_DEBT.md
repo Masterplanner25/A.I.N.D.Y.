@@ -1560,13 +1560,21 @@ that the endpoint exists and accepts them.
 
 ---
 
-## TRACE-ID-DUAL-1: every response carries two different trace ids (P2)
+## TRACE-ID-DUAL-1: every response carries two different trace ids (runtime-owned, P2)
 
-**Status: OPEN — but UNVERIFIED since 2026-07-22.** Found during the Phase 2b trace-continuity
-check. Two sibling items filed from the same walk log on the same day turned out to be long fixed
-(`ARM-PATH-CONFINE-1`, `CLIENT-ERROR-TELEMETRY-1`), so treat this one as *unconfirmed* rather than
-current: reproducing it needs an authenticated `/apps/*` request, and an unauthenticated probe
-returns 401 before an envelope is produced. **Re-verify before acting on it.**
+**Status: VERIFIED and ROOT-CAUSED 2026-09-11 — runtime bug, one line, filed as FR-26.**
+Reproduced with an authenticated `POST /apps/tasks/create` on 2.9.0: the `X-Trace-ID` header
+and `data.trace_id` agree (16 events — the flow, syscalls, memory, `task.created`); the body's
+top-level `trace_id` is a different uuid holding only the route's `execution.started/completed`
+(4 events). Cause: `ExecutionContext.from_request` (`core/execution_pipeline/context.py:38`)
+reads only *incoming* request headers — which a browser never sends — and mints its own id,
+ignoring the `request.state.trace_id` the `log_requests` middleware set two frames earlier. Still
+present at v2.11.0. The app-side workaround (`metadata={"trace_id": …}` at ~40 call sites) was
+deliberately not taken; see FR-26 for why. **Closes on the runtime release that adopts it.**
+
+*Original entry, 2026-07-22, retained:* Found during the Phase 2b trace-continuity check. Two
+sibling items filed from the same walk log turned out to be long fixed, so this was treated as
+unconfirmed until re-verified.
 
 A single `POST /apps/tasks/create` returns an `X-Trace-ID` header and a `data.trace_id` that agree,
 plus an **envelope `trace_id` that differs** — and both resolve to *different* execution graphs

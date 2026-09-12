@@ -1,12 +1,82 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-05"
+last_verified: "2026-09-11"
 api_version: "1.0"
 status: current
 owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-26 — the execution pipeline mints a second trace id instead of adopting the request's 🔴 observability
+
+> **One line, verified against 2.9.0 and still present at v2.11.0.** Every `/apps/*` response
+> carries two different trace ids, and they resolve to two different event graphs.
+
+### What we hit
+
+Authenticated `POST /apps/tasks/create` on 2.9.0, 2026-09-11:
+
+```
+X-Trace-ID header       ae6fcc10-…   ← log_requests middleware
+data.trace_id           ae6fcc10-…   ← the flow run, syscalls, memory writes: 16 events
+response.trace_id       0c44f951-…   ← the pipeline's ExecutionContext: 4 events
+```
+
+`system_events` for `ae6fcc10` holds the request metric, the `task_create` flow run, its nodes,
+the syscalls, the memory write and `task.created`. `0c44f951` holds only the route's
+`execution.started/completed` and one embedding. Anyone debugging from the body's top-level
+`trace_id` — the one most likely to be copied out of a client — sees a route that ran and
+produced nothing.
+
+### The mechanism, from your code
+
+`AINDY/middleware.py:106` — `log_requests` mints `trace_id`, sets `request.state.trace_id` and
+the `_trace_id_ctx` contextvar, and writes it to the response's `X-Trace-ID`. It does not honour
+an incoming `X-Trace-ID`.
+
+`AINDY/core/execution_pipeline/context.py:38` — `ExecutionContext.from_request` reads only the
+**incoming request headers**:
+
+```python
+request_id = (
+    request.headers.get("X-Trace-ID")
+    or request.headers.get("X-Request-ID")
+    or str(uuid.uuid4())
+)
+```
+
+A browser never sends one, so this always mints a second uuid. The pipeline then logs
+`execution.entry=PIPELINE` and emits `execution.*` events under it, while everything the handler
+does inside — which reads the contextvar — lands under the middleware's id.
+
+### Ask
+
+Prefer the id the middleware already assigned:
+
+```python
+request_id = (
+    getattr(getattr(request, "state", None), "trace_id", None)
+    or request.headers.get("X-Trace-ID")
+    or request.headers.get("X-Request-ID")
+    or str(uuid.uuid4())
+)
+```
+
+(or read `get_current_trace_id()` from `platform_layer.trace_context`, which is the same value).
+`execute_with_pipeline` already accepts `metadata["trace_id"]` as an override, so the plumbing
+below this line is fine; only the default is wrong.
+
+### Not asking for
+
+- Honouring incoming `X-Trace-ID` in the middleware — a separate decision (trust boundary).
+- An app-side workaround. We could pass `metadata={"trace_id": get_current_trace_id()}` at every
+  `execute_with_pipeline` call, but that is ~40 sites of scaffolding for a one-line default, and
+  the next router someone writes would forget it.
+
+Tracked on our side as `TRACE-ID-DUAL-1` (found 2026-07-22, root-caused 2026-09-11).
+
+---
+
 ## FR-25 — three places a runtime failure is less legible than it needs to be 🔴 observability
 
 > **Three independent asks, filed together because they are the same shape and none is large.**
