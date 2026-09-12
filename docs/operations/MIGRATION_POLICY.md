@@ -99,6 +99,18 @@ Ownership rule before authoring a migration:
 - Confirm `alembic current` == `alembic heads` after applying.
 - Run the full test suite after migration to catch model/migration drift.
 
+### ★ A revision must survive the replay (CI, since 2026-09-11)
+- Every PR touching `alembic/**` runs `scripts/replay_app_migrations.py` as Step 5 of
+  `deploy-bootstrap-guard.yml`: seed rows, snapshot, **downgrade the newest 16 revisions,
+  `upgrade head`**, and the schema must come back identical with the rows intact.
+- So a new revision needs a working `downgrade()` — inspector-guarded like the upgrade — and a
+  column added to a table that has rows needs a `server_default` (or nullable). A `NOT NULL`
+  column with no default passes the fresh-deploy stamp and fails here, which is the point: the
+  fresh path never has rows.
+- Locally: point `DATABASE_URL` at a **throwaway** pgvector (the script refuses the compose
+  stack's URL, because it downgrades), run `bootstrap-schema` + `deploy_bootstrap.py`, then the
+  script. `TEST-INFRA-GAPS-1` has the reasoning.
+
 ## 4. Known Migration Debt
 
 - Multiple overlapping migrations and no automated migration validation in CI (see `TECH_DEBT.md`).

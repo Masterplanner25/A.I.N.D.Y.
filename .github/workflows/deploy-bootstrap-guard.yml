@@ -25,6 +25,7 @@ on:
       - "alembic/**"
       - "aindy_plugins.json"
       - "pyproject.toml"
+      - "scripts/replay_app_migrations.py"
       - ".github/workflows/deploy-bootstrap-guard.yml"
   pull_request:
     paths:
@@ -35,6 +36,7 @@ on:
       - "alembic/**"
       - "aindy_plugins.json"
       - "pyproject.toml"
+      - "scripts/replay_app_migrations.py"
       - ".github/workflows/deploy-bootstrap-guard.yml"
 
 permissions:
@@ -196,6 +198,16 @@ jobs:
           print("OK: serve booted app-profile on the bootstrapped schema — guard accepted it")
           PY
 
+      - name: Stop serve before the replay
+        run: pkill -f "aindy-runtime serve" || true
+      # ★ TEST-INFRA-GAPS-1 item 2. Steps 1-4 are the FRESH path: bootstrap-schema, then a stamp
+      # at head on an empty database. A real deployment already has the tables and rows in them,
+      # and runs `alembic upgrade head` — the one path nothing tested, so a revision that broke
+      # only on replay over populated tables reached production unchallenged. This seeds rows,
+      # downgrades the newest revisions, upgrades head, and requires the schema to come back
+      # identical with the rows intact. Round trip, not a production fixture — see the script.
+      - name: Step 5 — the EXISTING-DB path: newest app revisions replay over populated tables
+        run: python scripts/replay_app_migrations.py --steps 16
       - name: Serve log (on failure)
         if: failure()
         run: tail -120 /tmp/serve.log || true
