@@ -63,8 +63,8 @@ describe("SEO draft loop", () => {
     analyses: [{ id: "a3" }, { id: "a2" }, { id: "a1", is_baseline: true }],
     deltas: {
       available: true,
-      since_previous: { word_count: 50, readability: -2, search_score: 0.03, title_characters: null },
-      since_baseline: { word_count: 450, readability: 18, search_score: 0.11, title_characters: null },
+      since_previous: { word_count: 50, readability: -2, title_characters: null },
+      since_baseline: { word_count: 450, readability: 18, title_characters: null },
       analyses_counted: 3,
     },
     retention: { prune_suggested: false, total: 3, threshold: 25 },

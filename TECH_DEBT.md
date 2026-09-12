@@ -169,7 +169,15 @@ registered and three Genesis turns have queued and completed it — so each is a
 
 ## MASTERPLAN-GOALS-UNLINKED-1: a goal belongs to a user, never to a plan (app-owned, P3 — Question)
 
-**Status: OPEN, and it is a question before it is a defect.** Found 2026-09-05 while mapping how
+**Status: ✅ CLOSED 2026-09-11 (owner) — answered by the strategy layer, not by linking.** The
+plan-scoped thing is `plan_objectives`: seeded from Genesis's `core_domains`, housing strategies,
+and since #335 reporting their own hours (`objective_rollup`). Goals stay user-scoped and outlive
+plan versions, which is what `STRATEGY_LAYER_SPEC` §6 Q1 intended when it kept the two apart. The
+alternative — `goals.masterplan_id` seeded from `success_criteria` — was declined for the reason
+the attainment spec gives: five permanently-`unresolved` goals with no unit. 0 goals exist and
+that is now fine. The original entry is retained below.
+
+*Original:* **OPEN, and it is a question before it is a defect.** Found 2026-09-05 while mapping how
 Genesis, MasterPlan and Tasks relate for walk-log item 17.
 
 ### The observation
@@ -692,7 +700,14 @@ than waiting behind a flag.
 
 ## RIPPLE-PINGS-NOT-ECHOES-1: a ping records a page about the same subject, not one that cites you (app-owned, P1)
 
-**Status: the CODE is fixed; the INSTRUMENT is the open question, and it is a decision.**
+**Status: the CODE is fixed; the sweep is PAUSED (owner, 2026-09-11); the INSTRUMENT is the
+open decision, deferred until a phrase-indexing provider is chosen.** `AINDY_RIPPLE_MENTION_
+DETECTION` is off in the local `.env` so the 6-hourly job stops spending ~200 fetches proving
+the same zero. Nothing built is removed: ingestion, containers, verification and settlement all
+stay, and flipping the flag back on resumes exactly where it stopped (168 debts owed, drop
+points due). Candidates when the owner is ready: Brave Search, Bing Web Search, Exa, Google CSE
+— anything that returns pages *containing a phrase* rather than answering a question. A second
+adapter behind `mention_search.search()` is the build; the key and the cost are the decision.
 Verification shipped 2026-09-07 (§6); budget debts made payable 09-10 (§6b) and then actually
 paid — off the table, not off the search — on 09-11 (§6c), after the debt was measured
 *growing* under the 09-10 fix. Three measurements on three different days, the last one a

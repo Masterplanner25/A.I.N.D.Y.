@@ -375,8 +375,10 @@ def test_an_analysis_denormalises_what_comparison_needs(db_session):
 
     assert recorded["word_count"] == 1234
     assert recorded["readability"] == 61.5
-    assert recorded["search_score"] == 0.71
     assert recorded["title_characters"] == 42
+    # `search_score` is no longer recorded or served (spec §5 Q3, dropped 2026-09-11); the
+    # column exists, nullable, for the analyses that recorded it before then.
+    assert "search_score" not in recorded
 
 
 def test_the_full_result_is_kept_alongside_the_scalars(db_session):

@@ -63,7 +63,6 @@ def _serialize_analysis(row: SeoDraftAnalysis, *, include_result: bool = False) 
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "word_count": row.word_count,
         "readability": row.readability,
-        "search_score": row.search_score,
         "title_characters": row.title_characters,
         "is_baseline": bool(row.is_baseline),
     }
@@ -256,7 +255,6 @@ def record_analysis(
         result=result or {},
         word_count=(result or {}).get("word_count"),
         readability=(result or {}).get("readability"),
-        search_score=(result or {}).get("search_score"),
         title_characters=title_analysis.get("characters"),
         is_baseline=existing == 0,
     )
@@ -268,7 +266,8 @@ def record_analysis(
 
 # ── comparison, which is the whole point ──────────────────────────────────────────────
 
-_TRACKED = ("word_count", "readability", "search_score", "title_characters")
+# `search_score` was tracked here until 2026-09-11; the column remains, nullable and unwritten.
+_TRACKED = ("word_count", "readability", "title_characters")
 
 
 def compute_deltas(analyses: list[SeoDraftAnalysis]) -> dict[str, Any]:

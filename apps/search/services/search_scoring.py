@@ -284,14 +284,8 @@ def score_research_result(
     return _clamp01(0.7 * length_factor + 0.3 * memory_factor)
 
 
-def score_seo_result(
-    *,
-    readability: float,
-    avg_keyword_density: float,
-    word_count: int,
-) -> float:
-    readability_score = _clamp01(readability / 100.0)
-    density_score = _clamp01(1.0 - (abs(avg_keyword_density - 2.0) / 2.0))
-    length_score = _clamp01(word_count / 1000.0)
-    return _clamp01(0.7 * readability_score + 0.2 * density_score + 0.1 * length_score)
+# `score_seo_result` lived here until 2026-09-11. It blended readability, mean keyword
+# density and word count into the SEO scorecard's `search_score`; dropped per
+# SEO_EDITING_AID_SPEC §5 Q3. `search_score` on lead and research results is a different
+# thing — a ranking composite — and is untouched.
 
