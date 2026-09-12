@@ -7,6 +7,57 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-27 — the idempotency gate degrades every concurrent duplicate; measured N−1 of N 🔴 correctness
+
+> **The docstring says "strict at-most-once needs advisory locking, which has not landed."
+> Measured: without it, at-most-once does not hold under contention at all.**
+
+### What we hit
+
+Runtime 2.11.0, PostgreSQL, `sys.v1.event.emit` (`execution_guarantee="EXACTLY_ONCE"`), one run
+scope, one payload, N callers released on a barrier from separate sessions:
+
+| callers | reserved | degraded | effect ran |
+|---|---|---|---|
+| 2 | 1 | 1 | 2× |
+| 4 | 1 | 3 | 4× |
+| 8 | 1 | 7 | 8× |
+| 16 | 1 | 15 | 16× |
+
+Sequentially the same call four times: `reserved 1, replayed 3`, effect ran once — the replay
+cache works. The gate is a replay cache for sequential duplicates and gives no protection for
+concurrent ones: every loser of the insert race takes the `degraded` path and executes.
+
+Your 2.5.0 note measured 8 callers → handler ran twice. On our stack it ran eight times. The
+difference is probably timing (our callers are barrier-released, so all of them lose the race
+while the winner's row is still pending); the shape is the same and the bound is N.
+
+### The mechanism, from your code
+
+`syscall_dispatcher.py` step 2f: `_resolve_effect_record` inserts the pending row; on a
+unique-violation against a *live pending* row the caller is downgraded to `AT_LEAST_ONCE`,
+counted as `degraded`, and proceeds to run the handler. There is no wait-and-reread and no
+lock, so a pending row protects nothing until it becomes completed.
+
+### Ask
+
+The thing your docstring already names: a `pg_advisory_xact_lock(hash(action_id))` around
+the reserve-or-replay decision, so a loser blocks until the winner's row is completed and then
+takes the `replayed` path instead of `degraded`. On non-PostgreSQL engines, keep today's
+behaviour and say so. `degraded` should then mean what its label says — the gate machinery
+lost, not "someone else was faster".
+
+### Not asking for
+
+- Exactly-once across process crashes (the winner dying mid-effect). `reclaimed` covers the
+  stale-slot case already.
+- A change to `AT_LEAST_ONCE` handlers.
+
+Tracked on our side as `IDEMPOTENCY-CONTENTION-UNVERIFIED-1` (now measured). The probe is
+five lines of threading and we will re-run it against the release that ships this.
+
+---
+
 ## FR-26 — the execution pipeline mints a second trace id instead of adopting the request's 🔴 observability
 
 > **One line, verified against 2.9.0 and still present at v2.11.0.** Every `/apps/*` response
