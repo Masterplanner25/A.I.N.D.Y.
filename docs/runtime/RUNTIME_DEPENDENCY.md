@@ -1,6 +1,6 @@
 ---
 title: "Runtime Dependency"
-last_verified: "2026-09-11"
+last_verified: "2026-09-12"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -19,21 +19,24 @@ published contracts.
 Recommended dependency range:
 
 ```toml
-aindy-runtime>=2.11.0,<3.0
+aindy-runtime>=2.12.0,<3.0
 ```
 
 The upper bound is required. The apps repo should not accept unbounded runtime
 upgrades.
 
-Validated on `2026-09-11`:
+Validated on `2026-09-12`:
 
-- installed runtime version: `2.11.0` (checked by **import**, not `pip show` — the
-  dist-info of an editable install reports whatever was recorded at install time; on this
-  machine it said `2.0.1` while `AINDY._version.__version__` said `2.11.0`)
-- apps repo dependency: range `aindy-runtime>=2.11.0,<3.0` in `pyproject.toml`, build pin
-  `aindy-runtime==2.11.0` in `constraints.txt`, asserted equal by
+- installed runtime version: `2.12.0` (checked by **import and path** —
+  `python -c "import AINDY, AINDY._version as v; print(v.__version__, list(AINDY.__path__))"` —
+  not `pip show`. On 2026-09-12 this venv answered `2.6.0` from a non-editable site-packages
+  install while the previous adoption doc believed it was current; see
+  `RUNTIME_2_12_0_UPGRADE.md` §1. `test_runtime_dependency_contract.py` now asks the interpreter
+  directly, so a venv below the floor fails the suite instead of validating it)
+- apps repo dependency: range `aindy-runtime>=2.12.0,<3.0` in `pyproject.toml`, build pin
+  `aindy-runtime==2.12.0` in `constraints.txt`, asserted equal by
   `tests/unit/test_runtime_dependency_contract.py`
-- app-profile boot smoke on 2.11.0: `boot_profile=default-apps`, `app_plugins_loaded=True`,
+- app-profile boot smoke on 2.12.0: `boot_profile=default-apps`, `app_plugins_loaded=True`,
   `app_plugin_count=16`
 
 **This block had said 2.4.1 / 2.1.0 since 2026-08-15 while the pin moved through 2.6, 2.8 and
@@ -141,7 +144,7 @@ live, published dependency contract — not a pre-publication staging arrangemen
 
 `aindy-runtime` is installed from PyPI as a normal pinned dependency:
 
-- the declared dependency in `pyproject.toml` is `aindy-runtime>=2.11.0,<3.0`
+- the declared dependency in `pyproject.toml` is `aindy-runtime>=2.12.0,<3.0`
 - CI installs it via `pip install -e .[test]` (no runtime-repo checkout, no source
   install)
 - CI verifies the installed runtime version and that `/api/version` reports the

@@ -669,10 +669,23 @@ the zero was the web's answer and not the host's.
 
 ---
 
-## IDEMPOTENCY-CONTENTION-UNVERIFIED-1: the effect gate is on, and unmeasured under load (P2 → runtime-owned)
+## IDEMPOTENCY-CONTENTION-UNVERIFIED-1: the effect gate is on, and unmeasured under load (P2 → now a flip decision)
 
-**Status: MEASURED 2026-09-11 — at-most-once does not hold under contention AT ALL, and the
-runtime already says so. Filed as FR-27; nothing to change here until it ships.**
+**Status 2026-09-12: the fix SHIPPED in `aindy-runtime==2.12.0` (FR-27) as
+`AINDY_SYSCALL_IDEMPOTENCY_STRICT` — opt-in, default off, PostgreSQL only — and we adopted it
+OFF.** So the measurement below still describes the running stack: N−1 of N concurrent
+duplicates run, and the app-side single-flight guards remain the protection that holds. This
+is no longer a runtime defect; it is our deployment decision, and the reasons it is off are in
+`docs/runtime/RUNTIME_2_12_0_UPGRADE.md` §3 — a blocked duplicate holds a pooled connection for
+the wait (300 s default) against `DB_POOL_SIZE=20`, on a host already inside the postgres-reinit
+band after builds, to protect paths we already single-flight. **Acceptance when it flips:** the
+09-11 probe below, expecting `reserved 1, replayed N−1, rows written 1`, and
+`aindy_effect_gate_outcomes_total{outcome="degraded_lock_timeout"}` staying at 0. Also note the
+metric's `degraded` now means "lock not attempted", not "lost the race".
+
+*Entry as it stood 2026-09-11, retained:* **MEASURED — at-most-once does not hold under
+contention AT ALL, and the runtime already says so. Filed as FR-27; nothing to change here until
+it ships.**
 
 Measured on the live stack (runtime 2.11.0, PostgreSQL, the test account), `sys.v1.event.emit`
 (`EXACTLY_ONCE`) with one run scope and one payload, N callers released on a barrier:
@@ -1646,9 +1659,18 @@ that the endpoint exists and accepts them.
 
 ---
 
-## TRACE-ID-DUAL-1: every response carries two different trace ids (runtime-owned, P2)
+## TRACE-ID-DUAL-1: every response carries two different trace ids (runtime-owned, P2) — CLOSED in aindy-runtime 2.12.0
 
-**Status: VERIFIED and ROOT-CAUSED 2026-09-11 — runtime bug, one line, filed as FR-26.**
+**Status: ✅ CLOSED 2026-09-12 in `aindy-runtime==2.12.0` (FR-26 shipped), adopted in
+`docs/runtime/RUNTIME_2_12_0_UPGRADE.md`.** Re-measured with the same request rather than
+taken from the handoff: `tests/unit/test_trace_id_envelope_contract.py` posts
+`/apps/tasks/create` and asserts body `trace_id == X-Trace-ID`. It **fails on 2.11.0** with two
+ids and passes on 2.12.0, and it stays in the suite so the next adoption re-checks it. The
+runtime did not start honouring a client-sent `X-Trace-ID` (their trust-boundary call), and no
+client-side workaround existed to remove. The ~40-site app workaround was never taken.
+
+*Entry as it stood 2026-09-11, retained:* **VERIFIED and ROOT-CAUSED — runtime bug, one line,
+filed as FR-26.**
 Reproduced with an authenticated `POST /apps/tasks/create` on 2.9.0: the `X-Trace-ID` header
 and `data.trace_id` agree (16 events — the flow, syscalls, memory, `task.created`); the body's
 top-level `trace_id` is a different uuid holding only the route's `execution.started/completed`
