@@ -1530,6 +1530,17 @@ it is the one path CI never takes. A revision that breaks only on replay against
 would reach production unchallenged. Any fix must respect `docs/operations/MIGRATION_POLICY.md` and
 the runtime/app split of `alembic_version_runtime` vs `alembic_version`.
 
+**★ Item 2 CLOSED 2026-09-11.** `scripts/replay_app_migrations.py`, run as Step 5 of
+`deploy-bootstrap-guard.yml` after the fresh path: seeds a user, plan, task, drop point and ping;
+snapshots the schema; downgrades the newest 16 app revisions; `upgrade head`; requires the schema
+to come back identical (tables, columns with types and nullability, indexes) with the seed rows
+intact and their defaults applied (`pings.verification = 'unverified'` on a pre-existing row is
+the exact case). First run on a throwaway pgvector: 16 down, 11 tables removed, 16 up, 105 tables
+identical. It refuses a `DATABASE_URL` that looks like the local stack's, because it downgrades.
+**Bound:** it is a round trip over the newest revisions, not a fixture from production — it
+proves reversibility and replay over rows, not that the box's database matches. Runs on any PR
+touching `alembic/**`. Items 1 (coverage) and 3 (E2E) remain open.
+
 **3. No E2E job.** No Playwright anywhere in CI. Unit tests catch component failures and the build
 smoke catches compile failures; neither catches a broken user flow. `README.md` already records this
 as a deliberate deferral pending a stable CI auth/backend fixture story, so this is the least urgent
