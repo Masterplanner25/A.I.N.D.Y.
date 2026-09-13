@@ -206,7 +206,7 @@ jobs:
       # only on replay over populated tables reached production unchallenged. This seeds rows,
       # downgrades the newest revisions, upgrades head, and requires the schema to come back
       # identical with the rows intact. Round trip, not a production fixture — see the script.
-      - name: Step 5 — the EXISTING-DB path: newest app revisions replay over populated tables
+      - name: "Step 5 — the EXISTING-DB path: newest app revisions replay over populated tables"
         run: python scripts/replay_app_migrations.py --steps 16
       - name: Serve log (on failure)
         if: failure()
