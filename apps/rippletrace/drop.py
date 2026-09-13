@@ -52,5 +52,13 @@ class PingDB(Base):
     #
     # There is no `rejected` value in the table. A candidate that demonstrably fails
     # verification is never written — a page that does not cite you is not a ripple.
-    verification = Column(String(16), default="unverified", nullable=False, index=True)
+    # `server_default` as well as `default`: the migration (`pv1verify0001`) declares the DB
+    # default, so a deploy that reached this column by `alembic upgrade` has it, while a fresh
+    # deploy builds the table by `create_all` from THIS line and — before 2026-09-13 — did not.
+    # The deploy-bootstrap guard's replay seed inserts without the column on purpose, to prove
+    # existing rows accept the arriving default; it was the first raw INSERT to notice the two
+    # paths disagree. `SCHEMA-DEFAULT-PARITY-1` has the rest of the pattern.
+    verification = Column(
+        String(16), default="unverified", server_default="unverified", nullable=False, index=True
+    )
     verification_note = Column(Text, nullable=True)
