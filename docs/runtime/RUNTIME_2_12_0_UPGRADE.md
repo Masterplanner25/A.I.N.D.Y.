@@ -145,11 +145,29 @@ curl -s -H "Authorization: Bearer $ADMIN" localhost:8000/observability/system \
 #  expect syscall_count ~98, tool_count 16 — the FR-23 fix; 0 means the plugin stack did not load
 ```
 
+### In the container, after the rebuild (2026-09-12)
+
+`--no-cache` build: `apt-get` 1,422 s and pip 966 s on a ~80 kB/s network — the build was slow,
+not broken. `/health` answered 200 about three minutes after `up -d`; host at 1,019 MB
+available during boot; 0 postgres reinits.
+
+| check | result |
+|---|---|
+| `import AINDY` version + path | `2.12.0 ['/usr/local/lib/python3.11/site-packages/AINDY']` |
+| `aindy-runtime bootstrap-schema` | exit 0 — "no table changes", stamped `0018` |
+| `/health/deep` → `syscall_registry` | `{"count": 98, "minimum_expected": 24, "status": "ok"}` |
+| `/api/version` | `default-apps`, `app_plugins_loaded=true`, `app_plugin_count=16` |
+| `AINDY_SYSCALL_IDEMPOTENCY_STRICT` | unset (off) |
+| **FR-23** `/platform/observability/system` → `registry` (admin session, from the signed-in client) | `{"syscall_count": 98, "tool_count": 16, "run_tool_provider_run_types": ["default"]}` — **was 0 / 0** |
+
+The run type is `default`, not `agent`: `apps/agent/agents/runtime_extensions.py:320` registers
+the provider as `register_run_tool_provider("default", get_tools_for_run)`. The route lives at
+`/platform/observability/system` (not the bare `/observability/system` the handoff's curl uses)
+and needs a platform-admin **user session** — the `X-API-Key` alone is 401 since
+`HTTP-SCOPE-GAP-1`.
+
 ### What this does not establish
 
-FR-23's fix is verified only by reading the runtime diff, not by hitting the route — it is
-admin-gated and mounted as a legacy root router the unit fixture does not serve; the container
-check above is where it gets measured. FR-27's lock is unexercised because it is off. FR-25's
-new WARNING lines are unexercised because nothing in the suite fails a syscall on purpose. All
-three are the correct state for a release whose required action is a pin bump; the first is
-owed on the next stack-up.
+FR-27's lock is unexercised because it is off. FR-25's new WARNING lines are unexercised
+because nothing in the suite fails a syscall on purpose. Both are the correct state for a
+release whose required action is a pin bump.
