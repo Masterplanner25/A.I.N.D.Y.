@@ -41,4 +41,4 @@
 # editable install (`pip install -e ../aindy-runtime --no-deps`) is the point there, and a
 # constraint would defeat it. See CLAUDE.md, "Runtime dependency contract".
 
-aindy-runtime==2.12.0
+aindy-runtime==2.13.0
