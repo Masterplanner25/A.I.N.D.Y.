@@ -84,7 +84,7 @@ Both fine. If we adopt fan-out later, `all` (the default) fails whole exactly as
 |---|---|
 | `AINDY_QUOTA_MAX_TENANT_TOKENS` | The governor works (verified live against our image: admit, admit, **429** at an 8,000-token window). But the reservation is the caller's `max_tokens` — ours is **4096** in `planner_anthropic.py`, so each plan reserves ~5.2k until it reconciles to ~2.3k. A window sized from typical actuals would refuse the second plan. **Decide the window against `max_tokens × plans-per-window-you-mean-to-allow`, with a number from `aindy_llm_tokens_total` in production first**, not this week. |
 | `AINDY_QUOTA_MAX_TOKENS` | Per-execution; does not cover planning (the run does not exist yet). Same sizing rule. |
-| `AINDY_RUN_SCOPED_QUOTA` | Makes the 100-syscall cap real for a whole guest script / agent run. Read `aindy_syscall_unowned_unit_total` on the container first — it names exactly what this moves. |
+| `AINDY_RUN_SCOPED_QUOTA` | Makes the 100-syscall cap real for a whole guest script / agent run. Read `aindy_syscall_unowned_unit_total` on the container first — it names exactly what this moves. **Read 2026-09-13 after one planner call:** `sys.v1.rippletrace.log_ripple_event` 1, `sys.v1.analytics.save_calculation` 1 — two app-side dispatches that mint their own unit (not request-bound). Small today; re-read after real traffic before deciding. |
 
 Alarm on `aindy_llm_budget_outcomes_total{outcome="refused"}` when a cap is eventually set.
 
@@ -139,9 +139,18 @@ took ~25 minutes before pip ever ran. `constraints.txt` is `COPY`'d before the p
 pip layer invalidates on a pin move by itself; `--no-cache` buys re-running apt, nothing more.
 Check `curl -w '%{speed_download}' http://deb.debian.org/...` before choosing it.
 
-### What this does not establish
+### Handoff step 4 — one planner call attributes (2026-09-13, owner-approved, test account)
 
-The handoff's step 4 — one planner call, then `aindy_llm_calls_total{attributed="unit"}` — was
-not run here: it spends a real Anthropic call and writes an `AgentRun` into the owner's database,
-so it is the owner's to trigger. The runtime team's live measurement of that path (#635) was
-against our image with the 2.13.0 wheel installed, sharing this compose stack's Postgres/Redis.
+`POST /apps/agent/run` as the designated test account → 200 in 15.6 s, envelope `SUCCESS` with an
+`eu_id`; `AgentRun` `05ddd6ff…` left in `pending_approval` (planner ran, nothing executed). Then:
+
+```
+aindy_llm_calls_total{attributed="unit",provider="anthropic"} 1.0
+aindy_llm_tokens_total{kind="prompt",model="claude-opus-4-8",provider="anthropic"} 2023.0
+aindy_llm_tokens_total{kind="completion",model="claude-opus-4-8",provider="anthropic"} 438.0
+```
+
+`unit`, not `none` — planning inside the request is attributed, matching the runtime team's
+measurement (#635: 2021 / 223) on the same image. `aindy_llm_budget_outcomes_total` has no sample
+because no cap is set; `attributed="run"` only appears once a run executes, which this one did
+not. Nothing left unverified from the handoff.
