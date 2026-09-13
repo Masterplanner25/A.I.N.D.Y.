@@ -111,9 +111,37 @@ curl -sL http://localhost:8000/metrics/ | grep -cE "^# HELP aindy_(llm_calls|llm
 
 Full `tests/unit` suite against the installed 2.13.0 (path printed, §1): **exit 0, reached 100%, zero failures or errors** — run to a file, not piped through `tail`. The count is not quoted: the suite's `-q` config suppresses the summary line, and a number read off progress dots has been wrong before (runtime #605).
 
+### Container rebuilt and verified (2026-09-13, later the same day)
+
+`docker compose ... build --no-cache api` → image `d79a5bc9060f`, `Successfully installed ...
+aindy-runtime-2.13.0`. Full stack up (`--profile full --profile mail`, both compose files);
+api `healthy` in ~40 s. Every §5 container check passed, each read rather than assumed:
+
+| Check | Result |
+|---|---|
+| version + path in the container | `2.13.0 ['/usr/local/lib/python3.11/site-packages/AINDY']` |
+| `aindy-runtime bootstrap-schema` | exit 0 |
+| Alembic heads | runtime `0018`, app `ga1shadow0001` — unchanged |
+| four new `# HELP` families on `/metrics/` | all four present |
+| `aindy_llm_budget_outcomes_total{outcome="refused"}` | **no sample** — the only grep hit is the HELP line, whose text contains the word "refused"; a `grep -c` reads 1 and lies |
+| `/api/version` | `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16` |
+| the three §4 knobs in the container | all unset |
+| logs after boot | 0 postgres cluster reinits, 0 tracebacks, 0 scheduler-saturation lines |
+
+The labelled counters (`aindy_llm_calls_total`, `aindy_llm_budget_outcomes_total`,
+`aindy_syscall_unowned_unit_total`) have no samples until something fires them — that is a
+correct reading of an unfired labelled counter, not an absent meter. `aindy_resource_usage_evicted_total`
+is unlabelled and reads `0.0`.
+
+**Cost of `--no-cache` on this host, for the next adoption:** the apt layer re-downloaded ~80
+Debian packages over a link measuring ~78 kB/s *from Windows itself* (not a VM problem), which
+took ~25 minutes before pip ever ran. `constraints.txt` is `COPY`'d before the pip `RUN`, so the
+pip layer invalidates on a pin move by itself; `--no-cache` buys re-running apt, nothing more.
+Check `curl -w '%{speed_download}' http://deb.debian.org/...` before choosing it.
+
 ### What this does not establish
 
-The container has not been rebuilt on 2.13.0 as of this doc. The live verification cited above
-(planner attribution, governor 429) was done by the runtime team against **our image with the
-2.13.0 wheel installed into it**, sharing our compose stack's Postgres/Redis — the same code,
-not the same build. Rebuild, then run §5's container checks.
+The handoff's step 4 — one planner call, then `aindy_llm_calls_total{attributed="unit"}` — was
+not run here: it spends a real Anthropic call and writes an `AgentRun` into the owner's database,
+so it is the owner's to trigger. The runtime team's live measurement of that path (#635) was
+against our image with the 2.13.0 wheel installed, sharing this compose stack's Postgres/Redis.
