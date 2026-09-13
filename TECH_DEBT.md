@@ -41,6 +41,44 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## SCHEMA-DEFAULT-PARITY-1: a fresh deploy and a migrated deploy build different DB defaults (app-owned, P2)
+
+**Found 2026-09-13 by the deploy-bootstrap guard on its first real run** — `#342` shipped it
+with an unquoted colon in a step name and GitHub could not parse the workflow for a day, so its
+step 5 (replay the newest revisions over populated tables) had never executed (#349).
+
+**The shape.** Nine NOT NULL columns in the guard's 16-revision window are declared twice, and
+the two declarations disagree on where the default lives:
+
+| column | migration | model |
+|---|---|---|
+| `pings.verification` | `server_default="unverified"` | ~~`default=` only~~ **fixed #349** |
+| `pings.connection_type` | `server_default` | `default="direct"` only |
+| `pings.strength` | `server_default` | `default=1.0` only |
+| `genesis_sessions.synthesis_ready` | `server_default` | `default=False` only |
+| `strategies.score` / `success_count` / `failure_count` | `server_default` | no `server_default` |
+| `tasks.depends_on` | `server_default` | `default=list` only |
+| `tasks.dependency_type` | `server_default` | `default="hard"` only |
+
+A database that reached these columns by `alembic upgrade` has a DB-level default; a database
+built by `scripts/deploy_bootstrap.py` (`Base.metadata.create_all` from the model, then stamp
+head) does not. ORM inserts never notice — SQLAlchemy fills `default=` client-side. Anything
+that writes without the ORM does: raw `INSERT`s, `COPY`, a future bulk loader, and the guard's
+own seed, which omits the column on purpose to prove "existing rows accept the arriving
+default". `pings.verification` was simply the first such write to run.
+
+**Why it is P2 and not a sweep in #349.** No production writer today bypasses the ORM for these
+tables, so nothing is wrong on either running database; the exposure is a fresh deploy plus a
+future non-ORM writer. The remedy is mechanical — add `server_default=` to each model column so
+`create_all` and the migration agree — but `strategies.*` did not match on a naive grep and the
+right fix may be a test that diffs `create_all` metadata against `alembic upgrade head` on the
+same engine, which would catch the next one instead of the next nine. That test is the item.
+
+**Rule until then:** a migration that adds a NOT NULL column with `server_default` must put
+the same `server_default` on the model in the same PR. `MIGRATION_POLICY.md` should say so.
+
+---
+
 ## MASTERPLAN-NO-SCORING-1: ✅ CLOSED 2026-09-05 — the lock is declined, and the other three triggers are unused features, not broken ones
 
 > ### ✅ Trigger-coverage half resolved — no defect
