@@ -152,5 +152,15 @@ aindy_llm_tokens_total{kind="completion",model="claude-opus-4-8",provider="anthr
 
 `unit`, not `none` — planning inside the request is attributed, matching the runtime team's
 measurement (#635: 2021 / 223) on the same image. `aindy_llm_budget_outcomes_total` has no sample
-because no cap is set; `attributed="run"` only appears once a run executes, which this one did
-not. Nothing left unverified from the handoff.
+because no cap is set. Nothing left unverified from the handoff.
+
+**Then approved via `POST /apps/agent/runs/{id}/approve` (no UI was up) → `executing` →
+`completed` in 24 s, 3/3 steps** (`runtime.selftest` ok, `reasoning.evaluate` answered,
+`memory.write` recorded). Its `score.computed` record carries the new accrual:
+`dimensions: {llm_tokens: 0, steps_total: 3, steps_completed: 3}`.
+
+**`attributed="run"` did NOT appear, and that is the correct reading, not a defect.** The planner
+chose three tools none of which calls an LLM, so execution spent zero tokens — which is exactly what
+`llm_tokens: 0` says. `run` is only minted when an execution-time step itself goes through the LLM
+seam. Do not file the absence of a `run` sample as a gap until a run whose steps call an LLM has
+completed and *still* shows only `unit`.
