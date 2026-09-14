@@ -114,7 +114,6 @@ venv/Scripts/python.exe -m pytest tests/unit/test_runtime_dependency_contract.py
 #  got: boot_profile=default-apps, app_plugins_loaded=True, app_plugin_count=16; 98 syscalls
 ```
 
-
 **Full `tests/unit` on the installed 2.14.0 (2026-09-14, this venv, path printed):** `1240 passed, 1 skipped, exit 0` in 116 s — read from the summary line of the log file, not from progress dots. `ruff check apps/ tests/`: clean. `scripts/check_app_imports.py`: 37 declared, 0 undeclared.
 
 ### In the container, after the rebuild — owed
