@@ -179,5 +179,9 @@ WARNINGs — one per read of the parked run — and ten `execution_units` rows s
 (eight `flow|route`, two `job|route`) after both runs had finished. The "run id" in each
 warning is the **GET request's own execution-unit id**: the pipeline's `_detect_wait` reads the
 returned run row's `status: waiting` as the request itself waiting. Pre-existing (none of the
-three files involved changed in 2.14.0), not a regression, and not something any code of ours
-triggers — filed as `RUNTIME_FEATURE_REQUESTS.md` **FR-29** with the mechanism and the ask.
+three files involved changed in 2.14.0), not a regression — **but armed by us**: our
+`register_flow_result("flow_run_get", result_key=…)` (`apps/rippletrace/bootstrap.py:148`) is what
+puts the bare row, `status: waiting` and all, where the detector reads; on a platform-only server the
+row is nested and the detector never fires, which is why the tutorial reads `data.flow_run_get_result`
+and the runtime team never saw it. Filed as `RUNTIME_FEATURE_REQUESTS.md` **FR-29** with the
+mechanism, the ask, and the one-line app-side sidestep (owner's call — it changes a response shape).
