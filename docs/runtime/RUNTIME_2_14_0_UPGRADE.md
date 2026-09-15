@@ -116,33 +116,68 @@ venv/Scripts/python.exe -m pytest tests/unit/test_runtime_dependency_contract.py
 
 **Full `tests/unit` on the installed 2.14.0 (2026-09-14, this venv, path printed):** `1240 passed, 1 skipped, exit 0` in 116 s — read from the summary line of the log file, not from progress dots. `ruff check apps/ tests/`: clean. `scripts/check_app_imports.py`: 37 declared, 0 undeclared.
 
-### In the container, after the rebuild — owed
+### Container rebuilt and verified (2026-09-14, same day)
 
-The image is still `d79a5bc9060f` (2.13.0). `constraints.txt` is `COPY`'d before the pip `RUN`,
-so a plain `docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full
---profile mail build api` invalidates the pip layer by itself; `--no-cache` buys re-running apt
-(~25 min on this link, `RUNTIME_2_13_0_UPGRADE.md` §5) and nothing else. Then, from the handoff §4:
+`docker compose ... build api` (no `--no-cache` — the pin move invalidates the pip layer by
+itself; apt stayed cached) → image `41642f6427f3`, `Successfully installed … aindy-runtime-2.14.0`.
+The pip layer alone took 968 s on this link. Full stack up (`--profile full --profile mail`,
+both compose files) with **430 MB** host memory available — under the documented reinit floor —
+and it still came up `healthy` with 0 restarts. Every handoff §4 check, each read rather than
+assumed:
 
-```bash
-# 1. on 2.14.0, path printed
-docker exec <api> python -c "import AINDY, AINDY._version as v; print(v.__version__, list(AINDY.__path__))"
-#    expect: 2.14.0 ['/usr/local/lib/python3.11/site-packages/AINDY']
+| Handoff check | Result |
+|---|---|
+| 1. version + path in the container | `2.14.0 ['/usr/local/lib/python3.11/site-packages/AINDY']` |
+| 2. `aindy-runtime bootstrap-schema` | exit 0; heads runtime `0018`, app `ga1shadow0001` — unchanged |
+| 3. job storm on boot | `failed TERMINALLY` 0, `is not registered` 0 — and still 0 after 12 h up and the tutorial. `[job_recovery] re-dispatched 3 orphaned thread-mode job(s)` at boot, all three handlers registered |
+| 4. ★ **Tutorial 2, Steps 1–6, live** | **passes — see below** |
+| 5. parked runs cost nothing | with a run `waiting`, four `GET /platform/flows/runs/{id}` → `[200, 200, 200, 200]` |
+| `/api/version` | `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16` |
+| logs after boot + tutorial | 0 postgres reinits, 0 tracebacks; 7 scheduler-saturation lines in 12.5 h, single and hours apart (idle noise on a 430 MB host, not the wedge fingerprint) |
 
-# 2. no schema drift
-docker exec <api> aindy-runtime bootstrap-schema      # exit 0
+#### Tutorial 2 end to end — the first live run of it anywhere (owner-approved, test account)
 
-# 3. no job storm on boot — at most one line per stale job_logs row, then silence
-docker logs <api> 2>&1 | grep -c "failed TERMINALLY"
-docker logs <api> 2>&1 | grep -c "is not registered"   # must not keep growing
+Run as the designated test account, promoted to `is_admin` for the duration (every route on that
+page is `platform.admin`) and **reverted afterwards** — the frontend-walk precedent. Script and
+`.nd` are the tutorial's verbatim; our harness logs in with a password instead of an admin key
+and accepts both the documented envelope and the bare shapes this runtime actually returns.
 
-# 4. ★ Tutorial 2 end to end (aindy-runtime docs/tutorials/02-event-driven-automation.md, Steps 1–6)
-#    expect: status=success  received={'review.approved': {...}}   history: ['WAIT', 'SUCCESS']
-#    and exactly ONE entry in the resume response's `results`. Exercises #654, #655, #656 in one pass.
-#    If it does not produce ['WAIT', 'SUCCESS'], file it against the runtime with the run's history —
-#    do not debug the tutorial.
+```
+Starting script (phase 1 - will suspend)...
+  Run id:       f40116a3-…      Flow status: WAITING      Nodus status: waiting   ← was None on 2.13.0 (handoff §2 row 2)
+Flow run: status=waiting waiting_for=review.approved
+Pending node written in phase 1:  • Pending review: 3 tasks loaded for sprint-12
 
-# 5. parked runs cost nothing — with a run waiting (Step 5), four read-only GETs for the tenant all 200
+Approving...
+  {'run_id': 'f40116a3-…', 'resumed': True, 'results': [{'run_id': 'f40116a3-…', 'payload_injected': True}], …}
+  results entries: 1                                                           ← #655: exactly one
+
+Watching the run after resume...
+  status=success   waiting_for=None  received={'review.approved': {'reviewer': 'shawn', 'approved': True, 'note': 'Ship it.'}}
+  history: ['WAIT', 'SUCCESS', 'SUCCESS']
+  nodus_output_state: {'nodus_received_events': {…}, 'outcome': 'approved'}
+Insights:  • Sprint-12 tasks approved by shawn. Note: Ship it.   tags: approved, sprint-12, shawn
 ```
 
-Step 4 is the one that matters: none of the four fixes has been re-run against a live server yet,
-and our rebuilt container is the first one that can.
+That is the handoff's "after the fix" output — #654 (payload reached the script), #655 (one
+`results` entry), #656 (four GETs 200 while parked) in one pass. Two things to know that the
+handoff's one line does not say:
+
+- **`history` has three rows, not two, and that is correct.** The `nodus.execute` node's rows are
+  exactly `['WAIT', 'SUCCESS']`; the third `SUCCESS` is `nodus_record_outcome`, the runtime's own
+  follow-on node (`AINDY/runtime/nodus_adapter.py`), which runs once the script completes. Read
+  the node names, not just the statuses, before filing `['WAIT','SUCCESS','SUCCESS']` as a defect.
+- **#655 was checked with a second run parked on the same event.** A first attempt had left run
+  `2b7ef96f…` waiting on `review.approved`; resuming `f40116a3…` left it `waiting` (on 2.13.0 it
+  would have been woken too). It was then resumed with `approved: false` → `success`,
+  `outcome: rejected` — the other branch of the script works as well. 0 waiting runs left.
+
+#### Found while looking: FR-28
+
+Eight `[Scheduler] waiting backup write failed … ForeignKeyViolation … waiting_flow_runs_run_id_fkey`
+WARNINGs — one per read of the parked run — and ten `execution_units` rows stuck `waiting`
+(eight `flow|route`, two `job|route`) after both runs had finished. The "run id" in each
+warning is the **GET request's own execution-unit id**: the pipeline's `_detect_wait` reads the
+returned run row's `status: waiting` as the request itself waiting. Pre-existing (none of the
+three files involved changed in 2.14.0), not a regression, and not something any code of ours
+triggers — filed as `RUNTIME_FEATURE_REQUESTS.md` **FR-28** with the mechanism and the ask.

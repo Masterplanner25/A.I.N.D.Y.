@@ -1,12 +1,102 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-12"
+last_verified: "2026-09-14"
 api_version: "1.0"
 status: current
 owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-28 — reading a waiting run parks the *reader's* ExecutionUnit, forever 🔴 defect (filed 2026-09-14, runtime 2.14.0; pre-existing)
+
+> **`GET /platform/flows/runs/{id}` on a run whose status is `waiting` leaves the GET's own
+> ExecutionUnit in `waiting` permanently, and the scheduler then tries to persist a
+> `waiting_flow_runs` row keyed on that EU id and hits a foreign-key violation, once per read.**
+
+Found on 2026-09-14 running Tutorial 2 (`docs/tutorials/02-event-driven-automation.md`) end to
+end against our 2.14.0 container — the first live run of that page anywhere. The tutorial itself
+passed (see below); this was in the log and the `execution_units` table afterwards.
+
+### What we hit
+
+Eight reads of a parked run (Step 3, four handoff-§4-step-5 GETs, three inspection GETs) →
+eight WARNINGs:
+
+```
+[Scheduler] waiting backup write failed for run=7c88cd31-… (non-fatal): (psycopg2.errors.ForeignKeyViolation)
+  insert or update on table "waiting_flow_runs" violates foreign key constraint "waiting_flow_runs_run_id_fkey"
+DETAIL:  Key (run_id)=(7c88cd31-…) is not present in table "flow_runs".
+```
+
+`7c88cd31…` is not a flow run. It is the **`execution_unit_id` of the GET request** — trace
+`c1c0acf5…` in `system_events` reads `execution.started {route_name: flow.runs.get}` →
+`syscall.executed sys.v1.flow.run {execution_unit_id: 7c88cd31…}` →
+`execution.waiting {route_name: flow.runs.get, wait_for: review.approved}`. Afterwards:
+
+```
+select type, status, source_type, wait_condition->>'event_name' from execution_units where status='waiting';
+ flow | waiting | route | review.approved      × 8   ← one per GET of the parked run
+ job  | waiting | route | unknown              × 2   ← the two POST /platform/nodus/run requests whose script suspended
+```
+
+All ten are still `waiting` after both runs finished (`success`). A GET of a *finished* run
+leaks nothing. The four GETs still answered 200 past `AINDY_QUOTA_MAX_CONCURRENT`, so these
+units do not hold a tenant slot (#656 holds) — they leak a row and a WARNING, not capacity.
+
+### The mechanism, from your code
+
+`core/execution_pipeline/waits.py::_detect_wait` classifies the handler's return value:
+
+```python
+if isinstance(result, dict) and str(result.get("status") or "").upper() == "WAITING":
+    wait_for = str(result.get("wait_for") or result.get("waiting_for") or "unknown")
+```
+
+`routes/flow_router.py::get_flow_run` returns `run_flow("flow_run_get", …)["data"]` — which is
+the **run row itself** (`id`, `flow_name`, `status`, `waiting_for`, `state`, …). When that row
+says `status: "waiting", waiting_for: "review.approved"`, the pipeline reads it as *the
+request* waiting on `review.approved`: `_safe_transition_eu_waiting` parks the request's EU,
+`execution.waiting` is emitted, and the wait registration's backup write
+(`kernel/scheduler/persistence.py`) tries to insert `waiting_flow_runs(run_id=<eu id>)`. Nothing
+ever completes that EU because nothing is actually waiting. The `POST /platform/nodus/run` case
+is the same detector reading the execution record's `status: "WAITING"` — there the request
+arguably *is* waiting, but its EU is never moved on when the run later resumes and finishes.
+
+None of `_detect_wait`, `get_flow_run`, or `persistence.py` changed between v2.13.0 and
+v2.14.0, so this is **not a 2.14.0 regression** — it is what 2.13.0 did too, unobserved. What
+2.14.0 added (`_park_execution_unit`, the run's *own* EU going `waiting`) is correct and
+separate; the leaked units here are the readers', not the run's.
+
+### Ask
+
+1. `_detect_wait` should recognise a wait **signal**, not a wait-shaped payload. An
+   `ExecutionWaitSignal` (already the first branch) or an explicit marker the handler sets —
+   not any dict that happens to carry `status: WAITING`. A route that *reads* a waiting run
+   must complete normally.
+2. A request EU that legitimately parks (`platform.nodus.run` when the script suspends) needs
+   a path out: complete it when the run it fronted resumes, or expire it — today it is
+   `waiting` on `"unknown"` for good.
+3. Until 1 lands: `persistence.py` should not attempt a `waiting_flow_runs` write for an id
+   that is not a `FlowRun` (one `exists()` check), so a read does not produce a WARNING that
+   reads like data loss.
+
+### Not asking for
+
+- A change to the response shape. (Note for the tutorial, separately: on 2.14.0 this route
+  answers the **bare run row**, not `data.flow_run_get_result` as Steps 3 and 6 document; the
+  same is true of `…/history` (`{"run_id", "history": […]}`) and `…/resume`
+  (`{"run_id", "resumed", "results", "execution_envelope"}`). Our copy of the script accepts
+  both.)
+
+### What we do meanwhile
+
+Nothing of ours reads that route (`flows/runs` → 0 hits under `apps/` and `client/src`), so the
+only producer on our stack is an operator reading a parked run by hand. Dashboards that count
+`execution_units` by status should expect `waiting` to be inflated by one row per such read
+until this lands. The ten leaked rows from 2026-09-14 are left in place as the evidence.
+
+---
+
 ## FR-27 — the idempotency gate degrades every concurrent duplicate; measured N−1 of N ✅ SHIPPED in 2.12.0 (opt-in, off here)
 
 **Closed upstream 2026-09-12, one day after filing.** 2.12.0 ships the advisory lock this asked
