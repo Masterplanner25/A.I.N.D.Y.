@@ -7,11 +7,22 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
-## FR-29 — reading a waiting run parks the *reader's* ExecutionUnit, forever 🔴 defect (filed 2026-09-14, runtime 2.14.0; pre-existing)
+## FR-29 — reading a waiting run parks the *reader's* ExecutionUnit, forever ✅ SHIPPED in 2.15.0 (same day)
 
 > **`GET /platform/flows/runs/{id}` on a run whose status is `waiting` leaves the GET's own
 > ExecutionUnit in `waiting` permanently, and the scheduler then tries to persist a
 > `waiting_flow_runs` row keyed on that EU id and hits a foreign-key violation, once per read.**
+
+**Closed upstream 2026-09-14, the day it was filed** — `WAIT-DETECT-SHAPE-1` (#670), in 2.15.0.
+Asks 1 and 3 built as asked: `_detect_wait` honours `ExecutionWaitSignal` only (the dict branch is
+gone) and `_persist_wait_backup` checks the id names a `flow_runs` row. Ask 2 was answered by
+construction: the "legitimately parked" `nodus/run` half never was — the dict branch parked that
+request on the literal event `"unknown"` and nothing has ever resumed a returned request, on any
+release. Our `flow_run_get` result key **stays**, by the owner's decision: with it, the app-profile
+container is the one deployment where the bare-row shape reaches the pipeline, so it is the direct
+live test of the fix (`RUNTIME_2_15_0_UPGRADE.md` §5). Adopted in 2.15.0.
+
+### Original entry (2026-09-14) — retained
 
 Numbered FR-29, not FR-28: the runtime's `APP-FR-*` ledger already holds an FR-28 (`acknowledge_message`, #628) that never passed through this register, and says *next available: FR-29*. Check that ledger before numbering the next one.
 
