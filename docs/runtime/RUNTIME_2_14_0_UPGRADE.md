@@ -172,7 +172,7 @@ handoff's one line does not say:
   would have been woken too). It was then resumed with `approved: false` → `success`,
   `outcome: rejected` — the other branch of the script works as well. 0 waiting runs left.
 
-#### Found while looking: FR-28
+#### Found while looking: FR-29
 
 Eight `[Scheduler] waiting backup write failed … ForeignKeyViolation … waiting_flow_runs_run_id_fkey`
 WARNINGs — one per read of the parked run — and ten `execution_units` rows stuck `waiting`
@@ -180,4 +180,4 @@ WARNINGs — one per read of the parked run — and ten `execution_units` rows s
 warning is the **GET request's own execution-unit id**: the pipeline's `_detect_wait` reads the
 returned run row's `status: waiting` as the request itself waiting. Pre-existing (none of the
 three files involved changed in 2.14.0), not a regression, and not something any code of ours
-triggers — filed as `RUNTIME_FEATURE_REQUESTS.md` **FR-28** with the mechanism and the ask.
+triggers — filed as `RUNTIME_FEATURE_REQUESTS.md` **FR-29** with the mechanism and the ask.

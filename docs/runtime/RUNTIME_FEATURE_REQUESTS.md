@@ -7,11 +7,13 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
-## FR-28 — reading a waiting run parks the *reader's* ExecutionUnit, forever 🔴 defect (filed 2026-09-14, runtime 2.14.0; pre-existing)
+## FR-29 — reading a waiting run parks the *reader's* ExecutionUnit, forever 🔴 defect (filed 2026-09-14, runtime 2.14.0; pre-existing)
 
 > **`GET /platform/flows/runs/{id}` on a run whose status is `waiting` leaves the GET's own
 > ExecutionUnit in `waiting` permanently, and the scheduler then tries to persist a
 > `waiting_flow_runs` row keyed on that EU id and hits a foreign-key violation, once per read.**
+
+Numbered FR-29, not FR-28: the runtime's `APP-FR-*` ledger already holds an FR-28 (`acknowledge_message`, #628) that never passed through this register, and says *next available: FR-29*. Check that ledger before numbering the next one.
 
 Found on 2026-09-14 running Tutorial 2 (`docs/tutorials/02-event-driven-automation.md`) end to
 end against our 2.14.0 container — the first live run of that page anywhere. The tutorial itself
