@@ -99,4 +99,64 @@ ruff check apps/ tests/ — clean;  check_app_imports.py — 37 declared, 0 unde
 
 **Full `tests/unit` on the installed 2.15.0 (2026-09-14, this venv, path printed):** `1240 passed, 1 skipped, 382 warnings, exit 0` — read from the summary line of the log file, not from progress dots.
 
-<!-- CONTAINER_RESULT -->
+### Container rebuilt and verified (2026-09-14/15, same session)
+
+`docker compose … build api` (pip layer only, 1486 s on this link) → image `be1dbcda32fb`,
+`Successfully installed … aindy-runtime-2.15.0`. Stack up on a **391 MB** host; `healthy`, 0
+restarts. Handoff §4, each read rather than assumed:
+
+| §4 check | Result |
+|---|---|
+| 1. version + path, in the container | `2.15.0 ['/usr/local/lib/python3.11/site-packages/AINDY']` |
+| 2. `bootstrap-schema` | exit 0; heads runtime `0018`, app `ga1shadow0001` unchanged |
+| 3. baseline SELECT (before any read) | `flow\|route\|review.approved` **8**, `job\|route\|unknown` **2** — exactly the ten rows 2.14.0 leaked, nothing else. The optional `UPDATE … set status='failed'` was **not** run; see the residual below for why it now matters more than the handoff says |
+| 4. ★ **FR-29 live** — Tutorial 2 Steps 1–6 with the parked run read **eight** times | **passes.** Tutorial output unchanged from 2.14.0 (`status=success`, payload received, one `results` entry, `nodus.execute` history `WAIT, SUCCESS` + `nodus_record_outcome`). **The table afterwards: `waiting` holds the same ten rows, newest still 02:17 the day before — no new `route` row.** The run's own unit (`flow\|flow_run`, `wait_condition` `review.approved`) went `waiting → completed`. `waiting backup write failed` lines since the run: **0**. Postgres `waiting_flow_runs_run_id_fkey` errors since the run: **0** |
+| boot health | 0 postgres reinits, 0 tracebacks, 0 job-storm lines; `/api/version` `default-apps` / 16 |
+
+Test account promoted to `is_admin` for the run and reverted, as before.
+
+**A wedge in the middle, not the release's fault, recorded so the next reader does not chase it:**
+the first attempt started at 05:59:34 UTC and the 06:00 cron burst (`Daily ETA projection
+recalculation`, `Task recurrence check`) on a 390 MB host wedged the API for ~90 s — `unhealthy`,
+three scheduler-saturation lines, one `idle-in-transaction` termination in postgres, and the SDK's
+30 s timeout gave up mid-`run_script`. No reinits, no hard paging (185 pages/s). The API answered
+again by itself (`/health` 4.4 s → 0.7 s) and the second attempt is the one above. Its casualty:
+flow run `63c5bf71…` orphaned in `running` on `nodus.execute` (the worker was starved) — left in
+place, one row.
+
+#### FR-29 residual — the leaked rows re-fire the FK warning **every boot**, on a path the fix does not cover
+
+At startup, `[rehydrate] waiting_flow_runs seed failed for run=7c88cd31-… (non-fatal):
+ForeignKeyViolation` — **ten times, one per leaked route unit**, ids matching 2.14.0's table
+exactly. `flow_run_rehydration` walks `execution_units` in `waiting` and seeds `waiting_flow_runs`
+for each; `_persist_wait_backup` now checks the id names a `flow_runs` row, the rehydration seed
+does not. Two consequences: (a) the §4 step-3 cleanup is not merely cosmetic — until those rows
+are retired, every boot logs ten FK warnings that read like data loss; (b) the rehydrate path
+wants the same existence check. Filed as an addendum to FR-29.
+
+#### FR-30 — a request's execution unit never reaches `completed`; the finalize is flushed after the last commit
+
+Read while checking the handoff's §1 sentence *"a request's execution unit describes the request:
+when the handler returns, it completes."* It does not, and never has:
+
+```
+select type, status, count(*), min(created_at)::date from execution_units where source_type='route' group by 1,2;
+ agent   | executing | 196 | 2026-07-23
+ default | completed |  13 | 2026-07-23   ← none since 2026-09-12
+ default | executing | 255 | 2026-07-23
+ flow    | executing | 373 | 2026-07-23
+ job     | executing |  39 | 2026-07-23
+ task    | executing |  52 | 2026-07-23
+```
+
+This tutorial run alone left 19 route units `executing` (13 `flow`, 6 `job`, the `nodus/run`
+request among them) after every request had returned 200. Mechanism, from the installed 2.15.0:
+`execution_pipeline/pipeline.py` emits `execution.started` (commits, via
+`system_event_service.py:125`) → handler → emits `execution.completed` (commits) → **then**
+`_safe_finalize_eu(ctx, "completed")` at `pipeline.py:202`, whose `ExecutionUnitService.
+update_status` does `flush()` only — and `db/database.py::get_db` tears down with `close()`, no
+commit. The finalize lands after the last commit and is rolled back on every request. No
+`invalid transition` or `finalize` failure is logged because nothing failed; it was undone. Filed
+as FR-30 in `RUNTIME_FEATURE_REQUESTS.md`. Not a 2.15.0 change — pre-existing since the table's
+first row — and not something the FR-29 probe can see, because `executing` is where it started.
+

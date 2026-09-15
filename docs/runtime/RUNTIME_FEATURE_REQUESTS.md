@@ -1,12 +1,82 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-14"
+last_verified: "2026-09-15"
 api_version: "1.0"
 status: current
 owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-30 — a request's execution unit never reaches `completed`: the finalize is flushed after the last commit 🔴 defect (filed 2026-09-15, runtime 2.15.0; pre-existing since 2026-07-23)
+
+Numbered from your ledger (*next available: FR-30* after you took FR-29).
+
+> **Every route-sourced `execution_units` row on our stack is `executing` forever. The
+> 2.15.0 handoff §1 says "a request's execution unit describes the request: when the handler
+> returns, it completes." The table says it has never once done so for `flow`, `agent`, `job`
+> or `task` units, and not for `default` since 2026-09-12.**
+
+Read on 2026-09-15 while verifying that sentence after the FR-29 run.
+
+### What we hit
+
+```
+select type, status, count(*), min(created_at)::date, max(created_at)::date
+  from execution_units where source_type='route' group by 1,2;
+ agent   | executing | 196 | 2026-07-23 | 2026-09-13
+ default | completed |  13 | 2026-07-23 | 2026-09-12
+ default | executing | 255 | 2026-07-23 | 2026-09-13
+ flow    | executing | 373 | 2026-07-23 | 2026-09-15
+ job     | executing |  39 | 2026-07-23 | 2026-09-15
+ task    | executing |  52 | 2026-07-23 | 2026-09-13
+```
+
+One Tutorial 2 pass leaves 19 route units `executing` (13 `flow`, 6 `job`, the `nodus/run`
+request among them) after every request returned 200 with `execution.completed` on its trace.
+Nothing is logged: no `[EU] invalid transition`, no `execution_unit.finalize.completed` failure.
+
+### The mechanism, from your code (installed 2.15.0)
+
+`core/execution_pipeline/pipeline.py`, success path, in order:
+
+1. `_safe_emit_event(… "execution.started")` — `core/system_event_service.py:125` **commits** the
+   request session; this is what lands the unit as `executing`.
+2. handler runs.
+3. `_safe_emit_event(… "execution.completed")` — **commits** again.
+4. `pipeline.py:202` `_safe_finalize_eu(ctx, "completed")` → `core/execution_pipeline/resources.py:139`
+   `ExecutionUnitService(db).update_status(eu_id, "completed")` → `core/execution_unit_service.py`
+   **`self.db.flush()`** — no commit. Records the side effect as `ok`.
+5. `db/database.py::get_db` `finally: db.close()` — no commit; the flushed UPDATE is rolled back.
+
+The finalize is the last write on the session and the only one nothing commits. The 13
+`default|completed` rows are the exception that shows the shape: a route whose handler commits
+*after* the pipeline's finalize (or a queued emit that commits later) carries the status through
+by accident.
+
+This is also why FR-29's parked units were the visible half of the same lifecycle: `waiting` got
+committed (the scheduler's registration commits) while `completed` never does.
+
+### Ask
+
+Commit the finalize — `_safe_finalize_eu` commits after `update_status`, or `update_status`
+takes a `commit=True` for terminal statuses, or the finalize moves before the
+`execution.completed` emit whose commit would carry it. Whichever, `ExecutionConsole`'s
+`executing` count should then mean *in flight*. A one-off retire for the ~900 rows here is our
+side (same shape as the FR-29 step 3).
+
+### Not asking for
+
+- A change to `get_db` — a route session that never commits on its own is the right default.
+- Backfilling `completed_at` for history.
+
+### What we do meanwhile
+
+Nothing of ours reads route units by status except the operator console's filter, which is
+therefore showing ~900 phantom in-flight executions; treat `executing` as *started* until this
+lands. No retire yet — data edit, owner's call, and the rows are the evidence.
+
+---
+
 ## FR-29 — reading a waiting run parks the *reader's* ExecutionUnit, forever ✅ SHIPPED in 2.15.0 (same day)
 
 > **`GET /platform/flows/runs/{id}` on a run whose status is `waiting` leaves the GET's own
@@ -21,6 +91,15 @@ request on the literal event `"unknown"` and nothing has ever resumed a returned
 release. Our `flow_run_get` result key **stays**, by the owner's decision: with it, the app-profile
 container is the one deployment where the bare-row shape reaches the pipeline, so it is the direct
 live test of the fix (`RUNTIME_2_15_0_UPGRADE.md` §5). Adopted in 2.15.0.
+
+**Verified live 2026-09-15 on the rebuilt 2.15.0 container** (`RUNTIME_2_15_0_UPGRADE.md` §5):
+eight reads of a parked run + full resume → `waiting` still holds exactly the ten 2.14.0 rows,
+no new `route` row, 0 read-path warnings, 0 FK errors. **Residual, for the same entry:** the ten
+leaked rows re-fire the FK violation **every boot** through `flow_run_rehydration` —
+`[rehydrate] waiting_flow_runs seed failed for run=<leaked eu id>` × 10 at startup — a path
+that does not have the `flow_runs`-exists check `_persist_wait_backup` now has. Ask: the same
+check there. Our side: the handoff's §4 step-3 `UPDATE` retires the rows and stops the noise;
+not yet run (owner's call, it is a data edit).
 
 ### Original entry (2026-09-14) — retained
 
