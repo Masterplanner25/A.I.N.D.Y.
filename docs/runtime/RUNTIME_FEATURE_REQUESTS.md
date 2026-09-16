@@ -51,7 +51,16 @@ docstring saying why (`test_memory_execute_no_recalc.py` pins that your graph st
 
 ---
 
-## FR-31 — a Nodus run parked across a restart cannot be resumed until some script has run in the new process, and the first attempt orphans it 🔴 defect (filed 2026-09-16, runtime 2.17.0; pre-existing)
+## FR-31 — a Nodus run parked across a restart cannot be resumed until some script has run in the new process, and the first attempt orphans it ✅ SHIPPED in 2.18.0 (same day)
+
+**Closed upstream 2026-09-16, the day it was filed** — 2.18.0 (#686–#689). All three asks built:
+`nodus_execute` registered at boot (API and FR-15 worker), a skipped resume re-arms the wait
+instead of consuming it, and the resume route's `resumed` now means *woken* with `woken: bool`
+per result. Reading the filing also found `agent_execution` had never been in `FLOW_REGISTRY` —
+an authority-gate-parked agent run could not have survived a restart either; it now resolves for
+resume only. Verified live in `RUNTIME_2_18_0_UPGRADE.md` §5 in the handoff's original order.
+
+### Original entry (2026-09-16) — retained
 
 Numbered from your ledger (*next available: FR-31*).
 
