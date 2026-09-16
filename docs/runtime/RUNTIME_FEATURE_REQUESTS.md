@@ -7,7 +7,19 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
-## FR-30 — a request's execution unit never reaches `completed`: the finalize is flushed after the last commit 🔴 defect (filed 2026-09-15, runtime 2.15.0; pre-existing since 2026-07-23)
+## FR-30 — a request's execution unit never reaches `completed`: the finalize is flushed after the last commit ✅ SHIPPED in 2.16.0 (same day)
+
+**Closed upstream 2026-09-15, the day it was filed** — `EU-FINALIZE-UNCOMMITTED-1` (#673), in
+2.16.0, together with the FR-29 addendum. Built as asked: `_safe_finalize_eu` commits after a
+successful `update_status`, at the write site, inside its existing try/except; `get_db` and
+`update_status` untouched. The mechanism here was verified line for line upstream. What neither
+side could see: the runtime's own route tests asserted `completed` and passed on the broken code
+because the shared fixture reads through the request's own transaction, where a flush looks like
+a commit — their new suite reads through a separate connection. The runtime also corrected its
+2.15.0 attribution of the 105 `executing` units (FR-30, not FR-29). Adopted and verified live in
+`RUNTIME_2_16_0_UPGRADE.md` §5.
+
+### Original entry (2026-09-15) — retained
 
 Numbered from your ledger (*next available: FR-30* after you took FR-29).
 
@@ -98,8 +110,11 @@ no new `route` row, 0 read-path warnings, 0 FK errors. **Residual, for the same 
 leaked rows re-fire the FK violation **every boot** through `flow_run_rehydration` —
 `[rehydrate] waiting_flow_runs seed failed for run=<leaked eu id>` × 10 at startup — a path
 that does not have the `flow_runs`-exists check `_persist_wait_backup` now has. Ask: the same
-check there. Our side: the handoff's §4 step-3 `UPDATE` retires the rows and stops the noise;
-not yet run (owner's call, it is a data edit).
+check there. **Shipped in 2.16.0 (#673), worse than reported:** the seed used `run_id=eu_id` for
+*every* waiting unit, so the FK fired for every waiting unit on every boot since it was written, not
+only the ten leaked rows; SQLite does not enforce the FK, which is why no test saw it. Guard now in
+`ensure_waiting_flow_run_row`, covering both callers. Our side: the ten rows are kept as evidence by
+the owner's decision; they no longer make noise.
 
 ### Original entry (2026-09-14) — retained
 
