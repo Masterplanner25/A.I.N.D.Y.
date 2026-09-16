@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { runLeadGen } from "../../api/search.js";
 import SearchHistory from "./SearchHistory";
+import LeadOutreach from "./LeadOutreach";
 import { safeMap } from "../../utils/safe";
 import { Toast } from "../shared/Toast";
 import { useToast } from "../../utils/useToast";
@@ -123,6 +124,10 @@ export default function LeadGen() {
           </div>)
         }
       </div>
+      {/* Saved leads + outreach. `historyRefresh` bumps after a search, so the saved list refetches
+          the rows that search just persisted. */}
+      <LeadOutreach refreshToken={historyRefresh} showToast={showToast} />
+
       <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 

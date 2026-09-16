@@ -44,6 +44,47 @@ export function runLeadGen(query) {
   });
 }
 
+// ── Leads + outreach (the Search Execution Layer) ─────────────────────────────────────
+//
+// Persisted leads are what `runLeadGen` saved; outreach acts on them behind the server-side
+// gate. `channel=email` sends REAL mail only when the server has AINDY_SEARCH_OUTREACH_SEND
+// on AND the lead carries a hand-entered contact — the UI never decides that, it only shows
+// the outcome the server reports (drafted | queued | sent | failed). A `sent` action cannot be
+// reverted; the server refuses and the UI does not offer it.
+
+export function listLeads() {
+  return authRequest(ROUTES.SEARCH.LEADS, { method: "GET" });
+}
+
+/** `contactEmail` null or "" clears the contact. 422 if it is not an email address. */
+export function setLeadContact(leadId, contactEmail) {
+  return authRequest(ROUTES.SEARCH.LEAD_CONTACT(leadId), {
+    method: "PATCH",
+    body: JSON.stringify({ contact_email: contactEmail || null }),
+  });
+}
+
+/** Dry run: which leads WOULD be actioned and why the rest are gated. Persists nothing. */
+export function previewLeadActions() {
+  return authRequest(`${ROUTES.SEARCH.LEAD_EXECUTE}?apply=false`, { method: "POST" });
+}
+
+export function executeLeadActions(channel = "draft") {
+  const params = new URLSearchParams({ apply: "true", channel });
+  return authRequest(`${ROUTES.SEARCH.LEAD_EXECUTE}?${params.toString()}`, { method: "POST" });
+}
+
+export function revertLeadAction(actionId) {
+  return authRequest(ROUTES.SEARCH.LEAD_EXECUTE_REVERT, {
+    method: "POST",
+    body: JSON.stringify({ action_id: actionId }),
+  });
+}
+
+export function listLeadActions(limit = 20) {
+  return authRequest(`${ROUTES.SEARCH.LEAD_ACTIONS}?limit=${limit}`, { method: "GET" });
+}
+
 export function analyzeSeo(content, title, targetKeywords) {
   // Both extras are optional and omitted when empty, so the request stays byte-identical to
   // the previous one for callers that do not pass them.
