@@ -15,7 +15,12 @@ def register() -> None:
     register_tool(
         "memory.recall",
         risk="low",
-        description="Recall relevant memory nodes for a given query",
+        description=(
+            "Recall relevant memory nodes for a given query. "
+            "Args: {query: str, limit?: int (default 5), node_type?: str}. Read-only; returns "
+            "{count, nodes[]}. Note: recall ranks by similarity over the user's own nodes, which "
+            "are mostly system telemetry — expect event summaries, not prose."
+        ),
         capability="tool:memory.recall",
         required_capability="read_memory",
         category="memory",
@@ -24,7 +29,11 @@ def register() -> None:
     register_tool(
         "memory.write",
         risk="low",
-        description="Write a memory node with content and tags",
+        description=(
+            "Write a memory node with content and tags. "
+            "Args: {content: str (required), tags?: [str], node_type?: str (default 'insight')}. "
+            "Returns {node_id}."
+        ),
         capability="tool:memory.write",
         required_capability="write_memory",
         category="memory",

@@ -35,7 +35,10 @@ def register() -> None:
     register_tool(
         "freelance.performance",
         risk="low",
-        description="Read recent realized-revenue performance signals for the current user.",
+        description=(
+            "Read recent realized-revenue performance signals for the current user. "
+            "Args: {limit?: int (default 3)}. Read-only."
+        ),
         capability="tool:freelance.performance",
         required_capability="revenue_read",
         category="revenue",

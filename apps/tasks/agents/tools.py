@@ -19,7 +19,11 @@ def register() -> None:
     register_tool(
         "task.create",
         risk="low",
-        description="Create a new task in the user's task list",
+        description=(
+            "Create a new task in the user's task list. Args: {task_name: str (required), "
+            "priority?: str, due_date?: ISO date, estimated_hours?: number, category?: str, "
+            "masterplan_id?: str, phase_id?: str, strategy_id?: str}."
+        ),
         capability="tool:task.create",
         required_capability="manage_tasks",
         category="task",
@@ -28,7 +32,10 @@ def register() -> None:
     register_tool(
         "task.complete",
         risk="medium",
-        description="Mark a task as complete by name",
+        description=(
+            "Mark a task as complete by name. Args: {task_name: str (required — the exact "
+            "task name)}."
+        ),
         capability="tool:task.complete",
         required_capability="manage_tasks",
         category="task",

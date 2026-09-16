@@ -20,8 +20,91 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-16:** FR-32 (awaiting intake) · FR-14 recurrence half · FR-6 items 2–3 ·
-> FR-19 app half (ours).
+> **Open as of 2026-09-16:** FR-33, FR-34 (filed from the seven approved runs) · FR-32 (awaiting
+> intake) · FR-14 recurrence half · FR-6 items 2–3 · FR-19 app half (ours).
+## FR-34 — `AgentRun.steps_completed` counts steps *attempted*, not steps that succeeded, and that number is a scoring dimension 🔴 open (filed 2026-09-16, runtime 2.19.0)
+
+Numbered after our FR-33; your ledger's *next available* is still FR-32 because FR-32 has not been
+taken into intake yet — please renumber on intake if that is wrong.
+
+> **`AINDY/runtime/nodus_adapter.py:568` (and `:237`, `:436`) sets
+> `agent_run.steps_completed = idx + 1` after every step regardless of `step_status`.** A run that
+> fails on step 2 of 2 records `steps_completed: 2, steps_total: 2` — and that pair is what
+> `execution.py:355` writes into the `score.computed` record's `dimensions`, the accrual Infinity
+> reads.
+
+### What we hit
+
+Approving seven agent runs parked since 2026-09-13 (`RUNTIME_2_19_0_UPGRADE.md` §6 follow-up):
+four planned `memory.recall → arm.analyze`, and `arm.analyze` failed on a missing argument
+(FR-33). Every one of the four finished `status: failed` with `steps_completed 2 / steps_total 2`
+and a `score.computed` record of `{steps_total: 2, steps_completed: 2, llm_tokens: 0}` at
+`score: 0.0`. The score was right because `status` is a separate input; the dimension was wrong.
+`AgentStep.status` per step is correct (`failed`) — only the run-level counter lies.
+
+### Ask
+
+Increment `steps_completed` only when the step's `status` is `success` (or whatever your terminal
+success name is at that site); keep `current_step = idx + 1` as the cursor. Three sites in
+`nodus_adapter.py`. If "attempted" is the intended meaning, name it so (`steps_attempted`) and add
+`steps_succeeded` next to it — the `score.computed` dimension should be the one that means
+progress.
+
+### Not asking for
+
+- A change to the score itself; `status` already drives it. This is the dimension record and the
+  `steps_completed` column that the presentation layer and our `ExecutionConsole` read as
+  "N of M done".
+
+---
+
+## FR-33 — the planner is told a tool's name and one sentence, never its arguments; `register_tool` has nowhere to put them 🔴 open (filed 2026-09-16, runtime 2.19.0)
+
+Numbered after your ledger's *next available* FR-32, which is our FR-32 below (awaiting intake).
+
+> **`AINDY/agents/agent_runtime/planning.py:182` renders the catalog the planner sees as
+> `- {name}: {description} (risk={risk})`. `AINDY/agents/tool_registry.py:142 register_tool(...)`
+> has no parameter for an argument schema, and the Claude planner's `submit_plan` schema
+> (ours, `apps/agent/agents/planner_anthropic.py`) can therefore only declare
+> `args: {type: object}` free-form.** A tool's argument contract has exactly one channel: prose in
+> its description, which nothing checks.
+
+### What we hit
+
+Seven runs parked in `pending_approval` since the 2.13.0 governor checks were approved on
+2026-09-16. All four that planned `arm.analyze` failed with `sys.v1.arm.analyze requires
+'file_path'`: the planner had sent `{"topic": "..."}`, because the description read *"Analyze code
+or a topic"* and the syscall takes a file path. The plan looked fine at approval time; the failure
+was only discoverable by running it. Four of our sixteen tools had already written `Args: {...}`
+into their descriptions as a private convention; the other ten had not.
+
+**Our half, shipped:** every app tool's description now carries `Args: {...}` and a test makes
+the convention mandatory (`tests/unit/test_agent_tool_descriptions_declare_args.py`). That is a
+workaround: the planner still reads prose, `execute_tool` still validates nothing, and a
+mismatch still surfaces as a failed step after approval.
+
+### Ask
+
+1. `register_tool(..., args_schema: dict | None = None)` — a JSON-Schema object, stored on the
+   registry entry, surfaced in `get_tools_for_run()`'s tool dicts.
+2. `planning.py` renders it into the catalog line when present (`- name: description
+   args={...}`), so every backend — `runtime_local` included — sees the contract.
+3. `execute_tool` validates `args` against it **before** dispatch and fails the step with the
+   schema error, so a bad plan fails at plan-validation (or at latest before the syscall) rather
+   than inside a domain handler with a domain message.
+
+(1)+(2) are additive and nothing changes for tools that do not declare one. (3) can be gated.
+The Claude planner would pass `args_schema` through as the per-tool `input_schema`, which is
+what the forced tool call was built to carry.
+
+### Not asking for
+
+- A tool-argument schema for your own `runtime.selftest` / default `memory.*` — though they
+  would benefit.
+- Any change to `PlannerRequest`'s shape beyond the extra key in each tool dict.
+
+---
+
 ## FR-32 — `memory_execute_loop` is a runtime-owned graph built entirely from app-owned nodes, and it dictates that a memory execution scores 🟡 ownership (filed 2026-09-16, runtime 2.17.0)
 
 Numbered from your ledger (*next available: FR-32*).

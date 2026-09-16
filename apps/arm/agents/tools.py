@@ -19,7 +19,12 @@ def register() -> None:
     register_tool(
         "arm.analyze",
         risk="medium",
-        description="Analyze code or a topic using the ARM reasoning engine",
+        description=(
+            "Analyze ONE SOURCE FILE with the ARM code-reasoning engine (architecture and "
+            "integrity scores plus a summary). Args: {file_path: str (required — a path to a "
+            ".py/.js/.ts/.md/.json/.yaml file under the project root; NOT a topic or free text), "
+            "additional_context?: str}. It cannot analyze a topic, a memory, or prior step output."
+        ),
         capability="tool:arm.analyze",
         required_capability="external_api_call",
         category="analysis",
@@ -28,7 +33,11 @@ def register() -> None:
     register_tool(
         "arm.generate",
         risk="medium",
-        description="Generate or refactor code using the ARM code generation engine",
+        description=(
+            "Generate or refactor code with the ARM code-generation engine. "
+            "Args: {prompt: str (required), language?: str, generation_type?: str, "
+            "original_code?: str, analysis_id?: str}."
+        ),
         capability="tool:arm.generate",
         required_capability="external_api_call",
         category="analysis",
@@ -37,7 +46,10 @@ def register() -> None:
     register_tool(
         "arm.autotune",
         risk="low",
-        description="Apply gated, reversible self-tuning config changes from ARM's own metrics",
+        description=(
+            "Apply gated, reversible self-tuning config changes from ARM's own metrics. "
+            "Args: {apply?: bool (default false — dry run), window?: int days (default 30)}."
+        ),
         capability="tool:arm.autotune",
         required_capability="self_tune",
         category="optimization",

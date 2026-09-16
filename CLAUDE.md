@@ -121,7 +121,13 @@ def register() -> None:
     #
     # AGENT TOOLS: use `register_run_tool_provider` (a callable returning the tool list),
     # NOT `register_agent_tool` (static registration). No app uses the static form; the
-    # 16 live tools all arrive through a provider. `iter_agent_tools()` returns 0.
+    # 16 live tools all arrive through a provider. `iter_agent_tools()` returns 0. Of the
+    # 16, 15 are ours (7 `apps/*/agents/tools.py` modules; counted 2026-09-16) and one is the
+    # runtime's `runtime.selftest`. The planner sees ONE LINE per tool — `- name: description
+    # (risk=…)` — and `register_tool` takes no argument schema, so a tool's `description` MUST
+    # carry `Args: {…}` or the planner guesses the keys and the step fails at execution
+    # (`arm.analyze` said "or a topic", took `file_path`, failed 4 of 4 runs on 09-13).
+    # `test_agent_tool_descriptions_declare_args.py` enforces it.
     # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
     # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
     # `register_syscalls` — which do not exist. Grepping for them returns nothing, which

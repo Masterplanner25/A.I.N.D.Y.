@@ -188,3 +188,20 @@ from 2026-09-13 now count as active forever — `+0.23` on `system_load` for as 
 there — and nothing expires them. Approve, reject or delete them; the snapshot our triggers and
 goal ranking read is the honest one only once the table is.
 
+**Decided: approved, all seven, 2026-09-16 22:08–22:15 UTC, as their owner (`shawn@local.test`,
+token minted in-container).** Snapshot afterwards: `active_runs 0, health_status healthy`. What
+running them showed:
+
+| runs | plan | result |
+|---|---|---|
+| 1 | `memory.recall` | completed 1/1 in 24 s — 5 nodes of telemetry (`execution.started from agent`, sim 0.86) for the query "cost governor phase 2" |
+| 2 | `memory.recall → reasoning.evaluate` | completed 2/2 in 3 s — `reasoning.evaluate` returned the canned Next-Action (`review_plan`), not a synthesis; the planner chose it on its name |
+| 4 | `memory.recall → arm.analyze` | **failed**: `sys.v1.arm.analyze requires 'file_path'` — the planner sent `{"topic": …}` because the description said "code or a topic" |
+
+Three findings, one ours: every app tool's description now carries `Args: {…}` and
+`test_agent_tool_descriptions_declare_args.py` enforces it (this was the only channel the planner
+has — **FR-33** asks for a real one); `steps_completed` reads 2/2 on every failed run and lands in
+`score.computed` that way (**FR-34**). No LLM call was minted by any of the seven, so
+`attributed="run"` (2.13.0 §3) is still unobserved — the `arm.analyze` runs would have been the
+first, and they fell over before the seam.
+
