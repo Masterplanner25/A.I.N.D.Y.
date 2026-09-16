@@ -32,7 +32,10 @@ def register() -> None:
     register_tool(
         "leadgen.search",
         risk="medium",
-        description="Search for B2B leads matching a query",
+        description=(
+            "Search for B2B leads matching a query. Args: {query: str (required)}. "
+            "Returns scored leads; does not contact anyone."
+        ),
         capability="tool:leadgen.search",
         required_capability="external_api_call",
         category="leadgen",
@@ -41,7 +44,9 @@ def register() -> None:
     register_tool(
         "research.query",
         risk="low",
-        description="Query external sources for research on a topic",
+        description=(
+            "Query external sources for research on a topic. Args: {query: str (required)}."
+        ),
         capability="tool:research.query",
         required_capability="external_api_call",
         category="research",

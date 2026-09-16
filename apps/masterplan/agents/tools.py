@@ -19,7 +19,12 @@ def register() -> None:
     register_tool(
         "genesis.message",
         risk="high",
-        description="Send a message to the Genesis strategic planning session (modifies MasterPlan state)",
+        description=(
+            "Send a message to the Genesis strategic planning session (modifies MasterPlan "
+            "state). Args: {message: str (required), session_id: str (required — the Genesis "
+            "session id; it must come from the objective or a prior step, the tool cannot look "
+            "it up)}. Do not plan this step without a session_id in hand."
+        ),
         capability="tool:genesis.message",
         required_capability="strategic_planning",
         category="planning",
