@@ -128,6 +128,14 @@ const APP_ONLY_ROUTES = {
     // The draft loop. App-owned and not in the ui-kit, so these carry their own `/seo`
     // prefix rather than going through `withPrefix`.
     DRAFTS: "/seo/drafts",
+    // The Search Execution Layer (act on scored leads) and the hand-entered contact that gives
+    // the email channel a recipient. All app-owned under the leadgen router; the kit declares
+    // only LEAD_GEN itself.
+    LEADS: "/leadgen/",
+    LEAD_CONTACT: (leadId) => `/leadgen/leads/${leadId}/contact`,
+    LEAD_EXECUTE: "/leadgen/execute",
+    LEAD_EXECUTE_REVERT: "/leadgen/execute/revert",
+    LEAD_ACTIONS: "/leadgen/actions",
   },
 };
 
