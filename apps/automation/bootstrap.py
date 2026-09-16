@@ -209,7 +209,7 @@ def _register_flow_plans() -> None:
 
     register_flow_plan(
         "memory_execution",
-        {"steps": ["memory_execution_validate", "memory_execution_run", "memory_execution_orchestrate"]},
+        {"steps": ["memory_execution_validate", "memory_execution_run"]},
     )
     register_flow_plan("generic", {"steps": ["execute", "store_result"]})
 
