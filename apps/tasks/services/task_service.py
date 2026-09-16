@@ -69,6 +69,23 @@ def _emit_task_event(
         event_db.close()
 
 
+def _commit_eu_hook(db: Session) -> None:
+    """Commit the execution-unit write an EU hook just made.
+
+    TASK-EU-NOT-PERSISTED-1 — `ExecutionUnitService.create` / `update_status` only FLUSH. Every
+    hook in this module runs AFTER the function's own `db.commit()` for the task row, so the
+    unit's write was the last thing on the session, and on the syscall path the handler owns
+    that session and closes it without committing (`_session_from_context` → `SessionLocal()`,
+    because `make_syscall_ctx_from_flow` carries no `_db`). The task row landed; the unit was
+    rolled back — 0 task units persisted between 2026-09-06 and 2026-09-16, and the
+    start/pause/complete hooks had nothing to move. Same mechanism as runtime FR-30, on our side.
+
+    Committing here is consistent with the rest of this module, which already commits the
+    caller's session for the task row itself.
+    """
+    db.commit()
+
+
 def _serialize_dependency(task_id: int, dependency_type: str = "hard") -> dict[str, Any]:
     return {"task_id": int(task_id), "dependency_type": dependency_type or "hard"}
 
@@ -512,6 +529,7 @@ def create_task(
             status="pending",
             extra={"task_name": task.name, "category": task.category, "priority": task.priority},
         )
+        _commit_eu_hook(db)
     except Exception as _eu_exc:
         logger.warning("[EU] task create hook — non-fatal | error=%s", _eu_exc)
     return task
@@ -550,6 +568,7 @@ def start_task(db: Session, name: str, user_id: str | uuid.UUID | None):
             _eu = _eus.get_by_source("task", str(task.id))
             if _eu:
                 _eus.update_status(_eu.id, "executing")
+                _commit_eu_hook(db)
         except Exception as _eu_exc:
             logger.warning("[EU] task start hook — non-fatal | error=%s", _eu_exc)
         return f"Started task: {task.name}"
@@ -580,6 +599,7 @@ def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
             _eu = _eus.get_by_source("task", str(task.id))
             if _eu:
                 _eus.update_status(_eu.id, "waiting")
+                _commit_eu_hook(db)
         except Exception as _eu_exc:
             logger.warning("[EU] task pause hook — non-fatal | error=%s", _eu_exc)
         return f"Paused task: {task.name}"
@@ -694,7 +714,14 @@ def complete_task(
         _eus = ExecutionUnitService(db)
         _eu = _eus.get_by_source("task", str(task.id))
         if _eu:
+            # A paused task's unit is `waiting`, and the runtime's transition table has no
+            # waiting -> completed edge (only waiting -> executing / resumed / failed). Step it
+            # through `executing` first; otherwise completing a paused task logs
+            # "[EU] invalid transition" and leaves the unit parked forever.
+            if _eu.status == "waiting":
+                _eus.update_status(_eu.id, "executing")
             _eus.update_status(_eu.id, "completed")
+            _commit_eu_hook(db)
     except Exception as _eu_exc:
         logger.warning("[EU] task complete hook — non-fatal | error=%s", _eu_exc)
 

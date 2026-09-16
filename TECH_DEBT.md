@@ -41,7 +41,32 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
-## TASK-EU-NOT-PERSISTED-1: a task's own execution unit is created by the hook and never lands in the table (app-owned, P2)
+## TASK-EU-NOT-PERSISTED-1: ✅ CLOSED 2026-09-16 — a task's own execution unit is created by the hook and never lands in the table (app-owned, was P2)
+
+**Closed 2026-09-16, same day, traced rather than guessed.** The session the `task_create` node
+runs on is one the *syscall handler owns*: `make_syscall_ctx_from_flow` carries no `_db` (its
+docstring lists `db`; its body does not pass it), so `_session_from_context` in
+`apps/tasks/syscalls/syscall_handlers.py:37` falls to `SessionLocal()` with `owns_session=True`,
+and the handler's `finally: db.close()` rolls back whatever the service left flushed. The service
+commits the task row itself (`:496`) and the EU hook runs *after* that — so the row landed and the
+unit was the last, uncommitted write. Same for start / pause / complete. The registry contract
+(`AINDY/kernel/syscall_registry.py:22`) is explicit that a handler owning its session owns its
+transaction; the hooks were relying on a commit that had already happened.
+
+**Fix:** `_commit_eu_hook(db)` after the unit write in all four hooks in
+`apps/tasks/services/task_service.py` — consistent with the module, which already commits the
+caller's session for the task row. Plus one edge the persistence exposed: the runtime's transition
+table has no `waiting → completed`, so completing a *paused* task would log
+`[EU] invalid transition` and strand the unit; the complete hook now steps `waiting → executing`
+first. **Test:** `tests/unit/test_task_execution_unit_persistence.py` runs the real handler path
+(a flow-style ctx with no `_db`) against a file-backed engine and reads the unit back through a
+*separate* session — the shared `db_session` fixture (one StaticPool connection, one transaction)
+reads a flush as a commit and cannot see this class, which is the same reason the runtime's FR-30
+tests passed on broken code. Both tests fail on the old code; the transition step is
+mutation-checked. The eight `pending` rows from ≤2026-09-06 and the 09-16 probe task stay as they
+are.
+
+### Original entry (2026-09-16) — retained
 
 Found 2026-09-16 while verifying the runtime 2.16.0 handoff's "not touched, correctly" row
 (`RUNTIME_2_16_0_UPGRADE.md` §3). The row says our pause hook's `update_status(_eu.id, "waiting")`
