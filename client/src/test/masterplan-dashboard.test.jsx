@@ -45,6 +45,10 @@ vi.mock("../api/masterplan.js", () => ({
   getMasterplanProjection: mockGetMasterplanProjection,
   getStrategyLayer: mockGetStrategyLayer,
   getPhaseAdvanceProposal: mockGetPhaseAdvanceProposal,
+  // PacePanel mounts beside PhasePanel; a quiet proposal keeps these tests about what they test.
+  getPaceProposal: vi.fn().mockResolvedValue({ proposed: false, reason: "no_projection", evidence: {}, options: [] }),
+  confirmPace: vi.fn(),
+  dismissPace: vi.fn(),
   confirmPhaseAdvance: mockConfirmPhaseAdvance,
   dismissPhaseAdvance: mockDismissPhaseAdvance,
   reopenPhase: mockReopenPhase,

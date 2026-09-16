@@ -311,7 +311,7 @@ is reframed, not abandoned, in
 | Typed `Domain`s → Composite Master Index | Scoped as the Domain Engine, not built |
 | Elo apex ranker | Absent; reframed as self-trust calibration |
 | Framework Forge · AI Mirror | Absent; reframed as the Creator Dashboard in `SURFACE_IDENTITY_BRIEF.md` |
-| **Risk posture & ETA drift** | ❌ **Still sensed, not actuated.** `posture` is read as identity evidence and displayed in flows, but nothing consumes it to re-sequence or steer the plan |
+| **Risk posture & ETA drift** | ✅ **Actuated 2026-09-16 — as a proposal, which is the only way this repo lets a system act on a plan.** `apps/masterplan/services/pace.py`: the posture becomes a drift *tolerance* (Aggressive 5 % / Accelerated 10 % / Stable 20 % / Reduced 35 % of the remaining horizon, floored at 7 / 14 / 30 / 45 days); the daily ETA job's `days_ahead_behind` is read against it; past the tolerance on a confident projection the system proposes (`GET /masterplans/{id}/pace`), the human confirms `retarget` (a refine: target_date → projected completion, ETA recomputed at once) or dismisses ("noted", measured — returns when drift moves past the tolerance). Re-posturing is *named* in the evidence, not offered: revise-class, and `/revise` is not built. `PacePanel` on the dashboard. Nothing re-sequences tasks — by design, not omission |
 
 **The July closing line — "what's left = autonomous triggering + closing the learning loops
 (+ the soak-gated score-drive)" — still describes the open list**, minus the learning loops. Four

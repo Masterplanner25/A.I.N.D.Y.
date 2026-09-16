@@ -1190,6 +1190,33 @@ Dismiss Phase Advance — the human's other half, "not done"; the proposal retur
 
 **Response 200:** phase, dismissed: {at, task_count}, returns_when; 409 when nothing is proposed
 
+#### GET /apps/masterplans/{plan_id}/pace
+Pace Proposal — the plan's ETA drift (`days_ahead_behind`, from the daily ETA job) read against
+its posture's tolerance (Aggressive 5 % / Accelerated 10 % / Stable 20 % / Reduced 35 % of the
+remaining horizon, floored at 7 / 14 / 30 / 45 days). Proposes only on a confident projection
+that drifts past the tolerance. Reads only.
+
+**Parameters:** plan_id (path): integer
+
+**Response 200:** proposed: boolean, reason, direction: behind | ahead | null, evidence: {posture, tolerance_days, days_ahead_behind, eta_confidence, target_date, projected_completion_date, implied_posture, …}, options: [{decision, kind, label, consequence}], dismissed
+
+#### POST /apps/masterplans/{plan_id}/pace/confirm
+Confirm Pace — `retarget` moves target_date to the projected completion (a refine), clears any
+dismissal, and recomputes the ETA at once.
+
+**Parameters:** plan_id (path): integer
+
+**Body:** decision: string ("retarget")
+
+**Response 200:** decision, kind, target_date_from, target_date_to, eta, proposal; 409 when nothing is proposed or the decision is unknown
+
+#### POST /apps/masterplans/{plan_id}/pace/dismiss
+Dismiss Pace — "noted"; records the drift it was measured against and returns when drift moves by more than the tolerance
+
+**Parameters:** plan_id (path): integer
+
+**Response 200:** dismissed: {at, days_ahead_behind}, returns_when; 409 when nothing is proposed
+
 #### POST /apps/masterplans/{plan_id}/phases/{phase_id}/reopen
 Reopen Phase — reverse a confirmation; only the most recently closed phase can reopen, and tasks stay where they are
 
