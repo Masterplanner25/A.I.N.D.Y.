@@ -135,9 +135,10 @@ def test_agent_ranking_strategy_registered():
 # Phase A/C — agent completion hook (enforces the Infinity loop post-run)
 # --------------------------------------------------------------------------- #
 class _FakeRun:
-    def __init__(self, result=None, run_id="run-1"):
+    def __init__(self, result=None, run_id="run-1", user_id="u1"):
         self.result = {} if result is None else result
         self.id = run_id
+        self.user_id = user_id
 
 
 class _FakeQuery:
@@ -215,6 +216,37 @@ def test_completion_hook_enforces_infinity_loop(monkeypatch):
     assert out["source"] == "infinity_orchestrator"
     assert out["reason"] == "infinity:continue_highest_priority_task"
     assert out["args"]["title"] == "Continue task: Ship onboarding"
+
+
+def test_completion_hook_takes_the_tenant_from_the_run_not_the_redacted_context(monkeypatch):
+    """AGENT-COMPLETION-HOOK-USERID-1 — the runtime passes `user_id` as a `uuid.UUID`, and the
+    extension boundary redacts every non-primitive to `{"_redacted_type": "UUID"}`. Every
+    completed agent run to 2026-09-16 (8/8) failed here with "user_id is required" and none
+    carries `loop_enforced`. The hook must take the tenant from the run it re-fetches."""
+    import AINDY.platform_layer.registry as registry
+
+    seen: dict = {}
+
+    def _job(name):
+        if name != "analytics.infinity_execute":
+            return None
+
+        def _execute(**kw):
+            seen.update(kw)
+            return {"next_action": {"type": "review_plan", "title": "Review"}}
+
+        return _execute
+
+    monkeypatch.setattr(registry, "get_job", _job)
+    run = _FakeRun(user_id="283ae082-19f1-47f8-af2e-1c2c5efada40")
+    _patch_session(monkeypatch, run)
+
+    # Exactly what the boundary hands us in production (see extension_boundary._sanitize).
+    out = handle_agent_run_completed({"run_id": "run-1", "user_id": {"_redacted_type": "UUID"}})
+
+    assert seen["user_id"] == "283ae082-19f1-47f8-af2e-1c2c5efada40"
+    assert run.result["loop_enforced"] is True
+    assert out is not None and out["action"] == "ask_user"
 
 
 def test_completion_hook_return_is_runtime_coercible(monkeypatch):

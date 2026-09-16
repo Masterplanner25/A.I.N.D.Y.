@@ -41,6 +41,32 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## AGENT-COMPLETION-HOOK-USERID-1: ✅ CLOSED 2026-09-16 — the Infinity loop after an agent run never ran: the hook read a redacted tenant (app-owned, was P1)
+
+**Every completed agent run on the live stack (8 of 8) logged `[AgentRuntimeExtensions] Agent
+completion orchestrator failed for <run>: user_id is required`, at WARNING, and moved on. None
+carries `loop_enforced`; no `NEXT_ACTION_CHOSEN` was ever recorded from the app.** Found reading
+the log of the first successful `arm.analyze` run (`RUNTIME_2_19_0_UPGRADE.md` §6).
+
+The runtime builds the completion-hook context with `"user_id": user_db_id` — a `uuid.UUID` —
+directly under its own comment explaining that `run_id` is passed as a *string* so it survives
+the extension-boundary sanitizer. The sanitizer redacts every non-primitive to
+`{"_redacted_type": "UUID"}`; `handle_agent_run_completed` passed that dict to the Infinity job
+and `require_user_id` raised. The one primitive that does cross — `run_id` — is the one the hook
+already uses to re-fetch the run, and `run.user_id` is on that row.
+
+**Fix (#377):** the hook takes the tenant from the re-fetched run; the context value is a
+fallback for a caller that passes a real string, and a redacted dict is treated as absent.
+**Test:** `test_agentics_app_levers.py::test_completion_hook_takes_the_tenant_from_the_run_not_the_redacted_context`
+hands the hook exactly the boundary's shape; the old hook fails it. **Runtime half:** FR-36 (pass
+`str(user_db_id)`, and assert no documented key is ever redacted). Same defect family as
+`INFINITY-COMPLETION-HOOK-BOUNDARY-1`, one key over.
+
+**Not verified live in this pass** — needs a rebuild and one more completed run; the next agent
+run on the rebuilt image should show `loop_enforced: true` on its row and no WARNING.
+
+---
+
 ## ARM-MODEL-NAME-PROVIDER-MISMATCH-1: ✅ CLOSED 2026-09-16 — ARM asked DeepSeek for `gpt-4o`, so it had never produced an analysis (app-owned, was P1)
 
 **Found by the first agent run that reached `arm.analyze` with a valid `file_path`** (after #375
