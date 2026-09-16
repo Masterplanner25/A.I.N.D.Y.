@@ -10,8 +10,11 @@ behind a safety gate, drafts outreach for each, and records a tracked, revertibl
 Safe by construction:
   * ``draft`` channel (default) never contacts the lead — it produces a draft for
     review and, via the search public surface, for freelance to convert.
-  * ``email`` channel is gated default-off (``AINDY_SEARCH_OUTREACH_SEND``); with no
-    provider wired in this cut it only ever queues a draft — nothing is sent.
+  * ``email`` channel is gated default-off (``AINDY_SEARCH_OUTREACH_SEND``). With the gate
+    on it SENDS — through the runtime's ``email_channel.send_email`` (a registered ``email``
+    connector, else ``AINDY_SMTP_*``), capability-gated by ``authorized_external_call`` — but
+    only to a lead whose ``contact_email`` was entered by hand; a lead without a recipient
+    stays ``queued``. A ``sent`` action cannot be reverted: outreach can't be un-sent.
 
 The gate (``evaluate_lead_action_gate``) is a pure function, unit-tested without a DB.
 
@@ -83,7 +86,7 @@ def evaluate_lead_action_gate(
     Decide which scored leads warrant an outreach action. Pure: no I/O.
     Returns ``(selected, skipped)``.
 
-    ``selected`` items: {lead_id, company, url, context, query, score, data_quality, reason}
+    ``selected`` items: {lead_id, company, url, context, contact_email, query, score, data_quality, reason}
     ``skipped`` items:  {lead_id, company, reason}
 
     ``suppressed_segments`` — leadgen queries the learning close judged as consistently
@@ -137,6 +140,7 @@ def evaluate_lead_action_gate(
                 "company": company,
                 "url": lead.get("url"),
                 "context": lead.get("context"),
+                "contact_email": lead.get("contact_email"),
                 "query": query,
                 "score": overall,
                 "data_quality": data_quality,
@@ -175,6 +179,7 @@ class LeadExecutionService:
                 "query": row.query,
                 "overall_score": row.overall_score,
                 "data_quality_score": row.data_quality_score,
+                "contact_email": row.contact_email,
             }
             for row in rows
         ]
@@ -247,7 +252,8 @@ class LeadExecutionService:
     # ── writes ────────────────────────────────────────────────────────────────
 
     def execute(self, channel: str = "draft", trigger: str = "manual") -> dict:
-        """Draft + record an action for each gated lead. Never sends in this cut.
+        """Draft + record an action for each gated lead; on the `email` channel with the send
+        gate on, deliver it to leads that carry a hand-entered `contact_email`.
 
         LEARN first: judge matured actions and refresh the auto-suppress set, so this run's
         gate already excludes segments that have proven non-converting.
@@ -268,6 +274,7 @@ class LeadExecutionService:
             }
 
         status, note = self._resolve_channel(channel)
+        sending = channel == "email" and _outreach_send_enabled()
         actions = []
         for item in selected:
             draft = self._draft_outreach(item)
@@ -286,6 +293,8 @@ class LeadExecutionService:
                 trigger=trigger,
                 note=note,
             )
+            if sending:
+                self._send(row, item.get("contact_email"))
             self.db.add(row)
             self.db.commit()
             self.db.refresh(row)
@@ -364,6 +373,10 @@ class LeadExecutionService:
             return {"status": "not_found", "action_id": action_pk}
         if row.status == "reverted":
             return {"status": "already_reverted", "action_id": row.id}
+        if row.status == "sent":
+            # Outreach can't be un-sent. Reverting would make the lead eligible again and the
+            # next run would email the same person twice; the action stays as the record.
+            return {"status": "sent_cannot_revert", "action_id": row.id, "lead_id": row.lead_id}
 
         from datetime import datetime, timezone
 
@@ -386,17 +399,48 @@ class LeadExecutionService:
 
     @staticmethod
     def _resolve_channel(channel: str) -> tuple[str, str | None]:
-        """Map a channel to the resulting status. No channel sends in this cut."""
+        """Map a channel to its pre-send status. `email` with the gate on is then resolved per
+        lead by `_send` (sent / failed / queued-no-recipient)."""
         if channel == "draft":
             return "drafted", None
         if channel == "email":
             if _outreach_send_enabled():
-                # A real provider send would happen here — intentionally not wired.
-                return "queued", "send enabled but no email provider wired; left queued"
+                return "queued", "send enabled; awaiting delivery"
             return "queued", "email send disabled (AINDY_SEARCH_OUTREACH_SEND off) — queued, not sent"
         if channel == "handoff":
             return "queued", "handed off for freelance conversion"
         return "drafted", f"unknown channel '{channel}', defaulted to draft"
+
+    def _send(self, row: LeadAction, contact_email: str | None) -> None:
+        """Deliver one drafted action through the runtime's email channel. Mutates `row` in place.
+
+        The recipient is the lead's hand-entered `contact_email` and nothing else — no
+        discovery, no guessing. `send_email` never raises: it returns `{success, route, error}`,
+        and route is `connector` (a registered `email` connector) or `smtp` (`AINDY_SMTP_*`).
+        """
+        recipient = (contact_email or "").strip()
+        if not recipient:
+            row.status = "queued"
+            row.note = "no recipient on lead — add a contact_email to send"
+            return
+        from AINDY.platform_layer.email_channel import send_email
+
+        result = send_email(
+            to=recipient,
+            subject=row.draft_subject or f"Hello from {row.company or 'us'}",
+            body=row.draft_body or "",
+            db=self.db,
+            user_id=str(self.user_uuid),
+        )
+        if result.get("success"):
+            row.status = "sent"
+            row.recipient = recipient
+            row.sent_at = datetime.now(timezone.utc)
+            row.note = f"sent via {result.get('route')}"
+        else:
+            row.status = "failed"
+            row.note = f"send failed: {result.get('error')}"
+            logger.warning("[lead_exec] send to %s failed: %s", recipient, result.get("error"))
 
     def _draft_outreach(self, item: dict) -> dict:
         """LLM-drafted outreach with a deterministic offline fallback."""
@@ -483,6 +527,8 @@ class LeadExecutionService:
             "decision_reason": row.decision_reason,
             "trigger": row.trigger,
             "note": row.note,
+            "recipient": row.recipient,
+            "sent_at": row.sent_at.isoformat() if row.sent_at else None,
             "outcome": row.outcome,
             "outcome_signal": row.outcome_signal,
             "evaluated_at": row.evaluated_at.isoformat() if row.evaluated_at else None,

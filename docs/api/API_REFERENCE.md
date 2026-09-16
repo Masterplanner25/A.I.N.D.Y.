@@ -908,11 +908,24 @@ Preview Lead Search
 
 **Response 200:** unspecified
 
+#### PATCH /apps/leadgen/leads/{lead_id}/contact
+Set Lead Contact — enter (or clear) the recipient address for one of your leads by hand.
+Discovery never sets it; the `email` channel sends only to leads that have one.
+
+**Parameters:** lead_id (path): integer
+
+**Body:** contact_email: string | null (null or "" clears)
+
+**Response 200:** `{id, company, url, contact_email}` · 404 lead not yours · 422 not an email address
+
 #### POST /apps/leadgen/execute
 Execute Lead Actions — the Search Execution Layer. Act on scored leads by drafting
-(never sending) outreach for those that clear a safety gate (score threshold, data
-quality, dedup vs already-actioned, max-per-run). Dry run unless `apply=true`; every
-action is tracked and revertible. No channel contacts a lead in this cut.
+outreach for those that clear a safety gate (score threshold, data quality, dedup vs
+already-actioned, max-per-run). Dry run unless `apply=true`; every action is tracked.
+`channel=email` with `AINDY_SEARCH_OUTREACH_SEND` on delivers through the runtime's email
+channel (registered `email` connector, else SMTP) to leads with a `contact_email`; a lead
+without one is left `queued`. Action status: drafted | queued | sent | failed | reverted.
+A `sent` action cannot be reverted.
 
 **Parameters:** apply (query): boolean (default false), channel (query): string (draft | email | handoff; default draft)
 

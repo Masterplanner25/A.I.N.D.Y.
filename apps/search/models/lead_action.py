@@ -60,6 +60,11 @@ class LeadAction(Base):
 
     trigger = Column(String(16), default="manual", server_default="manual")    # manual | agent | scheduler
     note = Column(String)                             # e.g. "send channel disabled"
+    # What the email channel actually did. `recipient` is the address a `sent` action went to
+    # (copied from the lead at send time, so a later contact edit does not rewrite history);
+    # `sent_at` is when. Both NULL for drafted / queued / failed actions.
+    recipient = Column(String, nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

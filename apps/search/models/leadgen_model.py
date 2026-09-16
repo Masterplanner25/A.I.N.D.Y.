@@ -27,6 +27,9 @@ class LeadGenResult(Base):
     company = Column(String, index=True)
     url = Column(String)
     context = Column(String)  # Optional: description, snippet, or hiring note
+    # Entered by hand (PATCH /leadgen/leads/{id}/contact) — never discovered or guessed. The
+    # `email` channel sends only to a lead that has one; a lead without stays queued.
+    contact_email = Column(String, nullable=True)
 
     # --- Infinity Algorithm Scoring ---
     fit_score = Column(Float)           # Solution / Market Fit

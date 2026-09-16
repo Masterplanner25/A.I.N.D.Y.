@@ -361,6 +361,7 @@ def list_leads(db: Session, user_id: str) -> list[dict]:
             "company": row.company,
             "url": row.url,
             "context": row.context,
+            "contact_email": row.contact_email,
             "fit_score": row.fit_score,
             "intent_score": row.intent_score,
             "search_score": row.overall_score,
@@ -371,4 +372,29 @@ def list_leads(db: Session, user_id: str) -> list[dict]:
     ]
 
 
+_EMAIL_SHAPE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def set_lead_contact(db: Session, *, user_id: str, lead_id: int, contact_email: str | None) -> dict | None:
+    """Record (or clear, with None/"") the hand-entered recipient for one of the user's leads.
+
+    The only way an address gets onto a lead. Returns the lead dict, or None if the lead is not
+    the user's. Raises ValueError on a malformed address — the route maps that to 422.
+    """
+    from apps.search.models.leadgen_model import LeadGenResult
+
+    cleaned = (contact_email or "").strip() or None
+    if cleaned is not None and not _EMAIL_SHAPE.match(cleaned):
+        raise ValueError("contact_email is not an email address")
+    row = (
+        db.query(LeadGenResult)
+        .filter(LeadGenResult.id == int(lead_id), LeadGenResult.user_id == uuid.UUID(str(user_id)))
+        .first()
+    )
+    if row is None:
+        return None
+    row.contact_email = cleaned
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "company": row.company, "url": row.url, "contact_email": row.contact_email}
 
