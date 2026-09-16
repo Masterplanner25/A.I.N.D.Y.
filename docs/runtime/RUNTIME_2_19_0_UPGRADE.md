@@ -122,8 +122,12 @@ Two truthful shapes, no urgency:
    (`resumed → executing`), clears `wait_condition`. One line, and
    `test_task_execution_unit_persistence.py` already pins the shape.
 
-Recommendation: (2) — it is the smaller change and keeps the pause visible in the unit's
-history. Not taken in this pass, which is pin + verification only.
+**Taken: (2), the day after this pass.** `complete_task`'s hook now calls
+`resume_execution_unit` when the unit is `waiting`, and
+`test_task_execution_unit_persistence.py` pins the sequence `resumed → executing → completed`
+(mutation-checked: the old shape fails it). Shape (1) was not taken because a paused task's
+unit *should* read as not-in-flight while paused — that is what the pause is — and the only
+cost of `waiting` was the exit path, which is now the runtime's own.
 
 ---
 

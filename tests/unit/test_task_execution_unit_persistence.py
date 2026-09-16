@@ -85,7 +85,7 @@ def test_create_via_owned_session_persists_the_task_unit(own_session_db):
     assert status == "pending"
 
 
-def test_start_pause_complete_move_the_persisted_unit(own_session_db):
+def test_start_pause_complete_move_the_persisted_unit(own_session_db, monkeypatch):
     from apps.tasks.syscalls.syscall_handlers import (
         _handle_task_complete,
         _handle_task_create,
@@ -103,7 +103,22 @@ def test_start_pause_complete_move_the_persisted_unit(own_session_db):
     _handle_task_pause({"task_name": "eu-lifecycle"}, _flow_ctx(user_id, "task.pause"))
     assert _unit_for(own_session_db, task_id)[1] == "waiting"
 
-    # Completing a PAUSED task: the runtime's transition table forbids waiting -> completed, so the
-    # hook must step through executing first, or the unit is stuck `waiting` forever.
+    # Completing a PAUSED task: the runtime's transition table forbids waiting -> completed, by
+    # design (DEC-021). The hook must resume the unit first — the runtime's own wake path,
+    # waiting -> resumed -> executing — or the unit is stuck `waiting` forever. Record every
+    # transition the hook asks for, so the shape is pinned and not just the end state: the
+    # previous shape stepped waiting -> executing directly and skipped `resumed`.
+    from AINDY.core.execution_unit_service import ExecutionUnitService
+
+    transitions: list[str] = []
+    real_update_status = ExecutionUnitService.update_status
+
+    def _recording_update_status(self, eu_id, new_status):
+        transitions.append(new_status)
+        return real_update_status(self, eu_id, new_status)
+
+    monkeypatch.setattr(ExecutionUnitService, "update_status", _recording_update_status)
+
     _handle_task_complete({"task_name": "eu-lifecycle"}, _flow_ctx(user_id, "task.complete"))
     assert _unit_for(own_session_db, task_id)[1] == "completed"
+    assert transitions == ["resumed", "executing", "completed"], transitions

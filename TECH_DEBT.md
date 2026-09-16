@@ -94,7 +94,11 @@ transaction; the hooks were relying on a commit that had already happened.
 caller's session for the task row. Plus one edge the persistence exposed: the runtime's transition
 table has no `waiting → completed`, so completing a *paused* task would log
 `[EU] invalid transition` and strand the unit; the complete hook now steps `waiting → executing`
-first. **Test:** `tests/unit/test_task_execution_unit_persistence.py` runs the real handler path
+first. *(Amended 2026-09-16 after runtime DEC-021, 2.19.0: the missing edge is by design —
+`waiting` means parked on an event, work unfinished — and the hook now takes the runtime's own
+wake path, `resume_execution_unit` → `waiting → resumed → executing`, before `completed`. The
+direct `waiting → executing` step worked but skipped `resumed` in the trail; the test now pins the
+full sequence, not just the end state.)* **Test:** `tests/unit/test_task_execution_unit_persistence.py` runs the real handler path
 (a flow-style ctx with no `_db`) against a file-backed engine and reads the unit back through a
 *separate* session — the shared `db_session` fixture (one StaticPool connection, one transaction)
 reads a flush as a commit and cannot see this class, which is the same reason the runtime's FR-30
