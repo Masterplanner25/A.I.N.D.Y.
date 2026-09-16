@@ -1,12 +1,92 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-15"
+last_verified: "2026-09-16"
 api_version: "1.0"
 status: current
 owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-31 — a Nodus run parked across a restart cannot be resumed until some script has run in the new process, and the first attempt orphans it 🔴 defect (filed 2026-09-16, runtime 2.17.0; pre-existing)
+
+Numbered from your ledger (*next available: FR-31*).
+
+> **`nodus_execute` is registered into `FLOW_REGISTRY` lazily — the first time a script runs in a
+> process. A run parked on it, rehydrated after a restart, is resumed through a callback that
+> looks the flow up at call time, finds nothing, logs a WARNING and returns — after the wake has
+> already consumed the run's registration. The route said `resumed: true`. The run is `waiting`
+> with nobody listening until the next restart.**
+
+Found running the 2.17.0 handoff's §4 step 4 — the step that exists to prove a run parked before
+the upgrade resumes after it. It did not, and not for the reason that step guards against.
+
+### What we hit
+
+Tutorial 2 Steps 1–3 on 2.16.0 → run `8c63136f…` parked, signature `77c1d6de…`. Stack down,
+image rebuilt on 2.17.0, stack up. After boot: still `waiting`, same signature, `dead_letter` 0,
+`waiting_flow_runs` row present (rehydrated). Then `POST /platform/flows/runs/8c63136f…/resume`
+with `{"event_type": "review.approved", "payload": {…, "correlation_id": "my-ref-1"}}`:
+
+```
+HTTP 200   resumed: true   results: 1   payload_injected: true
+```
+
+60 s later: `status=waiting`, `waiting_for=review.approved`, history `[WAIT]`, `state.event` set,
+`nodus_received_events` present on the row (the #654 bridge worked), **`waiting_flow_runs` row for
+the run: gone.** The api log, once:
+
+```
+[flow_rehydrate] resume callback: flow='nodus_execute' not in FLOW_REGISTRY for run=8c63136f-… — skipping resume
+```
+
+A second resume: 200, no log line at all, still `waiting` — the registration the first wake
+consumed is not re-created, so there is nothing to wake. Then, deliberately: **restart the api,
+run any script first, resume again → `success`**, payload delivered (`note: "…after restart"`,
+`correlation_id: "my-ref-3"`), history `WAIT, SUCCESS` + `nodus_record_outcome`. Same run, same
+signature, same route, same payload shape. The only difference was whether a script had run in
+the process before the resume.
+
+### The mechanism, from your code (installed 2.17.0)
+
+- `runtime/nodus_execution_service.py:96–104` `_ensure_nodus_flow_registered`: `if "nodus_execute"
+  not in FLOW_REGISTRY: register_flow("nodus_execute", NODUS_SCRIPT_FLOW)` — called from the
+  script-run path, so the flow exists only after the first script of the process.
+- `core/flow_run_rehydration.py:139–150`: the rehydrated resume callback does
+  `FLOW_REGISTRY.get(flow_name)` **inside `_callback`**, at wake time; `None` → WARNING → `return`.
+  By then the scheduler has dequeued the wait (the `waiting_flow_runs` row is deleted on wake),
+  so the skip is terminal for that registration.
+- The resume route reports `resumed: true` / `payload_injected: true` because injection and the
+  wake both happened; nothing reports that the wake found no flow. It is #678's exact wire
+  signature, from a different cause, on a release where #678 is fixed.
+
+Every earlier live run of Tutorial 2 (ours on 2.14.0 / 2.15.0 / 2.16.0, yours on 2.13.0) parked
+and resumed inside one process lifetime, so the flow was always already registered. Rehydration
+of a Nodus wait had never been exercised. Pre-existing.
+
+### Ask
+
+1. Register `nodus_execute` at boot (import-time or startup), not on first use — `NODUS_SCRIPT_FLOW`
+   is static. Or have the rehydration callback call `_ensure_nodus_flow_registered()` before the
+   lookup; either makes a rehydrated Nodus wait resumable.
+2. A skipped resume must not consume the registration — re-register (or do not dequeue until the
+   callback has a flow), so a second resume can succeed and the run is not orphaned.
+3. The route's `results` entry should be able to say the wake did not run — `payload_injected:
+   true, woken: false` or a 409 — rather than `resumed: true` for a run nothing will resume.
+
+### Not asking for
+
+- A change to `FLOW_REGISTRY` being process-local — that is the design; the ask is that the one
+  runtime-owned dynamic flow is present before anything can need it.
+
+### What we do meanwhile
+
+Nothing of ours runs a guest script that waits, so no production run of ours can hit this today.
+Operators resuming a parked Nodus run after a restart: **run any script first** (or resume
+twice across a restart). Handoff §4 step 4 as written cannot pass on a fresh boot without that;
+recorded in `RUNTIME_2_17_0_UPGRADE.md` §5 with the order that works.
+
+---
+
 ## FR-30 — a request's execution unit never reaches `completed`: the finalize is flushed after the last commit ✅ SHIPPED in 2.16.0 (same day)
 
 **Closed upstream 2026-09-15, the day it was filed** — `EU-FINALIZE-UNCOMMITTED-1` (#673), in
