@@ -1145,7 +1145,22 @@ matters — read the entry.
 
 ---
 
-## GENESIS-TURN-LATENCY-1: one chat message takes the whole API down for ~14 minutes (app-owned, was P0 → **P2** 2026-09-05) — placement PROVEN fixed; stall not reproduced in 3 turns
+## GENESIS-TURN-LATENCY-1: ✅ CLOSED 2026-09-16 — one chat message takes the whole API down for ~14 minutes (app-owned, was P0 → P2) — placement removed (#294); stall not reproduced in 8 turns, 5 under memory pressure
+
+**Closed 2026-09-16 on the soak this entry asked for.** Five more Genesis turns on runtime 2.18.0
+(test account, real `gpt-4o-mini` replies), `/health` probed around each, five-minute watch after:
+**3.9–4.6 s per turn, `/health` 200 in 0.04–0.46 s throughout, no stall** — while the host sat at
+164–384 MB available with page-fault bursts to **46k/s**, the band the original outage was
+measured in. Eight clean turns across two dates now. Postgres reinits 0, saturation 0, tracebacks 0.
+The placement half closed by *removal* in the meantime (#294 — a turn is not a scoring event;
+`test_genesis_turn_no_recalc.py` pins it), so the ~47 s → ~9 s → ~4.5 s line is: inline recalc →
+queued recalc → no recalc. The stall stays attributed to host starvation, which has now produced
+the same fingerprint with zero Genesis traffic on three occasions (§8.1 here; the 2026-09-15
+06:00 cron burst). Full table and reading in `DEFECT_GENESIS_MESSAGE_LATENCY.md` §9.
+
+**Reopens on:** a stall *following* a turn, on any host — not the fingerprint alone.
+
+### Original entry (2026-08-23 → 2026-09-05) — retained
 
 **Status: PARTIALLY RESOLVED 2026-09-01 (#257). Do not close it.** The placement half is fixed:
 `genesis_message_orchestrate` now submits `sys.v1.job.submit` for `analytics.infinity_recalc`
