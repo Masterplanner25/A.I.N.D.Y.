@@ -7,6 +7,21 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+
+> **Reconciled 2026-09-16.** Every `## FR-N` heading now carries its current state and appears once;
+> the retained "original request" sections were demoted to `###` so a heading scan tells the truth
+> (the same drift the 2026-08-22 `TECH_DEBT` audit found there: seven headings that said nothing
+> while their bodies said RESOLVED). Eight headings still read as open filings while the runtime's
+> ledger had shipped them — FR-17/18/20/21 in 2.6.0, FR-1/3/4 in 1.8.0 — and are marked with the
+> version and PR. Two honest partials are left as partials: **FR-19** (runtime half shipped; the
+> client still unwraps by shape — ours) and **FR-14** (recurrence half open, the runtime's).
+>
+> **Numbering is the runtime's.** Its `CLAUDE.md` `APP-FR-*` ledger says *next available*; it also
+> assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
+> authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
+>
+> **Open as of 2026-09-16:** FR-32 (awaiting intake) · FR-14 recurrence half · FR-6 items 2–3 ·
+> FR-19 app half (ours).
 ## FR-32 — `memory_execute_loop` is a runtime-owned graph built entirely from app-owned nodes, and it dictates that a memory execution scores 🟡 ownership (filed 2026-09-16, runtime 2.17.0)
 
 Numbered from your ledger (*next available: FR-32*).
@@ -879,7 +894,7 @@ a repo boundary this reporting already sits across. We render what the endpoint 
 > Follow-up on our side is rewiring the guard onto the inventory, tracked in
 > `RUNTIME_2_6_0_UPGRADE.md` §6 — not here.
 
-## FR-22 — 51 runtime routes are documented in our reference and guarded by nobody 🟡 drift *(original request below)*
+### FR-22 — original request, as filed 2026-08-22 (🟡 drift at the time)
 
 **apps-monolith ref:** found 2026-08-22 while restructuring `docs/`. Small, and the cheapest of
 the requests filed this week.
@@ -917,7 +932,9 @@ issue stops being visible to the people who could fix it.
 
 ---
 
-## FR-21 — the operator surface has been rebuilt app-side, next to yours; we would like to retire ours 🔴 ownership
+## FR-21 — the operator surface has been rebuilt app-side, next to yours; we would like to retire ours ✅ SHIPPED in 2.6.0 (#522)
+
+**Closed upstream in 2.6.0 (2026-08-22, #522)** — Webhooks and Dead-Letter Queue panels landed in the runtime's own operator console, which is what this asked for. Recorded here 2026-09-16 (reconciliation); the entry below is the filing as sent.
 
 **apps-monolith ref:** found 2026-08-22 while auditing why a runtime-verification phase produced
 almost entirely app-side fixes. This is the largest single instance, and it is offered as a
@@ -979,7 +996,9 @@ API shapes each was built against (every one was verified against live `curl` ou
 
 ---
 
-## FR-20 — `route_execution_guard` replaces a deliberately raised 4xx with an opaque 500 🟡 diagnostics
+## FR-20 — `route_execution_guard` replaces a deliberately raised 4xx with an opaque 500 ✅ SHIPPED in 2.6.0 (#520)
+
+**Closed upstream in 2.6.0 (2026-08-22, #520)** — a route's deliberate 4xx is no longer replaced by a 500. Our CI guard against the pre-pipeline-raise shape (`pre-pipeline-raise-500s`) stays as belt-and-braces. Recorded 2026-09-16; the filing follows.
 
 **apps-monolith ref:** observed 2026-07-22 (frontend walk item 3), filed 2026-08-22 after noticing
 we had built a CI guard against it instead of asking.
@@ -1005,7 +1024,9 @@ loses information nobody gains from losing.
 
 ---
 
-## FR-19 — an enveloped and a bare response share one URL space, with nothing to tell them apart 🔴 contract
+## FR-19 — an enveloped and a bare response share one URL space, with nothing to tell them apart ✅ runtime half SHIPPED in 2.6.0 (#521) · 🟡 app half NOT adopted (ours)
+
+**Runtime half closed in 2.6.0 (2026-08-22, #521)** — every response whose body *is* the canonical execution envelope now carries `X-AINDY-Envelope: v1`, exactly the discriminator this asked for. **App half not adopted as of 2026-09-16:** `@aindy/ui-kit`'s `unwrapEnvelope` still decides by shape (`"data" in e`), not by the header, so the eleven per-route unwrap fixes this filing describes are still how the client copes. Adopting the header is a ui-kit change, ours to make. The filing follows.
 
 **apps-monolith ref:** filed 2026-08-22. This was **the dominant defect class of the entire live
 verification phase** and — the reason it is worth your time — it was never raised with you. Five
@@ -1047,7 +1068,9 @@ which routes are enveloped, and there is no way to find out except by trying.
 
 ---
 
-## FR-18 — every liveness probe persists a full health snapshot, and it is now 99.6% of the database 🔴 storage
+## FR-18 — every liveness probe persists a full health snapshot, and it is now 99.6% of the database ✅ SHIPPED in 2.6.0 (#517) · retention half = runtime `SYSEVENT-RETENTION-1`
+
+**Closed upstream in 2.6.0 (2026-08-22, #517)** — a liveness probe no longer persists a full health snapshot; the growth stopped at the source. The retention half (what to do with the rows that exist) is the runtime's `SYSEVENT-RETENTION-1`, tracked on our side as `HEALTH-EVENT-VOLUME-1`. Recorded 2026-09-16; the filing follows.
 
 **apps-monolith ref:** found 2026-08-22 while taking a routine `pg_dump` before a runtime upgrade.
 The dump would not finish; the reason turned out to be worth a report on its own.
@@ -1138,7 +1161,9 @@ per-probe snapshot itself is runtime-owned.
 ---
 
 
-## FR-17 — `async_job_service` emits `execution.started` outside a pipeline, so the gate eats it 🟢 observability
+## FR-17 — `async_job_service` emits `execution.started` outside a pipeline, so the gate eats it ✅ SHIPPED in 2.6.0 (#518)
+
+**Closed upstream in 2.6.0 (2026-08-22, #518)** — async jobs now record that they started and finished. Recorded 2026-09-16; the filing follows.
 
 **apps-monolith ref:** found 2026-08-16 while verifying the 2.3.0 upgrade on a live stack. Small,
 non-fatal, and adjacent to something you just fixed for the same reason.
@@ -1210,7 +1235,7 @@ hard limit. **Now re-testable, and worth doing before treating that note as the 
 
 ### Original filing (2026-08-16) — retained for context
 
-## FR-16 — `nodus-lang==4.1.0` is an exact pin, so we cannot take 4.2.0 🟡 dependency
+### FR-16 — original request, as filed (🟡 dependency at the time)
 
 **apps-monolith ref:** found 2026-08-16, the day `nodus-lang==4.2.0` was published.
 
@@ -1315,7 +1340,7 @@ line number would have left two.
 
 ### Original filing (2026-08-16) — retained for context
 
-## FR-15 — a request can wait ~3 minutes to enter the execution pipeline, with no events emitted 🔴 defect
+### FR-15 — original request, as filed (🔴 defect at the time)
 
 **apps-monolith ref:** found 2026-08-16 driving a Genesis session to lock. Full writeup and
 reproduction: [`DEFECT_GENESIS_MESSAGE_LATENCY.md`](../verification/DEFECT_GENESIS_MESSAGE_LATENCY.md).
@@ -1460,7 +1485,7 @@ the bare form, which is what led us here originally.
 
 ### Original filing (2026-08-15) — retained for context
 
-## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🔴 upgrade-path (as filed)
+### FR-14 — original request, as filed (🔴 upgrade-path at the time)
 
 > **The 2.2.0 upgrade will not crash-loop, and that is not a fix.** Flagged explicitly by the
 > runtime team in `APP_HANDOFF_v2.2.0.md` §6, and worth repeating here because *"the upgrade
@@ -1478,7 +1503,7 @@ the bare form, which is what led us here originally.
 
 ---
 
-## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🔴 upgrade-path
+### FR-14 — original request, earlier draft (🔴 upgrade-path at the time)
 
 **apps-monolith ref:** found 2026-08-15 adopting 2.1.0, by the api container failing to start.
 **Severity: this takes a deployment down**, and it will recur on every runtime release that adds
@@ -2714,7 +2739,9 @@ Cross-referenced from this repo's `TECH_DEBT.md` (IDs match). Details below.
 
 ---
 
-## FR-1 — Connector registration hook + capability-enforced outbound I/O 🔴 net-new
+## FR-1 — Connector registration hook + capability-enforced outbound I/O ✅ SHIPPED in 1.8.0 · adopted (`MASTERPLAN-CONNECTOR-RUNTIME-1`)
+
+**Closed upstream in 1.8.0 (2026-07-17)** — `register_connector(connector_type, handler, *, capability=…)` plus the capability/policy/rate stack around `dispatch_connector`. Adopted app-side (`TECH_DEBT` `MASTERPLAN-CONNECTOR-RUNTIME-1`); the runtime's own transactional mail routes through the same seam (`email_channel`, FR-9), and so does the Search Execution Layer's real send since 2026-09-16. Recorded 2026-09-16; the filing follows.
 
 **apps-monolith ref:** `MASTERPLAN-CONNECTOR-RUNTIME-1` · **Status:** confirmed real gap; the actual work.
 
@@ -2753,7 +2780,9 @@ the broker rather than app config. No change to *delivery* — this is enforceme
 
 ---
 
-## FR-3 — Next-Action autonomous dispatch 🟡 ~70% shipped (Deliverable C)
+## FR-3 — Next-Action autonomous dispatch ✅ SHIPPED — acting half 1.6.2, dispatch-outcome contract 1.8.0 · app wiring done
+
+**Closed both sides.** The bounded acting half shipped in 1.6.2 (`maybe_act_on_next_action`, behind `AINDY_NEXT_ACTION_ACTING`, default off — one of the five flags `SOAK-THEN-FLIP-1` holds); the `NEXT_ACTION_DISPATCHED` dispatch-outcome contract in 1.8.0; the app reads it through `apps/agent/agents/next_action_outcomes.py` and `GET /apps/agent/…/dispatch-outcomes`. Recorded 2026-09-16; the entry below is the state as last written.
 
 **apps-monolith ref:** `INFINITY-RUNTIME-1` Gap 4 · **Status:** acting half shipped in aindy-runtime **1.6.2**.
 
@@ -2818,7 +2847,9 @@ for Nodus-native, VM-executed execution instead of the Python flow engine. **Ado
 
 ---
 
-## FR-4 — Docs relocation: Bucket A + the runtime half of `INVARIANTS.md` 🟢 hygiene
+## FR-4 — Docs relocation: Bucket A + the runtime half of `INVARIANTS.md` ✅ SHIPPED in 1.8.0 (`DOCS-BUCKET-A-1`)
+
+**Closed upstream in 1.8.0 (2026-07-17)** — the Bucket A relocation and the `ERROR_HANDLING_POLICY.md` split. Our side of the same work is `DOCS-MIGRATION-2`. Recorded 2026-09-16; the filing follows.
 
 **apps-monolith ref:** `DOCS-MIGRATION-2` · **Status:** hygiene; the ownership map already exists.
 
