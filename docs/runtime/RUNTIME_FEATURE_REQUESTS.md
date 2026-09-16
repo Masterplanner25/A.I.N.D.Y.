@@ -20,8 +20,88 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-16:** FR-33, FR-34 (filed from the seven approved runs) · FR-32 (awaiting
-> intake) · FR-14 recurrence half · FR-6 items 2–3 · FR-19 app half (ours).
+> **Open as of 2026-09-16:** FR-33 … FR-36 (filed from the approved runs and the first
+> `arm.analyze` that reached the provider) · FR-32 (awaiting intake) · FR-14 recurrence half ·
+> FR-6 items 2–3 · FR-19 app half (ours).
+## FR-36 — the agent-completion hook receives `user_id` as a `uuid.UUID`, which the extension boundary redacts; every first-party completion hook has been failing 🔴 open (filed 2026-09-16, runtime 2.19.0)
+
+> **`agents/agent_runtime/execution.py:~287` builds the completion-hook context with
+> `"user_id": user_db_id` — a `uuid.UUID` — two lines under a comment explaining that `run_id`
+> is passed as a *string* so it survives the extension-boundary sanitizer.**
+> `platform_layer/extension_boundary.py:_sanitize` turns every non-primitive into
+> `{"_redacted_type": "UUID"}`, so the hook gets a dict where it expects a tenant.
+
+### What we hit
+
+Our `handle_agent_run_completed` (the Infinity loop after an agent run,
+`INFINITY-COMPLETION-HOOK-BOUNDARY-1`) took `user_id` from the context and passed it to the
+Infinity job, whose `require_user_id` raised `user_id is required`. Logged at WARNING and
+swallowed, once per completed run. **8 of 8 completed agent runs on the live stack ended this
+way; none carries `loop_enforced`.** Found reading the log of the first successful `arm.analyze`
+run. Fixed on our side by taking the tenant from the run we re-fetch by `run_id`
+(`AGENT-COMPLETION-HOOK-USERID-1`), which is the right source anyway.
+
+### Ask
+
+`"user_id": str(user_db_id) if user_db_id else None` at that site — the same treatment `run_id`
+already gets, for the same reason. And a test on your side that the sanitized hook context
+contains no `_redacted_type` value for a documented key: the boundary exists to strip `db` and
+the ORM `run`, and a redacted *documented primitive* is the boundary hiding a bug.
+
+---
+
+## FR-35 — on the `nodus_vm` backend, LLM usage spent by tool steps is metered in the worker process and never reaches `/metrics`, the tenant window, or the run 🔴 open (filed 2026-09-16, runtime 2.19.0)
+
+> **With `AINDY_AGENT_EXECUTION_BACKEND=nodus_vm` — this app's default since RTR-1 §5
+> (`apps/agent/bootstrap.py:_select_execution_backend`) — a plan is compiled to a native
+> workflow and its `call_tool` steps execute inside the Nodus warm-pool worker
+> (`nodus_runtime_adapter.run_script` → `nodus_worker_pool.get_pool().execute`). A tool that
+> calls an LLM there is metered by `observe_llm_usage` in the worker's registry. The API
+> process's `/metrics` never serves it; `llm_attribution_scope` and `bind_execution_unit`
+> are ContextVars set in the API process, so `_attribute_usage` in the worker finds no run and
+> no tenant; `_rm.get_usage(run_id)["tokens"]` reads 0 in the API process afterwards.**
+
+### What we hit
+
+The first agent run whose step called an LLM at execution time — `arm.analyze` through the
+DeepSeek client, 1201 prompt + 764 completion tokens, `analysis_results` row written — after
+which, in the API process:
+
+| where | expected | read |
+|---|---|---|
+| `/metrics` `aindy_llm_tokens_total{provider="deepseek"}` | 1965 | **no sample** (only the planner's `anthropic` pair) |
+| `aindy_llm_calls_total{attributed="run"}` | 1 | **no sample** — the 2.13.0 §3 reading (*"`run` only appears once a step calls an LLM"*) needs *"…on the `agent_flow` backend"* |
+| Redis `aindy:rm:tenant:<user>:tokens` | +1965 | **5876**, which is exactly the two planner calls (2951 + 2925) |
+| `score.computed.dimensions.llm_tokens` for the run | 1965 | **0** |
+| `aindy_nodus_warm_pool_events_total{event="served"}` | — | 1, timestamped at the run's completion |
+
+So on this backend the cost governor's phase 3 (`AINDY_QUOTA_MAX_TENANT_TOKENS`,
+`AINDY_QUOTA_MAX_TOKENS`) sees planning and nothing else; a run could spend any number of
+tokens in tool steps against a window that never moves.
+
+### Ask
+
+Any one of, in order of preference:
+
+1. **Meter at the seam, in the parent.** The worker already reports each `call_tool` result
+   back over its protocol; add the call's token usage (`prompt`, `completion`, `provider`,
+   `model`) to that message when the tool's response carried one, and have the parent call
+   `observe_llm_usage` under the run's attribution scope. One counter, one process, correct
+   attribution, no multiprocess registry.
+2. Or forward the attribution identity into the worker's execution context (`run_id`,
+   `tenant_id`, `execution_unit_id` are already in `NodusExecutionContext`) and have the
+   worker accrue to Redis (`aindy:rm:*`) directly — the resource manager is already shared
+   there — leaving only the Prometheus counter per-process (acceptable if documented).
+3. Or `prometheus_client` multiprocess mode for `/metrics` — solves the graph, not the governor.
+
+### Not asking for
+
+- A change to the `agent_flow` backend, where the same run meters correctly (steps run
+  in-process under the scope).
+- Any change to `observe_llm_usage`'s contract.
+
+---
+
 ## FR-34 — `AgentRun.steps_completed` counts steps *attempted*, not steps that succeeded, and that number is a scoring dimension 🔴 open (filed 2026-09-16, runtime 2.19.0)
 
 Numbered after our FR-33; your ledger's *next available* is still FR-32 because FR-32 has not been

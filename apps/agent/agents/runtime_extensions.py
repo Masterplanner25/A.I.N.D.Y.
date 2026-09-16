@@ -197,6 +197,14 @@ def _next_action_for_runtime(orchestration):
     )
 
 
+def _hook_user_id(value) -> str | None:
+    """A usable tenant id, or None — a boundary-redacted `{"_redacted_type": ...}` is not one."""
+    if value is None or isinstance(value, dict):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def handle_agent_run_completed(context: dict):
     """Enforce the Infinity loop after an agent run completes.
 
@@ -210,8 +218,7 @@ def handle_agent_run_completed(context: dict):
     decision as NEXT_ACTION_CHOSEN; `None` means the runtime keeps its default.
     """
     run_id = context.get("run_id")
-    user_id = context.get("user_id")
-    if not run_id or not user_id:
+    if not run_id:
         return None
 
     from AINDY.db.database import SessionLocal
@@ -222,6 +229,18 @@ def handle_agent_run_completed(context: dict):
     try:
         run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
         if run is None:
+            return None
+        # AGENT-COMPLETION-HOOK-USERID-1 (2026-09-16): the tenant comes from the RE-FETCHED
+        # RUN, not from the context. The runtime hands the hook `user_id` as a `uuid.UUID`
+        # (`execution.py`: `"user_id": user_db_id`), and the same extension-boundary sanitizer
+        # that strips `db` and redacts the ORM `run` redacts every non-primitive — so the
+        # hook received `{"_redacted_type": "UUID"}`, passed it to the Infinity job, and
+        # `require_user_id` raised "user_id is required". Every completed agent run to date
+        # (8 of 8) ended here; none carries `loop_enforced`. `run.user_id` is on the row we
+        # already re-fetch by the one primitive that does survive the boundary. The context
+        # value is kept only as a fallback for a caller that passes a real string.
+        user_id = _hook_user_id(getattr(run, "user_id", None)) or _hook_user_id(context.get("user_id"))
+        if not user_id:
             return None
 
         result_payload = run.result if isinstance(run.result, dict) else {}

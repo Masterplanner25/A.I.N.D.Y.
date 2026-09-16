@@ -198,6 +198,32 @@ running them showed:
 | 2 | `memory.recall → reasoning.evaluate` | completed 2/2 in 3 s — `reasoning.evaluate` returned the canned Next-Action (`review_plan`), not a synthesis; the planner chose it on its name |
 | 4 | `memory.recall → arm.analyze` | **failed**: `sys.v1.arm.analyze requires 'file_path'` — the planner sent `{"topic": …}` because the description said "code or a topic" |
 
+### The file-path run (#375 → #376 → this), 2026-09-16 23:18–23:20 UTC
+
+Same objective (*"Analyze the file apps/arm/agents/tools.py with ARM and summarise what it does
+in one sentence"*), test account, rebuilt image each time:
+
+| image | plan | outcome |
+|---|---|---|
+| `f9ba89598710` (#375) | `arm.analyze {"file_path": "apps/arm/agents/tools.py"}` → `memory.write` — **the right key, first try** | `failed`: `400 The supported API model names are deepseek-flash, deepseek-v4-pro, but you passed gpt-4o` → `ARM-MODEL-NAME-PROVIDER-MISMATCH-1` (#376) |
+| `406b27d96ad1` (#376) | same | **`completed 2/2` in 41 s.** `arm.analyze` → architecture 8, integrity 6, a real summary, `analysis_results` row (`deepseek-v4-pro`, 1201/764 tokens, 15.2 s) — **ARM's first analysis on any stack**; `memory.write` → node written |
+
+And what the successful run's *telemetry* showed, which is where the next three came from:
+
+- `/metrics` after the run: only the planner's `anthropic` pair (`attributed="unit"`). **No
+  DeepSeek sample at all**, `aindy:rm:tenant:<test-account>:tokens` = 5876 = exactly the two
+  planner calls, `score.computed.llm_tokens: 0`. The run's `flow_run` is
+  `nodus_execute / nodus_agent_execution` and `aindy_nodus_warm_pool_events_total{served}`
+  ticked at its completion: our `apps/agent/bootstrap.py` defaults the backend to `nodus_vm`,
+  so tool steps run in the worker process and are metered there. **FR-35.** The 2.13.0 §3
+  reading — *"`run` only appears once a step calls an LLM"* — is true only on `agent_flow`.
+- `[AgentRuntimeExtensions] Agent completion orchestrator failed … user_id is required` at
+  completion — the runtime passes `user_id` as a `uuid.UUID`, the boundary redacts it, our hook
+  passed the redaction to the Infinity job. 8 of 8 completed runs ever; none `loop_enforced`.
+  **`AGENT-COMPLETION-HOOK-USERID-1`** (ours, #377) + **FR-36** (theirs, one `str()`).
+- `[EU] invalid transition completed→completed` at finalize — the runtime completes the run's
+  unit twice; noise, not filed.
+
 Three findings, one ours: every app tool's description now carries `Args: {…}` and
 `test_agent_tool_descriptions_declare_args.py` enforces it (this was the only channel the planner
 has — **FR-33** asks for a real one); `steps_completed` reads 2/2 on every failed run and lands in
