@@ -1315,7 +1315,33 @@ Write-up: `docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md` (see §8).
 
 ---
 
-## MEMORY-EXECUTE-LATENCY-1: `POST /memory/execute` recalculates Infinity on the request path — but that path has never executed (app-owned, P2 → **P3** 2026-09-05)
+## MEMORY-EXECUTE-LATENCY-1: ✅ CLOSED 2026-09-16 — `POST /memory/execute` recalculates Infinity on the request path — but that path has never executed (app-owned, was P3)
+
+**Closed 2026-09-16 by removal, not by going async.** The entry's fix ("submit
+`analytics.infinity_recalc` instead") was the Genesis fix's *first* shape (#263); the Genesis
+precedent then moved again (#294) — the recalculation was removed outright, because a turn is
+not a scoring event and 14 of 16 recalcs had a delta of exactly 0. A memory-loop execution is
+the same shape: `POST /memory/execute` runs a `leadgen` search or a `genesis_message` through the
+memory loop and changes neither the task graph nor the pillars, so there is nothing for the score
+to move on. Re-verified before deciding: still **0 `flow_runs`** for either graph, **0
+`score_history` rows** with a `memory_*` trigger, and no code anywhere consumes a `memory_*`
+trigger event.
+
+**What changed:** `memory_execution_orchestrate` no longer dispatches anything — it passes the
+response through with `orchestration: None`, `orchestration_skipped: "not_a_scoring_event"`. Our
+own `memory_execution` graph and its plan end at `memory_execution_run`. The node *function*
+stays registered because the runtime's `memory_execute_loop` graph (registered before plugins
+load, built entirely from our nodes) names it as its terminal; overriding a runtime-owned
+registry entry from the app is the wrong side of the boundary, so the ask to drop it is
+**FR-32**. `tests/unit/test_memory_execute_no_recalc.py` pins all of it, #294-style: the node
+dispatches nothing (mutation-checked — reinserting the call fails two tests), the body names no
+recalc, our graph and plan agree, and the runtime's graph still resolves its terminal.
+
+**Not done, deliberately:** the "stringify the user id" and "queued-job acknowledgement" notes
+below describe the async shape that was not taken. `watcher_ingest_orchestrate` is still not a
+third instance — it consumes the result synchronously and already runs off the request path.
+
+### Original entry (2026-09-01 → 2026-09-05) — retained
 
 > ### ★ Downgraded — the defect is real, the exposure is zero
 >

@@ -7,6 +7,50 @@ owner: "app-team"
 ---
 
 # Runtime Feature Requests — handoff to `aindy-runtime`
+## FR-32 — `memory_execute_loop` is a runtime-owned graph built entirely from app-owned nodes, and it dictates that a memory execution scores 🟡 ownership (filed 2026-09-16, runtime 2.17.0)
+
+Numbered from your ledger (*next available: FR-32*).
+
+> **`AINDY/runtime/flow_definitions_memory.py:467–478` registers `memory_execute_loop` as
+> `memory_execution_validate → memory_execution_run → memory_execution_orchestrate`. All three
+> nodes live in `apps/automation/flows/flow_definitions.py`. The runtime owns the route
+> (`POST /memory/execute`) and the graph's name; the app owns every node — and the graph is
+> registered before plugins load, so the app cannot change its shape without overwriting a
+> runtime-owned registry entry (`register_flow` overwrites silently).**
+
+### What we hit
+
+Closing `MEMORY-EXECUTE-LATENCY-1` (our register): the terminal node ran the full Infinity loop
+synchronously on the request path — the same defect as `GENESIS-TURN-LATENCY-1`. The Genesis
+precedent was resolved by *removing* the recalculation (#294: a turn is not a scoring event, and
+14 of 16 recalcs produced a delta of exactly 0). A memory-loop execution is the same shape — it
+runs a `leadgen` search or a `genesis_message` and changes nothing the score reads — so the
+same removal is right. Our own `memory_execution` graph and plan now end at `memory_execution_run`.
+But `memory_execution_orchestrate` must keep existing as a registered node with a do-nothing
+body, because your graph names it as its terminal and nothing of ours may remove it from there.
+A node whose only job is to exist is the dead-surface shape both repos keep finding.
+
+### Ask
+
+Either of:
+
+1. Drop `memory_execution_orchestrate` from `memory_execute_loop` — end at `memory_execution_run`,
+   which already produces `memory_execution_response`. Then we delete the node.
+2. Or let the app own the graph: register `memory_execute_loop` only if no plugin has, i.e. move
+   the guard so a plugin's registration wins — an app-node-only graph is app-shaped whichever
+   module declares it.
+
+Either is a one-line change on your side; (1) is smaller. Until one lands, the node stays with a
+docstring saying why (`test_memory_execute_no_recalc.py` pins that your graph still resolves it).
+
+### Not asking for
+
+- Any change to `POST /memory/execute` itself, its scope, or its response shape (the
+  `orchestration` key still comes back — `None`, with `orchestration_skipped:
+  "not_a_scoring_event"` — for any consumer outside this repo that reads it; none inside does).
+
+---
+
 ## FR-31 — a Nodus run parked across a restart cannot be resumed until some script has run in the new process, and the first attempt orphans it 🔴 defect (filed 2026-09-16, runtime 2.17.0; pre-existing)
 
 Numbered from your ledger (*next available: FR-31*).

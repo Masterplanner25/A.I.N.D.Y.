@@ -381,21 +381,26 @@ def memory_execution_run(state, context):
 
 @register_node("memory_execution_orchestrate")
 def memory_execution_orchestrate(state, context):
+    """Terminal node of the runtime-owned `memory_execute_loop` graph. It no longer scores.
+
+    MEMORY-EXECUTE-LATENCY-1 (closed 2026-09-16). This node ran the full Infinity loop —
+    `sys.v1.analytics.execute_infinity` — synchronously on the `POST /memory/execute` request
+    path, the same defect GENESIS-TURN-LATENCY-1 was measured on. The Genesis precedent moved
+    twice: async first (#263), then removed (#294), because a turn is not a scoring event — the
+    score has nothing to move on until something is actually *done*. A memory-loop execution is
+    the same shape: it runs a `leadgen` search or a `genesis_message` through the memory loop and
+    changes neither the task graph nor the pillars. The path had also never executed (0
+    `flow_runs` for either graph since the table began; no `memory_*` trigger in `score_history`).
+
+    The function survives with this body because the runtime registers `memory_execute_loop`
+    before plugins load and names this node as its terminal — the app cannot remove it from
+    that graph without overriding a runtime-owned name (FR-32 asks the runtime to drop it). The
+    app's own `memory_execution` graph no longer includes it.
+    """
     response = dict(state.get("memory_execution_response") or {})
-    try:
-        workflow = state.get("original_workflow")
-        orchestration = _syscall_data(
-            "sys.v1.analytics.execute_infinity",
-            {"user_id": context.get("user_id"), "trigger_event": f"memory_{workflow}"},
-            context,
-            "score.recalculate",
-        )
-        response["orchestration"] = orchestration
-        return {"status": "SUCCESS", "output_patch": {"memory_execution_response": response}}
-    except Exception as e:
-        response["orchestration"] = None
-        response["orchestration_error"] = str(e)
-        return {"status": "SUCCESS", "output_patch": {"memory_execution_response": response}}
+    response["orchestration"] = None
+    response["orchestration_skipped"] = "not_a_scoring_event"
+    return {"status": "SUCCESS", "output_patch": {"memory_execution_response": response}}
 
 
 # ── Task Create Flow ──────────────────────────────────────────────────────────
@@ -750,9 +755,8 @@ def register_all_flows() -> None:
             "start": "memory_execution_validate",
             "edges": {
                 "memory_execution_validate": ["memory_execution_run"],
-                "memory_execution_run": ["memory_execution_orchestrate"],
             },
-            "end": ["memory_execution_orchestrate"],
+            "end": ["memory_execution_run"],
         },
     )
 
