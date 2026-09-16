@@ -306,7 +306,7 @@ is reframed, not abandoned, in
 |---|---|
 | Close the learning loops (ARM / Freelance / Search) | ✅ **Done** — #122, #126, #127 |
 | **Autonomous self-triggering** | ⚠️ **Narrower than recorded.** *Corrected 2026-08-16:* scheduled jobs **do** exist — 21 `register_scheduled_job` sites registering 9 jobs across `analytics`, `masterplan`, `rippletrace` and `tasks`. The earlier "none anywhere" claim came from grepping the stale name `register_scheduler_jobs`. What is genuinely missing is narrower: **the act-on-insight loops** (ARM autotune, freelance pricing, search execution) have no self-firing trigger, and `AINDY_NEXT_ACTION_ACTING` is default false |
-| **Search's real send** | ❌ **Open** — `apps/search/services/lead_execution_service.py:394`, still *"a real provider send would happen here — intentionally not wired"* |
+| **Search's real send** | ✅ **Done 2026-09-16.** The blocker was never the send call — the runtime ships `email_channel.send_email` — it was that a lead carried no address. Owner's call: recipients are entered by hand (`PATCH /apps/leadgen/leads/{id}/contact`), never discovered. `channel=email` with `AINDY_SEARCH_OUTREACH_SEND` on delivers to leads with a `contact_email` (verified live into Mailpit: one message, `sent via smtp`), leaves the rest `queued`, and a `sent` action cannot be reverted. No UI for the contact yet — the client renders search results only; the execute/actions surface is API-only today |
 | **Soak-gated score-drive** (Phase D / Phase 2) | ❌ **Blocked, and not by soak** — see the soak audit |
 | Typed `Domain`s → Composite Master Index | Scoped as the Domain Engine, not built |
 | Elo apex ranker | Absent; reframed as self-trust calibration |

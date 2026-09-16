@@ -209,16 +209,50 @@ class RevertActionRequest(BaseModel):
     action_id: int
 
 
+class LeadContactRequest(BaseModel):
+    contact_email: str | None = None  # None or "" clears it
+
+
+@router.patch("/leads/{lead_id}/contact")
+@limiter.limit("30/minute")
+def set_lead_contact_route(
+    request: Request,
+    lead_id: int,
+    body: LeadContactRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Enter (or clear) the recipient for a lead by hand. The `email` channel sends only to
+    leads that have one; discovery never sets it."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.search.services.leadgen_service import set_lead_contact
+        try:
+            lead = set_lead_contact(db, user_id=user_id, lead_id=lead_id, contact_email=body.contact_email)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"error": "invalid_contact", "message": str(exc)})
+        if lead is None:
+            raise HTTPException(status_code=404, detail={"error": "lead_not_found", "message": f"lead {lead_id} not found"})
+        return lead
+
+    return _execute_leadgen(
+        request, "leadgen.contact.set", handler, db=db, user_id=user_id,
+        input_payload={"lead_id": lead_id, "has_contact": bool((body.contact_email or "").strip())},
+    )
+
+
 @router.post("/execute")
 @limiter.limit("10/minute")
 def execute_lead_actions(
     request: Request,
     apply: bool = Query(False, description="Persist actions. Default false = dry-run preview."),
-    channel: str = Query("draft", description="draft | email | handoff. Only 'draft' produces a ready artifact; no channel sends."),
+    channel: str = Query("draft", description="draft | email | handoff. 'email' sends only with AINDY_SEARCH_OUTREACH_SEND on, and only to leads with a hand-entered contact_email."),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Act on scored leads: draft (never send) outreach for qualified leads, gated and revertible."""
+    """Act on scored leads: draft outreach for qualified leads, gated and revertible; the email
+    channel delivers it (gate on, recipient entered) and a sent action is not revertible."""
     user_id = str(current_user["sub"])
 
     def handler(_ctx):

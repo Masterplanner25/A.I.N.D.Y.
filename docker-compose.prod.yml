@@ -143,7 +143,9 @@ services:
       AINDY_NEXT_ACTION_ACTING: "${AINDY_NEXT_ACTION_ACTING:-false}"
       AINDY_SEARCH_EMBEDDING_RANKING: "${AINDY_SEARCH_EMBEDDING_RANKING:-}"
       AINDY_SEARCH_OUTCOME_WEIGHTING: "${AINDY_SEARCH_OUTCOME_WEIGHTING:-}"
-      # WARNING: AINDY_SEARCH_OUTREACH_SEND sends REAL outreach. Never include it in a
+      # WARNING: AINDY_SEARCH_OUTREACH_SEND sends REAL outreach — since 2026-09-16 the email
+      # channel really delivers (runtime email_channel: a registered `email` connector, else
+      # AINDY_SMTP_*) to any lead with a hand-entered contact_email. Never include it in a
       # soak batch. Declared for visibility; leave unset unless that is the intent.
       AINDY_SEARCH_OUTREACH_SEND: "${AINDY_SEARCH_OUTREACH_SEND:-}"
       # DB statement / idle-in-transaction reap timeouts (ms). The runtime defaults to 30000,
