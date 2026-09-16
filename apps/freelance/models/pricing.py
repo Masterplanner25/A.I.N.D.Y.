@@ -51,8 +51,8 @@ class ServicePrice(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     service_type = Column(String, nullable=False, index=True)
-    current_price = Column(Float, nullable=False, default=0.0)
-    source = Column(String(16), nullable=False, default="manual")  # manual | auto
+    current_price = Column(Float, nullable=False, default=0.0, server_default="0")
+    source = Column(String(16), nullable=False, default="manual", server_default="manual")  # manual | auto
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -77,9 +77,9 @@ class PricingRecommendation(Base):
     rationale = Column(String, nullable=True)
     signals = Column(JSON, nullable=True)           # snapshot of the stats behind it
 
-    status = Column(String(16), nullable=False, default="recommended", index=True)  # recommended | applied | reverted
+    status = Column(String(16), nullable=False, default="recommended", index=True, server_default="recommended")  # recommended | applied | reverted
     prior_price = Column(Float, nullable=True)      # ServicePrice value before apply — revert target
-    trigger = Column(String(16), nullable=False, default="manual")  # manual | agent | scheduler
+    trigger = Column(String(16), nullable=False, default="manual", server_default="manual")  # manual | agent | scheduler
 
     applied_at = Column(DateTime(timezone=True), nullable=True)
     reverted_at = Column(DateTime(timezone=True), nullable=True)

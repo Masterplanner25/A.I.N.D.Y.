@@ -29,11 +29,12 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    func,
     Integer,
     JSON,
     String,
     Text,
-    func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -60,7 +61,7 @@ class SeoDraft(Base):
 
     # The draft itself. Kept so a draft can be reopened, edited and re-analysed — without it
     # the history is a record of readings on text that no longer exists anywhere.
-    content = Column(Text, nullable=False, default="")
+    content = Column(Text, nullable=False, default="", server_default="")
     title = Column(String(500), nullable=True)
 
     # ★ Remembered per draft, which answers §5 open question 1. Retyping the targets on every
@@ -110,7 +111,7 @@ class SeoDraftAnalysis(Base):
     # ★ The first analysis of a draft, protected from pruning. Not a user-set flag: it is
     # whatever came first, because "before" is only meaningful against the earliest reading —
     # and a prune that removes the baseline destroys the comparison it was making room for.
-    is_baseline = Column(Boolean, nullable=False, default=False)
+    is_baseline = Column(Boolean, nullable=False, default=False, server_default=text("false"))
 
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True

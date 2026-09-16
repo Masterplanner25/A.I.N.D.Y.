@@ -27,7 +27,7 @@ class IdentitySignal(Base):
 
     dimension = Column(String(32), nullable=False, index=True)   # risk_tolerance | speed_vs_quality | language | ...
     value = Column(String(64), nullable=False, index=True)       # the categorical candidate this observation votes for
-    weight = Column(Float, nullable=False, default=1.0)          # evidence strength of this observation
+    weight = Column(Float, nullable=False, default=1.0, server_default="1")          # evidence strength of this observation
     event_type = Column(String(64), nullable=True)              # provenance (arm_analysis_complete, masterplan_locked, ...)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

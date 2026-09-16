@@ -107,7 +107,7 @@ class PlanObjective(Base):
 
     name = Column(String(300), nullable=False)
     intent = Column(Text, nullable=True)
-    ordinal = Column(Integer, nullable=False, default=0)
+    ordinal = Column(Integer, nullable=False, default=0, server_default="0")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -138,10 +138,10 @@ class PlanPhase(Base):
 
     name = Column(String(300), nullable=False)
     description = Column(Text, nullable=True)
-    ordinal = Column(Integer, nullable=False, default=0)
+    ordinal = Column(Integer, nullable=False, default=0, server_default="0")
     duration_months = Column(Integer, nullable=True)
 
-    status = Column(String(16), nullable=False, default=PHASE_PENDING, index=True)
+    status = Column(String(16), nullable=False, default=PHASE_PENDING, index=True, server_default="pending")
     depends_on_phase_id = Column(String, ForeignKey("plan_phases.id"), nullable=True, index=True)
 
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -188,8 +188,8 @@ class PlanStrategy(Base):
     name = Column(String(300), nullable=False)
     description = Column(Text, nullable=True)
 
-    origin = Column(String(16), nullable=False, default=ORIGIN_PLANNED, index=True)
-    status = Column(String(32), nullable=False, default=STRATEGY_PROPOSED, index=True)
+    origin = Column(String(16), nullable=False, default=ORIGIN_PLANNED, index=True, server_default="planned")
+    status = Column(String(32), nullable=False, default=STRATEGY_PROPOSED, index=True, server_default="proposed")
 
     # Set when the strategy concludes. NULL for a displaced one, permanently and on purpose:
     # it was never tried, so there is nothing to judge, and inventing a verdict for it is what

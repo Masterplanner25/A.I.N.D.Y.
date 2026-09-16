@@ -15,7 +15,7 @@ class AutonomyDecision(Base):
     trigger_type = Column(String(32), nullable=False, index=True)
     trigger_source = Column(String(64), nullable=True, index=True)
     decision = Column(String(16), nullable=False, index=True)
-    priority = Column(Float, nullable=False, default=0.0)
+    priority = Column(Float, nullable=False, default=0.0, server_default="0")
     reason = Column(Text, nullable=False)
     trace_id = Column(String(128), nullable=True, index=True)
     job_log_id = Column(String, nullable=True, index=True)

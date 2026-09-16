@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, Boolean, ForeignKey, func
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -139,13 +139,13 @@ class ArmAutoTuneLog(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(String(36), nullable=False, index=True)     # arm_config key ('default' | user uuid)
-    trigger = Column(String(16), nullable=False, default="manual")  # manual | agent | scheduler
+    trigger = Column(String(16), nullable=False, default="manual", server_default="manual")  # manual | agent | scheduler
     applied = Column(JSON, nullable=False, default=list)         # [{param, old, new, metric, reason, risk}]
     skipped = Column(JSON, nullable=False, default=list)         # [{param, suggested, reason}]
     prior_config = Column(JSON, nullable=False, default=dict)    # snapshot before apply — revert target
     resulting_config = Column(JSON, nullable=False, default=dict)  # snapshot after apply
     metrics_snapshot = Column(JSON, nullable=False, default=dict)
-    reverted = Column(Boolean, nullable=False, default=False)
+    reverted = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     reverted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 

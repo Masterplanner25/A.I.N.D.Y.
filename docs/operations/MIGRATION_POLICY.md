@@ -71,6 +71,27 @@ Ownership rule before authoring a migration:
 > **Rule: Always run `alembic upgrade head` immediately after any SQLAlchemy model change.**
 > SQLAlchemy model edits do not alter the live database. Forgetting to apply the migration causes schema drift: the application code expects columns that don't exist in the DB, producing runtime errors or silent data corruption. This applies in development, CI, and production — every environment, every time.
 
+### Default Parity — the model and the migration must say the same thing
+
+> **Rule: a column with a DB-level default or `NOT NULL` in the migration carries the same
+> `server_default=` / `nullable=` on the model, in the same PR.** `default=` on the model is
+> client-side only — SQLAlchemy fills it on ORM inserts and the database never sees it.
+
+Two things build the app schema: `scripts/deploy_bootstrap.py` on a fresh database
+(`Base.metadata.create_all` from the models, then `alembic stamp head`) and `alembic upgrade
+head` on an existing one (the migrations). A column declared `default=` on the model and
+`server_default=` in the migration lands with a DB default on a migrated deploy and none on a
+fresh one. ORM writes never notice; a raw `INSERT`, `COPY`, a bulk loader, or the deploy guard's
+own seed fails on the fresh deploy only — which is how `pings.verification` was found
+(`SCHEMA-DEFAULT-PARITY-1`, 2026-09-13), and a full-history audit then found 72 such columns.
+
+Enforced by the deploy-bootstrap guard's **Step 6**: it builds the schema a second time from the
+migrations alone (the app chain is self-contained from empty) and runs
+`scripts/check_schema_default_parity.py`, which fails on any app-owned column whose reflected
+default or nullability disagrees with the model. Run it locally against any database built by
+`alembic upgrade head` from empty. Whichever side is wrong, fix both together — never by hand-editing
+the database.
+
 ### Additive-Only Policy
 - Columns are added, never removed, during active development unless explicitly agreed.
 - This policy exists because removing a column requires coordinating model code, migration, and all query sites simultaneously — additive changes reduce blast radius.

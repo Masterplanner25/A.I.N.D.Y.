@@ -39,7 +39,7 @@ class FreelanceOrder(Base):
     stripe_payment_intent_id = Column(String, nullable=True, index=True)
     stripe_payment_link_id = Column(String, nullable=True, index=True)
     payment_confirmed_at = Column(DateTime, nullable=True)
-    payment_status = Column(String, nullable=True, default="none")
+    payment_status = Column(String, nullable=True, default="none", server_default="none")
     refund_id = Column(String, nullable=True)
     refunded_at = Column(DateTime, nullable=True)
     refund_reason = Column(String, nullable=True)

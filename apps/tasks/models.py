@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, JSON, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from AINDY.db.database import Base
@@ -21,8 +21,8 @@ class Task(Base):
     status = Column(String, default="pending")  # pending, in_progress, paused, completed
     masterplan_id = Column(Integer, ForeignKey("master_plans.id"), nullable=True, index=True)
     parent_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True, index=True)
-    depends_on = Column(JSON, nullable=False, default=list)
-    dependency_type = Column(String, default="hard")
+    depends_on = Column(JSON, nullable=False, default=list, server_default=text("'[]'"))
+    dependency_type = Column(String, default="hard", server_default="hard")
     automation_type = Column(String, nullable=True)
     automation_config = Column(JSON, nullable=True)
 

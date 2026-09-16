@@ -29,7 +29,7 @@ class SearchResultFeedback(Base):
 
     kind = Column(String(16), nullable=False)                 # implicit | explicit
     signal = Column(String(32), nullable=False)               # click|convert|dwell|dismiss|thumbs_up|thumbs_down
-    weight = Column(Float, nullable=False, default=0.0)       # per-signal weight (recorded for auditability)
+    weight = Column(Float, nullable=False, default=0.0, server_default="0")       # per-signal weight (recorded for auditability)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

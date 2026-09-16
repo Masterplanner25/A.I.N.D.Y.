@@ -65,8 +65,8 @@ class IntentValueDeclaration(Base):
     # For a cardinal kind this is the declared figure (dollars). For an ordinal kind it is
     # the MAPPED value of `ordinal_level` — scoring reads this field either way, so the
     # per-kind maths in three_axis_service is unchanged.
-    declared_value = Column(Float, nullable=False, default=0.0)
-    kind = Column(String(16), nullable=False, default="strategic") # monetary_potential | intrinsic | strategic
+    declared_value = Column(Float, nullable=False, default=0.0, server_default="0")
+    kind = Column(String(16), nullable=False, default="strategic", server_default="strategic") # monetary_potential | intrinsic | strategic
     # What the user actually chose, for ordinal kinds; NULL for monetary_potential. Persisted
     # rather than reverse-derived from declared_value: a reverse mapping would silently
     # reinterpret every historical row if WORTH_ORDINAL_LEVELS were ever retuned.

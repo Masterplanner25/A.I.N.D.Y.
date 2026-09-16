@@ -24,7 +24,7 @@ class MasterPlan(Base):
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     # Lifecycle status: draft | locked | active | archived
-    status = Column(String, nullable=True, default="draft")
+    status = Column(String, nullable=True, default="draft", server_default="draft")
 
     is_active = Column(Boolean, default=False)
     is_origin = Column(Boolean, default=False)
@@ -104,7 +104,7 @@ class GenesisSessionDB(Base):
     transcript = Column(JSON, nullable=True)
 
     # Block 1 additions
-    synthesis_ready = Column(Boolean, nullable=False, default=False)
+    synthesis_ready = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     draft_json = Column(JSON, nullable=True)
     locked_at = Column(DateTime(timezone=True), nullable=True)
 
