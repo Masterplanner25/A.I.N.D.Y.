@@ -715,11 +715,15 @@ def complete_task(
         _eu = _eus.get_by_source("task", str(task.id))
         if _eu:
             # A paused task's unit is `waiting`, and the runtime's transition table has no
-            # waiting -> completed edge (only waiting -> executing / resumed / failed). Step it
-            # through `executing` first; otherwise completing a paused task logs
-            # "[EU] invalid transition" and leaves the unit parked forever.
+            # waiting -> completed edge — by design (runtime DEC-021, 2.19.0): `waiting` means
+            # parked on an event, work unfinished, and the truthful exit is to resume first.
+            # `resume_execution_unit` is the runtime's own wake path: waiting -> resumed ->
+            # executing, clearing `wait_condition`. It is idempotent (a no-op on resumed /
+            # executing / completed), so it is safe to call unconditionally. The previous
+            # shape here stepped waiting -> executing directly, which worked but skipped the
+            # `resumed` state the audit trail expects.
             if _eu.status == "waiting":
-                _eus.update_status(_eu.id, "executing")
+                _eus.resume_execution_unit(_eu.id)
             _eus.update_status(_eu.id, "completed")
             _commit_eu_hook(db)
     except Exception as _eu_exc:
