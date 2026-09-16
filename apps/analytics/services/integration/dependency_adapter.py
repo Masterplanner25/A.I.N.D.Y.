@@ -304,11 +304,17 @@ def get_latest_loop_adjustment_for_update(*, persisted_user_id, db):
     return _wrap_record(rows[0] if rows else None)
 
 
-def update_loop_adjustment(*, adjustment_id, db, **kwargs):
+def update_loop_adjustment(*, adjustment_id, db, user_id=None, **kwargs):
+    # SYSCALL-SILENT-ERRORS-1 (closed 2026-09-16): `user_id` is the TENANT for the dispatch, not a
+    # field of the patch. It used to be read out of **kwargs (so the caller's omission became an
+    # empty tenant → `TENANT_VIOLATION` outside a request) and forwarded into the payload (where
+    # the automation service would `setattr` it on the row). Explicit here, and `evaluate_pending_
+    # adjustment` now passes it — the Infinity recalc runs as an async job, with no request tenant
+    # to fall back on, and no adjustment had ever been evaluated because of it.
     result = _dispatch_syscall(
         "sys.v1.automation.update_loop_adjustment",
         {"adjustment_id": adjustment_id, **kwargs},
-        user_id=str(kwargs.get("user_id") or ""),
+        user_id=str(user_id or ""),
         capability="automation.write",
         db=db,
     )

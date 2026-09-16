@@ -360,7 +360,41 @@ question.
 
 ---
 
-## SYSCALL-SILENT-ERRORS-1: three syscalls fail with no log line and no durable event (app-owned, P2)
+## SYSCALL-SILENT-ERRORS-1: ✅ CLOSED 2026-09-16 — three syscalls fail with no log line and no durable event (app-owned, was P2)
+
+**Closed 2026-09-16. One mechanism for all three, and the entry's own exclusion table had
+ruled it out: `TENANT_VIOLATION: syscall requires authenticated tenant context`.** Each of the
+three is dispatched with an EMPTY `user_id` — `system_state_service` (runtime) passes
+`user_id=None` for `count_runs` and `list_recent_durations`; our `infinity_loop.
+evaluate_pending_adjustment` called `update_loop_adjustment_record(...)` without one, so the
+adapter built the context from `""`. Inside a request the pipeline's tenant context covers an
+empty ctx (which is why every route-level probe below succeeded and the counters "did not
+move"); outside one — a scheduled job, an async job, a health probe — the dispatcher refuses
+before the handler runs, on one of the eleven paths that logged nothing until FR-25 shipped.
+The table below says *"tenant violation — that check only fires when `metadata["_extension_call"]`
+is set"*: that is a different tenant check. Reproduced in-process in one line each: the same
+dispatch, no request, all three → `error: TENANT_VIOLATION`; `count_runs` with a real user →
+the handler runs.
+
+**Why it mattered more than three counters:** the Infinity recalc has run as an async job since
+the debounce work, so **no loop adjustment has ever been evaluated** — 115 `loop_adjustments`
+rows since 2026-07-23, `actual_outcome` NULL on every one, no `actual_score` in any payload. The
+expected-vs-actual ledger that `SOAK-THEN-FLIP-1` and the learned calibrator wait on was empty by
+construction, and the swallow rendered that as "nothing to evaluate". The `count_runs` /
+`list_recent_durations` half is the runtime's (`system_state_service`, `user_id=None`); on 2.17.0
+three polls of `/platform/observability/system` produce no error outcome — request-scoped — and
+if a job path ever dispatches it again, FR-25's WARNING now names it.
+
+**Fix:** `dependency_adapter.update_loop_adjustment` takes `user_id` explicitly as the dispatch
+tenant (it used to be read out of `**kwargs` AND forwarded into the patch, where the automation
+service `setattr`s every key), and `evaluate_pending_adjustment` passes it. **Test:**
+`tests/unit/test_loop_adjustment_evaluation_tenant.py` runs the real dispatcher with no request
+context — the job shape — and reads the row back; a second test pins the refusal shape so the
+reason for the fix cannot move silently; a third pins the caller (mutation-checked: drop the
+kwarg, it fails). The 115 unevaluated rows stay as they are; evaluation resumes from the next
+recalc.
+
+### Original entry (2026-09-05 → 2026-09-11) — retained
 
 **Status: OPEN, mechanism not identified.** Found 2026-09-05 by runtime 2.9.0's new
 `aindy_syscall_outcome_total` metric. Nothing else was measuring this, and there is no log line
