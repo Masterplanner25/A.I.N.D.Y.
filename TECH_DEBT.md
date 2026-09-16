@@ -41,6 +41,42 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## COMPOSE-REDIS-URL-UNCONDITIONAL-1: the documented single-instance `up` serves 500 on every rate-limited route, `/health` included (app-owned, P2)
+
+**Found 2026-09-16 during the 2.19.0 adoption, and it was first read as the release.** The
+stack was brought up as `DEPLOYMENT.md` line 47 documents — `docker compose -f
+docker-compose.prod.yml up -d`, plus the mongo overlay, no profiles — and the api sat `unhealthy`
+for 26 minutes with `/health` answering `{"error":"internal_error"}` while `/api/version` was
+fine. The traceback runs `slowapi._check_request_limit → limits → redis`: `docker-compose.prod.yml`
+sets `REDIS_URL: "redis://redis:6379/0"` **unconditionally** while the `redis` service is
+`profiles: ["full"]`, and the runtime's rate limiter (`platform_layer/rate_limiter.py`) takes
+`storage_uri=REDIS_URL` whenever it is set, with slowapi's default `swallow_errors=False` and no
+in-memory fallback. So every `@limiter.limit` route — `/health`, `/health/deep`, every route with
+a limit — raises on a name that does not resolve, and the healthcheck never passes. Same behaviour
+on the 2.18.0 image, A/B'd in-process against the same network (`RUNTIME_2_19_0_UPGRADE.md` §6):
+this is the compose file, not the runtime release.
+
+**Why nobody saw it:** every live stack since the 2.13.0 adoption was brought up with
+`--profile full --profile mail` (`RUNTIME_2_13_0_UPGRADE.md` §5, `RUNTIME_2_14_0_UPGRADE.md`
+§5), which starts redis. The documented default path has been broken for as long as the limiter
+has read `REDIS_URL` (2026-08-14, runtime #402 dropped the alias; the storage line itself is
+older) and no one has taken it. The scheduler-saturation line was in the log too — `[Scheduler]
+job 'scheduler_wait_tick' skipped a run` — because `RedisWaitRegistry.get_all_specs` retried the
+same unresolvable name for ~11 s per one-second tick. Per `CLAUDE.md`, that line named the victim.
+
+**Side effect worth knowing:** 88 `error.unhandled_request` system events from the healthcheck's
+500s put `compute_current_state()` at `failure_rate 0.77 → health_status critical` for the hour
+that followed, which our `triggers.py` and `goal_service.py` read. It aged out with the window.
+
+**Fix (not taken in the adoption PR — a compose change is its own PR):** either make `REDIS_URL`
+conditional on the profile (`"${REDIS_URL:-}"` and have the `full` profile set it), or drop it
+from the single-instance environment and document that `full` adds it. Then run the documented
+single-instance `up` once and watch `/health` go `healthy` without redis. `DEPLOYMENT.md` line 47
+and `local-stack-operations` should say which. Until then: **always `--profile full --profile
+mail`** on this host.
+
+---
+
 ## TASK-EU-NOT-PERSISTED-1: ✅ CLOSED 2026-09-16 — a task's own execution unit is created by the hook and never lands in the table (app-owned, was P2)
 
 **Closed 2026-09-16, same day, traced rather than guessed.** The session the `task_create` node
@@ -384,6 +420,18 @@ construction, and the swallow rendered that as "nothing to evaluate". The `count
 `list_recent_durations` half is the runtime's (`system_state_service`, `user_id=None`); on 2.17.0
 three polls of `/platform/observability/system` produce no error outcome — request-scoped — and
 if a job path ever dispatches it again, FR-25's WARNING now names it.
+
+**Runtime half closed in 2.19.0 (#692, `SYSTEM-STATE-TENANT-1`), and it corrected two inferences
+above.** *"Inside a request the pipeline's tenant context covers an empty ctx"* — nothing does; no
+ContextVar fills `SyscallContext.user_id`, so `count_runs` / `list_recent_durations` were refused
+on **every** dispatch, request or job, since 2.0.0. The route probes "succeeded" only because no
+runtime route calls `compute_current_state` — our three callers (`triggers.py:92`,
+`dependency_adapter.py:138`, `ranking.py:39`) are the only ones anywhere. And passing a tenant was
+not the fix: both syscalls scope to one user, the snapshot is whole-system, so the runtime now
+reads `AgentRun` directly (as `FlowRun` always was) and `list_recent_durations` is removed. Effect
+on us: `active_runs` / `avg_execution_time` include agent runs for the first time, so
+`system_load` / `health_status` read higher where there is agent traffic — the true reading. See
+`docs/runtime/RUNTIME_2_19_0_UPGRADE.md` §2. Our half (`update_loop_adjustment`) stands as below.
 
 **Fix:** `dependency_adapter.update_loop_adjustment` takes `user_id` explicitly as the dispatch
 tenant (it used to be read out of `**kwargs` AND forwarded into the patch, where the automation

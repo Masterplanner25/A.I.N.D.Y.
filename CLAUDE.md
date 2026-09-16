@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.18.0,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.19.0,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -111,8 +111,8 @@ def register() -> None:
     # 74 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
     # this block used to say otherwise.
     #
-    # Measured 2026-09-11 rather than carried forward: 98 registered at app-profile boot,
-    # 24 of them the runtime's own (import `AINDY.kernel.syscall_registry` alone to see that
+    # Measured 2026-09-16 rather than carried forward: 97 registered at app-profile boot,
+    # 23 of them the runtime's own (import `AINDY.kernel.syscall_registry` alone to see that
     # number), so 74 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
     # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`). The previous
     # figure of 90 was stale, which is the same failure the runtime-floor lines above had —
@@ -206,10 +206,10 @@ merge rules): `docs/operations/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime>=2.18.0,<3.0    # pyproject.toml — the COMPATIBILITY range
+aindy-runtime>=2.19.0,<3.0    # pyproject.toml — the COMPATIBILITY range
 ```
 ```
-aindy-runtime==2.18.0         # constraints.txt — the BUILD pin
+aindy-runtime==2.19.0         # constraints.txt — the BUILD pin
 ```
 
 The upper bound is required. Never widen to an unbounded range.
@@ -238,7 +238,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.18.0,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.19.0,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.
@@ -334,7 +334,7 @@ The Nodus worker is spawned as `subprocess.run([sys.executable, nodus_worker.py]
 `sys.path[0]` is the *worker's* directory and the inherited cwd is **not** on `sys.path`. If this
 repo is not pip-installed, the worker cannot `import apps`, `load_plugins()` raises
 `ModuleNotFoundError`, and `_ensure_tools_loaded` swallows it **at DEBUG**. The worker then runs
-with 24 runtime syscalls instead of 98 (measured 2026-09-11), and the visible symptom is
+with 23 runtime syscalls instead of 97 (measured 2026-09-16), and the visible symptom is
 three layers away:
 
 ```
