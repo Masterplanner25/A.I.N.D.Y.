@@ -2,7 +2,8 @@
 ARM Core Analysis Engine
 
 The reasoning heart of A.I.N.D.Y.'s Autonomous Reasoning Module.
-Powered by OpenAI GPT-4o.
+Powered by DeepSeek through the runtime's OpenAI-compatible DeepSeek client (the method
+names below still say "openai" — the wire protocol is OpenAI's, the host is not).
 
 Capabilities:
 - run_analysis()  : Deep code/logic analysis with architectural insights
@@ -16,6 +17,7 @@ Every operation is:
 """
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Any
@@ -30,6 +32,18 @@ from sqlalchemy.orm import Session
 
 from apps.arm.services.deepseek.security_deepseek import SecurityValidator
 from apps.arm.services.deepseek.file_processor_deepseek import FileProcessor
+
+# DeepSeek's current models (`deepseek-flash`, `deepseek-v4-pro`) are reasoning models: with the
+# default request shape every completion token goes to `reasoning_tokens` until the budget is
+# spent, and `message.content` comes back EMPTY — measured 2026-09-16: `max_tokens=200` →
+# 200 reasoning tokens, no content, on both. ARM asks for a JSON object under
+# `max_output_tokens` (2000) with `temperature` 0.2, so an unbounded think can eat the whole
+# budget on a large chunk and hand `json.loads` an empty string. `reasoning_effort="none"`
+# (equivalently `thinking: {type: disabled}`) turns it off and the same prompt answers in 5
+# tokens. Deterministic scoring is what ARM wants; set `AINDY_ARM_REASONING_EFFORT=low|medium|
+# high` to turn thinking on deliberately. Passed as `extra_body`, which the runtime's helper
+# forwards untouched to `chat.completions.create`.
+ARM_REASONING_EFFORT: str = (os.environ.get("AINDY_ARM_REASONING_EFFORT") or "none").strip().lower()
 from apps.arm.services.deepseek.config_manager_deepseek import ConfigManager, DEFAULT_CONFIG
 from apps.arm.models import AnalysisResult, CodeGeneration
 from AINDY.config import settings
@@ -94,7 +108,7 @@ Return ONLY valid JSON (no markdown fences) with exactly these keys:
 
 class DeepSeekCodeAnalyzer:
     """
-    ARM reasoning engine — analysis and code generation via OpenAI GPT-4o.
+    ARM reasoning engine — analysis and code generation via DeepSeek (OpenAI-compatible API).
 
     Initialized once per server process in the ARM bootstrap singleton.
     Thread-safe: each public operation refreshes runtime config from the
@@ -150,7 +164,7 @@ class DeepSeekCodeAnalyzer:
         Returns (response_text: str, input_tokens: int, output_tokens: int).
         Raises the last exception if all retries are exhausted.
         """
-        model = model or self.config.get("model", "gpt-4o")
+        model = model or self.config.get("model", DEFAULT_CONFIG["model"])
         temperature = temperature if temperature is not None else self.config.get("temperature", 0.2)
         retry_limit = self.config.get("retry_limit", 3)
         retry_delay = self.config.get("retry_delay_seconds", 2)
@@ -178,6 +192,7 @@ class DeepSeekCodeAnalyzer:
                         max_tokens=max_tokens,
                         response_format={"type": "json_object"},
                         timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
+                        extra_body={"reasoning_effort": ARM_REASONING_EFFORT},
                     ),
                 )
                 content = response.choices[0].message.content
@@ -209,7 +224,7 @@ class DeepSeekCodeAnalyzer:
         1. Security validation (path, content, size)
         2. File reading and chunking
         3. Task Priority calculation (Infinity Algorithm)
-        4. OpenAI GPT-4o analysis
+        4. DeepSeek analysis
         5. Persist to analysis_results table
         6. Return enriched result dict
         """
@@ -319,7 +334,7 @@ class DeepSeekCodeAnalyzer:
                 user_prompt=user_prompt,
                 db=db,
                 user_id=user_id,
-                model=self.config.get("analysis_model", "gpt-4o"),
+                model=self.config.get("analysis_model", DEFAULT_CONFIG["analysis_model"]),
                 temperature=self.config.get("temperature", 0.2),
             )
 
@@ -343,7 +358,7 @@ class DeepSeekCodeAnalyzer:
                 file_type=path.suffix,
                 analysis_type="analyze",
                 prompt_used=user_prompt[:2000],
-                model_used=self.config.get("analysis_model", "gpt-4o"),
+                model_used=self.config.get("analysis_model", DEFAULT_CONFIG["analysis_model"]),
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 execution_seconds=execution_seconds,
@@ -431,7 +446,7 @@ class DeepSeekCodeAnalyzer:
                         file_path=file_path,
                         file_type="unknown",
                         analysis_type="analyze",
-                        model_used=self.config.get("analysis_model", "gpt-4o"),
+                        model_used=self.config.get("analysis_model", DEFAULT_CONFIG["analysis_model"]),
                         input_tokens=0,
                         output_tokens=0,
                         execution_seconds=execution_seconds,
@@ -465,7 +480,7 @@ class DeepSeekCodeAnalyzer:
         Pipeline:
         1. Security validation of any provided code
         2. Task Priority calculation (Infinity Algorithm)
-        3. OpenAI GPT-4o generation
+        3. DeepSeek generation
         4. Persist to code_generations table
         5. Return structured result
         """
@@ -498,7 +513,7 @@ class DeepSeekCodeAnalyzer:
                 user_prompt=user_prompt,
                 db=db,
                 user_id=user_id,
-                model=self.config.get("generation_model", "gpt-4o"),
+                model=self.config.get("generation_model", DEFAULT_CONFIG["generation_model"]),
                 temperature=self.config.get("generation_temperature", 0.4),
             )
 
@@ -533,7 +548,7 @@ class DeepSeekCodeAnalyzer:
                 original_code=original_code[:10_000] if original_code else "",
                 generated_code=result.get("generated_code", ""),
                 language=result.get("language", language),
-                model_used=self.config.get("generation_model", "gpt-4o"),
+                model_used=self.config.get("generation_model", DEFAULT_CONFIG["generation_model"]),
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 execution_seconds=execution_seconds,

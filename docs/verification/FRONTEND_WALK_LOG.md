@@ -1008,6 +1008,10 @@ server's own source tree, presented as a general product surface.
 3. **A valid path also fails on this stack**, but for an unrelated reason: `apps/arm/models.py`
    passes validation, is read, and then the outbound LLM call fails repeatedly
    (`external.call.failed`) — a local provider-key/config matter, not an ARM bug.
+   **Correction 2026-09-16: it was an ARM bug.** ARM's config defaults said `gpt-4o` while its
+   only client is DeepSeek, which rejects the name with a 400; `analysis_results` had zero rows
+   on every stack until the day it was found. `ARM-MODEL-NAME-PROVIDER-MISMATCH-1` in
+   `TECH_DEBT.md`.
 
 **Fixed (client):** `submit` now surfaces `res.error` (with `failed_node`) in the existing error
 banner instead of silently rendering an empty page; the misleading default is cleared; the

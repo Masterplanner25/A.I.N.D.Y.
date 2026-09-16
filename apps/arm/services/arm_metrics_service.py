@@ -576,10 +576,12 @@ class ARMConfigSuggestionEngine:
                     "growing file complexity",
                     "suggestion": "Switch to faster model for initial "
                     "analysis passes",
-                    "config_change": {"analysis_model": "gpt-4o-mini"},
+                    # Must be a name the DeepSeek client accepts — `arm.autotune` can APPLY
+                    # this (ARM-MODEL-NAME-PROVIDER-MISMATCH-1).
+                    "config_change": {"analysis_model": "deepseek-flash"},
                     "expected_impact": "Faster analysis, lower cost — "
-                    "use gpt-4o for generation only",
-                    "risk": "medium — gpt-4o-mini may miss subtle issues",
+                    "keep deepseek-v4-pro for generation only",
+                    "risk": "medium — deepseek-flash may miss subtle issues",
                 }
             )
 
