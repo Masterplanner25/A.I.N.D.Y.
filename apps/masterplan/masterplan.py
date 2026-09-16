@@ -83,6 +83,10 @@ class MasterPlan(Base):
     days_ahead_behind = Column(Integer, nullable=True)        # positive=ahead, negative=behind
     eta_last_calculated = Column(DateTime(timezone=True), nullable=True)
     eta_confidence = Column(String, nullable=True)            # "high" | "medium" | "low" | "insufficient_data"
+    # The pace proposal's dismissal (services/pace.py): the drift it was measured against, so
+    # it returns when drift moves by more than the posture's tolerance and not before.
+    pace_dismissed_at = Column(DateTime(timezone=True), nullable=True)
+    pace_dismissed_days = Column(Integer, nullable=True)
 
 
 class GenesisSessionDB(Base):

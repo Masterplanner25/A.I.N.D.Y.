@@ -81,6 +81,24 @@ export function getStrategyLayer(planId) {
   return authRequest(`/apps/masterplans/${planId}/strategy-layer`, { method: "GET" });
 }
 
+// What the system proposes about the plan's PACE: its ETA drift read against its posture's
+// tolerance. Reads only. Confirm `retarget` moves the target date to the projected completion
+// (a refine); dismiss is "noted" and returns when the drift moves past the tolerance again.
+export function getPaceProposal(planId) {
+  return authRequest(`/apps/masterplans/${planId}/pace`, { method: "GET" });
+}
+
+export function confirmPace(planId, decision = "retarget") {
+  return authRequest(`/apps/masterplans/${planId}/pace/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  });
+}
+
+export function dismissPace(planId) {
+  return authRequest(`/apps/masterplans/${planId}/pace/dismiss`, { method: "POST" });
+}
+
 // What the system proposes about the plan's current phase. Reads only — the proposal is
 // the system's half; confirming it is the human's.
 export function getPhaseAdvanceProposal(planId) {

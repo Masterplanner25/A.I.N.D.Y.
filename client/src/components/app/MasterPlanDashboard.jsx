@@ -14,6 +14,7 @@ import { safeMap } from "../../utils/safe";
 import { useToast } from "../../utils/useToast";
 import { useMasterplanProjection } from "../../context/MasterplanProjectionContext.jsx";
 import PhasePanel from "./PhasePanel.jsx";
+import PacePanel from "./PacePanel.jsx";
 import PlanStructure from "./PlanStructure.jsx";
 
 const STATUS_BADGE = {
@@ -423,6 +424,9 @@ export default function MasterPlanDashboard() {
 
                 {/* ETA Projection — shown for active plans */}
                 {plan.is_active && <ETAProjectionPanel planId={plan.id} />}
+
+                {/* Pace — the ETA drift read against the plan's posture, as a proposal */}
+                {(plan.is_active || plan.status === "locked") && <PacePanel planId={plan.id} />}
 
                 {/* Phases and the phase-advance proposal — any plan with a strategy layer */}
                 {(plan.is_active || plan.status === "locked") && <PhasePanel planId={plan.id} />}

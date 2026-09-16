@@ -344,6 +344,10 @@ class PhaseAdvanceConfirmRequest(BaseModel):
     phase_id: str
 
 
+class PaceConfirmRequest(BaseModel):
+    decision: str  # "retarget" — the only confirmable decision today (services/pace.py)
+
+
 @router.get("/{plan_id}/strategy-layer")
 @limiter.limit("60/minute")
 async def get_strategy_layer(
@@ -494,6 +498,111 @@ async def dismiss_phase_advance_route(
         metadata={"db": db},
     )
     return _with_execution_envelope(result)
+
+
+# ── PACE — posture × ETA drift, as a proposal ─────────────────────────────────────────────────
+#
+# BUILD_PLAN "Risk posture & ETA drift → actuation". The daily ETA job measures drift; the plan's
+# posture sets how much of it is tolerable; past that the system proposes and the human confirms
+# (retarget, a refine) or dismisses. See services/pace.py.
+
+
+@router.get("/{plan_id}/pace")
+@limiter.limit("60/minute")
+async def get_pace_proposal(
+    request: Request,
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """What the system proposes about the plan's pace. Reads only."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.pace import propose_pace_review
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        return propose_pace_review(db, masterplan_id=plan.id, user_id=user_id)
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.pace.propose",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+@router.post("/{plan_id}/pace/confirm")
+@limiter.limit("30/minute")
+async def confirm_pace_route(
+    request: Request,
+    plan_id: int,
+    body: PaceConfirmRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """The human's half: `retarget` moves the target date to the projected completion."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.pace import confirm_pace_review
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        try:
+            return confirm_pace_review(db, masterplan_id=plan.id, user_id=user_id, decision=body.decision)
+        except ValueError as exc:
+            raise _pace_refused(exc) from exc
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.pace.confirm",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id, "decision": body.decision},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+@router.post("/{plan_id}/pace/dismiss")
+@limiter.limit("30/minute")
+async def dismiss_pace_route(
+    request: Request,
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """The human's other half: "noted". The proposal returns when drift moves past the tolerance again."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.pace import dismiss_pace_review
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        try:
+            return dismiss_pace_review(db, masterplan_id=plan.id, user_id=user_id)
+        except ValueError as exc:
+            raise _pace_refused(exc) from exc
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.pace.dismiss",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+def _pace_refused(exc: ValueError) -> HTTPException:
+    return HTTPException(status_code=409, detail={"error": "pace_refused", "message": str(exc)})
 
 
 @router.post("/{plan_id}/phases/{phase_id}/reopen")
