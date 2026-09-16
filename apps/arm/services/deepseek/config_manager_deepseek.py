@@ -14,10 +14,20 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+# ARM-MODEL-NAME-PROVIDER-MISMATCH-1 (2026-09-16): these MUST be names the DeepSeek API
+# accepts, because that is the only client ARM has (`_build_deepseek_client` →
+# `base_url=api.deepseek.com`). They said "gpt-4o" from the first commit, DeepSeek answered
+# `400 The supported API model names are deepseek-flash, deepseek-v4-pro, but you passed
+# gpt-4o`, and ARM never produced an analysis on any stack — `analysis_results` had zero rows
+# before the day this was found. The 2026-07-22 walk log saw the same failure and misread it
+# as a local provider-key matter. The two names below are what `models.list()` returned for
+# this account on 2026-09-16; `arm.autotune`'s "faster model" suggestion must stay in the
+# same vocabulary (see `arm_metrics_service.py`). Both are reasoning models: see
+# `ARM_REASONING_EFFORT` in `deepseek_code_analyzer.py` for why thinking is off by default.
 DEFAULT_CONFIG = {
-    "model": "gpt-4o",
-    "analysis_model": "gpt-4o",
-    "generation_model": "gpt-4o",
+    "model": "deepseek-v4-pro",
+    "analysis_model": "deepseek-v4-pro",
+    "generation_model": "deepseek-v4-pro",
     "temperature": 0.2,               # Low: deterministic analysis
     "generation_temperature": 0.4,    # Slightly higher: creative generation
     "max_chunk_tokens": 4000,

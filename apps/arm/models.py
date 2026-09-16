@@ -98,9 +98,12 @@ class ArmConfig(Base):
     __tablename__ = "arm_config"
 
     id = Column(String(36), primary_key=True, default="default")
-    model = Column(String(128), nullable=False, default="gpt-4o")
-    analysis_model = Column(String(128), nullable=False, default="gpt-4o")
-    generation_model = Column(String(128), nullable=False, default="gpt-4o")
+    # Python-side defaults only (no server_default); keep in step with
+    # `deepseek.config_manager_deepseek.DEFAULT_CONFIG` — a name the DeepSeek client rejects
+    # here means every analysis fails at the provider (ARM-MODEL-NAME-PROVIDER-MISMATCH-1).
+    model = Column(String(128), nullable=False, default="deepseek-v4-pro")
+    analysis_model = Column(String(128), nullable=False, default="deepseek-v4-pro")
+    generation_model = Column(String(128), nullable=False, default="deepseek-v4-pro")
     temperature = Column(Float, nullable=False, default=0.2)
     generation_temperature = Column(Float, nullable=False, default=0.4)
     max_chunk_tokens = Column(Integer, nullable=False, default=4000)

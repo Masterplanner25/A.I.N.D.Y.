@@ -41,6 +41,39 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## ARM-MODEL-NAME-PROVIDER-MISMATCH-1: ✅ CLOSED 2026-09-16 — ARM asked DeepSeek for `gpt-4o`, so it had never produced an analysis (app-owned, was P1)
+
+**Found by the first agent run that reached `arm.analyze` with a valid `file_path`** (after #375
+gave the planner the argument contract): `step 0 (arm.analyze) failed: Error code: 400 — The
+supported API model names are deepseek-flash, deepseek-v4-pro, but you passed gpt-4o`. ARM's
+client is DeepSeek and only DeepSeek (`_build_deepseek_client` → the runtime's
+`DeepSeekLLMClient`, `base_url=api.deepseek.com`), and `config_manager_deepseek.DEFAULT_CONFIG`,
+the `ArmConfig` column defaults and the autotune "faster model" suggestion (`gpt-4o-mini`, which
+`arm.autotune` can *apply*) all spoke OpenAI's model vocabulary. `analysis_results` had **zero
+rows** on the live stack before this run — the ARM module, its self-tuning loop (#80), its
+learning-close (#122) and its Infinity signal (#92) were all built on an engine that had never
+returned once. The 2026-07-22 walk log (item 19, point 3) saw exactly this failure and filed it as
+"a local provider-key/config matter, not an ARM bug"; corrected there.
+
+**Second half, found while fixing the first:** both current DeepSeek models are reasoning models.
+With ARM's request shape (`max_tokens`, JSON object, temperature 0.2) every completion token went
+to `reasoning_tokens` and `message.content` came back empty — 200 of 200 on both, measured — so a
+correct model name alone would have handed `json.loads` an empty string on any chunk where the
+think exceeded the budget. `reasoning_effort="none"` (== `thinking: {type: disabled}`) answers
+the same prompt in 5 tokens.
+
+**Fix (#376):** defaults → `deepseek-v4-pro` for all three model slots (the analysis is the
+product; `deepseek-flash` is the cheap alternative and is what the autotune suggestion now names);
+every ARM call passes `extra_body={"reasoning_effort": AINDY_ARM_REASONING_EFFORT or "none"}`.
+**Test:** `tests/unit/test_arm_model_names_match_provider.py` pins the three vocabularies to
+`deepseek-*` and the per-call `reasoning_effort`; the old code fails three of four.
+
+**What it does not fix:** any existing `arm_config` row still carries whatever it was saved with
+(there were none on this stack); a name the provider retires later fails the same way — the
+defaults are the account's `models.list()` on 2026-09-16, and nothing re-derives them.
+
+---
+
 ## COMPOSE-REDIS-URL-UNCONDITIONAL-1: the documented single-instance `up` serves 500 on every rate-limited route, `/health` included (app-owned, P2)
 
 **Found 2026-09-16 during the 2.19.0 adoption, and it was first read as the release.** The
