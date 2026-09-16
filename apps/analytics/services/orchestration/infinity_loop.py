@@ -254,6 +254,7 @@ def evaluate_pending_adjustment(
             adjustment = update_loop_adjustment_record(
                 adjustment_id=_adjustment_get(adjustment, "id"),
                 db=db,
+                user_id=user_id,  # the dispatch tenant — without it the job path is refused (SYSCALL-SILENT-ERRORS-1)
                 actual_outcome=actual_outcome,
                 actual_score=int(round(actual_score_value)),
                 deviation_score=deviation_score,
