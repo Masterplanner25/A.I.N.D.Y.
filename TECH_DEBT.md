@@ -41,6 +41,45 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## TASK-EU-NOT-PERSISTED-1: a task's own execution unit is created by the hook and never lands in the table (app-owned, P2)
+
+Found 2026-09-16 while verifying the runtime 2.16.0 handoff's "not touched, correctly" row
+(`RUNTIME_2_16_0_UPGRADE.md` §3). The row says our pause hook's `update_status(_eu.id, "waiting")`
+(`apps/tasks/services/task_service.py:582`) is followed by our own commit. It is not — the
+commit is at `:570`, before it — and that turned out to be moot, because **the unit the hook
+would move does not exist**:
+
+```
+create → start → pause  (POST /apps/tasks/{create,start,pause}, test account, 200/200/200; task 27 → paused)
+select … from execution_units where source_type='task' and created_at > now() - interval '5 minutes'  → 0 rows
+select status, count(*), max(created_at)::date from execution_units where source_type='task' group by 1
+  pending | 8 | 2026-09-06                                                       ← all time
+```
+
+`create_task` (`task_service.py:506–515`) calls `ExecutionUnitService(db).create(source_type="task",
+status="pending", …)` inside a try/except that logs `[EU] task create hook` at WARNING on failure.
+No such line is logged; the task row itself persists (`task_service.py:496` `db.commit()` runs
+*before* the hook). `ExecutionUnitService.create` is `add` + `flush`, no commit — the FR-30 shape
+on our side of the seam — and whatever session the `task_create` flow node runs on, nothing
+commits that flush: not the flow runner (which commits `runner.db` at nine sites) and, on 2.16.0,
+not the pipeline's new finalize commit either. So either the node runs on a session that is not
+the request's, or something rolls it back between the flush and the response. Not traced further
+in that session; the eight `pending` rows from ≤2026-09-06 say it *did* work once, which dates the
+break to a change after that.
+
+**Consequence:** `start_task`'s `update_status(_eu.id, "executing")` (`:552`) and `pause_task`'s
+`update_status(_eu.id, "waiting")` (`:582`) both do `get_by_source("task", …)` → `None` → silently
+skip. The per-task execution-unit lifecycle this domain claims to keep (`pending → executing →
+waiting → completed`) has been a no-op since early September; `ExecutionConsole`'s task rows come
+from `flow|route` units, not from these.
+
+**To close:** (1) find which session the `task_create` node's `db` is and where the flush is lost
+— boot the app in-process against Postgres, call `run_flow("task_create", …, db=db)`, and read
+the unit back through a *separate* connection (the runtime's FR-30 lesson: the same session
+reads a flush as a commit); (2) commit at the hook, or move the hook after a commit that carries
+it; (3) a test that reads the unit back through a second connection after each of create / start
+/ pause. Re-verify the pause row of `RUNTIME_2_16_0_UPGRADE.md` §3 once the unit exists.
+
 ## SCHEMA-DEFAULT-PARITY-1: a fresh deploy and a migrated deploy build different DB defaults (app-owned, P2)
 
 **Found 2026-09-13 by the deploy-bootstrap guard on its first real run** — `#342` shipped it

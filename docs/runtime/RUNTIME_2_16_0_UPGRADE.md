@@ -99,4 +99,36 @@ ruff check apps/ tests/ — clean;  check_app_imports.py — 37 declared, 0 unde
 
 **Full `tests/unit` on the installed 2.16.0 (2026-09-15, this venv, path printed):** `1240 passed, 1 skipped, 382 warnings, exit 0` — read from the summary line of the log file, not from progress dots.
 
-<!-- CONTAINER_RESULT -->
+### Container rebuilt and verified (2026-09-16 02:25 UTC, same session)
+
+`docker compose … build api` → image `f6d22e2ba5e1`, `Successfully installed … aindy-runtime-2.16.0`.
+The pip layer took **62 s** this time (the 2.15.0 build had just pulled every wheel into the build
+cache; only the runtime's own was new) — the 25-minute figure is the cold case. Stack up on a
+**255 MB** host; `healthy`, 0 restarts. Timed away from the 06:00 UTC cron burst on purpose.
+Handoff §4, each read rather than assumed:
+
+| §4 check | Result |
+|---|---|
+| 1. version + path, in the container | `2.16.0 ['/usr/local/lib/python3.11/site-packages/AINDY']` |
+| 2. `bootstrap-schema` | exit 0; heads runtime `0018`, app `ga1shadow0001` unchanged |
+| 3. baseline SELECT (before any request) | route units by status: `agent\|executing` 196, `default\|completed` 13, `default\|executing` 255, `flow\|executing` 373, `flow\|waiting` 8, `job\|executing` 39, `job\|waiting` 2, `task\|executing` 52 — the table exactly as FR-30 and FR-29 recorded it. The optional retire `UPDATE`s (`executing` and `waiting` route rows) were **not** run — owner's decision (2026-09-15): the rows stay as evidence |
+| 4. ★ **FR-30 live** — a Tutorial 2 pass (18 route requests), then the post-upgrade table | **passes.** `select type, status, count(*) … where source_type='route' and created_at > '2026-09-16T02:25:53Z'` → `flow\|completed` 12, `job\|completed` 6, **zero `executing`**. On 2.15.0 the same pass left 19 `executing`. Then three task-route requests (create/start/pause) → `default\|completed` 3 — a third route type. Tutorial output itself unchanged (`WAITING`/`waiting`, eight GETs 200, one `results` entry, `success`, history `WAIT, SUCCESS` + `nodus_record_outcome`) |
+| 5. `[rehydrate] … seed failed` lines at boot | **0** (was 10 on 2.15.0, one per leaked row — the rows are still there; the addendum's guard is what changed) |
+| boot health | 0 postgres reinits, 0 tracebacks, 0 job-storm lines, 0 `waiting_flow_runs` FK errors this boot; `/api/version` `default-apps` / 16; 0 `finalize` failures after the run |
+
+`waiting` still holds exactly the ten pre-upgrade rows. Test account promoted to `is_admin` for the
+tutorial and reverted; the task-route probe needed no promotion.
+
+#### The §3 pause-hook precision, checked live — and it found something else
+
+Before the upgrade: `select count(*) from execution_units where source_type='task' and
+status='waiting'` → **0, all time**. So the handoff's "followed by your own commit path" was wrong
+in the way §3 says — our `waiting` write was rolled back on every pause, ever. After the upgrade,
+create → start → pause on a fresh task (`27`, `paused`, all three 200) — and the task's own unit
+**does not exist**: `source_type='task'` rows created in the last five minutes → 0; all time → 8
+`pending`, newest **2026-09-06**. The create hook (`task_service.py:506`) flushes a unit and
+nothing commits it, and no warning fires. So the pause hook has had nothing to move since early
+September; the 2.16.0 finalize commit cannot carry a write that never happened. **Ours, not the
+runtime's** — filed as `TECH_DEBT.md` `TASK-EU-NOT-PERSISTED-1` with the evidence and the
+close path; the §3 row is re-verified when the unit exists.
+
