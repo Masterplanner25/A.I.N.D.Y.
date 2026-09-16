@@ -1,6 +1,6 @@
 ---
 title: "Defect — Genesis message latency is unbounded, and it can take the API down"
-last_verified: "2026-08-16"
+last_verified: "2026-09-16"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -318,3 +318,51 @@ Genesis: [`DEFECT_INFINITY_RECALC_DEBOUNCE.md`](./DEFECT_INFINITY_RECALC_DEBOUNC
 
 It matters here because it is the throttle that *should* absorb remedy 1: making the recalculation
 async removes it from the request path but does not reduce how often it runs.
+
+---
+
+## 9. Closed 2026-09-16 — the soak the register asked for, and how the two halves ended
+
+**Placement — closed by removal, not by deferral.** #257 moved the recalculation off the request
+path (`sys.v1.job.submit`), #263 fixed the UUID that stopped it queueing, and #294 then removed it
+altogether: a turn is not a scoring event (14 of 16 recalcs had a delta of exactly 0). The
+`genesis_message_orchestrate` node no longer exists; `tests/unit/test_genesis_turn_no_recalc.py`
+pins that nothing scores on a turn. So there is no scoring work on the turn to place anywhere.
+
+**The stall — not reproduced in eight turns across two dates, the last five under memory pressure.**
+`TECH_DEBT` said three turns on one afternoon were not a soak. Five more were run 2026-09-16
+(runtime 2.18.0, test account, `gpt-4o-mini`, real replies), with `/health` probed around each
+and a five-minute watch afterwards — the original stall began about a minute after the reply:
+
+| turn | server `duration_ms` | `/health` after | host during (available MB / pages·s⁻¹) |
+|---|---|---|---|
+| 1 | 4552 | 200 in 0.04 s | 473 / 2875 |
+| 2 | 4620 | 200 in 0.07 s | 365 / 7585 |
+| 3 | 4541 | 200 in 0.06 s | 318 / 1065 |
+| 4 | 3905 | 200 in 0.05 s | 393 / 1931 |
+| 5 | 4345 | 200 in 0.04 s | 193 / 15727 |
+
+Post-soak watch, ten probes over five minutes: `/health` 200 every time, 0.04–0.46 s, while the
+host swung between 164 and 870 MB available with page-fault bursts of 35k and **46k/s** — the
+band the 2026-08-23 outage was measured in. Postgres cluster reinits 0, scheduler-saturation lines
+0, tracebacks 0, `analytics.infinity_recalc` jobs 0 (correct: #294).
+
+| | 2026-08-23 (defect) | 2026-09-05 ×3 (recalc queued) | 2026-09-16 ×5 (no recalc) |
+|---|---|---|---|
+| turn wall time | ~47 s | 7.1–10.0 s | **3.9–4.6 s** |
+| API afterwards | down 14–18 min | healthy | healthy, watched 5 min |
+| host | 40–58k faults/s sustained | 65 faults/s | bursts to 46k/s |
+
+**Reading.** The §3 mechanism for the *latency* — synchronous scoring on the single dispatch
+slot — was real and is gone. The *stall* never had a mechanism on this page beyond a `py-spy`
+dump showing nothing executing app code, and §8.1 reproduced its fingerprint with zero Genesis
+traffic; on 2026-09-15 the same fingerprint appeared again with no Genesis traffic (the 06:00 cron
+burst on a 390 MB host, `RUNTIME_2_15_0_UPGRADE.md` §5). Eight turns without it, five of them
+while the host was paging hard, is as close to a controlled negative as this machine can give.
+The stall is filed as what §8.1 already argued: host starvation wearing a Genesis-shaped
+coincidence.
+
+**What would reopen it:** a stall *following* a turn — `/health` dead within a few minutes of a
+`genesis.message.completed` event — on any host. Not the fingerprint on its own; that has three
+attested non-Genesis causes now.
+
