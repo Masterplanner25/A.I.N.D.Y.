@@ -29,9 +29,9 @@ class InfinityExpectationModel(Base):
 
     coefficients = Column(JSON, nullable=False)     # [w1..wN, bias] — inspectable
     feature_keys = Column(JSON, nullable=False)     # ordered feature names for coefficients
-    feature_version = Column(Integer, nullable=False, default=1)
+    feature_version = Column(Integer, nullable=False, default=1, server_default="1")
 
-    sample_size = Column(Integer, nullable=False, default=0)
+    sample_size = Column(Integer, nullable=False, default=0, server_default="0")
     holdout_mae = Column(Float, nullable=True)      # MAE on the held-out split at fit time
 
     trained_at = Column(DateTime(timezone=True), server_default=func.now())

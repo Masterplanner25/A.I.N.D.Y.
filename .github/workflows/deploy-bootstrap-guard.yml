@@ -208,6 +208,22 @@ jobs:
       # identical with the rows intact. Round trip, not a production fixture — see the script.
       - name: "Step 5 — the EXISTING-DB path: newest app revisions replay over populated tables"
         run: python scripts/replay_app_migrations.py --steps 16
+      # SCHEMA-DEFAULT-PARITY-1. Step 2 built the app schema from the MODELS (fresh path); this
+      # builds it from the MIGRATIONS on a second, empty database (the app chain is
+      # self-contained — it predates the runtime split and creates what it needs) and then
+      # requires every app-owned column's default and nullability to agree with the model.
+      # Step 5's round trip only covers its 16-revision window; this covers the whole history,
+      # which is where 72 of the mismatches were on 2026-09-16. Whichever side is wrong, the
+      # fix is model + migration in the same PR (docs/operations/MIGRATION_POLICY.md).
+      - name: "Step 6 — a fresh deploy and a migrated deploy build the same defaults (full history)"
+        env:
+          PGPASSWORD: aindy_test
+        run: |
+          psql -h localhost -p 5433 -U aindy_test -d aindy_test -c "CREATE DATABASE parity_scratch"
+          psql -h localhost -p 5433 -U aindy_test -d parity_scratch -c "CREATE EXTENSION IF NOT EXISTS vector"
+          DATABASE_URL=postgresql+psycopg2://aindy_test:aindy_test@localhost:5433/parity_scratch alembic upgrade head > /tmp/parity_upgrade.log 2>&1 || { tail -40 /tmp/parity_upgrade.log; exit 1; }
+          echo "migrated from empty: $(grep -c 'Running upgrade' /tmp/parity_upgrade.log) revisions"
+          DATABASE_URL=postgresql+psycopg2://aindy_test:aindy_test@localhost:5433/parity_scratch python scripts/check_schema_default_parity.py
       - name: Serve log (on failure)
         if: failure()
         run: tail -120 /tmp/serve.log || true

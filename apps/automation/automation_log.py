@@ -25,10 +25,10 @@ class AutomationLog(Base):
     # e.g. "task_completion", "scheduled_job", "webhook", "background_task"
     task_name = Column(String, nullable=True)
     payload = Column(JSON, nullable=True)
-    status = Column(String, nullable=False, default="pending")
+    status = Column(String, nullable=False, default="pending", server_default="pending")
     # Values: "pending" | "running" | "success" | "failed" | "retrying"
-    attempt_count = Column(Integer, nullable=False, default=0)
-    max_attempts = Column(Integer, nullable=False, default=3)
+    attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
+    max_attempts = Column(Integer, nullable=False, default=3, server_default="3")
     error_message = Column(Text, nullable=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     result = Column(JSON, nullable=True)

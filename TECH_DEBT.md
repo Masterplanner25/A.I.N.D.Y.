@@ -105,7 +105,39 @@ reads a flush as a commit); (2) commit at the hook, or move the hook after a com
 it; (3) a test that reads the unit back through a second connection after each of create / start
 / pause. Re-verify the pause row of `RUNTIME_2_16_0_UPGRADE.md` §3 once the unit exists.
 
-## SCHEMA-DEFAULT-PARITY-1: a fresh deploy and a migrated deploy build different DB defaults (app-owned, P2)
+## SCHEMA-DEFAULT-PARITY-1: ✅ CLOSED 2026-09-16 — a fresh deploy and a migrated deploy build different DB defaults (app-owned, was P2)
+
+**Closed 2026-09-16 — measured, not grepped, and it was 72, not nine.** The entry below guessed
+the count from a 16-revision window and a naive grep (it got `strategies.*` wrong: a later
+revision, `f1a2b3c4d5e6`, deliberately `ALTER … server_default=None`s those three, so they
+*matched* at head). The instrument that could answer for the whole history did not exist, so it
+was built: the app migration chain turns out to be self-contained from an empty database (160
+revisions; it predates the runtime split and creates what it needs), which gives a purely
+*migrated* schema to reflect against `Base.metadata`. Against that, **72 app-owned columns** across
+24 model modules had a DB default in the migration and only a client `default=` on the model —
+every `user_kpi_weights` / `user_policy_thresholds` / `user_scores` column, `goals`, `goal_states`,
+`plan_*`, `ripple_*`, `seo_*`, `tasks.depends_on` / `dependency_type`, `pings.strength` /
+`connection_type`, `genesis_sessions.synthesis_ready`, three `now()` timestamps, and so on. The
+local `postgres_data` database could not have shown this: it was rebuilt by `create_all` on
+2026-08-22, so it carries *model* defaults for everything older than that and *migration*
+defaults only for September's columns — a hybrid that agreed with the model exactly where the
+model was wrong.
+
+**Fix:** `server_default=` added to all 72 model columns, values taken from the migrated schema
+(`text("true")`, `text("'[]'")`, `func.now()`, or the literal). `create_all` from the patched
+models and `alembic upgrade head` from empty now reflect identically for every app-owned column,
+default and nullability both (`pings.strength` `'1'` vs `1.0` is the same value).
+
+**The durable part:** `scripts/check_schema_default_parity.py` + deploy-bootstrap guard **Step 6**,
+which builds `parity_scratch` from the migrations alone and fails on any app-owned column whose
+reflected default or nullability disagrees with the model — whole history, both directions,
+every PR. Step 5's round trip still covers types and indexes inside its window. Rule written into
+`MIGRATION_POLICY.md` §2 ("Default Parity"). Not touched: runtime-owned tables the pre-split chain
+happens to create (`dynamic_flows`, `platform_api_keys` — their `create_all` has no server
+defaults either, theirs to decide) and two dead tables only the migrations know (`arm_configs`,
+`arm_logs`).
+
+### Original entry (2026-09-13) — retained
 
 **Found 2026-09-13 by the deploy-bootstrap guard on its first real run** — `#342` shipped it
 with an unquoted colon in a step name and GitHub could not parse the workflow for a day, so its

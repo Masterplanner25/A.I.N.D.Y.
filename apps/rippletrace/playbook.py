@@ -14,5 +14,5 @@ class PlaybookDB(Base):
     steps = Column(Text)
     template = Column(Text, nullable=True)
 
-    success_rate = Column(Float)
+    success_rate = Column(Float, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow)

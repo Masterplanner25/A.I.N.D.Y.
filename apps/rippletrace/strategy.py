@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, JSON, String, Text
+from sqlalchemy import Column, DateTime, Float, Integer, JSON, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from AINDY.db.database import Base
@@ -26,6 +26,6 @@ class StrategyDB(Base):
     failure_count = Column(Integer, nullable=False, default=0)
     user_id = Column(UUID(as_uuid=True), nullable=True, index=True)
 
-    usage_count = Column(Integer, nullable=False, default=0)
+    usage_count = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())

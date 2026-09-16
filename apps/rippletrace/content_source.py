@@ -25,6 +25,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -53,9 +54,9 @@ class ContentSourceDB(Base):
     platform = Column(String, nullable=True)
     # "feed" today. Reserved so a sitemap or platform-API source can be added without
     # a second table.
-    kind = Column(String(16), nullable=False, default="feed")
+    kind = Column(String(16), nullable=False, default="feed", server_default="feed")
 
-    active = Column(Boolean, nullable=False, default=True)
+    active = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     last_polled_at = Column(DateTime(timezone=True), nullable=True)
@@ -64,7 +65,7 @@ class ContentSourceDB(Base):
     last_status = Column(String(32), nullable=True)
     last_error = Column(Text, nullable=True)
     last_entry_count = Column(Integer, nullable=True)
-    ingested_count = Column(Integer, nullable=False, default=0)
+    ingested_count = Column(Integer, nullable=False, default=0, server_default="0")
 
     etag = Column(String, nullable=True)
     last_modified = Column(String, nullable=True)

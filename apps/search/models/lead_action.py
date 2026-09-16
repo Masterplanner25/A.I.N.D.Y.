@@ -47,8 +47,8 @@ class LeadAction(Base):
     url = Column(String)
     lead_query = Column(String, nullable=True, index=True)  # leadgen query that produced the lead — the learning segment
 
-    channel = Column(String(16), default="draft")     # draft | email | handoff
-    status = Column(String(16), default="drafted", index=True)  # drafted | queued | sent | skipped | reverted
+    channel = Column(String(16), default="draft", server_default="draft")     # draft | email | handoff
+    status = Column(String(16), default="drafted", index=True, server_default="drafted")  # drafted | queued | sent | skipped | reverted
 
     # The generated outreach artifact (draft channel).
     draft_subject = Column(String)
@@ -58,7 +58,7 @@ class LeadAction(Base):
     decision_score = Column(Float)
     decision_reason = Column(String)
 
-    trigger = Column(String(16), default="manual")    # manual | agent | scheduler
+    trigger = Column(String(16), default="manual", server_default="manual")    # manual | agent | scheduler
     note = Column(String)                             # e.g. "send channel disabled"
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

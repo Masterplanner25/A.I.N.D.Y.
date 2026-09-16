@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from AINDY.db.database import Base
@@ -55,7 +55,7 @@ class WatcherSignal(Base):
     window_title = Column(Text, nullable=True)
     activity_type = Column(String(32), nullable=False)
     signal_timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
-    received_at = Column(DateTime(timezone=True), default=_now_utc, nullable=False)
+    received_at = Column(DateTime(timezone=True), default=_now_utc, nullable=False, server_default=func.now())
     duration_seconds = Column(Float, nullable=True)
     focus_score = Column(Float, nullable=True)
     signal_metadata = Column(JSONB, nullable=True)

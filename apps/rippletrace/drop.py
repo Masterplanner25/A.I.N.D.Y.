@@ -34,8 +34,8 @@ class PingDB(Base):
     external_url = Column(String, nullable=True)
     reaction_notes = Column(Text, nullable=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
-    strength = Column(Float, default=1.0, nullable=False)
-    connection_type = Column(String, default="direct", nullable=False)
+    strength = Column(Float, default=1.0, nullable=False, server_default="1.0")
+    connection_type = Column(String, default="direct", nullable=False, server_default="direct")
 
     # ★ Whether this page was checked and actually cites the drop point
     # (RIPPLE-PINGS-NOT-ECHOES-1). Detection's search provider is an answer engine: it returns

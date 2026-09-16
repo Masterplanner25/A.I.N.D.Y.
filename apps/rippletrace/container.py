@@ -58,7 +58,7 @@ class ContainerDB(Base):
     # container.
     normalized = Column(String(300), nullable=False, index=True)
 
-    status = Column(String(16), nullable=False, default=CONTAINER_CONFIRMED, index=True)
+    status = Column(String(16), nullable=False, default=CONTAINER_CONFIRMED, index=True, server_default="confirmed")
 
     # What the corpus said when the person answered. Kept as a record of the evidence they were
     # shown, not as a live count — the live count is a query.
