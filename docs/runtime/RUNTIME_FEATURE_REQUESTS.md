@@ -20,11 +20,52 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-17:** FR-39 (the two hook contexts FR-36's fix did not reach — filed from
-> the 2.20.0 verification) · FR-38 (the authority gate on `nodus_vm`, with the first observed
+> **Open as of 2026-09-17:** FR-40 (FR-33's `warn` mode has no witness on `nodus_vm`) · FR-39 (the
+> two hook contexts FR-36's fix did not reach — filed from the 2.20.0 verification) · FR-38 (the authority gate on `nodus_vm`, with the first observed
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-40 — on `nodus_vm`, FR-33's `warn` mode has no witness: the counter is incremented and the WARNING logged in the worker, and neither reaches the api 🔴 open (filed 2026-09-17, runtime 2.20.0)
+
+> **`tool_registry.execute_tool` counts `aindy_tool_args_validation_total{outcome, mode}` and,
+> under `warn`, logs `[AgentTool] … args do not match its declared schema` — in whichever process
+> runs `execute_tool`. On `nodus_vm` that is the warm-pool worker: its registry is not the api's
+> (`/metrics` never serves the sample — FR-35's shape, one series over), and
+> `nodus_worker_pool.py:152` opens it with `stderr=subprocess.DEVNULL` while stdout is the frame
+> channel, so the WARNING goes nowhere.** The 2.20.0 handoff's recipe — *leave it at `warn`, watch
+> `outcome="invalid"` read zero, then `enforce`* — cannot be followed on the backend this app runs.
+
+### What we hit
+
+Rebuild `9b25956261bf` with `args_schema` declared on all 15 tools (#389). One run,
+`memory.recall → memory.write`, args matching both schemas, `completed 2/2`. `/metrics`:
+**no `aindy_tool_args_validation_total` sample at all**, not even `outcome="valid"` — the
+`elif tool_args_schema(tool_name)` branch ran, in the worker. Nothing in the api log either.
+There is no observable difference on this backend between "every step validated clean" and
+"validation never ran".
+
+### Ask
+
+Ride the validation outcome back on the worker reply the way #712 rides `llm_usage` — a small
+per-tool tally `{tool: {valid: n, invalid: n, errors: [...]}}` — and record it in the api process
+(counter + the `warn` WARNING re-emitted there). Then the recipe holds on both backends.
+
+### Not asking for
+
+Worker stderr piped into the api log; the frame channel is the right design and `llm_usage` is
+the precedent for what crosses it.
+
+### What we will do meanwhile
+
+The planner now reads each tool's `args={…}` and got every key right on the first plan after the
+change, `validate_payload` rejects only missing `required` keys and wrong types on declared ones
+(extra keys pass), and the one type it would get wrong (`number` vs an int) is left untyped. So
+the downside of `enforce` here is a failed step with `failure_class: invalid` and a readable
+reason — which is *more* evidence than `warn` gives on this backend, not less. Flipping is the
+owner's call; recorded in `RUNTIME_2_20_0_UPGRADE.md` §7.3.
+
+---
+
 ## FR-39 — the planner-context and tools-for-run hook contexts still hand the boundary a `uuid.UUID`; FR-36's fix and its test cover the completion-hook builder only 🔴 open (filed 2026-09-17, runtime 2.20.0)
 
 Numbered after our FR-38; your ledger's *next available* still reads FR-37 — please reconcile on

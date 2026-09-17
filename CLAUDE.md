@@ -153,8 +153,9 @@ def register() -> None:
     # dialect (`syscall_versioning._SCHEMA_TYPE_MAP`; note "number" means float ONLY — leave an
     # int-or-float property untyped). `execute_tool` checks args against the same schema before
     # dispatch: `AINDY_TOOL_ARGS_VALIDATION=warn` (default) counts and logs,
-    # `enforce` refuses the step — flip once `aindy_tool_args_validation_total{outcome="invalid"}`
-    # has read zero on the live stack for a while.
+    # `enforce` refuses the step. On `nodus_vm` (our default) the counter and the warn-mode
+    # WARNING both land in the WORKER and never reach `/metrics` or the api log (FR-40) — so
+    # `warn` is unobservable here and `enforce` is the only mode that shows a violation.
     # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
     # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
     # `register_syscalls` — which do not exist. Grepping for them returns nothing, which
@@ -520,7 +521,7 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 filed 2026-09-17 |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17 |
 | Latest runtime adoption record | `docs/runtime/RUNTIME_2_20_0_UPGRADE.md` — one per release; the 2.19.0 doc's §7 is the previous rebuild ledger |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
