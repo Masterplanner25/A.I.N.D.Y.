@@ -62,8 +62,9 @@ hands the hook exactly the boundary's shape; the old hook fails it. **Runtime ha
 `str(user_db_id)`, and assert no documented key is ever redacted). Same defect family as
 `INFINITY-COMPLETION-HOOK-BOUNDARY-1`, one key over.
 
-**Not verified live in this pass** — needs a rebuild and one more completed run; the next agent
-run on the rebuilt image should show `loop_enforced: true` on its row and no WARNING.
+**Verified live 2026-09-17 on image `15633d24267f`:** the next agent run completed with
+`loop_enforced: true`, `next_action: review_plan`, and zero hook WARNINGs since boot
+(`RUNTIME_2_19_0_UPGRADE.md` §7).
 
 ---
 

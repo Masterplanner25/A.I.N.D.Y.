@@ -21,8 +21,61 @@ owner: "app-team"
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
 > **Open as of 2026-09-16:** FR-33 … FR-36 (filed from the approved runs and the first
-> `arm.analyze` that reached the provider) · FR-32 (awaiting intake) · FR-14 recurrence half ·
-> FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's — ours is the cleanup after).
+> `arm.analyze` that reached the provider) · FR-38 (the authority gate on `nodus_vm`, with the
+> first observed denial) · FR-32 (awaiting intake) · FR-14 recurrence half · FR-6 items 2–3 ·
+> FR-37 (FR-19's client half, the ui-kit's — ours is the cleanup after).
+## FR-38 — the authority gate is wired at `agent_execute_step` only; on the `nodus_vm` backend a denied tool fails the step and never negotiates 🔴 open (filed 2026-09-16, runtime 2.19.0) — with the first observed denial, as asked
+
+> **`negotiate_capability_denial` has exactly one caller: `nodus_adapter.agent_execute_step`
+> (`:357`), the AGENT_FLOW node. On `AINDY_AGENT_EXECUTION_BACKEND=nodus_vm` a plan is compiled
+> to a native workflow whose tool steps are the worker's `call_tool` host function
+> (`nodus_worker.py:157`) → `tool_registry.execute_tool`, whose own `check_tool_capability`
+> (`tool_registry.py:816`) emits `capability.denied` and returns `{success: False}`; the
+> workflow records the step `failed` and the run fails. `on_denial="wait"` is never consulted
+> on that path.** This app defaults every real boot to `nodus_vm`
+> (`apps/agent/bootstrap.py:_select_execution_backend`, RTR-1 §5), so the gate we were asked to
+> declare a tool for cannot fire here.
+
+### The first denial, observed — one run per backend, otherwise identical
+
+`leadgen.act` declares `on_denial="wait"` (#378); `AINDY_AUTHORITY_NEGOTIATION=true` in the
+container. A denial was manufactured the way a real one arises — a token minted under a
+**capability ceiling** that excludes `external_api_call` (`mint_token(capability_ceiling=…)`,
+your RTR-4 delegated-run path), so the run is authorised and the tool is not:
+`granted_tools: []`, `allowed_capabilities: ['execute_flow']`. (An *expired* token was tried
+first: it fails at the run-level `execute_flow` check before any step, which your design §1
+correctly lists as non-negotiable.) Plan: one step, `leadgen.act {apply: false, channel: draft}`.
+
+| backend | denial site | result |
+|---|---|---|
+| **nodus_vm** (run `3562ae93…`) | `tool_registry.py:816` inside the worker's `call_tool` | `capability.denied` ×3 (the medium-risk retries), `AGENT_STEP_FAILED`, run **`failed`** — `step 0 (leadgen.act) failed: tool 'leadgen.act' not granted by capability token`. No `AUTHORITY_NEGOTIATED`, no park |
+| **agent_flow** (run `25d7bf4c…`, same script with `AINDY_AGENT_EXECUTION_BACKEND=agent_flow`) | `nodus_adapter.py:350` | `AUTHORITY_NEGOTIATED {outcome: waiting, negotiation_outcome: no_variant}`, `WAITING`, run **`waiting`** with `wait_state.authority_gate {decisions: [skip, abort], denied_error: …}`, `flow_runs` row `waiting` at `agent_execute_step`, `waiting_flow_runs` row present |
+
+Then the operator's half, on the parked run: `POST /platform/flows/runs/{flow_run_id}/resume
+{"event_type": "agent.authority.decision", "payload": {"decision": "skip", "note": …}}` (as
+admin) → `resumed: true, woken: true` — **from a park made in a different process** (the
+manufacture ran in a `docker exec`; the API's scheduler rehydrated it, FR-31's case) → the step
+recorded `skipped` with the note → run `completed`, and the completion hook ran
+(`loop_enforced: true`). The whole gate works, exactly as §5a describes, on the backend that has it.
+
+### Ask
+
+Wire the same negotiation into the nodus_vm tool path — at the `call_tool` seam
+(`nodus_worker._call_tool`), or inside `execute_tool` itself when the registry entry declares a
+`degraded_variant` / `on_denial` — and have the compiled workflow's step park the run the way
+`agent_execute_step` does (the durable wait + `wait_state` the nodus_vm chain already has for
+approval waits). Until then, for a deployment on `nodus_vm` (this one) the declaration is
+inert and phase 3 has evidence only from the other backend.
+
+### Two small things seen on the way
+
+- After the resumed run completed, `agent_runs.wait_state` was **not cleared** (still carries the
+  gate); a consumer reading it as "currently parked" would be wrong.
+- The skipped step counted as `steps_completed 1 / 1` — FR-34's family (attempted ≠ succeeded,
+  and now ≠ skipped).
+
+---
+
 ## FR-37 — `@aindy/ui-kit` unwraps by shape and never sees `X-AINDY-Envelope`; the discriminator FR-19 asked for has no consumer 🔴 open (filed 2026-09-16, ui-kit 2.0.0 / runtime 2.19.0)
 
 Filed here because the ui-kit is the runtime's UI (owner's ruling, 2026-09-16) and this register
