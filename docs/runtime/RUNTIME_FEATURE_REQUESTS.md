@@ -22,7 +22,61 @@ owner: "app-team"
 >
 > **Open as of 2026-09-16:** FR-33 … FR-36 (filed from the approved runs and the first
 > `arm.analyze` that reached the provider) · FR-32 (awaiting intake) · FR-14 recurrence half ·
-> FR-6 items 2–3 · FR-19 app half (ours).
+> FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's — ours is the cleanup after).
+## FR-37 — `@aindy/ui-kit` unwraps by shape and never sees `X-AINDY-Envelope`; the discriminator FR-19 asked for has no consumer 🔴 open (filed 2026-09-16, ui-kit 2.0.0 / runtime 2.19.0)
+
+Filed here because the ui-kit is the runtime's UI (owner's ruling, 2026-09-16) and this register
+is where passbacks to the runtime side go — not on the kit's repo directly. This is FR-19's
+other half; that entry now points here.
+
+> **`aindy-ui-kit` `src/api/_core.js` at HEAD (2.0.0): `request()` parses the body at `:193`
+> (`normalizeArrayFields(JSON.parse(text))`) and returns it; `unwrapEnvelope()` at `:65` receives
+> only that value and decides by shape — `"data" in response`. The response headers are in scope
+> two lines above the parse (`res.headers?.get?.("X-Version-Warning")` at `:170` already reads
+> one), and none of that reaches the unwrap.** So the runtime has been stamping
+> `X-AINDY-Envelope: v1` on every canonical envelope since 2.6.0 (#521) and no client reads it.
+
+### What we hit
+
+FR-19's whole finding: a bare `{data: …}` row from a non-pipeline route is indistinguishable from
+an execution envelope by shape, so the kit unwraps rows it should not — five surfaces, ~40
+`safeMap prevented crash` lines inside the kit, eleven per-route workarounds in our
+`client/src/api/*.js` (65 `unwrapEnvelope` call sites across 8 files today, each carrying
+per-route knowledge of whether that route entered the pipeline). The runtime shipped the
+discriminator; the kit is the one place that can consume it, and it cannot be consumed from
+outside because the header is dropped before any consumer code runs.
+
+### Ask
+
+In `request()` (`_core.js`), one of:
+
+1. **Carry the header to the unwrap.** Read `res.headers.get("X-AINDY-Envelope")` next to the
+   existing `X-Version-Warning` read; when it is `v1`, return the parsed body already
+   unwrapped (and surface `error` as `ApiError`, as `unwrapEnvelope` does today); when absent,
+   return the body **untouched**. Then `unwrapEnvelope(value)` becomes a no-op for enveloped
+   responses and a pass-through for bare ones, and every existing `.then(unwrapEnvelope)` keeps
+   working — nothing changes for consumers except that a bare `{data: …}` row stops being mistaken
+   for an envelope.
+2. Or attach it non-enumerably (`Object.defineProperty(body, "__aindy_envelope", …)`) and have
+   `unwrapEnvelope` prefer that mark over the shape test, keeping the shape test only as the
+   fallback for a runtime older than 2.6.0.
+
+(1) is smaller and removes the shape test from the decision path entirely for current runtimes.
+Either is additive for consumers; a major bump is not needed.
+
+### What is ours when it lands
+
+Bump `@aindy/ui-kit` and delete the per-route unwrap workarounds in `client/src/api/*.js`.
+A cleanup with no decision in it; it cannot be done first.
+
+### Not asking for
+
+- Any change to the runtime's header (`RUNTIME_2_6_0_UPGRADE.md`; it is exactly right).
+- A change to `unwrapEnvelope`'s public signature — consumers call it with one argument and
+  should keep doing so.
+
+---
+
 ## FR-36 — the agent-completion hook receives `user_id` as a `uuid.UUID`, which the extension boundary redacts; every first-party completion hook has been failing 🔴 open (filed 2026-09-16, runtime 2.19.0)
 
 > **`agents/agent_runtime/execution.py:~287` builds the completion-hook context with
@@ -1187,9 +1241,23 @@ loses information nobody gains from losing.
 
 ---
 
-## FR-19 — an enveloped and a bare response share one URL space, with nothing to tell them apart ✅ runtime half SHIPPED in 2.6.0 (#521) · 🟡 app half NOT adopted (ours)
+## FR-19 — an enveloped and a bare response share one URL space, with nothing to tell them apart ✅ runtime half SHIPPED in 2.6.0 (#521) · 🟡 client half is `@aindy/ui-kit`'s (not this repo's)
 
-**Runtime half closed in 2.6.0 (2026-08-22, #521)** — every response whose body *is* the canonical execution envelope now carries `X-AINDY-Envelope: v1`, exactly the discriminator this asked for. **App half not adopted as of 2026-09-16:** `@aindy/ui-kit`'s `unwrapEnvelope` still decides by shape (`"data" in e`), not by the header, so the eleven per-route unwrap fixes this filing describes are still how the client copes. Adopting the header is a ui-kit change, ours to make. The filing follows.
+**Runtime half closed in 2.6.0 (2026-08-22, #521)** — every response whose body *is* the canonical execution envelope now carries `X-AINDY-Envelope: v1`, exactly the discriminator this asked for.
+
+**Client half — corrected 2026-09-16: it is `@aindy/ui-kit`'s, not this repo's.** This entry said
+*"a ui-kit change, ours to make"*; the owner's ruling is that the ui-kit is the runtime's UI
+(`Masterplanner25/aindy-ui-kit`, consumed here as a published package, `^2.0.0`). Read at HEAD of
+that repo (2.0.0): `src/api/_core.js:65 unwrapEnvelope(response)` decides by shape —
+`"data" in response` — and **never sees a header at all**: `authRequest` hands it the parsed body.
+So adopting the discriminator is a change inside the kit's request core (read
+`X-AINDY-Envelope` off the response, carry it to the unwrap), which no consumer can make from
+outside. **The ask is filed as FR-37** — passbacks to the runtime side go through this register,
+not the kit's repo.
+
+**What stays ours, when that lands:** bump `@aindy/ui-kit` and delete the per-route unwrap
+workarounds in `client/src/api/*.js` — a cleanup with no decision in it. Until then the
+workarounds are how the client copes, and they are correct. The original filing follows.
 
 **apps-monolith ref:** filed 2026-08-22. This was **the dominant defect class of the entire live
 verification phase** and — the reason it is worth your time — it was never raised with you. Five
