@@ -13,6 +13,7 @@ from AINDY.platform_layer.rate_limiter import limiter
 
 from apps.rippletrace.services import container_service
 from apps.rippletrace.services import content_ingest
+from apps.rippletrace.services import citation_record
 from apps.rippletrace.services import ripple_detection
 from apps.rippletrace.services import rippletrace_services
 from apps.rippletrace.services.content_fetch import ContentFetchError
@@ -102,6 +103,11 @@ class IngestUrlRequest(BaseModel):
 
 class ContentSourceUpdate(BaseModel):
     active: bool
+
+
+class CitationRecord(BaseModel):
+    """A page the author found citing one of their drop points. Verified before it counts."""
+    url: str = Field(..., min_length=1, max_length=2048)
 
 
 class RippleEvent(BaseModel):
@@ -302,6 +308,54 @@ async def detect_ripples_for_drop_point(
             ) from exc
 
     result = await execute_with_pipeline(request, "rippletrace_detect_drop_point", handler)
+    return _with_execution_envelope(result)
+
+
+@router.post("/drop_points/{drop_point_id}/citations")
+@limiter.limit("10/minute")
+async def record_citation(
+    request: Request,
+    drop_point_id: str,
+    body: CitationRecord,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Record a citation the author found — RIPPLE-PINGS-NOT-ECHOES-1's replacement for the sweep.
+
+    The page is fetched and checked with the same verifier detection used. A page that does
+    not reference the drop point is refused (422) and nothing is written; one that cannot be
+    read is kept `unverified` and does not score. See `services/citation_record.py`.
+    """
+    def handler(ctx):
+        from apps.rippletrace.models import DropPointDB
+
+        user_id = str(current_user["sub"])
+        drop_point = (
+            db.query(DropPointDB)
+            .filter(DropPointDB.id == drop_point_id, DropPointDB.user_id == uuid_or_none(user_id))
+            .first()
+        )
+        if drop_point is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "drop_point_not_found", "message": "Drop point not found"},
+            )
+        try:
+            return citation_record.record_citation(
+                db, drop_point=drop_point, url=body.url, user_id=user_id
+            )
+        except citation_record.NotACitation as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "not_a_citation", "message": str(exc)},
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "invalid_citation", "message": str(exc)},
+            ) from exc
+
+    result = await execute_with_pipeline(request, "rippletrace_record_citation", handler)
     return _with_execution_envelope(result)
 
 

@@ -11,6 +11,7 @@ import {
   getRippleDropPoints,
   ingestContentUrl,
   pollContentSource,
+  recordCitation,
   setContentSourceActive,
 } from "../../api/rippletrace.js";
 import { safeMap } from "../../utils/safe";
@@ -51,6 +52,9 @@ export default function RippleTrace() {
   const [suggestedFeeds, setSuggestedFeeds] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [containers, setContainers] = useState([]);
+  // "I found a citation" — one open form at a time, keyed by drop point id.
+  const [citingFor, setCitingFor] = useState(null);
+  const [citationUrl, setCitationUrl] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -182,6 +186,43 @@ export default function RippleTrace() {
         detail?.error === "mention_search_unavailable"
           ? detail.message
           : err.message || "Could not check for ripples"
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRecordCitation(dropPointId) {
+    const target = citationUrl.trim();
+    if (!target) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await recordCitation(dropPointId, target);
+      const verification = unwrap(response, "verification");
+      const note = unwrap(response, "note");
+      const created = unwrap(response, "created");
+      const upgraded = unwrap(response, "upgraded");
+      if (verification === "verified") {
+        setNotice(
+          created || upgraded
+            ? "Verified — that page cites this piece. It now counts."
+            : "Already recorded and verified."
+        );
+      } else {
+        // Kept, but honestly: the page could not be read, so it does not score.
+        setNotice(`Recorded as unverified — ${note || "the page could not be read"}. It won't score until it can be checked.`);
+      }
+      setCitingFor(null);
+      setCitationUrl("");
+      await load();
+    } catch (err) {
+      const detail = err?.data?.detail;
+      setError(
+        detail?.error === "not_a_citation" || detail?.error === "invalid_citation"
+          ? `Not recorded — ${detail.message}`
+          : err.message || "Could not record that citation"
       );
     } finally {
       setBusy(false);
@@ -449,7 +490,8 @@ export default function RippleTrace() {
             <h2 className="text-sm font-semibold text-zinc-100">Tracked content</h2>
             <p className="text-xs text-zinc-500">
               Ripples are references to these elsewhere. Your own pages don't count, so scores
-              stay at zero until someone else picks it up.
+              stay at zero until someone else picks it up. Found one? Record it on the piece and
+              it will be checked before it counts.
             </p>
           </div>
           <button
@@ -483,15 +525,53 @@ export default function RippleTrace() {
                     {Number(point.spread_score || 0).toFixed(0)}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleDetect(point.id)}
-                  disabled={busy}
-                  className="shrink-0 text-xs text-blue-400 hover:text-blue-300 disabled:opacity-40"
-                >
-                  Check
-                </button>
+                <div className="shrink-0 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCitingFor(citingFor === point.id ? null : point.id);
+                      setCitationUrl("");
+                    }}
+                    disabled={busy}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 disabled:opacity-40"
+                  >
+                    I found a citation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDetect(point.id)}
+                    disabled={busy}
+                    className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-40"
+                  >
+                    Check
+                  </button>
+                </div>
               </div>
+              {citingFor === point.id && (
+                <form
+                  className="mt-2 flex items-center gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleRecordCitation(point.id);
+                  }}
+                >
+                  <input
+                    type="url"
+                    value={citationUrl}
+                    onChange={(event) => setCitationUrl(event.target.value)}
+                    placeholder="https://… the page that cites this piece"
+                    className="flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 placeholder:text-zinc-600"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy || !citationUrl.trim()}
+                    className="rounded-md border border-emerald-700 px-2 py-1 text-xs text-emerald-200 hover:border-emerald-500 disabled:opacity-40"
+                  >
+                    Verify & record
+                  </button>
+                </form>
+              )}
             </div>
           ))}
         </div>
