@@ -53,7 +53,27 @@ payload = TestClient(main.app, raise_server_exceptions=False).get('/api/version'
 print(json.dumps(payload['runtime'], sort_keys=True))
 "
 # Expected: boot_profile=default-apps, app_plugins_loaded=True, app_plugin_count=16
+
+# Local stack — BOTH compose files AND BOTH profiles, every up/down (see the trap below)
+docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail build api   # after a merge you want live
+
+# Schema-default parity guard, locally (what CI Step 6 does): migrate a scratch DB FROM EMPTY
+# inside the api image, then diff models vs. migrations. PYTHONPATH is load-bearing —
+# `pip install .` in the image is non-editable, so without it you audit site-packages' copy.
+docker exec <postgres> psql -U aindy -d aindy -c "create database parity_scratch"
+docker exec <postgres> psql -U aindy -d parity_scratch -c "create extension if not exists vector"
+MSYS_NO_PATHCONV=1 docker run --rm --network aindy-apps-monolith_default -v "$(pwd -W):/src:ro" -w /src \
+  -e DATABASE_URL=postgresql+psycopg2://aindy:aindy@postgres:5432/parity_scratch -e PYTHONPATH=/src \
+  --entrypoint sh aindy-apps-monolith-api:latest -c 'alembic upgrade head >/tmp/up.log 2>&1; python scripts/check_schema_default_parity.py'
+docker exec <postgres> psql -U aindy -d aindy -c "drop database parity_scratch"
 ```
+
+**`--profile full` is not optional on this stack** (found 2026-09-16, cost 26 minutes and was first
+read as a runtime regression): `docker-compose.prod.yml` hardcodes `REDIS_URL` while `redis` is
+profile-gated, and the runtime's rate limiter uses Redis storage with no fallback. Without redis
+**every rate-limited route 500s, `/health` included**, so the api sits `unhealthy` forever while
+`/api/version` (unlimited) looks fine. `COMPOSE-REDIS-URL-UNCONDITIONAL-1` in `TECH_DEBT.md`.
 
 ---
 
@@ -370,9 +390,57 @@ level, not the spawn, which is ours.
 
 Use `disabled` (set in `pytest.integration.ini`), **not** `stub`. The `stub` backend causes planner-path tests to fail with errors rather than cleanly skip when the planner isn't wired up. Tests that touch planner-dependent paths must check `os.environ.get("AINDY_AGENT_PLANNER_BACKEND") == "disabled"` and skip or fast-path accordingly.
 
+### Where an agent run's tool steps actually execute — `nodus_vm`, in the worker
+
+`apps/agent/bootstrap.py::_select_execution_backend` makes **`nodus_vm` this app's default** on
+every real boot (the runtime's own default is `agent_flow`). A plan is compiled to a native Nodus
+workflow and its tool steps run as the worker's `call_tool` host function → `execute_tool`,
+**in the warm-pool worker process** (`nodus_worker.py --serve`, a separate PID with its own
+import of the 16-app graph). Three consequences, each measured 2026-09-16 and filed:
+
+- **The API's `/metrics` never sees a tool step's LLM usage** — it is metered in the worker's
+  registry. The Redis tenant window and the run's `score.computed.llm_tokens` miss it too, so
+  the cost governor sees planning and nothing else on this backend (**FR-35**). A run can spend
+  any number of tokens in tool steps against a window that never moves.
+- **The authority gate (`register_tool(on_denial="wait")`) never fires** — `negotiate_capability_
+  denial` has one caller, `agent_execute_step`, the AGENT_FLOW node; on `nodus_vm` a denied tool
+  fails at `tool_registry.py:816` and the step fails (**FR-38**). Our `leadgen.act` declaration
+  is inert until that lands. To exercise the gate, run with
+  `AINDY_AGENT_EXECUTION_BACKEND=agent_flow` (explicit env always wins over the setdefault).
+- **The worker needs this repo pip-installed** or it cannot `import apps` — see the Nodus test
+  section below. A guest execution's memory is bounded by `AINDY_NODUS_MAX_MEMORY_MB` (256,
+  compose) inside the container's `mem_limit` (1536m); `test_compose_memory_bounds.py` keeps the
+  three together — do not lower the cap without re-measuring `cgroup memory.peak` across a boot.
+
 ### ARM config — per-user scoping
 
 `arm_config.id` is a `String(36)` primary key. All rows are keyed by user UUID. All `arm_config_dao` calls must pass `user_id=str(current_user["sub"])`. A missing `user_id` falls back to the key `"default"` — the system default singleton, not per-user storage. The `String(36)` length is required to hold a UUID; `String(32)` is too short.
+
+**ARM's only LLM client is DeepSeek, so every model name in ARM must be one DeepSeek accepts**
+(`deepseek-v4-pro`, `deepseek-flash` as of 2026-09-16 — `models.list()` is the source of truth).
+The defaults said `gpt-4o` from the first commit and ARM had **never produced an analysis** on any
+stack until #376 (`ARM-MODEL-NAME-PROVIDER-MISMATCH-1`). Both DeepSeek models are reasoning
+models: with ARM's request shape they spend the whole `max_tokens` budget thinking and return
+**empty content**, so every ARM call passes `extra_body={"reasoning_effort": "none"}`
+(`AINDY_ARM_REASONING_EFFORT` to change it). `test_arm_model_names_match_provider.py` pins both.
+
+### Live probes against the container — the recipe, so it is not re-derived
+
+- **A token without a password:** mint one in-container with the runtime's own function —
+  `docker exec <api> python -c "from AINDY.services.auth_service import create_access_token; print(create_access_token({'sub': '<user uuid>', 'email': '<email>', 'is_admin': False}, token_version=0))"`.
+  Use the designated test account (`kingknight845@gmail.com`) for anything that writes; the
+  owner's account only for read-only GETs on the real plan, and say so.
+- **`/platform/*` needs `platform.admin`.** The test account is not admin. Approved practice:
+  `UPDATE users SET is_admin=true …` before, revert after, every time — never leave it.
+- `POST /platform/syscall` takes `{"name": …, "payload": …}` — the field is `name`, not `syscall`
+  as the 2.19.0 handoff writes it. A user JWT carries no capabilities there (`403 … caller has
+  []`); a scoped API key does.
+- `/metrics` redirects (307) to **`/metrics/`**; curl the trailing slash.
+- `python /tmp/script.py` inside the image imports the **site-packages** `apps`, not `/app/apps`
+  — `pip install .` there is non-editable. Add `-e PYTHONPATH=/app` (or run from a mounted
+  `/src`) or you audit the previous build.
+- The stack must be up with `--profile full`; if `/health` is 500 and `/api/version` is 200,
+  that is redis missing, not the code (Commands, above).
 
 ---
 
@@ -394,7 +462,18 @@ starved 1-second heartbeat — has now been produced by at least two unrelated c
 request, and pure host memory starvation with no app traffic whatsoever. Seeing the fingerprint
 tells you the slot is full. It does not tell you what filled it.
 
-**Check in this order, cheapest first:**
+**Two fingerprints that look like this and are not, cheaper than all of the below:**
+
+- `/health` **500** with `/api/version` **200**, from the first request after boot, plus
+  `RedisWaitRegistry.get_all_specs failed` tracebacks every second — the rate limiter's Redis
+  storage cannot resolve `redis`. The stack was brought up without `--profile full`. Not the
+  release, not the code.
+- Since #380 the api carries `mem_limit: 1536m` with swap off, so a runaway now ends in an
+  **OOM kill and a restart** — `docker ps` shows a restart count, the log restarts from
+  `[entrypoint]`. "Zero container restarts" is no longer part of the saturation fingerprint; a
+  non-zero count is the cap doing its job, and `cgroup memory.peak` says what grew.
+
+**Then check in this order, cheapest first:**
 
 1. `docker logs <postgres> | grep "terminating any other active server processes"` — a non-zero
    count means PostgreSQL has been reinitialising its whole cluster and every app symptom is
@@ -431,6 +510,9 @@ Only after those three should you look at application code. Full write-ups:
 | Cross-domain coupling doc | `docs/architecture/CROSS_DOMAIN_COUPLING.md` |
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
-| Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §5b (attribution) as of 2026-09-11; §8 has the build log and what is left |
+| Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16 |
+| Latest runtime adoption record | `docs/runtime/RUNTIME_2_19_0_UPGRADE.md` — one per release; §7 is the rebuild ledger |
+| Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |
