@@ -986,13 +986,26 @@ not whether.
 The plan card now shows OBJECTIVES above PHASES: *Ethical AI Framework · 1 strategy · 6h of
 2 d*, *Partnership Development · nothing serves this yet*, and the unhoused line.
 
-### Step 3b(v), still to do
+### Step 3b(v) — both halves decided 2026-09-16
 
-* **Strategy-level proposals.** "All of this strategy's tasks are done — conclude it?" is the
-  same shape as phase advance, one tier down. Not built; the human concludes by hand.
-* **Feeding the algorithm.** `objective_rollup` is the first per-objective measurement. Whether
-  it enters goal attainment (`MASTERPLAN_GOAL_ATTAINMENT_SPEC` §4b, the *wcu* unit) is the
-  decision that spec deferred until attribution existed. It exists now.
+* **Strategy-level proposals — ★ built (#382), `services/strategy_conclude.py`.** "All of this
+  strategy's tasks are done — conclude it?" is the third instance of the proposal shape after
+  phase advance and pace. `GET /strategy-conclusions` lists active strategies whose every
+  attached task is `completed` (at least one; a strategy with no tasks is never proposed — nothing
+  was measured, so nothing is done). Confirming is the *existing* verdict (§6 Q5: judged, never
+  measured), so there is no confirm route of its own; declining records the task count on
+  `plan_strategies.conclude_dismissed_*` (migration `sc1concl0001`, the `advance_dismissed_*` pair
+  one tier down) and returns when the attached work changes. Unlike pace, the rule is binary and
+  needs no calibration. On the live plan nothing proposes yet — three strategies, two with one
+  open task each — which is the correct state; the first strategy to finish will be asked.
+* **Feeding the algorithm — already answered on 09-11, as a shadow.** `objective_rollup` IS the
+  attainment term of `MASTERPLAN_GOAL_ATTAINMENT_SPEC` phase 2 (attribution-based, hours-weighted,
+  recorded beside the live score on every score event). What remains is that spec's phase-3 flip,
+  and it is gated on a ledger that cannot fill without usage: three rows on 09-16, all identical
+  (live 70.0 / shadow 42.5), **1 of 3 objectives measured**, because two objectives have nothing
+  housed under them and two tasks are unhoused. Owner's call 2026-09-16: **do not flip**; revisit
+  when `objectives_measured ≥ 2` and the rows differ. Same shape as `SOAK-THEN-FLIP-1` — the
+  lever is housing work under objectives, not building.
 
 ### Original step 3 notes
 

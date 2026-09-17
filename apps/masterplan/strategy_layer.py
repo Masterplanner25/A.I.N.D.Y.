@@ -199,6 +199,15 @@ class PlanStrategy(Base):
 
     started_at = Column(DateTime(timezone=True), nullable=True)
     concluded_at = Column(DateTime(timezone=True), nullable=True)
+
+    # ★ The human said "not done" to a conclude proposal (§8 step 3b(v); services/
+    # strategy_conclude.py) — the same pair `PlanPhase.advance_dismissed_*` carries, for the
+    # same reason: the count is the evidence the proposal was built on, so it stays quiet while
+    # the strategy's attached work is unchanged and comes back the moment a task is added or
+    # removed. Migration `sc1concl0001`.
+    conclude_dismissed_at = Column(DateTime(timezone=True), nullable=True)
+    conclude_dismissed_task_count = Column(Integer, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

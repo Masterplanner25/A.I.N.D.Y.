@@ -9,6 +9,8 @@ import {
   startStrategy,
   finishStrategy,
   setStrategyObjective,
+  getStrategyConclusionProposals,
+  dismissStrategyConclusion,
 } from "../../api/masterplan.js";
 import { safeMap } from "../../utils/safe";
 import { describeHours } from "../../utils/effort.js";
@@ -88,20 +90,28 @@ export default function PhasePanel({ planId }) {
   const [newStrategy, setNewStrategy] = useState("");
   const [newStrategyObjective, setNewStrategyObjective] = useState("");
   const [verdictFor, setVerdictFor] = useState(null);   // strategy id with the verdict menu open
+  // Strategies whose every attached task is done — the system asks for a verdict
+  // (STRATEGY_LAYER_SPEC §8 step 3b(v)). Keyed by strategy id; the value is the evidence.
+  const [conclusions, setConclusions] = useState({});
 
   const load = async () => {
     try {
-      const [layerData, proposalData] = await Promise.all([
+      const [layerData, proposalData, conclusionData] = await Promise.all([
         getStrategyLayer(planId),
         getPhaseAdvanceProposal(planId),
+        getStrategyConclusionProposals(planId).catch(() => null),
       ]);
       setLayer(layerData);
       setProposal(proposalData);
+      const asked = {};
+      for (const entry of conclusionData?.proposed || []) asked[entry.strategy.id] = entry.evidence;
+      setConclusions(asked);
     } catch {
       // A plan that predates the layer has nothing here, and that is not an error worth
       // a red box on a card that is mostly about other things.
       setLayer(null);
       setProposal(null);
+      setConclusions({});
     }
   };
 
@@ -173,6 +183,11 @@ export default function PhasePanel({ planId }) {
     if (result && typeof result.tasks_released === "number" && result.tasks_released > 0) {
       setNotice(`${st.name} ${verb === "abandon" ? "abandoned" : "displaced"}. ${result.tasks_released} open ${result.tasks_released === 1 ? "task" : "tasks"} returned to the plan; completed work stays attached.`);
     }
+  };
+
+  const handleNotDone = async (st) => {
+    const result = await act("strategy", () => dismissStrategyConclusion(planId, st.id));
+    if (result) setNotice(`${st.name}: noted. It will ask again when its tasks change.`);
   };
 
   const strategiesOf = (phase) => (layer?.strategies || []).filter((st) => st.phase_id === phase.id);
@@ -302,7 +317,16 @@ export default function PhasePanel({ planId }) {
                   {st.status === "proposed" &&
                     <button onClick={() => handleStart(st)} disabled={busy !== null} style={miniBtn("#facc15")}>START</button>
                   }
-                  {!FINISHED.has(st.status) && verdictFor !== st.id &&
+                  {conclusions[st.id] && verdictFor !== st.id &&
+                    <span data-testid="strategy-conclusion-proposal" style={{ display: "inline-flex", gap: "6px", alignItems: "center", fontSize: "10px", color: "#00ffaa" }}>
+                      <span title="Every task attached to this strategy is complete. How did it go?">
+                        All {conclusions[st.id].tasks_total} {conclusions[st.id].tasks_total === 1 ? "task" : "tasks"} done — conclude it?
+                      </span>
+                      <button onClick={() => setVerdictFor(st.id)} disabled={busy !== null} style={miniBtn("#00ffaa")} title="Give the verdict">VERDICT…</button>
+                      <button onClick={() => handleNotDone(st)} disabled={busy !== null} style={miniBtn("#facc15")} title="Not done — it was under-tasked. Asks again when its tasks change.">NOT DONE</button>
+                    </span>
+                  }
+                  {!FINISHED.has(st.status) && verdictFor !== st.id && !conclusions[st.id] &&
                     <button onClick={() => setVerdictFor(st.id)} disabled={busy !== null} style={miniBtn("#a1a1aa")}>FINISH…</button>
                   }
                   {verdictFor === st.id &&

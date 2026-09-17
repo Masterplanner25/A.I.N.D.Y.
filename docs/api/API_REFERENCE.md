@@ -1217,6 +1217,20 @@ Dismiss Pace — "noted"; records the drift it was measured against and returns 
 
 **Response 200:** dismissed: {at, days_ahead_behind}, returns_when; 409 when nothing is proposed
 
+#### GET /apps/masterplans/{plan_id}/strategy-conclusions
+Strategy conclusion proposals — which active strategies have finished every attached task and are asking for a verdict. Reads only. The third instance of the proposal shape (`STRATEGY_LAYER_SPEC` §8 step 3b(v)): the rule is binary (every task `completed`, at least one), a strategy with no tasks is never proposed, and confirming is the EXISTING verdict — `POST …/strategies/{strategy_id}/conclude {outcome}` or `/abandon` — because a strategy is judged, never measured.
+
+**Parameters:** plan_id (path): integer
+
+**Response 200:** proposed: [{strategy, reason: "work_complete", evidence: {tasks_total, tasks_completed, hours_total, hours_completed, work_complete}}], dismissed: [same shape + dismissed: {at, task_count}]
+
+#### POST /apps/masterplans/{plan_id}/strategies/{strategy_id}/conclusion/dismiss
+Dismiss Strategy Conclusion — "not done" (it was under-tasked); records the task count the proposal was built on and returns when the strategy's attached tasks change
+
+**Parameters:** plan_id (path): integer, strategy_id (path): string
+
+**Response 200:** strategy, dismissed: {at, task_count}, returns_when; 409 `conclusion_refused` when nothing is proposed, the strategy is not active, or it is not on this plan
+
 #### POST /apps/masterplans/{plan_id}/phases/{phase_id}/reopen
 Reopen Phase — reverse a confirmation; only the most recently closed phase can reopen, and tasks stay where they are
 

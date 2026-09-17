@@ -120,6 +120,19 @@ export function dismissPhaseAdvance(planId, phaseId) {
   });
 }
 
+// Which active strategies have finished every attached task and are asking for a verdict.
+// Reads only. Confirming is the existing verdict (finishStrategy); declining is below.
+export function getStrategyConclusionProposals(planId) {
+  return authRequest(`/apps/masterplans/${planId}/strategy-conclusions`, { method: "GET" });
+}
+
+// "Not done." The proposal returns when the strategy's attached tasks change.
+export function dismissStrategyConclusion(planId, strategyId) {
+  return authRequest(`/apps/masterplans/${planId}/strategies/${strategyId}/conclusion/dismiss`, {
+    method: "POST",
+  });
+}
+
 // Reverse a confirmation. Only the most recently closed phase can reopen.
 export function reopenPhase(planId, phaseId) {
   return authRequest(`/apps/masterplans/${planId}/phases/${phaseId}/reopen`, { method: "POST" });

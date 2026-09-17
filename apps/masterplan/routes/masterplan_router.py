@@ -605,6 +605,82 @@ def _pace_refused(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=409, detail={"error": "pace_refused", "message": str(exc)})
 
 
+# STRATEGY_LAYER_SPEC §8 step 3b(v). A strategy whose every attached task is complete is
+# proposed for a verdict; the human concludes it through the existing verdict routes
+# (`/strategies/{id}/conclude`, `/abandon`) or declines. See services/strategy_conclude.py —
+# the third instance of the proposal shape, after phase advance and pace.
+
+
+def _conclusion_refused(exc: ValueError) -> HTTPException:
+    return HTTPException(
+        status_code=409, detail={"error": "conclusion_refused", "message": str(exc)}
+    )
+
+
+@router.get("/{plan_id}/strategy-conclusions")
+@limiter.limit("60/minute")
+async def get_strategy_conclusion_proposals(
+    request: Request,
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Which active strategies have finished their work and are asking for a verdict. Reads only."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.strategy_conclude import propose_strategy_conclusions
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        return propose_strategy_conclusions(db, masterplan_id=plan.id, user_id=user_id)
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.strategy.conclusion.propose",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+@router.post("/{plan_id}/strategies/{strategy_id}/conclusion/dismiss")
+@limiter.limit("30/minute")
+async def dismiss_strategy_conclusion_route(
+    request: Request,
+    plan_id: int,
+    strategy_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """The human's other half: "not done". Returns when the strategy's attached tasks change."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.masterplan.services.strategy_conclude import dismiss_strategy_conclusion
+
+        plan = assert_masterplan_owned(db, plan_id, user_id)
+        try:
+            return dismiss_strategy_conclusion(
+                db, masterplan_id=plan.id, strategy_id=strategy_id, user_id=user_id
+            )
+        except ValueError as exc:
+            raise _conclusion_refused(exc) from exc
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.strategy.conclusion.dismiss",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id, "strategy_id": strategy_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
 @router.post("/{plan_id}/phases/{phase_id}/reopen")
 @limiter.limit("30/minute")
 async def reopen_phase_route(
