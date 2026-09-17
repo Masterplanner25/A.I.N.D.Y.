@@ -1,10 +1,12 @@
 import logging
 
-from AINDY.runtime.flow_engine import FLOW_REGISTRY, register_flow
+from AINDY.runtime.flow_engine import DEFAULT_PREDICATE, FLOW_REGISTRY, register_flow
 from AINDY.runtime.flow_helpers import (
     register_nodes,
     register_single_node_flows,
 )
+
+from apps._shared.predicates import WATCHER_DEFER, WATCHER_EXECUTE
 
 logger = logging.getLogger(__name__)
 
@@ -155,19 +157,14 @@ def register() -> None:
                 "start": "watcher_evaluate_trigger_node",
                 "edges": {
                     "watcher_evaluate_trigger_node": ["watcher_record_decision_node"],
+                    # Named predicates (runtime #680): an ordered `when` list is a switch —
+                    # first match wins, `default` last. The names enter the graph signature;
+                    # they live in apps/_shared/predicates.py because this flow is declared
+                    # twice (see that module).
                     "watcher_record_decision_node": [
-                        {
-                            "condition": lambda s: s.get("watcher_decision") == "execute",
-                            "target": "watcher_ingest_validate",
-                        },
-                        {
-                            "condition": lambda s: s.get("watcher_decision") == "defer",
-                            "target": "watcher_defer_job_node",
-                        },
-                        {
-                            "condition": lambda s: True,
-                            "target": "watcher_ignore_node",
-                        },
+                        {"when": WATCHER_EXECUTE, "target": "watcher_ingest_validate"},
+                        {"when": WATCHER_DEFER, "target": "watcher_defer_job_node"},
+                        {"when": DEFAULT_PREDICATE, "target": "watcher_ignore_node"},
                     ],
                     "watcher_ingest_validate": ["watcher_ingest_persist"],
                     "watcher_ingest_persist": ["watcher_ingest_orchestrate"],

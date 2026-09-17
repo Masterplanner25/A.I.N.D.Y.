@@ -12,10 +12,32 @@ no behavior changes, just wrapped in the node contract:
 import logging
 
 from AINDY.core.execution_signal_helper import queue_memory_capture
-from AINDY.runtime.flow_engine import FLOW_REGISTRY, NODE_REGISTRY, register_flow, register_node
+from AINDY.runtime.flow_engine import (
+    FLOW_REGISTRY,
+    NODE_REGISTRY,
+    register_flow,
+    register_node,
+    register_predicate,
+)
 from apps.automation.flows.flow_definitions_extended import register_extended_flows  # noqa: F401
 
 logger = logging.getLogger(__name__)
+
+
+#: `genesis_conversation`'s one decision (runtime #680, named predicates): advance to the
+#: synthesis store when the session, or the resume event, says synthesis is ready. Named so
+#: it enters the graph signature — this is the flow with the WAIT, i.e. the one where a run
+#: can be parked across a deploy and a rerouted decision would matter. Pure function of state.
+GENESIS_SYNTHESIS_READY = "genesis_synthesis_ready"
+
+
+@register_predicate(GENESIS_SYNTHESIS_READY)
+def genesis_synthesis_ready(state: dict) -> bool:
+    return bool(
+        state.get("synthesis_ready", False)
+        or (state.get("event") or {}).get("synthesis_ready", False)
+    )
+
 
 
 def _syscall_node(name: str, state: dict, context: dict, capability: str) -> dict:
@@ -724,13 +746,7 @@ def register_all_flows() -> None:
                 # contract — current_node stays at genesis_record_exchange
                 # until synthesis_ready becomes True.
                 "genesis_record_exchange": [
-                    {
-                        "condition": lambda s: (
-                            s.get("synthesis_ready", False)
-                            or s.get("event", {}).get("synthesis_ready", False)
-                        ),
-                        "target": "genesis_store_synthesis",
-                    }
+                    {"when": GENESIS_SYNTHESIS_READY, "target": "genesis_store_synthesis"},
                 ],
             },
             "end": ["genesis_store_synthesis"],

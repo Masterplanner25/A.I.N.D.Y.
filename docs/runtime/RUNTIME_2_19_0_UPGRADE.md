@@ -133,9 +133,10 @@ cost of `waiting` was the exit path, which is now the runtime's own.
 
 ## 5. The two 2.17.0 asks
 
-`RUNTIME_2_17_0_UPGRADE.md` §3: named predicates behind a drain (#680) — **still the owner's
-call** (which flows can be drained). One tool declaring `on_denial="wait"` (#681) — **taken,
-`leadgen.act`, #378**; see that doc's §3.3 for the reasoning and what still needs observing.
+`RUNTIME_2_17_0_UPGRADE.md` §3: named predicates behind a drain (#680) — **taken, #379**; the
+drain was empty (zero runs ever on either flow), see that doc's §3.1. One tool declaring
+`on_denial="wait"` (#681) — **taken, `leadgen.act`, #378**; see §3.3 for the reasoning and what
+still needs observing. Both 2.17.0 asks are now closed on our side.
 
 **§4.1 above needs a correction, made here rather than rewritten:** "nothing writes to the guest
 path with `AINDY_REASONING_NODUS_NATIVE` off" was wrong. This app defaults the agent backend to
