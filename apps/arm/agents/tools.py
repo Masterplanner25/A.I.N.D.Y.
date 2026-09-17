@@ -21,10 +21,23 @@ def register() -> None:
         risk="medium",
         description=(
             "Analyze ONE SOURCE FILE with the ARM code-reasoning engine (architecture and "
-            "integrity scores plus a summary). Args: {file_path: str (required — a path to a "
-            ".py/.js/.ts/.md/.json/.yaml file under the project root; NOT a topic or free text), "
-            "additional_context?: str}. It cannot analyze a topic, a memory, or prior step output."
+            "integrity scores plus a summary). It cannot analyze a topic, a memory, or prior "
+            "step output — only a file path under the project root."
         ),
+        # FR-33 (runtime 2.20.0): the argument contract, rendered into the planner catalog as
+        # `args={…}` and checked before dispatch under AINDY_TOOL_ARGS_VALIDATION. Types are
+        # the dispatcher's dialect (`syscall_versioning._SCHEMA_TYPE_MAP`); `description` on a
+        # property is for the planner, the validator ignores it.
+        args_schema={
+            "required": ["file_path"],
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "path to a .py/.js/.ts/.md/.json/.yaml file under the project root; NOT a topic",
+                },
+                "additional_context": {"type": "string"},
+            },
+        },
         capability="tool:arm.analyze",
         required_capability="external_api_call",
         category="analysis",
@@ -33,11 +46,17 @@ def register() -> None:
     register_tool(
         "arm.generate",
         risk="medium",
-        description=(
-            "Generate or refactor code with the ARM code-generation engine. "
-            "Args: {prompt: str (required), language?: str, generation_type?: str, "
-            "original_code?: str, analysis_id?: str}."
-        ),
+        description="Generate or refactor code with the ARM code-generation engine.",
+        args_schema={
+            "required": ["prompt"],
+            "properties": {
+                "prompt": {"type": "string"},
+                "language": {"type": "string", "description": "default python"},
+                "generation_type": {"type": "string", "description": "default generate"},
+                "original_code": {"type": "string"},
+                "analysis_id": {"type": "string"},
+            },
+        },
         capability="tool:arm.generate",
         required_capability="external_api_call",
         category="analysis",
@@ -48,8 +67,15 @@ def register() -> None:
         risk="low",
         description=(
             "Apply gated, reversible self-tuning config changes from ARM's own metrics. "
-            "Args: {apply?: bool (default false — dry run), window?: int days (default 30)}."
+            "Dry run unless apply=true."
         ),
+        args_schema={
+            "required": [],
+            "properties": {
+                "apply": {"type": "boolean", "description": "default false (dry run)"},
+                "window": {"type": "integer", "description": "days, default 30"},
+            },
+        },
         capability="tool:arm.autotune",
         required_capability="self_tune",
         category="optimization",

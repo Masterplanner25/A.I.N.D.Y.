@@ -107,8 +107,22 @@ def _plan_tool(tool_names: list[str]) -> dict[str, Any]:
                         "type": "object",
                         "properties": {
                             "tool": {"type": "string", "enum": tool_names},
-                            # Free-form, tool-specific arguments.
-                            "args": {"type": "object"},
+                            # Tool-specific arguments. Kept an open object: one forced tool
+                            # cannot carry fifteen per-tool input schemas without a `oneOf`
+                            # branch per tool. The contract reaches the model another way —
+                            # since runtime 2.20.0 (FR-33) the catalog line in the system
+                            # prompt renders each tool's declared `args_schema` as `args={…}`,
+                            # and `execute_tool` validates against the same schema before
+                            # dispatch (AINDY_TOOL_ARGS_VALIDATION). This description points
+                            # the model at it.
+                            "args": {
+                                "type": "object",
+                                "description": (
+                                    "The tool's arguments: exactly the keys in that tool's "
+                                    "args={...} schema from the catalog, every 'required' key "
+                                    "present, values of the declared types."
+                                ),
+                            },
                             "risk_level": {"type": "string", "enum": _RISK_LEVELS},
                             "description": {
                                 "type": "string",

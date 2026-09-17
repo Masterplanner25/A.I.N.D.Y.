@@ -19,11 +19,23 @@ def register() -> None:
     register_tool(
         "task.create",
         risk="low",
-        description=(
-            "Create a new task in the user's task list. Args: {task_name: str (required), "
-            "priority?: str, due_date?: ISO date, estimated_hours?: number, category?: str, "
-            "masterplan_id?: str, phase_id?: str, strategy_id?: str}."
-        ),
+        description="Create a new task in the user's task list.",
+        # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.
+        # `estimated_hours` carries no type on purpose: the dispatcher's "number" means
+        # `float` only, and a planner writes `2` as readily as `2.0`.
+        args_schema={
+            "required": ["task_name"],
+            "properties": {
+                "task_name": {"type": "string"},
+                "priority": {"type": "string"},
+                "due_date": {"type": "string", "description": "ISO date"},
+                "estimated_hours": {"description": "hours"},
+                "category": {"type": "string"},
+                "masterplan_id": {"type": "string"},
+                "phase_id": {"type": "string"},
+                "strategy_id": {"type": "string"},
+            },
+        },
         capability="tool:task.create",
         required_capability="manage_tasks",
         category="task",
@@ -32,10 +44,11 @@ def register() -> None:
     register_tool(
         "task.complete",
         risk="medium",
-        description=(
-            "Mark a task as complete by name. Args: {task_name: str (required — the exact "
-            "task name)}."
-        ),
+        description="Mark a task as complete by its exact name.",
+        args_schema={
+            "required": ["task_name"],
+            "properties": {"task_name": {"type": "string", "description": "the exact task name"}},
+        },
         capability="tool:task.complete",
         required_capability="manage_tasks",
         category="task",

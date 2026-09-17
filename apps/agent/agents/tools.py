@@ -16,11 +16,19 @@ def register() -> None:
         "memory.recall",
         risk="low",
         description=(
-            "Recall relevant memory nodes for a given query. "
-            "Args: {query: str, limit?: int (default 5), node_type?: str}. Read-only; returns "
-            "{count, nodes[]}. Note: recall ranks by similarity over the user's own nodes, which "
-            "are mostly system telemetry — expect event summaries, not prose."
+            "Recall relevant memory nodes for a given query. Read-only; returns {count, nodes[]}. "
+            "Note: recall ranks by similarity over the user's own nodes, which are mostly system "
+            "telemetry — expect event summaries, not prose."
         ),
+        # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.
+        args_schema={
+            "required": ["query"],
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "description": "default 5"},
+                "node_type": {"type": "string"},
+            },
+        },
         capability="tool:memory.recall",
         required_capability="read_memory",
         category="memory",
@@ -29,11 +37,15 @@ def register() -> None:
     register_tool(
         "memory.write",
         risk="low",
-        description=(
-            "Write a memory node with content and tags. "
-            "Args: {content: str (required), tags?: [str], node_type?: str (default 'insight')}. "
-            "Returns {node_id}."
-        ),
+        description="Write a memory node with content and tags. Returns {node_id}.",
+        args_schema={
+            "required": ["content"],
+            "properties": {
+                "content": {"type": "string"},
+                "tags": {"type": "array", "description": "list of str"},
+                "node_type": {"type": "string", "description": "default insight"},
+            },
+        },
         capability="tool:memory.write",
         required_capability="write_memory",
         category="memory",

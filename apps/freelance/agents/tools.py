@@ -23,10 +23,15 @@ def register() -> None:
         risk="medium",
         description=(
             "Recommend (or apply) gated, revertible service-price adjustments from realized "
-            "outcomes (paid revenue, acceptance, refunds, ratings). Args: {apply?: bool}. "
-            "Dry run unless apply=true; applying writes an internal default price for future "
-            "quotes only — it never changes an existing order or charges a customer."
+            "outcomes (paid revenue, acceptance, refunds, ratings). Dry run unless apply=true; "
+            "applying writes an internal default price for future quotes only — it never "
+            "changes an existing order or charges a customer."
         ),
+        # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.
+        args_schema={
+            "required": [],
+            "properties": {"apply": {"type": "boolean", "description": "default false (dry run)"}},
+        },
         capability="tool:freelance.optimize_pricing",
         required_capability="revenue_optimize",
         category="optimization",
@@ -35,10 +40,11 @@ def register() -> None:
     register_tool(
         "freelance.performance",
         risk="low",
-        description=(
-            "Read recent realized-revenue performance signals for the current user. "
-            "Args: {limit?: int (default 3)}. Read-only."
-        ),
+        description="Read recent realized-revenue performance signals for the current user. Read-only.",
+        args_schema={
+            "required": [],
+            "properties": {"limit": {"type": "integer", "description": "default 3"}},
+        },
         capability="tool:freelance.performance",
         required_capability="revenue_read",
         category="revenue",

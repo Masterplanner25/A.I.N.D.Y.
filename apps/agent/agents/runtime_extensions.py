@@ -182,6 +182,9 @@ def get_tools_for_run(_context: dict) -> list[dict]:
             "required_capability": metadata.get("required_capability"),
             "category": metadata.get("category"),
             "egress_scope": metadata.get("egress_scope"),
+            # FR-33 (runtime 2.20.0): the catalog renderer reads this key first and falls back
+            # to the registry by name; carrying it keeps the provider's dicts self-describing.
+            "args_schema": metadata.get("args_schema"),
         }
         for name, metadata in TOOL_REGISTRY.items()
     ]
