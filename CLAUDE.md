@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.19.0,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.20.0,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -144,10 +144,13 @@ def register() -> None:
     # 16 live tools all arrive through a provider. `iter_agent_tools()` returns 0. Of the
     # 16, 15 are ours (7 `apps/*/agents/tools.py` modules; counted 2026-09-16) and one is the
     # runtime's `runtime.selftest`. The planner sees ONE LINE per tool — `- name: description
-    # (risk=…)` — and `register_tool` takes no argument schema, so a tool's `description` MUST
-    # carry `Args: {…}` or the planner guesses the keys and the step fails at execution
-    # (`arm.analyze` said "or a topic", took `file_path`, failed 4 of 4 runs on 09-13).
-    # `test_agent_tool_descriptions_declare_args.py` enforces it.
+    # (risk=…)` — plus, since runtime 2.20.0 (FR-33), `args={…}` rendered from the tool's
+    # `register_tool(..., args_schema={...})`. A tool WITHOUT a declared schema is back to the
+    # one line, so its `description` MUST carry `Args: {…}` or the planner guesses the keys and
+    # the step fails at execution (`arm.analyze` said "or a topic", took `file_path`, failed 4
+    # of 4 runs on 09-13). `test_agent_tool_descriptions_declare_args.py` enforces the prose;
+    # declaring `args_schema` on all 15 is the 2.20.0 handoff's ask 1 (pending — see
+    # `RUNTIME_2_20_0_UPGRADE.md` §5). `AINDY_TOOL_ARGS_VALIDATION` is `warn` until then.
     # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
     # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
     # `register_syscalls` — which do not exist. Grepping for them returns nothing, which
@@ -232,10 +235,10 @@ merge rules): `docs/operations/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime>=2.19.0,<3.0    # pyproject.toml — the COMPATIBILITY range
+aindy-runtime>=2.20.0,<3.0    # pyproject.toml — the COMPATIBILITY range
 ```
 ```
-aindy-runtime==2.19.0         # constraints.txt — the BUILD pin
+aindy-runtime==2.20.0         # constraints.txt — the BUILD pin
 ```
 
 The upper bound is required. Never widen to an unbounded range.
@@ -264,7 +267,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.19.0,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.20.0,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.
@@ -398,10 +401,12 @@ workflow and its tool steps run as the worker's `call_tool` host function → `e
 **in the warm-pool worker process** (`nodus_worker.py --serve`, a separate PID with its own
 import of the 16-app graph). Three consequences, each measured 2026-09-16 and filed:
 
-- **The API's `/metrics` never sees a tool step's LLM usage** — it is metered in the worker's
-  registry. The Redis tenant window and the run's `score.computed.llm_tokens` miss it too, so
-  the cost governor sees planning and nothing else on this backend (**FR-35**). A run can spend
-  any number of tokens in tool steps against a window that never moves.
+- **A tool step's LLM usage is metered in the worker** and, since runtime 2.20.0 (**FR-35**,
+  #712), rides the worker's reply back and is recorded in the api process — `/metrics`, the
+  Redis tenant window and the run's `score.computed.llm_tokens` all read it. Before 2.20.0 none
+  of them did, so the cost governor saw planning and nothing else on this backend; now the
+  tenant window moves on tool steps too, and `AINDY_QUOTA_MAX_TENANT_TOKENS` (unset here) would
+  refuse guest calls it never used to see.
 - **The authority gate (`register_tool(on_denial="wait")`) never fires** — `negotiate_capability_
   denial` has one caller, `agent_execute_step`, the AGENT_FLOW node; on `nodus_vm` a denied tool
   fails at `tool_registry.py:816` and the step fails (**FR-38**). Our `leadgen.act` declaration
@@ -511,8 +516,8 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16 |
-| Latest runtime adoption record | `docs/runtime/RUNTIME_2_19_0_UPGRADE.md` — one per release; §7 is the rebuild ledger |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 filed 2026-09-17 |
+| Latest runtime adoption record | `docs/runtime/RUNTIME_2_20_0_UPGRADE.md` — one per release; the 2.19.0 doc's §7 is the previous rebuild ledger |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |
