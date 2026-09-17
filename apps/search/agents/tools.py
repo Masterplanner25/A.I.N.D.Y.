@@ -56,14 +56,30 @@ def register() -> None:
         "leadgen.act",
         risk="medium",
         description=(
-            "Act on scored leads — draft (never send) outreach for qualified leads, "
-            "behind a safety gate. Args: {apply?: bool, channel?: 'draft'|'email'|'handoff'}. "
-            "Dry run unless apply=true; every action is tracked and revertible."
+            "Act on scored leads — draft outreach for qualified leads, behind a safety gate. "
+            "Args: {apply?: bool, channel?: 'draft'|'email'|'handoff'}. Dry run unless "
+            "apply=true; with channel='email' and AINDY_SEARCH_OUTREACH_SEND on it REALLY "
+            "sends to a hand-entered contact. Every action is tracked and revertible. If this "
+            "step is refused for lack of authority the run parks for an operator decision "
+            "(skip/abort) rather than failing."
         ),
         capability="tool:leadgen.act",
         required_capability="external_api_call",
         category="leadgen",
         egress_scope="external_llm",
+        # AUTHORITY-NEGOTIATION-1 phase 3 evidence (runtime 2.17.0 handoff §3.3, taken
+        # 2026-09-16): the one tool of ours whose denial we would rather have PARKED than
+        # failed. It is the tool that can email a real person (#369) — and a denial here
+        # most plausibly means the run's token expired (24 h TTL) while it sat parked on an
+        # approval, or a delegated run's ceiling excludes egress. Failing it would discard
+        # the `leadgen.search` work the run already did; parking keeps that work and hands a
+        # human the call (`skip` records the step skipped and continues, `abort` fails the
+        # run with the reason; there is no `grant` — the gate cannot widen authority).
+        # Inert until AINDY_AUTHORITY_NEGOTIATION is on (default off; on in the local
+        # profile only, via docker-compose.prod.yml + .env). Resume with
+        #   POST /platform/flows/runs/{wait_state.flow_run_id}/resume
+        #   {"event_type": "agent.authority.decision", "payload": {"decision": "skip"|"abort"}}
+        on_denial="wait",
     )(leadgen_act)
 
 

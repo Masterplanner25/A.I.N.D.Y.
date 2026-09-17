@@ -100,6 +100,21 @@ and report the first denial. **Not done here** — which tool, and turning a fla
 owner's; the candidates by that criterion are the freelance/social tools that send or spend. Once
 chosen it is one kwarg on one `register_tool` call plus the flag in `.env`.
 
+**Taken 2026-09-16 (#378): `leadgen.act`, `on_denial="wait"`.** The owner's pick, by the
+criterion above: since #369 it is the tool that emails a real person. Where a denial would
+actually come from, read from `check_tool_capability` rather than assumed: the token is minted
+*from the plan* at approval, so a granted plan rarely denies at execution — the realistic cases
+are an **expired token** (24 h TTL; a run parked on an approval for a day, then resumed) and a
+**delegated run's ceiling** excluding egress. In both, failing the step would discard the
+`leadgen.search` work already done; parking keeps it and hands a human `skip | abort`. Plumbed
+`AINDY_AUTHORITY_NEGOTIATION` through `docker-compose.prod.yml` (compose passes only declared
+variables — the shadow-flag lesson) and documented it in `.env.example`; set `true` in the local
+`.env` only. `test_leadgen_act_on_denial_wait.py` pins the declaration and that any further gate or
+variant is added to its list on purpose, because each one is evidence the runtime reads.
+**The first denial has not been observed yet** — that needs the flag live on a rebuilt image and
+a denial, which on this stack means manufacturing the expiry case; recorded in
+`RUNTIME_2_19_0_UPGRADE.md` §5 when done.
+
 ---
 
 ## 4. Optional cleanup — the ten `waiting` route units are now unreachable
