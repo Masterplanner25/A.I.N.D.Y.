@@ -253,6 +253,19 @@ is off. Everything built stays and resumes on the flag. Remedy 3 (§6a) — a se
 pages containing a phrase rather than answering a question — is the path, and it needs a key and a
 cost decision, which is why it is deferred rather than built on speculation.
 
+### ★ 6e. Decided (owner, 2026-09-16): no provider — the sweep is retired, citations are recorded by hand and verified by the system
+
+Remedy 3 was costed before it was built: Bing is gone (retired 2025-08-11), Google CSE is closing
+(no new customers; ends 2027-01-01), and the two left — Brave at $5/1k with an exact-phrase index,
+Exa at $7/1k — come to **~$65/month** at this sweep's cadence (215 drop points × 1–2 queries,
+daily). Against that: the owner has been cited three times in eighteen months of publishing and
+found every one by accident. The instrument costs more than the signal is worth, for this author
+and for the regular author the product is pitched at. Decision: retire the sweep, keep everything
+it proved, and replace discovery with recording — `POST /drop_points/{id}/citations`, which runs
+the §6 verifier on a page the author found (`services/citation_record.py`, #381). Verified pages
+score; unreadable ones are kept `unverified`; pages that do not cite are refused and never
+written. `TECH_DEBT.md` has the full decision under the entry.
+
 ### ★ The intended, visible consequence
 
 `threadweaver` counts `verified` pings only, and the migration labels all 256 existing rows

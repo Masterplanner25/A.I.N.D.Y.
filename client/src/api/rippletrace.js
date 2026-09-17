@@ -72,6 +72,15 @@ export function detectRipplesForDropPoint(dropPointId) {
   });
 }
 
+// Record a page the author found citing a drop point. The server fetches it and verifies it
+// cites the piece before it counts; a page that does not is refused (422 `not_a_citation`).
+export function recordCitation(dropPointId, url) {
+  return authRequest(`/apps/rippletrace/drop_points/${dropPointId}/citations`, {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
 export function getCausalChain(dropPointId, depth = 3) {
   return authRequest(`${ROUTES.RIPPLETRACE.CAUSAL_CHAIN(dropPointId)}?depth=${depth}`);
 }

@@ -1875,6 +1875,27 @@ Detect Ripples For Drop Point
 
 **Response 200:** unspecified
 
+#### POST /apps/rippletrace/drop_points/{drop_point_id}/citations
+Record Citation
+
+Record a page the author found citing one of their drop points — the replacement for the
+automated mention sweep, which was retired 2026-09-16 as a product decision
+(`RIPPLE-PINGS-NOT-ECHOES-1`: a phrase-indexing provider costs more than the signal is worth; a
+regular author is cited rarely and finds it by accident). Discovery is the author's; recording
+and verification are the system's. The page is fetched and checked with the same verifier
+detection used (contains the drop point's URL or its distinctive title). A page that does not
+reference the drop point is refused with **422 `not_a_citation`** and nothing is written; a
+page that cannot be read (publisher refuses scripted fetches, JavaScript-rendered body) is kept
+`unverified` with the reason and does not score. Only `verified` scores. The drop point's own
+URL is refused. The ping id is the same identity a sweep would produce, so a hand-recorded
+citation and a later-detected one are one row.
+
+**Parameters:** drop_point_id (path): string
+
+**Body:** url: string (required)
+
+**Response 200:** drop_point_id, ping_id, url, verification (`verified` | `unverified`), note, created, upgraded, scores {narrative_score, velocity_score, spread_score}
+
 #### POST /apps/rippletrace/drop_point
 Create Drop Point
 
