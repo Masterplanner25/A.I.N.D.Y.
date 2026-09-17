@@ -254,3 +254,18 @@ has — **FR-33** asks for a real one); `steps_completed` reads 2/2 on every fai
 `attributed="run"` (2.13.0 §3) is still unobserved — the `arm.analyze` runs would have been the
 first, and they fell over before the seam.
 
+---
+
+## 7. The rebuild the day owed — image `15633d24267f`, 2026-09-17 02:15 UTC
+
+Carried #377–#383; boot ran `pc1pace0001 → sc1concl0001`. Each item read rather than assumed:
+
+| owed by | check | result |
+|---|---|---|
+| #382 | `GET /masterplans/10/strategy-conclusions` on the real plan (read-only, owner's token) | `proposed: [], dismissed: []` — and the table agrees (0/1, 0/1, 0/0 tasks done). Correct: nothing has finished |
+| #377 | one agent run (`memory.recall → memory.write`) | `completed 2/2`, **`loop_enforced: true`, `next_action: review_plan`**, 0 `Agent completion orchestrator failed` lines since boot. The Infinity loop after an agent run ran for the first time |
+| #381 | `POST /drop_points/{id}/citations` with a non-citing page, then with the drop point's own URL | `422 not_a_citation` both, with the reason; `pings` unchanged at 668. The verified path awaits a real citing page from the owner |
+| #378 | the first denial (FR-38 has the full record) | on `agent_flow`: park → resume `skip` → `completed`; on `nodus_vm` (our default): **fails the step, never negotiates** — filed |
+
+Not re-verified here, already verified the same day: the api memory cap (#380 §4.1).
+

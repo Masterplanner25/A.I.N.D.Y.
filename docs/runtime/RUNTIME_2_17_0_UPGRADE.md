@@ -125,9 +125,14 @@ are an **expired token** (24 h TTL; a run parked on an approval for a day, then 
 variables — the shadow-flag lesson) and documented it in `.env.example`; set `true` in the local
 `.env` only. `test_leadgen_act_on_denial_wait.py` pins the declaration and that any further gate or
 variant is added to its list on purpose, because each one is evidence the runtime reads.
-**The first denial has not been observed yet** — that needs the flag live on a rebuilt image and
-a denial, which on this stack means manufacturing the expiry case; recorded in
-`RUNTIME_2_19_0_UPGRADE.md` §5 when done.
+**The first denial was observed 2026-09-16, on the rebuilt image, and it is FR-38.** Manufactured
+as the delegated-run ceiling case (an expired token turned out to fail at the run level, before
+any step — non-negotiable by design). On `agent_flow` the gate works end to end: park →
+`resume {decision: skip}` from the API → step `skipped` with the note → `completed`, hook ran. On
+**`nodus_vm` — this app's default — the same denial fails the step**, because the worker's
+`call_tool → execute_tool` denies at `tool_registry.py:816` and `negotiate_capability_denial`
+is only called from `agent_execute_step`. The declaration on `leadgen.act` is therefore inert on
+this deployment until FR-38 lands; the full record is in the register.
 
 ---
 
