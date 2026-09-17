@@ -1024,10 +1024,41 @@ than waiting behind a flag.
 
 ---
 
-## RIPPLE-PINGS-NOT-ECHOES-1: a ping records a page about the same subject, not one that cites you (app-owned, P1)
+## RIPPLE-PINGS-NOT-ECHOES-1: ✅ DECIDED 2026-09-16 — the sweep is retired; citations are recorded by the author and verified by the system (app-owned, was P1)
 
-**Status: the CODE is fixed; the sweep is PAUSED (owner, 2026-09-11); the INSTRUMENT is the
-open decision, deferred until a phrase-indexing provider is chosen.** `AINDY_RIPPLE_MENTION_
+**Decided 2026-09-16 (owner): no provider. The automated sweep is retired as a product decision,
+and the paid instrument with it.** The field had narrowed on its own — Bing Search APIs retired
+2025-08-11, Google Custom Search JSON closed to new customers and ending 2027-01-01 — leaving
+Brave ($5/1k, exact-phrase index) and Exa ($7/1k). At the sweep's cadence (215 drop points,
+1–2 queries each, re-checked daily) that is ~13k queries/month, **~$65/month**, and the owner's
+own record is three citations in eighteen months of publishing, every one found by accident:
+roughly $390 per citation found, for a signal that arrives on its own. *"This is the point where
+that part of the pitch breaks."* Paying to search for a rare thing is the pitch breaking, not
+the code — the pipeline was proven (§6–6c), and what it proved is that the thing it is pointed
+at is rare.
+
+**What replaced it (#381): the author records the citation; the system verifies it.**
+`POST /apps/rippletrace/drop_points/{id}/citations {url}` fetches the page and applies the SAME
+verifier the sweep used (`page_cites`: contains the drop point's URL or distinctive title). It
+cites → a `verified` ping, `ping_type="citation"`, and it scores. It does not → **422, nothing
+written**; the author's say-so is not evidence, the page is. It cannot be read (403, JS body) →
+kept `unverified` with the reason, does not score. Same ping identity as detection
+(`ping_id_for`), so a hand-recorded page and a later-found one are one row. One button on each
+tracked piece: *I found a citation → Verify & record*. Discovery was the rare, expensive half;
+recording is the half this system can do honestly and for nothing — the same shape as #369's
+hand-entered contact. The owner's three citations, recorded, become the first verified pings this
+domain has ever had, and `narrative_score` and `build_strategies` finally stand on real echoes.
+
+**Kept, inert:** `mention_search` (Perplexity), `ripple_detection`, the 6-hourly job and the
+per-drop-point *Check* button — behind `AINDY_RIPPLE_MENTION_DETECTION`, off. Nothing removed;
+a provider could still be dropped in behind `mention_search.search()` if the economics ever
+change. The 256 legacy pings stay `unverified`, as decided. For discovery itself the honest
+recommendation is the free one a regular author would use anyway — a Google Alert on the piece's
+title — not a paid API.
+
+*The entry as it stood before the decision:* **the CODE is fixed; the sweep is PAUSED (owner,
+2026-09-11); the INSTRUMENT is the open decision, deferred until a phrase-indexing provider is
+chosen.** `AINDY_RIPPLE_MENTION_
 DETECTION` is off in the local `.env` so the 6-hourly job stops spending ~200 fetches proving
 the same zero. Nothing built is removed: ingestion, containers, verification and settlement all
 stay, and flipping the flag back on resumes exactly where it stopped (168 debts owed, drop
