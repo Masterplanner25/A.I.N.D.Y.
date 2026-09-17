@@ -78,6 +78,20 @@ flow's digest is byte-for-byte unchanged by the upgrade itself (§5 step 4 measu
 step. When it is taken: three `register_predicate` names (`watcher_execute`, `watcher_defer`, and
 whatever `:723` decides), the shared `watcher_decision` switch done once and used twice.
 
+**Taken 2026-09-16 (#379).** The drain question answered itself: `flow_runs` holds **zero runs,
+ever**, for `genesis_conversation` or `watcher_evaluate_trigger`, and zero parked runs on any flow
+(`waiting_flow_runs` empty) — the per-flow quarantine window was empty on this deployment, so
+the deploy decision cost nothing. Three names as predicted: `watcher_execute` and `watcher_defer`
+in `apps/_shared/predicates.py` (one registration for the switch declared twice — the runtime
+refuses a name rebound to a different callable and treats a re-import of the same function as a
+no-op), the fall-through as the runtime's own `DEFAULT_PREDICATE`, and `genesis_synthesis_ready`
+beside the flow that owns it. `grep '"condition": lambda' apps/` → 0.
+`tests/unit/test_named_flow_predicates.py` pins the zero, the routing of every case the lambdas
+handled, and that both flows' canonical edges now carry the names. Each of the two digests moved
+once, as the runtime's `graph_signature.py` comment says it would; any deployment that *does* have
+a run parked on either flow at upgrade time will see it quarantined with a reason, which is the
+mechanism working.
+
 ### 3.2 Typed wait payloads (#677) — optional, no ask
 
 A WAIT node may declare `resume_schema`; a bad resume is refused 422 before anything is injected.
