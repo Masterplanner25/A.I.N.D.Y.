@@ -21,9 +21,20 @@ def register() -> None:
         risk="medium",
         description=(
             "Unified search over leadgen, research, SEO, and memory surfaces. "
-            "Args: {query, search_type?: 'research'|'leadgen'|'seo_analysis'|'memory', limit?}. "
             "Returns a ranked SearchResponse (query, search_type, results[], search_score, memory)."
         ),
+        # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.
+        args_schema={
+            "required": ["query"],
+            "properties": {
+                "query": {"type": "string"},
+                "search_type": {
+                    "type": "string",
+                    "description": "research | leadgen | seo_analysis | memory (default research)",
+                },
+                "limit": {"type": "integer"},
+            },
+        },
         capability="tool:search.query",
         required_capability="external_api_call",
         category="search",
@@ -32,10 +43,8 @@ def register() -> None:
     register_tool(
         "leadgen.search",
         risk="medium",
-        description=(
-            "Search for B2B leads matching a query. Args: {query: str (required)}. "
-            "Returns scored leads; does not contact anyone."
-        ),
+        description="Search for B2B leads matching a query. Returns scored leads; does not contact anyone.",
+        args_schema={"required": ["query"], "properties": {"query": {"type": "string"}}},
         capability="tool:leadgen.search",
         required_capability="external_api_call",
         category="leadgen",
@@ -44,9 +53,8 @@ def register() -> None:
     register_tool(
         "research.query",
         risk="low",
-        description=(
-            "Query external sources for research on a topic. Args: {query: str (required)}."
-        ),
+        description="Query external sources for research on a topic.",
+        args_schema={"required": ["query"], "properties": {"query": {"type": "string"}}},
         capability="tool:research.query",
         required_capability="external_api_call",
         category="research",
@@ -57,12 +65,18 @@ def register() -> None:
         risk="medium",
         description=(
             "Act on scored leads — draft outreach for qualified leads, behind a safety gate. "
-            "Args: {apply?: bool, channel?: 'draft'|'email'|'handoff'}. Dry run unless "
-            "apply=true; with channel='email' and AINDY_SEARCH_OUTREACH_SEND on it REALLY "
-            "sends to a hand-entered contact. Every action is tracked and revertible. If this "
-            "step is refused for lack of authority the run parks for an operator decision "
+            "Dry run unless apply=true; with channel='email' and AINDY_SEARCH_OUTREACH_SEND on it "
+            "REALLY sends to a hand-entered contact. Every action is tracked and revertible. If "
+            "this step is refused for lack of authority the run parks for an operator decision "
             "(skip/abort) rather than failing."
         ),
+        args_schema={
+            "required": [],
+            "properties": {
+                "apply": {"type": "boolean", "description": "default false (dry run)"},
+                "channel": {"type": "string", "description": "draft | email | handoff (default draft)"},
+            },
+        },
         capability="tool:leadgen.act",
         required_capability="external_api_call",
         category="leadgen",

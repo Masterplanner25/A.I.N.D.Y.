@@ -21,10 +21,20 @@ def register() -> None:
         risk="high",
         description=(
             "Send a message to the Genesis strategic planning session (modifies MasterPlan "
-            "state). Args: {message: str (required), session_id: str (required — the Genesis "
-            "session id; it must come from the objective or a prior step, the tool cannot look "
-            "it up)}. Do not plan this step without a session_id in hand."
+            "state). The session_id must come from the objective or a prior step — the tool "
+            "cannot look it up. Do not plan this step without a session_id in hand."
         ),
+        # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.
+        args_schema={
+            "required": ["message", "session_id"],
+            "properties": {
+                "message": {"type": "string"},
+                "session_id": {
+                    "type": "string",
+                    "description": "the Genesis session id, from the objective or a prior step",
+                },
+            },
+        },
         capability="tool:genesis.message",
         required_capability="strategic_planning",
         category="planning",

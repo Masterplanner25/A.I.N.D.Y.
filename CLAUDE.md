@@ -144,13 +144,17 @@ def register() -> None:
     # 16 live tools all arrive through a provider. `iter_agent_tools()` returns 0. Of the
     # 16, 15 are ours (7 `apps/*/agents/tools.py` modules; counted 2026-09-16) and one is the
     # runtime's `runtime.selftest`. The planner sees ONE LINE per tool — `- name: description
-    # (risk=…)` — plus, since runtime 2.20.0 (FR-33), `args={…}` rendered from the tool's
-    # `register_tool(..., args_schema={...})`. A tool WITHOUT a declared schema is back to the
-    # one line, so its `description` MUST carry `Args: {…}` or the planner guesses the keys and
-    # the step fails at execution (`arm.analyze` said "or a topic", took `file_path`, failed 4
-    # of 4 runs on 09-13). `test_agent_tool_descriptions_declare_args.py` enforces the prose;
-    # declaring `args_schema` on all 15 is the 2.20.0 handoff's ask 1 (pending — see
-    # `RUNTIME_2_20_0_UPGRADE.md` §5). `AINDY_TOOL_ARGS_VALIDATION` is `warn` until then.
+    # (risk=…) args={…}` — the last part rendered from the tool's
+    # `register_tool(..., args_schema={"required": [...], "properties": {k: {"type": ...}}})`
+    # (runtime 2.20.0, FR-33). Every one of our 15 declares one and
+    # `test_agent_tool_args_schema.py` enforces it: a tool without a schema gives the planner
+    # nothing but prose, it guesses the keys, and the step fails at execution (`arm.analyze` said
+    # "or a topic", took `file_path`, failed 4 of 4 runs on 09-13). Types are the dispatcher's
+    # dialect (`syscall_versioning._SCHEMA_TYPE_MAP`; note "number" means float ONLY — leave an
+    # int-or-float property untyped). `execute_tool` checks args against the same schema before
+    # dispatch: `AINDY_TOOL_ARGS_VALIDATION=warn` (default) counts and logs,
+    # `enforce` refuses the step — flip once `aindy_tool_args_validation_total{outcome="invalid"}`
+    # has read zero on the live stack for a while.
     # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
     # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
     # `register_syscalls` — which do not exist. Grepping for them returns nothing, which

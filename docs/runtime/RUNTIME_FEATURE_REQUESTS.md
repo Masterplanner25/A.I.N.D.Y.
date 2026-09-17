@@ -326,7 +326,7 @@ progress.
 
 ---
 
-## FR-33 — the planner is told a tool's name and one sentence, never its arguments; `register_tool` has nowhere to put them ✅ SHIPPED in 2.20.0 (next day) — our `args_schema` declarations are the follow-up
+## FR-33 — the planner is told a tool's name and one sentence, never its arguments; `register_tool` has nowhere to put them ✅ SHIPPED in 2.20.0 (next day) — and declared on all 15 of ours the same day
 
 **Closed upstream 2026-09-17, the day after it was filed** — 2.20.0 (#709).
 `register_tool(..., args_schema={...})` in the dispatcher's dialect (`required` +
@@ -337,6 +337,17 @@ declare a schema** — the 2.20.0 handoff's ask 1 is exactly that: one kwarg per
 pass it through as the Claude planner's per-tool `input_schema`, watch
 `aindy_tool_args_validation_total{outcome="invalid"}` read zero, then flip to `enforce`, and let
 `test_agent_tool_descriptions_declare_args.py` pin the schema instead of the `Args:` prose.
+
+**Taken, 2026-09-17:** all 15 tools declare `args_schema` (seven `apps/*/agents/tools.py`), the
+`Args:` prose is gone from every description, the run-tool provider carries the key in its dicts,
+and the Claude planner's `submit_plan.args` description points the model at the catalog's
+`args={…}`. `test_agent_tool_args_schema.py` (renamed) pins: every tool declares one; `required ⊆
+properties` and every type is a spelling the validator honours; no `Args:` prose survives;
+`validate_tool_args("arm.analyze", {"topic": …})` names `file_path`; the catalog line renders the
+schema. `AINDY_TOOL_ARGS_VALIDATION` stays `warn`. **One note for the dialect:**
+`_SCHEMA_TYPE_MAP["number"]` is `float` only, so an `estimated_hours: 2` from a planner would read
+`invalid` under `enforce` — `task.create` leaves that property untyped. `(int, float)` minus `bool`
+would let it be typed; small, not a new FR.
 
 ### Original entry (2026-09-16) — retained
 

@@ -33,8 +33,10 @@ def register() -> None:
         description=(
             "Evaluate the user's current state and return the autonomous-reasoning "
             "recommendation: decision_type, reason, next action, and execution intent. "
-            "Read-only. Use to decide what to do next. Args: {} (no input required)."
+            "Read-only. Use to decide what to do next. Takes no arguments."
         ),
+        # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.
+        args_schema={"required": [], "properties": {}},
         capability="tool:reasoning.evaluate",
         required_capability="read_reasoning",
         category="analysis",

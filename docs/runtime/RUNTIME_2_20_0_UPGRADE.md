@@ -66,7 +66,7 @@ In the container (§6.4): `FLOW_REGISTRY["memory_execute_loop"]` is the two-node
 |---|---|---|
 | **FR-36** (#708) | completion-hook `user_id` is a `str`; a boundary test for the hook builder's documented keys | 0 `user_id is required` on two new runs; `loop_enforced: true`, `next_action.chosen` recorded. Our `AGENT-COMPLETION-HOOK-USERID-1` fix (tenant from the re-fetched run) is kept and is no longer load-bearing. **The fix covers one of three hook contexts** — §7 |
 | **FR-34** (#708) | `steps_completed` counts steps that succeeded, both backends (our filing named `agent_flow`'s sites; `nodus_vm` had four more) | a run failing at step 1 of 2 reads **`steps_completed 0, steps_total 2, current_step 1`**, and `score.computed.dimensions.steps_completed` is 0 with it. Under 2.19.0 that row read 1. `Assistant.jsx:268` / `AgentConsole.jsx:134` need no change — they were reading the wrong number, now they read the right one |
-| **FR-33** (#709) | `register_tool(..., args_schema={...})`; catalog renders `args={…}`; `execute_tool` validates under `AINDY_TOOL_ARGS_VALIDATION` (`warn`) | 15 tools, **0 with a schema** — nothing changes until we declare them (§5.1). `aindy_tool_args_validation_total` has no samples for the same reason |
+| **FR-33** (#709) | `register_tool(..., args_schema={...})`; catalog renders `args={…}`; `execute_tool` validates under `AINDY_TOOL_ARGS_VALIDATION` (`warn`) | at adoption: 15 tools, **0 with a schema**, `aindy_tool_args_validation_total` no samples. Declared on all 15 the same day (§5.1); the counter starts moving at the next rebuild |
 | **FR-35** (#712) | tool-step LLM usage on `nodus_vm` rides the worker reply; recorded in the api process | **First DeepSeek sample `/metrics` has ever served**: `aindy_llm_tokens_total{provider="deepseek",model="deepseek-v4-pro"}` prompt 1233 + completion 969 = **2202**; `aindy_llm_calls_total{attributed="run",provider="deepseek"} 1` — the reading the 2.13.0 note said only appeared on `agent_flow`; tenant window `aindy:rm:tenant:<test>:tokens` = **5238** = planner 2636+400 + 2202, to the token; `score.computed.dimensions.llm_tokens: 2202` (every prior run: 0) |
 
 The FR-35 consequence the handoff flags — *the governor's tenant window now moves on this
@@ -94,14 +94,23 @@ ours, unchanged.
 
 ## 5. Decisions recorded, and the two asks
 
-### 5.1 Ask 1 — `args_schema` on our 15 tools: **taken as the follow-up, not here**
+### 5.1 Ask 1 — `args_schema` on our 15 tools: **taken, the PR after the adoption**
 
-One kwarg per `register_tool` in the dispatcher's dialect (`required` + `properties[].type`),
-passed through as the Claude planner's per-tool `input_schema`; leave `AINDY_TOOL_ARGS_VALIDATION`
-at `warn`, watch `aindy_tool_args_validation_total{outcome="invalid"}` read zero on this stack,
-then `enforce`; `test_agent_tool_descriptions_declare_args.py` pins the schema instead of the
-`Args:` prose. Seven `apps/*/agents/tools.py` modules. Kept out of the adoption PR so the pin move
-stays a pin move.
+One kwarg per `register_tool` in the dispatcher's dialect (`required` + `properties[].type`,
+property `description` for the planner — the validator ignores it), across the seven
+`apps/*/agents/tools.py` modules; the `Args: {…}` prose removed from every description (two
+contracts drift); the run-tool provider carries `args_schema` in its dicts. **Not passed as a
+per-tool `input_schema`** the way the handoff phrases it: the Claude planner is one forced
+`submit_plan` tool whose `steps[].args` is an open object, and fifteen per-tool schemas inside
+it would need a `oneOf` branch per tool. The contract reaches the model as the runtime intends —
+the catalog line in the system prompt renders `args={…}` per tool — and `submit_plan.args` now
+says so in its description. `test_agent_tool_args_schema.py` (renamed from the prose guard) pins
+the schema instead. `AINDY_TOOL_ARGS_VALIDATION` stays `warn`; flip after a stretch of
+`aindy_tool_args_validation_total{outcome="invalid"}` reading zero live.
+
+One dialect note: `_SCHEMA_TYPE_MAP["number"]` is `float` only, so `estimated_hours: 2` from a
+planner would read `invalid` under `enforce`; `task.create` leaves that property untyped.
+Recorded under FR-33 in the register; `(int, float)` minus `bool` would let it be typed.
 
 ### 5.2 Ask 2 — observe the first `leadgen.act` denial: **already on file, FR-38**
 
