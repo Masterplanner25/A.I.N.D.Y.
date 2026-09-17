@@ -401,30 +401,6 @@ def memory_execution_run(state, context):
         return {"status": "RETRY", "error": str(e)}
 
 
-@register_node("memory_execution_orchestrate")
-def memory_execution_orchestrate(state, context):
-    """Terminal node of the runtime-owned `memory_execute_loop` graph. It no longer scores.
-
-    MEMORY-EXECUTE-LATENCY-1 (closed 2026-09-16). This node ran the full Infinity loop —
-    `sys.v1.analytics.execute_infinity` — synchronously on the `POST /memory/execute` request
-    path, the same defect GENESIS-TURN-LATENCY-1 was measured on. The Genesis precedent moved
-    twice: async first (#263), then removed (#294), because a turn is not a scoring event — the
-    score has nothing to move on until something is actually *done*. A memory-loop execution is
-    the same shape: it runs a `leadgen` search or a `genesis_message` through the memory loop and
-    changes neither the task graph nor the pillars. The path had also never executed (0
-    `flow_runs` for either graph since the table began; no `memory_*` trigger in `score_history`).
-
-    The function survives with this body because the runtime registers `memory_execute_loop`
-    before plugins load and names this node as its terminal — the app cannot remove it from
-    that graph without overriding a runtime-owned name (FR-32 asks the runtime to drop it). The
-    app's own `memory_execution` graph no longer includes it.
-    """
-    response = dict(state.get("memory_execution_response") or {})
-    response["orchestration"] = None
-    response["orchestration_skipped"] = "not_a_scoring_event"
-    return {"status": "SUCCESS", "output_patch": {"memory_execution_response": response}}
-
-
 # ── Task Create Flow ──────────────────────────────────────────────────────────
 
 
@@ -767,6 +743,23 @@ def register_all_flows() -> None:
 
     register_flow(
         "memory_execution",
+        {
+            "start": "memory_execution_validate",
+            "edges": {
+                "memory_execution_validate": ["memory_execution_run"],
+            },
+            "end": ["memory_execution_run"],
+        },
+    )
+
+    # `memory_execute_loop` is the graph `POST /memory/execute` (runtime `memory_router`) runs.
+    # Since runtime 2.20.0 (FR-32, option 2) a plugin's registration WINS: the runtime registers
+    # its own shape only if nothing is here by the time `register_default_flows()` runs, last, on
+    # both the API and the worker. Ours ends at `memory_execution_run` — the runtime default's
+    # third node, `memory_execution_orchestrate`, was deleted with this registration. It scored
+    # (MEMORY-EXECUTE-LATENCY-1) and a memory-loop execution is not a scoring event.
+    register_flow(
+        "memory_execute_loop",
         {
             "start": "memory_execution_validate",
             "edges": {

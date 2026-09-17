@@ -41,6 +41,47 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## AGENT-PLANNER-CONTEXT-BOUNDARY-1: the planner has never seen the Infinity context — the provider reads `db` and `user_id` from a context the boundary strips (app-owned, P1; runtime half FR-39)
+
+**Found 2026-09-17 reading an agent run's log at WARNING during the 2.20.0 adoption
+(`RUNTIME_2_20_0_UPGRADE.md` §7.1):**
+
+```
+get_user_kpi_snapshot failed for {'_redacted_type': 'UUID'}: 'NoneType' object has no attribute 'query'
+```
+
+`apps/agent/agents/runtime_extensions.py::build_planner_context` is our
+`register_planner_context_provider("default", …)`. It reads `db` and `user_id` from the context
+the runtime hands it and builds the three blocks the planner's system prompt is supposed to carry:
+the Infinity KPI block, the reasoning recommendation, and the memory enrichment. The runtime
+routes the call through the extension boundary (`registry.get_planner_context` →
+`_sanitized_extension_input`), which drops `db` at the root **by design** and redacts the
+`uuid.UUID` that `agents/agent_runtime/shared.py:81` passes as `user_id`. So on every invocation
+since the boundary landed (2026-05-20; the provider dates from the 05-17 extraction) the provider
+has had `db=None` and `{"_redacted_type": "UUID"}`, all three blocks took their `except: return ""`
+path, and **every plan to date was made from the base prompt plus the tool catalog — blind to the
+score it exists to steer by.** The provider's `system_prompt` is what reaches the model
+(`planning.py:173-176`, `planner_anthropic.py:159`), so the gap is real, not cosmetic.
+
+Third instance of one shape: `INFINITY-COMPLETION-HOOK-BOUNDARY-1` (the hook expected `db`),
+`AGENT-COMPLETION-HOOK-USERID-1` (the hook got a redacted tenant), and now the planner-context
+provider, both at once. Runtime 2.20.0 fixed the completion-hook builder only (#708, FR-36) and
+tested only that builder's keys; `shared.py:81` (planner context) and `:90` (tools-for-run) still
+pass a `uuid.UUID`.
+
+**Fix, ours:** open our own `SessionLocal()` inside the provider (the pattern
+`handle_agent_run_completed` already uses) and take the tenant through `_hook_user_id`, which
+treats a redacted dict as absent. Until FR-39 lands there is nothing to identify the user by at
+planning time — no `run_id` exists yet to re-fetch — so the fix makes the provider *correct*, and
+FR-39 makes it *effective*. Test: hand the provider the boundary's exact shape (no `db`, redacted
+`user_id`) and assert it neither raises nor logs the failure; hand it a real string and assert the
+KPI block is built against a session it opened itself.
+
+**Not affected:** `get_tools_for_run` ignores its context, so tool selection never was — which is
+why runs kept choosing the right tools while the prompt carried nothing of the user.
+
+---
+
 ## AGENT-COMPLETION-HOOK-USERID-1: ✅ CLOSED 2026-09-16 — the Infinity loop after an agent run never ran: the hook read a redacted tenant (app-owned, was P1)
 
 **Every completed agent run on the live stack (8 of 8) logged `[AgentRuntimeExtensions] Agent
@@ -65,6 +106,10 @@ hands the hook exactly the boundary's shape; the old hook fails it. **Runtime ha
 **Verified live 2026-09-17 on image `15633d24267f`:** the next agent run completed with
 `loop_enforced: true`, `next_action: review_plan`, and zero hook WARNINGs since boot
 (`RUNTIME_2_19_0_UPGRADE.md` §7).
+
+**Runtime half shipped, 2.20.0 (#708, FR-36):** the hook context's `user_id` is now a `str`. The
+fix above is kept — the re-fetched run is the right source of the tenant whether or not the
+context is trustworthy — but it is no longer load-bearing. `RUNTIME_2_20_0_UPGRADE.md` §2.
 
 ---
 
@@ -1498,6 +1543,14 @@ recalc, our graph and plan agree, and the runtime's graph still resolves its ter
 **Not done, deliberately:** the "stringify the user id" and "queued-job acknowledgement" notes
 below describe the async shape that was not taken. `watcher_ingest_orchestrate` is still not a
 third instance — it consumes the result synchronously and already runs off the request path.
+
+**FR-32 shipped in 2.20.0 (option 2) and taken on adoption, 2026-09-17:** the runtime's
+`memory_execute_loop` is a default registered *after* plugin flows, so this app now registers
+the graph itself, ending at `memory_execution_run`, and **`memory_execution_orchestrate` is
+deleted** — the pass-through body above no longer exists. `test_memory_execute_no_recalc.py`
+now pins the node's absence, both graphs and the plan ending at `run`, no recalc reachable from
+the two nodes that remain, and that `register_default_memory_execute_loop()` stands down to ours.
+`RUNTIME_2_20_0_UPGRADE.md` §2.
 
 ### Original entry (2026-09-01 → 2026-09-05) — retained
 

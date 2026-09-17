@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-16"
+last_verified: "2026-09-17"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -20,10 +20,62 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-16:** FR-33 … FR-36 (filed from the approved runs and the first
-> `arm.analyze` that reached the provider) · FR-38 (the authority gate on `nodus_vm`, with the
-> first observed denial) · FR-32 (awaiting intake) · FR-14 recurrence half · FR-6 items 2–3 ·
-> FR-37 (FR-19's client half, the ui-kit's — ours is the cleanup after).
+> **Open as of 2026-09-17:** FR-39 (the two hook contexts FR-36's fix did not reach — filed from
+> the 2.20.0 verification) · FR-38 (the authority gate on `nodus_vm`, with the first observed
+> denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
+> ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
+> were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-39 — the planner-context and tools-for-run hook contexts still hand the boundary a `uuid.UUID`; FR-36's fix and its test cover the completion-hook builder only 🔴 open (filed 2026-09-17, runtime 2.20.0)
+
+Numbered after our FR-38; your ledger's *next available* still reads FR-37 — please reconcile on
+intake.
+
+> **`agents/agent_runtime/shared.py:81` (`_get_planner_context`) and `:90` (`_get_tools_for_run`)
+> build their hook context with `"user_id": _db_user_id(user_id)` — a `uuid.UUID` — and pass it
+> through `registry.get_planner_context` / `get_tools_for_run`, whose `_sanitized_extension_input`
+> redacts it to `{"_redacted_type": "UUID"}` and drops `db` at the root.** #708 (FR-36) applied
+> `str()` at the completion-hook builder in `execution.py` and added
+> `test_every_documented_primitive_survives_the_boundary_with_production_shaped_values` for
+> **that builder's** `COMPLETION_HOOK_PRIMITIVE_KEYS`. The other two hook contexts the runtime
+> builds were not in scope, and they have the same bug.
+
+### What we hit
+
+Found on 2.20.0, reading a completed run's log at WARNING to confirm FR-36 (it is confirmed —
+zero `user_id is required`). Twice under the planner's trace:
+
+```
+get_user_kpi_snapshot failed for {'_redacted_type': 'UUID'}: 'NoneType' object has no attribute 'query'
+```
+
+Our `register_planner_context_provider("default", build_planner_context)` reads `user_id` and
+`db` from the context and builds the planner's Infinity KPI block, reasoning-recommendation block
+and memory enrichment. With both keys unusable it has returned the bare base prompt on every
+invocation since the boundary landed (2026-05-20). The provider's `system_prompt` is what
+`planning.py:173-176` sends, so **every plan the planner has made was made without the context
+the provider exists to supply.** Our half — the provider must open its own session, which the
+boundary's `db` rule requires of every hook and which our completion hook already does — is
+`AGENT-PLANNER-CONTEXT-BOUNDARY-1`, in progress. But at planning time there is no `run_id` to
+re-fetch the tenant by, so our fix has nothing to identify the user with until the string arrives.
+
+### Ask
+
+1. `str(...)` at `shared.py:81` and `:90` — the same one-line treatment #708 gave `execution.py`.
+2. Widen #708's boundary test from one builder to **every hook context the runtime constructs**
+   (planner context, tools-for-run, completion hooks, and any event-handler context that carries a
+   tenant): for each, the documented primitive keys survive `sanitize_extension_context` with
+   production-shaped values. A redacted documented key is the boundary hiding a bug — FR-36 said
+   so, and this is the second time it was.
+3. Document, at `register_planner_context_provider` / `register_run_tool_provider`, that the
+   handler receives **no `db`** by design and must open its own session. Our provider assumed
+   otherwise for four months because nothing said so.
+
+### Not asking for
+
+`db` across the boundary. The rule is right; the handler is what has to change, and ours will.
+
+---
+
 ## FR-38 — the authority gate is wired at `agent_execute_step` only; on the `nodus_vm` backend a denied tool fails the step and never negotiates 🔴 open (filed 2026-09-16, runtime 2.19.0) — with the first observed denial, as asked
 
 > **`negotiate_capability_denial` has exactly one caller: `nodus_adapter.agent_execute_step`
@@ -130,7 +182,15 @@ A cleanup with no decision in it; it cannot be done first.
 
 ---
 
-## FR-36 — the agent-completion hook receives `user_id` as a `uuid.UUID`, which the extension boundary redacts; every first-party completion hook has been failing 🔴 open (filed 2026-09-16, runtime 2.19.0)
+## FR-36 — the agent-completion hook receives `user_id` as a `uuid.UUID`, which the extension boundary redacts; every first-party completion hook has been failing ✅ SHIPPED in 2.20.0 (next day)
+
+**Closed upstream 2026-09-17, the day after it was filed** — 2.20.0 (#708). The completion-hook
+context's `user_id` is a `str`. Our `AGENT-COMPLETION-HOOK-USERID-1` fix (tenant from the
+re-fetched run) keeps working and is now redundant rather than load-bearing; left in place — the
+run is the right source regardless. What to watch for: `loop_enforced` on newly completed runs
+and zero `user_id is required` in the log. Verified live in `RUNTIME_2_20_0_UPGRADE.md` §6.
+
+### Original entry (2026-09-16) — retained
 
 > **`agents/agent_runtime/execution.py:~287` builds the completion-hook context with
 > `"user_id": user_db_id` — a `uuid.UUID` — two lines under a comment explaining that `run_id`
@@ -157,7 +217,20 @@ the ORM `run`, and a redacted *documented primitive* is the boundary hiding a bu
 
 ---
 
-## FR-35 — on the `nodus_vm` backend, LLM usage spent by tool steps is metered in the worker process and never reaches `/metrics`, the tenant window, or the run 🔴 open (filed 2026-09-16, runtime 2.19.0)
+## FR-35 — on the `nodus_vm` backend, LLM usage spent by tool steps is metered in the worker process and never reaches `/metrics`, the tenant window, or the run ✅ SHIPPED in 2.20.0 (next day)
+
+**Closed upstream 2026-09-17, the day after it was filed** — 2.20.0 (#712). Tool-step LLM usage
+on `nodus_vm` rides the worker's reply and is recorded in the api process: `aindy_llm_tokens_total`
+`{provider="deepseek"}`, `aindy_llm_calls_total{attributed="run"}`, the tenant window
+`aindy:rm:tenant:<user>:tokens` and `score.computed.dimensions.llm_tokens` read the spend for the
+first time — the table in the filing below. New knob `AINDY_NODUS_LLM_LEDGER_MAX` (256 per-call
+records carried; the rest aggregated per provider/model). **The governor's tenant window now moves
+on this backend** — `AINDY_QUOTA_MAX_TENANT_TOKENS` is unset here, so nothing new is refused.
+Found by the runtime while building it: the worker seam had been dropping `failure_class` from
+every tool result, so `RETRY-CLASSIFY-1`'s class never reached a compiled plan — fixed in the
+same release. Verified live in `RUNTIME_2_20_0_UPGRADE.md` §6.
+
+### Original entry (2026-09-16) — retained
 
 > **With `AINDY_AGENT_EXECUTION_BACKEND=nodus_vm` — this app's default since RTR-1 §5
 > (`apps/agent/bootstrap.py:_select_execution_backend`) — a plan is compiled to a native
@@ -209,7 +282,15 @@ Any one of, in order of preference:
 
 ---
 
-## FR-34 — `AgentRun.steps_completed` counts steps *attempted*, not steps that succeeded, and that number is a scoring dimension 🔴 open (filed 2026-09-16, runtime 2.19.0)
+## FR-34 — `AgentRun.steps_completed` counts steps *attempted*, not steps that succeeded, and that number is a scoring dimension ✅ SHIPPED in 2.20.0 (next day)
+
+**Closed upstream 2026-09-17, the day after it was filed** — 2.20.0 (#708). `steps_completed`
+counts steps that *succeeded*, on both backends — the filing named the `agent_flow` sites; our
+runs were on `nodus_vm`, which had four more. `Assistant.jsx` and `AgentConsole.jsx` ("N/M
+done") and `score.computed.dimensions.steps_completed` now read honest numbers; a failed run's N
+is **lower** than before, which is the correction, not a regression. No client change needed.
+
+### Original entry (2026-09-16) — retained
 
 Numbered after our FR-33; your ledger's *next available* is still FR-32 because FR-32 has not been
 taken into intake yet — please renumber on intake if that is wrong.
@@ -245,7 +326,19 @@ progress.
 
 ---
 
-## FR-33 — the planner is told a tool's name and one sentence, never its arguments; `register_tool` has nowhere to put them 🔴 open (filed 2026-09-16, runtime 2.19.0)
+## FR-33 — the planner is told a tool's name and one sentence, never its arguments; `register_tool` has nowhere to put them ✅ SHIPPED in 2.20.0 (next day) — our `args_schema` declarations are the follow-up
+
+**Closed upstream 2026-09-17, the day after it was filed** — 2.20.0 (#709).
+`register_tool(..., args_schema={...})` in the dispatcher's dialect (`required` +
+`properties[].type`); the planner catalog renders `args={…}` per tool; `execute_tool` checks
+args before dispatch under `AINDY_TOOL_ARGS_VALIDATION` (**`warn`** by default — count and log;
+`enforce` refuses the step as `failure_class: invalid`, never retried). **Nothing changes until we
+declare a schema** — the 2.20.0 handoff's ask 1 is exactly that: one kwarg per `register_tool`,
+pass it through as the Claude planner's per-tool `input_schema`, watch
+`aindy_tool_args_validation_total{outcome="invalid"}` read zero, then flip to `enforce`, and let
+`test_agent_tool_descriptions_declare_args.py` pin the schema instead of the `Args:` prose.
+
+### Original entry (2026-09-16) — retained
 
 Numbered after your ledger's *next available* FR-32, which is our FR-32 below (awaiting intake).
 
@@ -292,7 +385,19 @@ what the forced tool call was built to carry.
 
 ---
 
-## FR-32 — `memory_execute_loop` is a runtime-owned graph built entirely from app-owned nodes, and it dictates that a memory execution scores 🟡 ownership (filed 2026-09-16, runtime 2.17.0)
+## FR-32 — `memory_execute_loop` is a runtime-owned graph built entirely from app-owned nodes, and it dictates that a memory execution scores ✅ SHIPPED in 2.20.0, option 2 — and taken by us the same day
+
+**Closed upstream 2026-09-17** — 2.20.0 (#708), **option 2**: the runtime's `memory_execute_loop`
+is a *default*, registered by `register_default_flows()` **after** plugin flows on both the api and
+the worker boot paths (`startup._register_flow_engine`, `worker/__main__`), so a plugin's
+registration wins. Until 2026-09-16 the block ran inside `flow_definitions_memory.register()` —
+before plugins on the api and after them on the worker — which is why the guard meant different
+things in the two processes. **Taken on adoption:** `apps/automation/flows/flow_definitions.py`
+registers `memory_execute_loop` ending at `memory_execution_run`; `memory_execution_orchestrate` is
+deleted; `test_memory_execute_no_recalc.py` now pins that the runtime's default stands down to ours
+(`register_default_memory_execute_loop()` → `False`). `RUNTIME_2_20_0_UPGRADE.md` §2.
+
+### Original entry (2026-09-16) — retained
 
 Numbered from your ledger (*next available: FR-32*).
 
