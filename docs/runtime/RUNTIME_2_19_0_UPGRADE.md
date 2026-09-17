@@ -131,10 +131,18 @@ cost of `waiting` was the exit path, which is now the runtime's own.
 
 ---
 
-## 5. The two 2.17.0 asks — unchanged, still owner's calls
+## 5. The two 2.17.0 asks
 
-`RUNTIME_2_17_0_UPGRADE.md` §3: named predicates behind a drain (#680); one tool declaring
-`on_denial="wait"` (#681). Nothing in 2.19.0 changes their shape or cost.
+`RUNTIME_2_17_0_UPGRADE.md` §3: named predicates behind a drain (#680) — **still the owner's
+call** (which flows can be drained). One tool declaring `on_denial="wait"` (#681) — **taken,
+`leadgen.act`, #378**; see that doc's §3.3 for the reasoning and what still needs observing.
+
+**§4.1 above needs a correction, made here rather than rewritten:** "nothing writes to the guest
+path with `AINDY_REASONING_NODUS_NATIVE` off" was wrong. This app defaults the agent backend to
+`nodus_vm` (`apps/agent/bootstrap.py`), so every agent run's tool steps execute in the Nodus
+worker — the guest path is live for agents (FR-35 is the consequence). `AINDY_NODUS_MAX_MEMORY_MB`
+would apply to them. What still stands is the pairing rule: it bounds growth, polled, and needs
+a container cap alongside it; the container cap on this host is the real decision.
 
 ---
 

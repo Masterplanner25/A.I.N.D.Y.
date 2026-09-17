@@ -110,6 +110,13 @@ services:
       # See docs/operations/DEPLOYMENT.md "Enabling the Claude planner".
       AINDY_AGENT_PLANNER_BACKEND: "${AINDY_AGENT_PLANNER_BACKEND:-runtime_local}"
       AINDY_CLAUDE_PLANNER_MODEL: "${AINDY_CLAUDE_PLANNER_MODEL:-}"
+      # Authority negotiation (runtime AUTHORITY-NEGOTIATION-1, default OFF upstream). When
+      # on, an agent step refused for lack of authority may take its tool's declared
+      # fallback instead of failing the run: `leadgen.act` declares on_denial="wait", which
+      # PARKS the run (AgentRun.status=waiting) for an operator's skip/abort. Set in .env for
+      # the local, non-production profile only — it is the evidence the runtime's phase 3
+      # flip waits on, and the gate cannot widen authority (no `grant` decision exists).
+      AINDY_AUTHORITY_NEGOTIATION: "${AINDY_AUTHORITY_NEGOTIATION:-}"
       # ── Shadow / advisory flags (LIVE_VERIFICATION_SCOPE phase 2c) ──────────────
       # These MUST be declared here to reach the container. Compose reads .env for
       # interpolation only — a variable set in .env but absent from this block is
