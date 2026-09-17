@@ -113,25 +113,58 @@ def _build_reasoning_context_block(user_id, db) -> str:
 
 
 def build_planner_context(context: dict) -> dict:
-    db = context.get("db")
-    user_id = context.get("user_id")
-    kpi_context = _build_kpi_context_block(user_id, db)
-    reasoning_context = _build_reasoning_context_block(user_id, db)
-    kpi_context = kpi_context + reasoning_context
-    prompt = PLANNER_SYSTEM_PROMPT + kpi_context
-    try:
-        from AINDY.memory.memory_helpers import enrich_context, format_memories_for_prompt
+    """The planner's system prompt: base prompt + the user's Infinity context.
 
-        memory_context = enrich_context({
-            "db": db,
-            "user_id": str(user_id) if user_id else None,
-            "node_name": "agent_planning",
-            "agent_type": context.get("run_type") or "default",
-        })
-        prompt += format_memories_for_prompt(memory_context.get("memory_context") or [])
-    except Exception as exc:
-        logger.debug("agent planner memory context skipped: %s", exc)
-    return {"system_prompt": prompt, "context_block": kpi_context}
+    The runtime routes this provider through the extension boundary
+    (`registry.get_planner_context` -> `_sanitized_extension_input`), which strips `db` at the
+    root BY DESIGN and redacts every non-primitive. So the context never carries a session, and
+    this function opens its own — the same rule `handle_agent_run_completed` already lives by.
+
+    AGENT-PLANNER-CONTEXT-BOUNDARY-1 (2026-09-17): until this fix the provider read `db` from
+    the context (always None) and `user_id` as handed (a `uuid.UUID` upstream, so
+    `{"_redacted_type": "UUID"}` here), and every block below took its `except: return ""`
+    path — every plan since the boundary landed (2026-05-20) was made from the base prompt plus
+    the tool catalog, blind to the score it exists to steer by. The runtime still passes the
+    UUID at `agent_runtime/shared.py:81` (FR-39); until that lands the tenant is absent here
+    and the prompt stays bare, but it is logged rather than swallowed, and the moment a string
+    arrives the blocks build against a real session.
+    """
+    run_type = context.get("run_type") or "default"
+    user_id = _hook_user_id(context.get("user_id"))
+    if not user_id:
+        logger.warning(
+            "[planner_context] no usable user_id in the hook context (got %r) — planning without "
+            "the Infinity context; runtime FR-39",
+            context.get("user_id"),
+        )
+        return {"system_prompt": PLANNER_SYSTEM_PROMPT, "context_block": ""}
+
+    # An in-process caller may hand us a real session; the boundary never does.
+    db = context.get("db")
+    owns_session = db is None or isinstance(db, dict)
+    if owns_session:
+        from AINDY.db.database import SessionLocal
+
+        db = SessionLocal()
+    try:
+        kpi_context = _build_kpi_context_block(user_id, db) + _build_reasoning_context_block(user_id, db)
+        prompt = PLANNER_SYSTEM_PROMPT + kpi_context
+        try:
+            from AINDY.memory.memory_helpers import enrich_context, format_memories_for_prompt
+
+            memory_context = enrich_context({
+                "db": db,
+                "user_id": user_id,
+                "node_name": "agent_planning",
+                "agent_type": run_type,
+            })
+            prompt += format_memories_for_prompt(memory_context.get("memory_context") or [])
+        except Exception as exc:
+            logger.debug("agent planner memory context skipped: %s", exc)
+        return {"system_prompt": prompt, "context_block": kpi_context}
+    finally:
+        if owns_session:
+            db.close()
 
 
 def get_tools_for_run(_context: dict) -> list[dict]:

@@ -41,7 +41,7 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
-## AGENT-PLANNER-CONTEXT-BOUNDARY-1: the planner has never seen the Infinity context — the provider reads `db` and `user_id` from a context the boundary strips (app-owned, P1; runtime half FR-39)
+## AGENT-PLANNER-CONTEXT-BOUNDARY-1: 🟡 app half FIXED 2026-09-17 — the planner has never seen the Infinity context; effective when FR-39 lands (app-owned, was P1)
 
 **Found 2026-09-17 reading an agent run's log at WARNING during the 2.20.0 adoption
 (`RUNTIME_2_20_0_UPGRADE.md` §7.1):**
@@ -79,6 +79,18 @@ KPI block is built against a session it opened itself.
 
 **Not affected:** `get_tools_for_run` ignores its context, so tool selection never was — which is
 why runs kept choosing the right tools while the prompt carried nothing of the user.
+
+**Fixed, app half (same day):** `build_planner_context` takes the tenant through `_hook_user_id`;
+with none usable it returns the base prompt and logs one WARNING naming FR-39 (visible, not
+swallowed — the completion hook's WARNING is the only reason its twin was ever found); with a
+string it opens its own `SessionLocal()`, builds all three blocks against it, and closes it in a
+`finally`. An in-process caller's real session is used as given and left open.
+`tests/unit/test_planner_context_boundary.py` hands it the boundary's exact shape (no `db`,
+`{"_redacted_type": "UUID"}` → no jobs called, no session opened, WARNING logged) and FR-39's
+shape (a string → one session opened, passed to both jobs, closed; the KPI heading in the
+prompt); both fail against the old body. **What remains is the runtime's one line** at
+`shared.py:81` — until then every plan logs the WARNING and is still made bare. Live check at the
+next rebuild: the WARNING replaces `get_user_kpi_snapshot failed for {'_redacted_type': 'UUID'}`.
 
 ---
 
