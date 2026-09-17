@@ -91,7 +91,21 @@ agent and five runs ever on the local stack (`agent-tools-and-runs`) make it a n
 
 ## 4. Decisions recorded, not taken
 
-### 4.1 `AINDY_NODUS_MAX_MEMORY_MB` — left unset
+### 4.1 `AINDY_NODUS_MAX_MEMORY_MB` — left unset at adoption; **set with a container cap, #380**
+
+**Taken 2026-09-16, after §5's correction (the guest path IS live for agents).** The real
+decision was the container cap, and it was made from measurement: cgroup `memory.peak` on the
+api container over a life that included boot (the 16-app graph imported twice), an agent run
+and a warm-worker spawn was **530 MiB**; idle is ~320 MiB api + ~225 MiB per warm worker, pool
+default 4 (~1.2 GB worst case). `docker-compose.prod.yml` now sets `mem_limit: 1536m` (~3× the
+peak; do not drop below ~1024m without re-measuring), `memswap_limit: 1536m` (no swap — a
+swapping API is the frozen-zero-restarts fingerprint; a clean OOM kill is the better failure),
+and `AINDY_NODUS_MAX_MEMORY_MB=256` (growth over one guest run; 4 workers at full growth still
+fit under the cap). `tests/unit/test_compose_memory_bounds.py` keeps the three together and the
+ceiling under the cap. Verified by recreating the api under the cap: boot `healthy` with kernel `memory.max` 1.5 GiB and `swap.max` 0, boot peak 311 MiB; one agent run (`memory.recall → memory.write`) executed in the worker under the 256 MB ceiling, `completed 2/2` in 21 s, no `sandbox` error and no *cannot be enforced on this host* refusal, container peak 471 MiB with the worker up.
+
+The paragraph below is the adoption-day reasoning, kept as written.
+
 
 It bounds *growth* over a run, polled, so a single large allocation still escapes it; the handoff
 says to set an OS-level cap alongside. `docker-compose.prod.yml` sets no memory limit on `api`
