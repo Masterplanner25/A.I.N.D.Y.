@@ -9,6 +9,7 @@ const {
   mockGetStrategyLayer, mockGetPhaseAdvanceProposal, mockConfirmPhaseAdvance,
   mockDismissPhaseAdvance, mockReopenPhase,
   mockCreateStrategy, mockStartStrategy, mockFinishStrategy, mockSetStrategyObjective,
+  mockGetStrategyConclusionProposals, mockDismissStrategyConclusion,
 } = vi.hoisted(() => ({
   mockGetStrategyLayer: vi.fn(),
   mockGetPhaseAdvanceProposal: vi.fn(),
@@ -19,6 +20,8 @@ const {
   mockStartStrategy: vi.fn(),
   mockFinishStrategy: vi.fn(),
   mockSetStrategyObjective: vi.fn(),
+  mockGetStrategyConclusionProposals: vi.fn(),
+  mockDismissStrategyConclusion: vi.fn(),
 }));
 
 vi.mock("../api/masterplan.js", () => ({
@@ -31,6 +34,8 @@ vi.mock("../api/masterplan.js", () => ({
   startStrategy: mockStartStrategy,
   finishStrategy: mockFinishStrategy,
   setStrategyObjective: mockSetStrategyObjective,
+  getStrategyConclusionProposals: mockGetStrategyConclusionProposals,
+  dismissStrategyConclusion: mockDismissStrategyConclusion,
 }));
 
 import PhasePanel from "../components/app/PhasePanel";
@@ -60,6 +65,10 @@ describe("PhasePanel", () => {
     mockStartStrategy.mockReset();
     mockFinishStrategy.mockReset();
     mockSetStrategyObjective.mockReset();
+    mockGetStrategyConclusionProposals.mockReset();
+    mockDismissStrategyConclusion.mockReset();
+    // No strategy has finished its work unless a test says so.
+    mockGetStrategyConclusionProposals.mockResolvedValue({ proposed: [], dismissed: [] });
   });
 
   it("renders nothing for a plan that predates the layer", async () => {
@@ -294,6 +303,46 @@ describe("PhasePanel", () => {
     expect(await screen.findByTestId("phase-advance-notice")).toHaveTextContent(
       "Establish Authority abandoned. 2 open tasks returned to the plan; completed work stays attached.",
     );
+  });
+
+  // ── the third proposal: a strategy whose work is done ──────────────────────────
+
+  it("a strategy whose every task is done is asked for a verdict, and NOT DONE declines it", async () => {
+    mockGetStrategyLayer.mockResolvedValue({
+      phases: PHASES, strategies: [STRATEGIES[0]],
+      strategy_task_counts: { s1: { total: 2, completed: 2, hours_total: 3, hours_completed: 3 } },
+    });
+    mockGetPhaseAdvanceProposal.mockResolvedValue({ proposed: false, phase: PHASES[0], evidence: {} });
+    mockGetStrategyConclusionProposals.mockResolvedValue({
+      proposed: [{ strategy: STRATEGIES[0], reason: "work_complete",
+                   evidence: { tasks_total: 2, tasks_completed: 2, hours_total: 3, hours_completed: 3, work_complete: true } }],
+      dismissed: [],
+    });
+    mockDismissStrategyConclusion.mockResolvedValue({
+      strategy: STRATEGIES[0], dismissed: { at: "2026-09-16T00:00:00Z", task_count: 2 },
+      returns_when: "the strategy's attached tasks change",
+    });
+
+    render(<PhasePanel planId={10} />);
+
+    const ask = await screen.findByTestId("strategy-conclusion-proposal");
+    expect(ask).toHaveTextContent("All 2 tasks done — conclude it?");
+    // The proposal replaces the generic FINISH… with the verdict the system is asking for.
+    expect(screen.queryByRole("button", { name: /^finish/i })).toBeNull();
+
+    // Confirming IS the existing verdict: VERDICT… opens the same menu.
+    fireEvent.click(screen.getByRole("button", { name: /verdict/i }));
+    expect(screen.getByTestId("strategy-verdict")).toHaveTextContent("WORKED");
+    fireEvent.click(screen.getByRole("button", { name: /×/ }));
+
+    // Declining records it and says when it comes back.
+    mockGetStrategyConclusionProposals.mockResolvedValue({ proposed: [], dismissed: [] });
+    fireEvent.click(screen.getByRole("button", { name: /not done/i }));
+    await waitFor(() => expect(mockDismissStrategyConclusion).toHaveBeenCalledWith(10, "s1"));
+    expect(await screen.findByTestId("phase-advance-notice")).toHaveTextContent(
+      "Establish Authority: noted. It will ask again when its tasks change.",
+    );
+    await waitFor(() => expect(screen.queryByTestId("strategy-conclusion-proposal")).toBeNull());
   });
 
   // ── objectives: worked toward THIS ─────────────────────────────────────────────
