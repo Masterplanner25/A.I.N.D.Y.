@@ -20,6 +20,26 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Hard memory ceiling for the api container — the API process PLUS the Nodus warm-pool
+    # workers that run agent steps (nodus_vm is this app's default backend, so every agent
+    # run executes in one). Same reason mongo has one below: a runaway here should OOM-kill
+    # THIS container and restart it, not push the Docker VM into a global OOM that takes
+    # postgres down (POSTGRES-CRASH-RESIDUAL-1's original mechanism, PR #234).
+    #
+    # Sized 2026-09-16 from measurement, not guessed: cgroup memory.peak over a container
+    # life that included boot (the 16-app graph imported twice), an agent run and a warm
+    # worker spawn was 530 MiB; idle is ~320 MiB api + ~225 MiB per warm worker, and the pool
+    # defaults to 4 workers (~1.2 GB worst case under agent concurrency). 1536m is ~3x the
+    # measured peak. Do NOT drop below ~1024m without re-measuring the boot spike.
+    #
+    # memswap_limit == mem_limit disables swap for this container on purpose: an API that
+    # swaps produces the "running, zero restarts, dead /health, no log output" fingerprint
+    # (CLAUDE.md, "When the API hangs") — a clean OOM kill + restart is the better failure.
+    # Pairs with AINDY_NODUS_MAX_MEMORY_MB below, which bounds a single guest execution's
+    # growth; the runtime's handoff (2.19.0 §3) says to set both, because that ceiling is
+    # polled and cannot stop one large allocation — only this can.
+    mem_limit: 1536m
+    memswap_limit: 1536m
     environment:
       # psycopg2 is the runtime's bundled driver -> plain postgresql:// scheme.
       DATABASE_URL: "postgresql://${POSTGRES_USER:-aindy}:${POSTGRES_PASSWORD:-aindy}@postgres:5432/${POSTGRES_DB:-aindy}"
@@ -172,6 +192,17 @@ services:
       # limit". Widened + env-overridable. See docs/operations/DEPLOYMENT.md.
       AINDY_NODUS_MAX_EXECUTION_MS: "${AINDY_NODUS_MAX_EXECUTION_MS:-120000}"
       AINDY_NODUS_BOOT_ALLOWANCE_MS: "${AINDY_NODUS_BOOT_ALLOWANCE_MS:-60000}"
+      # Runtime 2.19.0 (#697): per-execution memory ceiling for the Nodus guest, enforced by
+      # nodus-lang's max_memory_mb. It bounds GROWTH over one run — the VM reads the worker's
+      # RSS when the script starts and fails the run with a `sandbox` error once the process
+      # has grown past the budget — and it is polled, so a single large allocation can still
+      # land; the container mem_limit above is the hard stop. 256 MB of growth is far above
+      # an agent plan's tool results or an ARM analysis of a <=100 KB file, and 4 warm
+      # workers each at full growth still fit under mem_limit. A per-execution env_spec may
+      # narrow it, never widen it. Guest path only: agent runs and flow nodes executing in
+      # the API process are unbounded (runtime SYSMAX-3, open). Unset = the runtime's
+      # default = no ceiling. See docs/runtime/RUNTIME_2_19_0_UPGRADE.md §4.1.
+      AINDY_NODUS_MAX_MEMORY_MB: "${AINDY_NODUS_MAX_MEMORY_MB:-256}"
       # Runtime 2.11.0: nodus's workflow framework keeps its own run records, which used to
       # land in the worker's cwd (/home/aindy, no volume) and vanish on every recreate.
       # Pointing them at a volume makes them durable. Use this variable, not the legacy
