@@ -268,6 +268,18 @@ Two halves:
 `get_tools_for_run` (our other provider) ignores its context, so tool selection was never
 affected — which is why the runs above still chose the right tools.
 
+### 7.3 `AINDY_TOOL_ARGS_VALIDATION=warn` has no witness on `nodus_vm` — FR-40
+
+Found at the rebuild (§8). `execute_tool` counts `aindy_tool_args_validation_total` and logs the
+`warn`-mode WARNING in the process that runs it — the worker, on our backend — whose registry the
+api's `/metrics` never serves (FR-35's shape) and whose stderr is `DEVNULL`
+(`nodus_worker_pool.py:152`). After a clean run with every arg matching: no sample, not even
+`outcome="valid"`; nothing in the log. The handoff's *watch invalid read zero, then `enforce`*
+recipe cannot produce its evidence here. Filed FR-40 (ride the tally on the worker reply like
+`llm_usage`). Meanwhile `enforce` would give **more** evidence than `warn` on this backend — a
+failed step with `failure_class: invalid` and the reason — and the planner got every key right on
+the first schema-fed plan; whether to flip is the owner's call.
+
 ### 7.2 One `memory.generate_embedding` job `pending` with `attempt_count 0`
 
 Created 04:02:42 by the runtime's feedback capture (`feedback.latency_spike` → memory node
@@ -275,3 +287,18 @@ Created 04:02:42 by the runtime's feedback capture (`feedback.latency_spike` →
 the job never dispatched and is still `pending` twenty minutes on. Runtime-side, cosmetic (the
 node is searchable), and it will be one of `job_recovery`'s "orphaned thread-mode jobs" at the
 next boot. Noted, not filed: one occurrence.
+
+---
+
+## 8. The rebuild for #388 / #389 — image `9b25956261bf`, 2026-09-17 06:38–06:44 UTC
+
+Built from `main` at #389; api recreated in place (postgres, mongo, redis, mailpit untouched);
+`healthy` in ~1 min; `bootstrap-schema` needed nothing (`0019` already stamped — no exit 3 this
+time). One run on the test account, *"Recall what memory holds about the cost governor and write a
+one-line insight note"* → plan `memory.recall {query, limit: 5} → memory.write {content, tags,
+node_type}` — **every key from the schemas, first try** — `completed 2/2`.
+
+| what the rebuild was for | read |
+|---|---|
+| #388 — the provider names its condition instead of swallowing it | `WARNING [planner_context] no usable user_id in the hook context (got {'_redacted_type': 'UUID'}) — planning without the Infinity context; runtime FR-39` — one line, under the planner's trace; `get_user_kpi_snapshot failed …` gone |
+| #389 — `aindy_tool_args_validation_total` starts sampling | **no sample** — the counter lives in the worker on `nodus_vm`. §7.3, FR-40 |
