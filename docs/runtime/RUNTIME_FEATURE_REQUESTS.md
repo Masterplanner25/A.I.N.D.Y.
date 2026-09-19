@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-17"
+last_verified: "2026-09-18"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -128,6 +128,10 @@ re-fetch the tenant by, so our fix has nothing to identify the user with until t
 > on that path.** This app defaults every real boot to `nodus_vm`
 > (`apps/agent/bootstrap.py:_select_execution_backend`, RTR-1 §5), so the gate we were asked to
 > declare a tool for cannot fire here.
+
+**2026-09-18:** the 2.21.0 handoff (§6 ask 1) asks again for "the first observed denial". It is
+the section below, recorded 2026-09-16 — both backends, the `skip` resume included. Nothing
+further is owed from this side; the flip waits on the `nodus_vm` seam this FR is about.
 
 ### The first denial, observed — one run per backend, otherwise identical
 
