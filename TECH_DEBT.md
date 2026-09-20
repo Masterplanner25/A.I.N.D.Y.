@@ -41,6 +41,39 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## ROUTE-PIPELINE-ORM-RETURN-1: ✅ CLOSED 2026-09-20 — RippleTrace handlers returned ORM rows; once the pipeline had a session to commit, the page got 214 `{}`s and the api wedged (app-owned, was P1 — a regression from #393, same day)
+
+**Found by the owner, minutes after the #393 rebuild:** *"all of the rippletrace tracked content
+shows unknown in the UI"*. `GET /apps/rippletrace/drop_points` returned `[{},{},…]` × 214 —
+title empty, platform "unknown", date unknown — and before that the api had been unreachable
+for ~15 minutes (`/api/version` included; main thread idle in `epoll_wait`, 1 % CPU, one
+connection `idle in transaction`, 0 postgres reinits, host memory fine).
+
+**Mechanism, reproduced on a SQLite session in the test:** the RippleTrace services hand back
+ORM instances (`q.all()`), and the handlers returned them raw. With no session in `metadata`
+(before #393) the pipeline never committed, so the encoder read the loaded rows by accident.
+With the session (after #393) the pipeline commits after the handler — the events ride the
+transaction, `EVENT-OUTBOX-1` — and `expire_on_commit` empties every instance before
+`jsonable_encoder` sees it: `{}`. Each attribute the encoder then touched was a lazy refresh
+on a post-commit session, which is the wedge. Every other domain returns dicts / pydantic
+models from its handlers; RippleTrace was the one that had never been under a real pipeline.
+
+**Fix (#394, same day):** `apps/_shared/serialization.py` — `materialize()` walks lists /
+dicts and converts SQLAlchemy instances to dicts of their column attributes *while the session
+is live*, never following a relationship; `materialized(handler)` applies it before the
+pipeline can commit. All 44 RippleTrace calls go through it; `_run_legacy` wraps once for the
+27 legacy surfaces. Response bodies are what they were before #393 (column attributes — the
+same thing `jsonable_encoder` used to read off a live instance). **Test:**
+`tests/unit/test_handler_returns_data_not_rows.py` reproduces the failure on a real session
+(`jsonable_encoder(rows)` after `commit()` **is** `[{}, {}]`), shows `materialize` survives
+the commit, and AST-checks every RippleTrace pipeline call is wrapped.
+
+**The lesson, filed where it can be read next time:** *a pipeline handler returns data.* A
+handler that returns rows only works while nothing commits behind it — and the runtime now
+does, by design. The wire, once connected, found the next missing one.
+
+---
+
 ## ROUTE-PIPELINE-NO-SESSION-1: ✅ CLOSED 2026-09-20 — 80 pipeline call sites handed the pipeline no session; RippleTrace, its legacy surface, scores and three social reads ran outside the execution ledger (app-owned, was P1)
 
 **Found 2026-09-19, scanning after `ROUTE-NAME-EVENT-SOURCE-1`.** `execute_with_pipeline*` takes the

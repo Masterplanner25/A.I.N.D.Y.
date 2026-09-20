@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
+from apps._shared.serialization import materialized
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import verify_api_key
@@ -63,7 +64,7 @@ async def _run_legacy(request: Request, route_name: str, handler, *, db=None, in
     return await execute_with_pipeline(
         request=request,
         route_name=route_name,
-        handler=handler,
+        handler=materialized(handler),  # ROUTE-PIPELINE-ORM-RETURN-1: data, not rows
         user_id=_LEGACY_API_KEY_USER_ID,
         input_payload=input_payload,
         metadata={"db": db} if db is not None else None,

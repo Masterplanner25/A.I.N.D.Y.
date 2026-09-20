@@ -334,6 +334,15 @@ that INSERT, the runtime rolls back and continues at WARNING, and the route is n
 eight of ours were like that until 2026-09-19 (`ROUTE-NAME-EVENT-SOURCE-1`, FR-41).
 `test_route_names_fit_event_source.py` reads the width off the model and scans every call site.
 
+**A pipeline handler returns data, not ORM rows, and every call passes `metadata={"db": db}`.**
+With the session in metadata the pipeline commits after the handler (events ride the handler's
+transaction since 2.21.0), `expire_on_commit` empties every loaded instance, and a handler that
+returned rows serialises as `{}` — RippleTrace served 214 of them and wedged the api for 15
+minutes on 2026-09-20 (`ROUTE-PIPELINE-ORM-RETURN-1`). Where a service still hands back rows,
+wrap the handler: `materialized(handler)` from `apps/_shared/serialization.py`.
+`test_pipeline_routes_pass_session.py` guards the session (80 sites were missing it, #393);
+`test_handler_returns_data_not_rows.py` guards RippleTrace's wrapping.
+
 ### `_fresh_main_app()` and `Base.metadata` — model import timing hazard
 
 `_setup_postgres_schema` (session-scoped, autouse) calls `Base.metadata.create_all()` once at session start. Each test's `_fresh_main_app()` reloads `AINDY.main` + `AINDY.startup`, which imports all app modules and may add new model classes to `Base.metadata`. Tables registered this way exist in `Base.metadata` but **were never created in PostgreSQL** because `create_all` already ran.
