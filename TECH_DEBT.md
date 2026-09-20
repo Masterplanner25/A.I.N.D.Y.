@@ -41,6 +41,30 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## DOCKER-PIP-LAYER-INVALIDATION-1: ✅ CLOSED 2026-09-20 — every source-only rebuild re-downloaded the whole dependency tree; `COPY apps` sat above `pip install` (app-owned, was P3)
+
+**Found 2026-09-20, the third rebuild of the day:** each of #392, #393 and #394 was a source-only
+change, and each rebuild spent 10–15 minutes in `pip install` re-resolving and re-downloading
+every wheel (numpy 17 MB at ~70 kB/s, and the rest). The Dockerfile's own comment on that layer
+said *"layer-cached on source-only changes"*. It was the opposite: `COPY apps ./apps` came
+**before** the `RUN pip install .`, so any change under `apps/` changed the install layer's
+inputs and busted it. The BuildKit pip cache mount was meant to soften a miss and evidently
+retained nothing between builds either — every build showed `Downloading …` for the whole tree.
+
+**Fix (#395):** two layers. The first copies only `pyproject.toml`, `README.md` and
+`constraints.txt`, creates a placeholder `apps/__init__.py` so `pip install . -c constraints.txt`
+can build and resolve, installs the dependency tree, and removes the placeholder. The second
+copies the real `apps/` and runs `pip install --no-deps .` — seconds. pip reinstalls a local
+directory project unconditionally, so the placeholder package is replaced although the version
+string is unchanged. `-c constraints.txt` is on both installs (`RUNTIME-PIN-FLOAT-1`;
+`test_build_paths_install_with_the_constraints_file` still holds).
+
+**Measured on this host, same link:** first build after the change (dependency layer
+populated) **17 min 59 s**; a rebuild after a one-line change under `apps/` **35 s**. A
+pin move (`constraints.txt`) still rebuilds the dependency layer, as it should.
+
+---
+
 ## ROUTE-PIPELINE-ORM-RETURN-1: ✅ CLOSED 2026-09-20 — RippleTrace handlers returned ORM rows; once the pipeline had a session to commit, the page got 214 `{}`s and the api wedged (app-owned, was P1 — a regression from #393, same day)
 
 **Found by the owner, minutes after the #393 rebuild:** *"all of the rippletrace tracked content
