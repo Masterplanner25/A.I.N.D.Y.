@@ -57,6 +57,9 @@ print(json.dumps(payload['runtime'], sort_keys=True))
 # Local stack — BOTH compose files AND BOTH profiles, every up/down (see the trap below)
 docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail up -d
 docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail build api   # after a merge you want live
+# A source-only change rebuilds in ~a minute (deps layer is keyed on pyproject/constraints only, since
+# #395); a pin move re-downloads the tree, 10-15 min on this link. If a source change takes 10+ min,
+# the layer order regressed — DOCKER-PIP-LAYER-INVALIDATION-1.
 
 # Schema-default parity guard, locally (what CI Step 6 does): migrate a scratch DB FROM EMPTY
 # inside the api image, then diff models vs. migrations. PYTHONPATH is load-bearing —
