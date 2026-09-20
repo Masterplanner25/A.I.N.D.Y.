@@ -55,15 +55,18 @@ def _with_execution_envelope(payload):
     return {"data": payload, "execution_envelope": envelope}
 
 
-async def _run_legacy(request: Request, route_name: str, handler, *, input_payload=None):
+async def _run_legacy(request: Request, route_name: str, handler, *, db=None, input_payload=None):
     # Legacy surface is API-key-only. Existing callers do not authenticate as a user,
     # so we stamp a sentinel user_id for execution-pipeline observability.
+    # The session goes in `metadata["db"]`: without it the pipeline records no
+    # execution.started/completed and attaches no execution unit (ROUTE-PIPELINE-NO-SESSION-1).
     return await execute_with_pipeline(
         request=request,
         route_name=route_name,
         handler=handler,
         user_id=_LEGACY_API_KEY_USER_ID,
         input_payload=input_payload,
+        metadata={"db": db} if db is not None else None,
     )
 
 
@@ -262,7 +265,7 @@ async def analyze_ripple(request: Request, drop_point_id: str, db: Session = Dep
             raise HTTPException(status_code=404, detail="Drop point not found")
         return metrics
 
-    return await _run_legacy(request, "rippletrace.legacy.analyze_ripple", handler)
+    return await _run_legacy(request, "rippletrace.legacy.analyze_ripple", handler, db=db)
 
 
 @router.get("/dashboard", dependencies=[Depends(add_deprecation_headers)])
@@ -288,14 +291,14 @@ async def proofboard_dashboard(request: Request, db: Session = Depends(get_db)):
         )
         return snapshot
 
-    return await _run_legacy(request, "rippletrace.legacy.dashboard", handler)
+    return await _run_legacy(request, "rippletrace.legacy.dashboard", handler, db=db)
 
 
-async def _wrap_legacy(request: Request, route_name: str, fn):
+async def _wrap_legacy(request: Request, route_name: str, fn, *, db=None):
     def handler(ctx):
         return fn()
 
-    return await _run_legacy(request, route_name, handler)
+    return await _run_legacy(request, route_name, handler, db=db)
 
 
 @router.get("/top_drop_points", dependencies=[Depends(add_deprecation_headers)])
@@ -304,7 +307,7 @@ async def top_drop_points(request: Request, db: Session = Depends(get_db)):
     def fn():
         return {"top_drop_points": get_top_drop_points(db)}
 
-    return await _wrap_legacy(request, "rippletrace.legacy.top_drop_points", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.top_drop_points", fn, db=db)
 
 
 @router.get("/ripple_deltas/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -313,7 +316,7 @@ async def ripple_deltas(request: Request, drop_point_id: str, db: Session = Depe
     def fn():
         return compute_deltas(drop_point_id, db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.ripple_deltas", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.ripple_deltas", fn, db=db)
 
 
 @router.get("/emerging_drops", dependencies=[Depends(add_deprecation_headers)])
@@ -322,7 +325,7 @@ async def emerging_drops_view(request: Request, db: Session = Depends(get_db)):
     def fn():
         return {"emerging_drops": emerging_drops(db)}
 
-    return await _wrap_legacy(request, "rippletrace.legacy.emerging_drops", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.emerging_drops", fn, db=db)
 
 
 @router.get("/predict/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -331,7 +334,7 @@ async def predict_drop_point_view(request: Request, drop_point_id: str, db: Sess
     def fn():
         return predict_drop_point(drop_point_id, db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.predict", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.predict", fn, db=db)
 
 
 @router.get("/prediction_summary", dependencies=[Depends(add_deprecation_headers)])
@@ -340,7 +343,7 @@ async def prediction_summary_view(request: Request, db: Session = Depends(get_db
     def fn():
         return prediction_summary(db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.prediction_summary", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.prediction_summary", fn, db=db)
 
 
 @router.get("/recommend/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -349,7 +352,7 @@ async def recommend_drop_point(request: Request, drop_point_id: str, db: Session
     def fn():
         return recommend_for_drop_point(drop_point_id, db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.recommend", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.recommend", fn, db=db)
 
 
 @router.get("/recommendations_summary", dependencies=[Depends(add_deprecation_headers)])
@@ -358,7 +361,7 @@ async def recommendations_summary_view(request: Request, db: Session = Depends(g
     def fn():
         return recommendations_summary(db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.recommendations_summary", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.recommendations_summary", fn, db=db)
 
 
 # NOTE: This route has no equivalent in rippletrace_router.py and is called by
@@ -369,7 +372,7 @@ async def influence_graph_view(request: Request, db: Session = Depends(get_db)):
     def fn():
         return build_influence_graph(db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.influence_graph", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.influence_graph", fn, db=db)
 
 
 @router.get("/influence_chain/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -378,7 +381,7 @@ async def influence_chain_view(request: Request, drop_point_id: str, db: Session
     def fn():
         return influence_chain(drop_point_id, db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.influence_chain", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.influence_chain", fn, db=db)
 
 
 @router.get("/causal_graph", dependencies=[Depends(add_deprecation_headers)])
@@ -387,7 +390,7 @@ async def causal_graph_view(request: Request, db: Session = Depends(get_db)):
     def fn():
         return build_causal_graph(db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.causal_graph", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.causal_graph", fn, db=db)
 
 
 @router.get("/causal_chain/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -396,7 +399,7 @@ async def causal_chain_view(request: Request, drop_point_id: str, db: Session = 
     def fn():
         return get_causal_chain(drop_point_id, db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.causal_chain", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.causal_chain", fn, db=db)
 
 
 @router.get("/narrative/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -405,7 +408,7 @@ async def narrative_view(request: Request, drop_point_id: str, db: Session = Dep
     def fn():
         return generate_narrative(drop_point_id, db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.narrative", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.narrative", fn, db=db)
 
 
 @router.get("/narrative_summary", dependencies=[Depends(add_deprecation_headers)])
@@ -414,7 +417,7 @@ async def narrative_summary_view(request: Request, db: Session = Depends(get_db)
     def fn():
         return {"stories": narrative_summary(db)}
 
-    return await _wrap_legacy(request, "rippletrace.legacy.narrative_summary", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.narrative_summary", fn, db=db)
 
 
 @router.get("/strategies", dependencies=[Depends(add_deprecation_headers)])
@@ -424,7 +427,7 @@ async def strategies_view(request: Request, db: Session = Depends(get_db)):
         build_strategies(db)
         return {"strategies": list_strategies(db)}
 
-    return await _wrap_legacy(request, "rippletrace.legacy.strategies", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.strategies", fn, db=db)
 
 
 @router.get("/strategy/{strategy_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -436,7 +439,7 @@ async def strategy_view(request: Request, strategy_id: str, db: Session = Depend
             raise HTTPException(status_code=404, detail="Strategy not found")
         return strategy
 
-    return await _wrap_legacy(request, "rippletrace.legacy.strategy", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.strategy", fn, db=db)
 
 
 @router.get("/strategy_match/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -445,7 +448,7 @@ async def strategy_match_view(request: Request, drop_point_id: str, db: Session 
     def fn():
         return {"matches": match_strategies(drop_point_id, db)}
 
-    return await _wrap_legacy(request, "rippletrace.legacy.strategy_match", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.strategy_match", fn, db=db)
 
 
 @router.post("/build_playbook/{strategy_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -455,7 +458,7 @@ async def build_playbook_view(request: Request, strategy_id: str, db: Session = 
         return build_playbook(strategy_id, db)
 
     return _with_execution_envelope(
-        await _wrap_legacy(request, "rippletrace.legacy.build_playbook", fn)
+        await _wrap_legacy(request, "rippletrace.legacy.build_playbook", fn, db=db)
     )
 
 
@@ -465,7 +468,7 @@ async def playbooks_view(request: Request, db: Session = Depends(get_db)):
     def fn():
         return {"playbooks": list_playbooks(db)}
 
-    return await _wrap_legacy(request, "rippletrace.legacy.playbooks", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.playbooks", fn, db=db)
 
 
 @router.get("/playbook/{playbook_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -477,7 +480,7 @@ async def playbook_view(request: Request, playbook_id: str, db: Session = Depend
             raise HTTPException(status_code=404, detail="Playbook not found")
         return playbook
 
-    return await _wrap_legacy(request, "rippletrace.legacy.playbook", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.playbook", fn, db=db)
 
 
 @router.get("/playbook_match/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -486,7 +489,7 @@ async def playbook_match_view(request: Request, drop_point_id: str, db: Session 
     def fn():
         return {"matches": match_playbooks(drop_point_id, db)}
 
-    return await _wrap_legacy(request, "rippletrace.legacy.playbook_match", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.playbook_match", fn, db=db)
 
 
 @router.get("/generate_content/{playbook_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -495,7 +498,7 @@ async def generate_content_view(request: Request, playbook_id: str, db: Session 
     def fn():
         return generate_content(playbook_id, db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.generate_content", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.generate_content", fn, db=db)
 
 
 @router.post("/generate_content_for_drop/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -505,7 +508,7 @@ async def generate_content_for_drop_view(request: Request, drop_point_id: str, d
         return generate_content_for_drop(drop_point_id, db)
 
     return _with_execution_envelope(
-        await _wrap_legacy(request, "rippletrace.legacy.generate_content_for_drop", fn)
+        await _wrap_legacy(request, "rippletrace.legacy.generate_content_for_drop", fn, db=db)
     )
 
 
@@ -515,7 +518,7 @@ async def generate_variations_view(request: Request, playbook_id: str, db: Sessi
     def fn():
         return generate_variations(playbook_id, db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.generate_variations", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.generate_variations", fn, db=db)
 
 
 @router.get("/learning_stats", dependencies=[Depends(add_deprecation_headers)])
@@ -524,7 +527,7 @@ async def learning_stats_view(request: Request, db: Session = Depends(get_db)):
     def fn():
         return learning_stats(db)
 
-    return await _wrap_legacy(request, "rippletrace.legacy.learning_stats", fn)
+    return await _wrap_legacy(request, "rippletrace.legacy.learning_stats", fn, db=db)
 
 
 @router.post("/evaluate/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
@@ -536,5 +539,5 @@ async def evaluate_drop_point(request: Request, drop_point_id: str, db: Session 
         return result
 
     return _with_execution_envelope(
-        await _wrap_legacy(request, "rippletrace.legacy.evaluate", fn)
+        await _wrap_legacy(request, "rippletrace.legacy.evaluate", fn, db=db)
     )

@@ -41,6 +41,46 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## ROUTE-PIPELINE-NO-SESSION-1: ✅ CLOSED 2026-09-20 — 80 pipeline call sites handed the pipeline no session; RippleTrace, its legacy surface, scores and three social reads ran outside the execution ledger (app-owned, was P1)
+
+**Found 2026-09-19, scanning after `ROUTE-NAME-EVENT-SOURCE-1`.** `execute_with_pipeline*` takes the
+request session from `metadata["db"]`. Without it the runtime marks nothing as required
+(`_requires_route_side_effects`), writes no `execution.started` / `execution.completed`
+(`_safe_emit_event` returns with no session), attaches no execution unit (`_safe_require_eu`),
+and skips the tenant quota check. The route answers normally. **80 of ~285 call sites did not
+pass one**, and it was whole files, not stragglers:
+
+| file | sites | what was missing |
+|---|---|---|
+| `rippletrace_router.py` | 44 / 44 | no `db`, **no `user_id`**, and every response re-wrapped by a local `_with_execution_envelope()` hard-coding `eu_id=None, trace_id=None` — dead code, since `raw_json_adapter` had already returned a finished `JSONResponse` it passed straight through |
+| `legacy_surface_router.py` | 27 / 27 | `_run_legacy` / `_wrap_legacy` never took a session (the first scan saw 2; the other 25 sat behind a wrapper of the wrapper) |
+| `score_router.py` | 5 / 5 | no `db`; same dead envelope helper (`scores` uses `raw_json_adapter` too) |
+| `social_router.py` | 3 / 8 | the reads — `profile.get`, `post.comment.list`, `analytics.get`; the five writes passed `sql_db` |
+| `authorship_router.py` | 1 | `_execute_authorship` never took a session or user; same dead helper |
+
+Twenty router files passed a session on every call. Live, before the fix: `system_events` held
+**zero rows with a rippletrace source, ever**; a masterplan route's response carried a real
+`eu_id` / `trace_id` while `/apps/rippletrace/recent` was a bare list. The domain the owner was
+about to record citations into had never been in the ledger. Built-one-wire-short, at domain
+scale (`RECURRING_DEFECT_PATTERNS.md`).
+
+**Fix (#393):** every site passes `metadata={"db": db}` — and `user_id=str(current_user["sub"])`
+where it was missing — through the wrappers where a wrapper exists (`_run_legacy` / `_wrap_legacy`
+take `db=`, `_execute_authorship` takes `db=` and `user_id=`; `list_post_comments` and
+`get_social_analytics` gain a `sql_db` dependency). The three dead `_with_execution_envelope`
+helpers are deleted; no response body changes (each of those routers registers
+`raw_json_adapter`, which had already produced the body they passed through).
+**Test:** `tests/unit/test_pipeline_routes_pass_session.py` walks every call to the pipeline —
+direct, or through any app wrapper, transitively — and asserts a session is handed over; it
+names all 80 against the old code and sees 285+ sites. Live check at the next rebuild: a
+RippleTrace request leaves `execution.started` / `completed` with a rippletrace source and an
+execution unit; `/scores/me` likewise.
+
+**Not changed:** the response adapters (bare JSON is what the client reads), and the legacy
+surface's sentinel user id.
+
+---
+
 ## ROUTE-NAME-EVENT-SOURCE-1: ✅ CLOSED 2026-09-19 — eight routes had never had an execution record: their names did not fit `system_events.source varchar(32)` (app-owned, was P2; runtime half FR-41)
 
 **Found 2026-09-19 reading the api log while the owner used the MasterPlan page** (the first
