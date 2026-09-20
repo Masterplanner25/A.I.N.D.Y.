@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 
 from AINDY.core.execution_helper import execute_with_pipeline
+from apps._shared.serialization import materialized
 
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
@@ -114,7 +115,7 @@ async def create_drop_point(
         )
 
     result = await execute_with_pipeline(
-        request, "rippletrace_create_drop_point", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_create_drop_point", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -133,7 +134,7 @@ async def create_ping(
         )
 
     result = await execute_with_pipeline(
-        request, "rippletrace_create_ping", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_create_ping", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -152,7 +153,7 @@ async def get_ripples(
         )
 
     return await execute_with_pipeline(
-        request, "rippletrace_get_ripples", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_get_ripples", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -169,7 +170,7 @@ async def all_drop_points(
         )
 
     return await execute_with_pipeline(
-        request, "rippletrace_all_drop_points", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_all_drop_points", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -186,7 +187,7 @@ async def all_pings(
         )
 
     return await execute_with_pipeline(
-        request, "rippletrace_all_pings", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_all_pings", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -204,7 +205,7 @@ async def recent_ripples(
         )
 
     return await execute_with_pipeline(
-        request, "rippletrace_recent", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_recent", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -238,7 +239,7 @@ async def ingest_content_url(
             ) from exc
 
     result = await execute_with_pipeline(
-        request, "rippletrace_ingest_url", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_ingest_url", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -267,7 +268,7 @@ async def detect_ripples(
             ) from exc
 
     result = await execute_with_pipeline(
-        request, "rippletrace_detect_batch", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_detect_batch", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -303,7 +304,7 @@ async def detect_ripples_for_drop_point(
             ) from exc
 
     result = await execute_with_pipeline(
-        request, "rippletrace_detect_drop_point", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_detect_drop_point", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -353,7 +354,7 @@ async def record_citation(
             ) from exc
 
     result = await execute_with_pipeline(
-        request, "rippletrace_record_citation", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_record_citation", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -369,7 +370,7 @@ async def list_content_sources(
         return {"sources": content_ingest.list_sources(db, user_id=str(current_user["sub"]))}
 
     result = await execute_with_pipeline(
-        request, "rippletrace_list_sources", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_list_sources", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -395,7 +396,7 @@ async def poll_content_source(
         return {"source": content_ingest.source_to_dict(source), **outcome}
 
     result = await execute_with_pipeline(
-        request, "rippletrace_poll_source", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_poll_source", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -424,7 +425,7 @@ async def update_content_source(
         return updated
 
     result = await execute_with_pipeline(
-        request, "rippletrace_update_source", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_update_source", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -448,7 +449,7 @@ async def delete_content_source(
         return {"deleted": True, "id": source_id}
 
     result = await execute_with_pipeline(
-        request, "rippletrace_delete_source", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_delete_source", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -479,7 +480,7 @@ async def log_ripple_event(
         }
 
     result = await execute_with_pipeline(
-        request, "rippletrace_log_event", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_log_event", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -495,7 +496,7 @@ async def get_causal_graph(
         return causal_engine.build_causal_graph(db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_causal_graph", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_causal_graph", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -517,7 +518,7 @@ async def get_influence_graph(
         return influence_engine.build_influence_graph(db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_influence_graph", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_influence_graph", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -535,7 +536,7 @@ async def get_causal_chain_view(
         return causal_engine.get_causal_chain(drop_point_id, db, depth=depth)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_causal_chain", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_causal_chain", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -552,7 +553,7 @@ async def get_narrative_summary(
         return narrative_engine.narrative_summary(db, limit=limit)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_narrative_summary", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_narrative_summary", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -569,7 +570,7 @@ async def get_narrative(
         return narrative_engine.generate_narrative(drop_point_id, db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_narrative", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_narrative", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -586,7 +587,7 @@ async def get_predictions_summary(
         return prediction_engine.prediction_summary(db, limit=limit)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_predictions_summary", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_predictions_summary", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -606,7 +607,7 @@ async def get_drop_point_prediction(
         )
 
     result = await execute_with_pipeline(
-        request, "rippletrace_predict", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_predict", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -623,7 +624,7 @@ async def get_system_recommendations(
         return recommendation_engine.system_recommendations(db, limit=limit)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_recs_system", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_recs_system", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -640,7 +641,7 @@ async def get_recommendations_summary(
         return recommendation_engine.recommendations_summary(db, limit=limit)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_recs_summary", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_recs_summary", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -657,7 +658,7 @@ async def get_drop_point_recommendation(
         return recommendation_engine.recommend_for_drop_point(drop_point_id, db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_recommend", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_recommend", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -673,7 +674,7 @@ async def get_learning_stats(
         return learning_engine.learning_stats(db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_learning_stats", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_learning_stats", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -690,7 +691,7 @@ async def evaluate_learning_outcome(
         return learning_engine.evaluate_outcome(drop_point_id, db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_learning_evaluate", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_learning_evaluate", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -706,7 +707,7 @@ async def adjust_learning_thresholds(
         return learning_engine.adjust_thresholds(db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_learning_adjust", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_learning_adjust", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -722,7 +723,7 @@ async def list_playbooks_view(
         return playbook_engine.list_playbooks(db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_playbooks_list", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_playbooks_list", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -739,7 +740,7 @@ async def match_playbooks_view(
         return playbook_engine.match_playbooks(drop_point_id, db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_playbooks_match", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_playbooks_match", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -759,7 +760,7 @@ async def get_playbook_view(
         return result
 
     result = await execute_with_pipeline(
-        request, "rippletrace_playbook_get", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_playbook_get", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -775,7 +776,7 @@ async def list_strategies_view(
         return strategy_engine.list_strategies(db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_strategies_list", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_strategies_list", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -791,7 +792,7 @@ async def build_strategies_view(
         return strategy_engine.build_strategies(db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_strategies_build", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_strategies_build", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -808,7 +809,7 @@ async def match_strategies_view(
         return strategy_engine.match_strategies(drop_point_id, db)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_strategies_match", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_strategies_match", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -828,7 +829,7 @@ async def get_strategy_view(
         return result
 
     result = await execute_with_pipeline(
-        request, "rippletrace_strategy_get", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_strategy_get", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -852,7 +853,7 @@ async def get_event_downstream(
         return rippletrace_service.get_downstream_effects(db, event_id)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_event_downstream", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_event_downstream", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -869,7 +870,7 @@ async def get_event_upstream(
         return rippletrace_service.get_upstream_causes(db, event_id)
 
     result = await execute_with_pipeline(
-        request, "rippletrace_event_upstream", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_event_upstream", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
     return result
 
@@ -923,7 +924,7 @@ async def get_trace_graph(
         }
 
     return await execute_with_pipeline(
-        request, "rippletrace_trace_graph", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_trace_graph", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -959,7 +960,7 @@ async def list_container_candidates(
         return {"candidates": container_service.detect_candidates(db, user_id)}
 
     return await execute_with_pipeline(
-        request, "rippletrace_container_candidates", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_container_candidates", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -976,7 +977,7 @@ async def list_containers(
         return {"containers": container_service.list_containers(db, user_id)}
 
     return await execute_with_pipeline(
-        request, "rippletrace_containers_list", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_containers_list", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -1000,7 +1001,7 @@ async def container_performance(
         return {"containers": container_service.list_container_performance(db, user_id)}
 
     return await execute_with_pipeline(
-        request, "rippletrace_containers_perf", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_containers_perf", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -1026,7 +1027,7 @@ async def container_detail(
         return detail
 
     return await execute_with_pipeline(
-        request, "rippletrace_containers_detail", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_containers_detail", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -1052,7 +1053,7 @@ async def confirm_container(
         return result
 
     return await execute_with_pipeline(
-        request, "rippletrace_containers_confirm", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_containers_confirm", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
@@ -1079,5 +1080,5 @@ async def dismiss_container(
         return result
 
     return await execute_with_pipeline(
-        request, "rippletrace_containers_dismiss", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_containers_dismiss", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
