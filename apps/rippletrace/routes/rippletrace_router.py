@@ -5,7 +5,6 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from uuid import UUID
 
-from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 
 from AINDY.db.database import get_db
@@ -49,26 +48,6 @@ def uuid_or_none(value):
         return UUID(str(value))
     except (TypeError, ValueError):
         return None
-
-
-def _with_execution_envelope(payload):
-    envelope = to_envelope(
-        eu_id=None,
-        trace_id=None,
-        status="SUCCESS",
-        output=None,
-        error=None,
-        duration_ms=None,
-        attempt_count=1,
-    )
-    if hasattr(payload, "status_code") and hasattr(payload, "body"):
-        return payload
-    if isinstance(payload, dict):
-        data = payload.get("data")
-        result = dict(data) if isinstance(data, dict) else dict(payload)
-        result.setdefault("execution_envelope", envelope)
-        return result
-    return {"data": payload, "execution_envelope": envelope}
 
 
 # === Schemas ===
@@ -134,8 +113,10 @@ async def create_drop_point(
             db, dp, user_id=str(current_user["sub"])
         )
 
-    result = await execute_with_pipeline(request, "rippletrace_create_drop_point", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_create_drop_point", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.post("/ping")
@@ -151,8 +132,10 @@ async def create_ping(
             db, pg, user_id=str(current_user["sub"])
         )
 
-    result = await execute_with_pipeline(request, "rippletrace_create_ping", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_create_ping", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/ripples/{drop_point_id}")
@@ -168,7 +151,9 @@ async def get_ripples(
             db, drop_point_id, user_id=str(current_user["sub"])
         )
 
-    return await execute_with_pipeline(request, "rippletrace_get_ripples", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_get_ripples", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 @router.get("/drop_points")
@@ -183,7 +168,9 @@ async def all_drop_points(
             db, user_id=str(current_user["sub"])
         )
 
-    return await execute_with_pipeline(request, "rippletrace_all_drop_points", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_all_drop_points", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 @router.get("/pings")
@@ -198,7 +185,9 @@ async def all_pings(
             db, user_id=str(current_user["sub"])
         )
 
-    return await execute_with_pipeline(request, "rippletrace_all_pings", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_all_pings", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 @router.get("/recent")
@@ -214,7 +203,9 @@ async def recent_ripples(
             db, limit, user_id=str(current_user["sub"])
         )
 
-    return await execute_with_pipeline(request, "rippletrace_recent", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_recent", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 # === Content ingestion ===
@@ -246,8 +237,10 @@ async def ingest_content_url(
                 detail={"error": "content_fetch_failed", "message": str(exc)},
             ) from exc
 
-    result = await execute_with_pipeline(request, "rippletrace_ingest_url", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_ingest_url", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.post("/detect")
@@ -273,8 +266,10 @@ async def detect_ripples(
                 detail={"error": "mention_search_unavailable", "message": str(exc)},
             ) from exc
 
-    result = await execute_with_pipeline(request, "rippletrace_detect_batch", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_detect_batch", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.post("/drop_points/{drop_point_id}/detect")
@@ -307,8 +302,10 @@ async def detect_ripples_for_drop_point(
                 detail={"error": "mention_search_unavailable", "message": str(exc)},
             ) from exc
 
-    result = await execute_with_pipeline(request, "rippletrace_detect_drop_point", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_detect_drop_point", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.post("/drop_points/{drop_point_id}/citations")
@@ -355,8 +352,10 @@ async def record_citation(
                 detail={"error": "invalid_citation", "message": str(exc)},
             ) from exc
 
-    result = await execute_with_pipeline(request, "rippletrace_record_citation", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_record_citation", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/sources")
@@ -369,8 +368,10 @@ async def list_content_sources(
     def handler(ctx):
         return {"sources": content_ingest.list_sources(db, user_id=str(current_user["sub"]))}
 
-    result = await execute_with_pipeline(request, "rippletrace_list_sources", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_list_sources", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.post("/sources/{source_id}/poll")
@@ -393,8 +394,10 @@ async def poll_content_source(
         outcome = content_ingest.poll_source(db, source)
         return {"source": content_ingest.source_to_dict(source), **outcome}
 
-    result = await execute_with_pipeline(request, "rippletrace_poll_source", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_poll_source", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.patch("/sources/{source_id}")
@@ -420,8 +423,10 @@ async def update_content_source(
             )
         return updated
 
-    result = await execute_with_pipeline(request, "rippletrace_update_source", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_update_source", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.delete("/sources/{source_id}")
@@ -442,8 +447,10 @@ async def delete_content_source(
             )
         return {"deleted": True, "id": source_id}
 
-    result = await execute_with_pipeline(request, "rippletrace_delete_source", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_delete_source", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.post("/event")
@@ -471,8 +478,10 @@ async def log_ripple_event(
             },
         }
 
-    result = await execute_with_pipeline(request, "rippletrace_log_event", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_log_event", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/causal/graph")
@@ -485,8 +494,10 @@ async def get_causal_graph(
     def handler(ctx):
         return causal_engine.build_causal_graph(db)
 
-    result = await execute_with_pipeline(request, "rippletrace_causal_graph", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_causal_graph", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/influence/graph")
@@ -505,8 +516,10 @@ async def get_influence_graph(
     def handler(ctx):
         return influence_engine.build_influence_graph(db)
 
-    result = await execute_with_pipeline(request, "rippletrace_influence_graph", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_influence_graph", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/causal/chain/{drop_point_id}")
@@ -521,8 +534,10 @@ async def get_causal_chain_view(
     def handler(ctx):
         return causal_engine.get_causal_chain(drop_point_id, db, depth=depth)
 
-    result = await execute_with_pipeline(request, "rippletrace_causal_chain", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_causal_chain", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/narrative/summary")
@@ -536,8 +551,10 @@ async def get_narrative_summary(
     def handler(ctx):
         return narrative_engine.narrative_summary(db, limit=limit)
 
-    result = await execute_with_pipeline(request, "rippletrace_narrative_summary", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_narrative_summary", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/narrative/{drop_point_id}")
@@ -551,8 +568,10 @@ async def get_narrative(
     def handler(ctx):
         return narrative_engine.generate_narrative(drop_point_id, db)
 
-    result = await execute_with_pipeline(request, "rippletrace_narrative", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_narrative", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/predictions/summary")
@@ -566,8 +585,10 @@ async def get_predictions_summary(
     def handler(ctx):
         return prediction_engine.prediction_summary(db, limit=limit)
 
-    result = await execute_with_pipeline(request, "rippletrace_predictions_summary", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_predictions_summary", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/predictions/{drop_point_id}")
@@ -584,8 +605,10 @@ async def get_drop_point_prediction(
             drop_point_id, db, record_learning=record_learning
         )
 
-    result = await execute_with_pipeline(request, "rippletrace_predict", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_predict", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/recommendations/system")
@@ -599,8 +622,10 @@ async def get_system_recommendations(
     def handler(ctx):
         return recommendation_engine.system_recommendations(db, limit=limit)
 
-    result = await execute_with_pipeline(request, "rippletrace_recs_system", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_recs_system", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/recommendations/summary")
@@ -614,8 +639,10 @@ async def get_recommendations_summary(
     def handler(ctx):
         return recommendation_engine.recommendations_summary(db, limit=limit)
 
-    result = await execute_with_pipeline(request, "rippletrace_recs_summary", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_recs_summary", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/recommendations/{drop_point_id}")
@@ -629,8 +656,10 @@ async def get_drop_point_recommendation(
     def handler(ctx):
         return recommendation_engine.recommend_for_drop_point(drop_point_id, db)
 
-    result = await execute_with_pipeline(request, "rippletrace_recommend", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_recommend", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/learning/stats")
@@ -643,8 +672,10 @@ async def get_learning_stats(
     def handler(ctx):
         return learning_engine.learning_stats(db)
 
-    result = await execute_with_pipeline(request, "rippletrace_learning_stats", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_learning_stats", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.post("/learning/evaluate/{drop_point_id}")
@@ -658,8 +689,10 @@ async def evaluate_learning_outcome(
     def handler(ctx):
         return learning_engine.evaluate_outcome(drop_point_id, db)
 
-    result = await execute_with_pipeline(request, "rippletrace_learning_evaluate", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_learning_evaluate", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.post("/learning/adjust")
@@ -672,8 +705,10 @@ async def adjust_learning_thresholds(
     def handler(ctx):
         return learning_engine.adjust_thresholds(db)
 
-    result = await execute_with_pipeline(request, "rippletrace_learning_adjust", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_learning_adjust", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/playbooks")
@@ -686,8 +721,10 @@ async def list_playbooks_view(
     def handler(ctx):
         return playbook_engine.list_playbooks(db)
 
-    result = await execute_with_pipeline(request, "rippletrace_playbooks_list", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_playbooks_list", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/playbooks/match/{drop_point_id}")
@@ -701,8 +738,10 @@ async def match_playbooks_view(
     def handler(ctx):
         return playbook_engine.match_playbooks(drop_point_id, db)
 
-    result = await execute_with_pipeline(request, "rippletrace_playbooks_match", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_playbooks_match", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/playbooks/{playbook_id}")
@@ -719,8 +758,10 @@ async def get_playbook_view(
             raise HTTPException(status_code=404, detail=f"Playbook {playbook_id} not found")
         return result
 
-    result = await execute_with_pipeline(request, "rippletrace_playbook_get", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_playbook_get", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/strategies")
@@ -733,8 +774,10 @@ async def list_strategies_view(
     def handler(ctx):
         return strategy_engine.list_strategies(db)
 
-    result = await execute_with_pipeline(request, "rippletrace_strategies_list", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_strategies_list", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/strategies/build")
@@ -747,8 +790,10 @@ async def build_strategies_view(
     def handler(ctx):
         return strategy_engine.build_strategies(db)
 
-    result = await execute_with_pipeline(request, "rippletrace_strategies_build", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_strategies_build", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/strategies/match/{drop_point_id}")
@@ -762,8 +807,10 @@ async def match_strategies_view(
     def handler(ctx):
         return strategy_engine.match_strategies(drop_point_id, db)
 
-    result = await execute_with_pipeline(request, "rippletrace_strategies_match", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_strategies_match", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/strategies/{strategy_id}")
@@ -780,8 +827,10 @@ async def get_strategy_view(
             raise HTTPException(status_code=404, detail=f"Strategy {strategy_id} not found")
         return result
 
-    result = await execute_with_pipeline(request, "rippletrace_strategy_get", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_strategy_get", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/event/{event_id}/downstream")
@@ -802,8 +851,10 @@ async def get_event_downstream(
     def handler(ctx):
         return rippletrace_service.get_downstream_effects(db, event_id)
 
-    result = await execute_with_pipeline(request, "rippletrace_event_downstream", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_event_downstream", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/event/{event_id}/upstream")
@@ -817,8 +868,10 @@ async def get_event_upstream(
     def handler(ctx):
         return rippletrace_service.get_upstream_causes(db, event_id)
 
-    result = await execute_with_pipeline(request, "rippletrace_event_upstream", handler)
-    return _with_execution_envelope(result)
+    result = await execute_with_pipeline(
+        request, "rippletrace_event_upstream", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+    return result
 
 
 @router.get("/{trace_id}")
@@ -869,7 +922,9 @@ async def get_trace_graph(
             "insights": generate_trace_insights(db, trace_id),
         }
 
-    return await execute_with_pipeline(request, "rippletrace_trace_graph", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_trace_graph", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 # ── Containers ───────────────────────────────────────────────────────────────────
@@ -903,7 +958,9 @@ async def list_container_candidates(
     def handler(_ctx):
         return {"candidates": container_service.detect_candidates(db, user_id)}
 
-    return await execute_with_pipeline(request, "rippletrace_container_candidates", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_container_candidates", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 @router.get("/containers")
@@ -918,7 +975,9 @@ async def list_containers(
     def handler(_ctx):
         return {"containers": container_service.list_containers(db, user_id)}
 
-    return await execute_with_pipeline(request, "rippletrace_containers_list", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_containers_list", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 @router.get("/containers/performance")
@@ -940,7 +999,9 @@ async def container_performance(
     def handler(_ctx):
         return {"containers": container_service.list_container_performance(db, user_id)}
 
-    return await execute_with_pipeline(request, "rippletrace_containers_perf", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_containers_perf", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 @router.get("/containers/{container_id}")
@@ -964,7 +1025,9 @@ async def container_detail(
             raise ValueError("HTTP_404:container not found")
         return detail
 
-    return await execute_with_pipeline(request, "rippletrace_containers_detail", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_containers_detail", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 @router.post("/containers/confirm")
@@ -988,7 +1051,9 @@ async def confirm_container(
             raise ValueError("HTTP_422:a container needs a name")
         return result
 
-    return await execute_with_pipeline(request, "rippletrace_containers_confirm", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_containers_confirm", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )
 
 
 @router.post("/containers/dismiss")
@@ -1013,4 +1078,6 @@ async def dismiss_container(
             raise ValueError("HTTP_422:a container needs a name")
         return result
 
-    return await execute_with_pipeline(request, "rippletrace_containers_dismiss", handler)
+    return await execute_with_pipeline(
+        request, "rippletrace_containers_dismiss", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+    )

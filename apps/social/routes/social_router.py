@@ -386,6 +386,7 @@ def get_profile(
             request=request,
             route_name="social.profile.get",
             handler=handler,
+            metadata={"db": sql_db},
         )
     except ServerSelectionTimeoutError:
         return _mongo_degraded_payload("mongodb_unavailable")
@@ -746,6 +747,7 @@ def list_post_comments(
     post_id: str,
     limit: int = 100,
     db: Database | None = Depends(get_optional_mongo_db),
+    sql_db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
@@ -764,6 +766,7 @@ def list_post_comments(
         route_name="social.post.comment.list",
         handler=handler,
         user_id=str(current_user["sub"]),
+        metadata={"db": sql_db},
     )
     if isinstance(result, dict) and result.get("status") == "degraded":
         return _with_execution_envelope(result)
@@ -774,6 +777,7 @@ def list_post_comments(
 @limiter.limit("60/minute")
 def get_social_analytics(
     request: Request,
+    sql_db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     result = execute_with_pipeline_sync(
@@ -781,6 +785,7 @@ def get_social_analytics(
         route_name="social.analytics.get",
         handler=lambda ctx: summarize_social_performance(user_id=str(current_user["sub"])),
         user_id=str(current_user["sub"]),
+        metadata={"db": sql_db},
     )
     if isinstance(result, dict) and result.get("status") == "degraded":
         return _with_execution_envelope(result)
