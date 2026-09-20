@@ -456,7 +456,7 @@ def list_pricing_recommendations(
         rows = RevenueIntelligenceService(db=db, user_id=user_id).history(limit=limit)
         return {"recommendations": rows, "count": len(rows)}
 
-    return _execute_freelance(request, "freelance.pricing.recommendations", handler, db=db, user_id=user_id)
+    return _execute_freelance(request, "freelance.pricing.history", handler, db=db, user_id=user_id)
 
 
 @router.get("/pricing")

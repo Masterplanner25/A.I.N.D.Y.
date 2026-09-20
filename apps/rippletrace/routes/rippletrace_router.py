@@ -599,7 +599,7 @@ async def get_system_recommendations(
     def handler(ctx):
         return recommendation_engine.system_recommendations(db, limit=limit)
 
-    result = await execute_with_pipeline(request, "rippletrace_recommendations_system", handler)
+    result = await execute_with_pipeline(request, "rippletrace_recs_system", handler)
     return _with_execution_envelope(result)
 
 
@@ -614,7 +614,7 @@ async def get_recommendations_summary(
     def handler(ctx):
         return recommendation_engine.recommendations_summary(db, limit=limit)
 
-    result = await execute_with_pipeline(request, "rippletrace_recommendations_summary", handler)
+    result = await execute_with_pipeline(request, "rippletrace_recs_summary", handler)
     return _with_execution_envelope(result)
 
 
@@ -903,7 +903,7 @@ async def list_container_candidates(
     def handler(_ctx):
         return {"candidates": container_service.detect_candidates(db, user_id)}
 
-    return await execute_with_pipeline(request, "rippletrace_containers_candidates", handler)
+    return await execute_with_pipeline(request, "rippletrace_container_candidates", handler)
 
 
 @router.get("/containers")
@@ -940,7 +940,7 @@ async def container_performance(
     def handler(_ctx):
         return {"containers": container_service.list_container_performance(db, user_id)}
 
-    return await execute_with_pipeline(request, "rippletrace_containers_performance", handler)
+    return await execute_with_pipeline(request, "rippletrace_containers_perf", handler)
 
 
 @router.get("/containers/{container_id}")

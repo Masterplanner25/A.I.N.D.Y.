@@ -328,6 +328,12 @@ hand-rolling the same decision is how eighteen sites in four of them ended up te
 maps a node's `HTTP_<code>:<msg>` error onto that status code, which a hand-written check
 will not.
 
+**A pipeline `route_name` is at most 32 characters.** It is written as `system_events.source`
+(`String(32)` in the runtime's model) on every request's `execution.started`; a longer name fails
+that INSERT, the runtime rolls back and continues at WARNING, and the route is never recorded —
+eight of ours were like that until 2026-09-19 (`ROUTE-NAME-EVENT-SOURCE-1`, FR-41).
+`test_route_names_fit_event_source.py` reads the width off the model and scans every call site.
+
 ### `_fresh_main_app()` and `Base.metadata` — model import timing hazard
 
 `_setup_postgres_schema` (session-scoped, autouse) calls `Base.metadata.create_all()` once at session start. Each test's `_fresh_main_app()` reloads `AINDY.main` + `AINDY.startup`, which imports all app modules and may add new model classes to `Base.metadata`. Tables registered this way exist in `Base.metadata` but **were never created in PostgreSQL** because `create_all` already ran.
@@ -521,7 +527,7 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17 |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19 |
 | Latest runtime adoption record | `docs/runtime/RUNTIME_2_21_0_UPGRADE.md` — one per release; the 2.20.0 doc's §6.2 is the exit-3 reconcile, proven once |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
