@@ -1,6 +1,6 @@
 ---
 title: "Infinity Score — the three-axis model (Volume / Worth / Trajectory)"
-last_verified: "2026-07-18"
+last_verified: "2026-09-20"
 api_version: "1.0"
 status: draft
 owner: "app-team"
@@ -249,7 +249,79 @@ AI-leverage} + add {Worth (declared prior), Trajectory (padding-guarded)}; blend
 Trajectory into `master_score` within the existing weight clamps at a conservative initial
 worth weight; flag-gated (default off) with a per-user weight-migration path; soak-then-flip.
 
-## 9. References
+## 9. Field note — the first real reading of `execution_speed` (2026-09-20)
+
+**The first day the owner completed two real tasks on the live stack, the master score moved
+three times, and one of the moves was backwards.** Completing task #28 at 05:03 registered
+**−2.04**; the 07:00 scheduled recalc took another **−3.74**; completing task #25 at 20:07
+registered **+6.38**. Every other KPI rose or held across all three. The whole swing is
+`execution_speed`: **44.66 → 26.89 → 11.92 → 18.24**. This section records why, to the
+decimal, so the decision it bears on (§8 #2) is made against numbers and not re-derived.
+
+### 9.1 What the formula is
+
+`calculate_execution_speed` (`infinity_service.py:169`):
+
+```
+current_velocity = tasks completed in the last 14 days / 14
+historical_avg   = all completed tasks / days since the first completion   (whole days)
+score            = sigmoid(current_velocity / historical_avg, midpoint 1.0, steepness 3.0)
+```
+
+### 9.2 What happened, reconstructed
+
+The owner's completion history was four tasks: #17 and #18 on **09-06 at 04:35 and 06:53**,
+#28 on **09-20 at 05:03**, #25 on **09-20 at 20:07**.
+
+| recalc | in the 14-day window | current (÷14) | lifetime avg (completed ÷ days active) | ratio | `execution_speed` | Δ master |
+|---|---|---|---|---|---|---|
+| 09-19 07:00 scheduled | #17, #18 | 2/14 = 0.143 | 2/13 = 0.154 | 0.93 | 44.66 | +2.54 |
+| **09-20 05:03 — #28 completed** | #18, #28 — **#17 had left the window at 04:35, 28 minutes earlier** | 0.143 | 3/14 = 0.214 | 0.67 | 26.89 | **−2.04** |
+| 09-20 07:00 scheduled | #28 — **#18 left at 06:53** | 0.071 | 0.214 | 0.33 | 11.92 | −3.74 |
+| 09-20 20:07 — #25 completed | #28, #25 | 0.143 | 4/14 = 0.286 | 0.50 | 18.24 | +6.38 |
+
+Every figure matches the formula. **Completing #28 lowered nothing by itself**: the recalc it
+triggered was the first after #17 aged out of the window, and the completion also raised the
+lifetime denominator. Two hours later #18 aged out too. The design did exactly what it says.
+
+### 9.3 What the reading says about the design
+
+1. **The lifetime average includes the current window.** Every completion raises the
+   denominator the instant it raises the numerator. Once `days_active ≥ 14` — which is now
+   permanent for this user — a completion moves the ratio by *less* than a single window
+   dropout does. Finishing work can never outrun your own history by much; a cluster aging
+   out can crater the score. Comparing the window against **prior** history only
+   (`(completed − recent) / (days_active − 14)`, guarded) removes the self-reference.
+2. **Four completions is not a baseline.** At this sample size the KPI is noise driven by
+   which day a cluster falls off the edge. `confidence` is derived from *total* data points
+   across all five KPIs (`≥10 → medium`, `≥50 → high`; the row read **`medium`, 12 points**)
+   — so speed at 11.92 on four tasks carries the same weight in `master_score` as it would on
+   forty. The confidence label does not discount the dimension that produced it.
+3. **`days_active` truncates to whole days** (`(now − first_end).days`), so the baseline
+   steps once a day regardless of when tasks complete. Small, but it is a step the user did
+   nothing to cause.
+4. **It is a Volume signal wearing a velocity costume.** Estimated 5 h, done in 2.2 h (#28);
+   estimated 4 h, done in 4.9 h (#25) — the thing a person would call *speed* is
+   estimate-vs-actual, which is Trajectory (§3, §8 #3) and is not in this number at all.
+
+### 9.4 Options — a decision for the owner, not taken here
+
+| | option | what it changes | cost |
+|---|---|---|---|
+| **A** | Leave it; let §8 #2 retire it | `execution_speed` is already slated to collapse into Volume in Phase C. This reading is the evidence that the retirement is right, filed early | a user watching the score today sees completions read as drops until Phase C ships |
+| **B** | Interim: baseline on prior history only | one expression in `calculate_execution_speed`; a completion can no longer lower the ratio through the denominator; window dropouts still move it | a formula change ahead of the consolidation, to a KPI that is going away |
+| **C** | Interim: weight by per-KPI sample size | `execution_speed` contributes at reduced weight until `N` completions exist (say 10), with the freed weight spread across the other KPIs — the confidence idea applied where it bites | touches `kpi_weight_service` effective-weights; the same migration path §8 #2 needs anyway |
+
+**Recorded 2026-09-20, decision pending.** The recommendation, for what it is worth: **A**, with
+this section as the standing explanation — because the KPI is being retired and both interim
+fixes are work on a number Phase C deletes. If the score is going to be *watched* before Phase
+C ships, **C** is the smaller honest change: it makes the label and the weight agree.
+
+**How to re-derive:** `select calculated_at, trigger_event, execution_speed_score, master_score,
+score_delta from score_history where user_id = … order by calculated_at` against the tasks'
+`end_time` values; the window is `SCORING_WINDOW_DAYS = 14`.
+
+## 10. References
 
 - Current scoring: `apps/analytics/services/scoring/infinity_service.py`,
   `kpi_weight_service.py`; the orphaned calculators:
