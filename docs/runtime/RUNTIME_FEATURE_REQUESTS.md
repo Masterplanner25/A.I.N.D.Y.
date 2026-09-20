@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-18"
+last_verified: "2026-09-19"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -20,11 +20,48 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-17:** FR-40 (FR-33's `warn` mode has no witness on `nodus_vm`) · FR-39 (the
+> **Open as of 2026-09-19:** FR-41 (`system_events.source` is 32 wide; a longer route name is never recorded) · FR-40 (FR-33's `warn` mode has no witness on `nodus_vm`) · FR-39 (the
 > two hook contexts FR-36's fix did not reach — filed from the 2.20.0 verification) · FR-38 (the authority gate on `nodus_vm`, with the first observed
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-41 — `system_events.source` is `String(32)`; a route name longer than that fails its *required* `execution.started` on every request, at WARNING, and the request proceeds unrecorded 🔴 open (filed 2026-09-19, runtime 2.21.0)
+
+> **`AINDY/db/models/system_event.py:19` — `source = Column(String(32), …)`. The pipeline writes
+> every request's `execution.started` / `completed` / `failed` with `source = metadata["source"]
+> or route_name`. A route name of 33+ characters raises `StringDataRightTruncation` inside
+> `emit_system_event`, which rolls the request session back, logs `[SystemEvent] Failed to emit …`
+> and raises `SystemEventEmissionError`; `_safe_emit_event` catches it, records the side effect as
+> `failed`, logs `execution.event_emit_skipped`, and the request continues.** The route answers
+> normally. It just never has an execution record — and the only signal is a per-request WARNING.
+
+### What we hit
+
+Eight of our 230 route names were over 32 (longest `masterplan.strategy.conclusion.propose`, 38).
+Found on 2.21.0 while the owner used the MasterPlan page — the page polls that route, so the log
+filled with the pair above — but the width predates every release we have adopted; those eight
+routes had simply never been recorded, some since 2026-09-10. Renamed on our side
+(`ROUTE-NAME-EVENT-SOURCE-1`) with a test that reads the width off your model, so this is not
+blocking us. Filed because the failure shape is the runtime's, and it is the quiet kind.
+
+### Ask
+
+1. **Widen `source`** — 128 matches `trace_id`; dotted route names are the natural key here and
+   the metrics label already carries them at full length.
+2. **Fail once, not per request:** a `source` that cannot fit the column is a registration-time
+   fact (`route_name` is a literal at every call site). Validate it where routes are registered
+   or on the first emit per name — an ERROR naming the route — rather than a WARNING per request
+   with the request proceeding unrecorded. `required=True` should mean the event is required.
+3. While the width stands, document it at `execute_with_pipeline` (the `route_name` parameter) so
+   an app learns it from the docstring, not from the log.
+
+### Not asking for
+
+Truncation. A silently shortened source would collide across routes and hide the problem better
+than it is hidden now.
+
+---
+
 ## FR-40 — on `nodus_vm`, FR-33's `warn` mode has no witness: the counter is incremented and the WARNING logged in the worker, and neither reaches the api 🔴 open (filed 2026-09-17, runtime 2.20.0)
 
 > **`tool_registry.execute_tool` counts `aindy_tool_args_validation_total{outcome, mode}` and,

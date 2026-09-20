@@ -41,6 +41,52 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## ROUTE-NAME-EVENT-SOURCE-1: ✅ CLOSED 2026-09-19 — eight routes had never had an execution record: their names did not fit `system_events.source varchar(32)` (app-owned, was P2; runtime half FR-41)
+
+**Found 2026-09-19 reading the api log while the owner used the MasterPlan page** (the first
+session anyone has used the strategy layer live for more than a probe):
+
+```
+[SystemEvent] Failed to emit execution.started trace=… user=<owner>: (psycopg2.errors.StringDataRightTruncation)
+  value too long for type character varying(32)
+  … 'source': 'masterplan.strategy.conclusion.propose' …
+execution.event_emit_skipped
+```
+
+The pipeline writes every request's `execution.started` (and its `completed` / `failed`) with
+`source = metadata["source"] or route_name`; the runtime's `SystemEvent.source` is `String(32)`.
+**Eight of our 230 route names were longer** — `masterplan.strategy.conclusion.{propose,dismiss}`
+(38), `rippletrace_recommendations_{summary,system}` (35/34), `rippletrace_containers_{performance,
+candidates}` (34/33), `analytics.policy_thresholds.adapt` (33), `freelance.pricing.recommendations`
+(33) — so every request on those routes failed its INSERT, the runtime rolled the request session
+back and continued at WARNING (`required` event, `event_emit_skipped`), the route answered
+normally, and **no execution record was ever written for them**: not in `system_events`, not in
+the per-route metrics' event trail, not for the Infinity loop's telemetry. Since each route's
+creation — the RippleTrace four since 2026-09-10, the conclusion pair since #382, the other two
+older. The only trace was a per-request log line. Not a 2.21.0 regression (`EVENT-OUTBOX-1`
+changed *when* the event commits, not the width); it was the first time the log was read while
+those pages were in use.
+
+**Fix (same day):** the eight renamed under the width (`masterplan.conclusion.{propose,dismiss}`,
+`rippletrace_recs_{summary,system}`, `rippletrace_containers_perf`,
+`rippletrace_container_candidates`, `analytics.thresholds.adapt`, `freelance.pricing.history`) —
+route names are a metrics label and the event source, nothing else keys on them (0 other
+references; the `freelance.pricing.recommendations` hits elsewhere are the URL path). **Test:**
+`tests/unit/test_route_names_fit_event_source.py` AST-scans every string handed to
+`execute_with_pipeline*` / our `_execute_*` wrappers / `route_name=` and asserts each fits the
+width **read from the runtime's model** (`SystemEvent.__table__.c.source.type.length`), so a
+widening upstream relaxes it automatically; it names all eight against the old code. Live check
+at the next rebuild: zero `Failed to emit execution.started` while the MasterPlan and RippleTrace
+pages are in use.
+
+**Runtime half — FR-41:** 32 is narrow for dotted route names (the runtime's own longest is
+close), and a *required* event failing on a valid, registered name should fail once and loudly —
+at registration or first emit — not once per request at WARNING with the request proceeding
+unrecorded. The metric label (`route=`) carried the full name the whole time; only the event
+source could not.
+
+---
+
 ## AGENT-PLANNER-CONTEXT-BOUNDARY-1: 🟡 app half FIXED 2026-09-17 — the planner has never seen the Infinity context; effective when FR-39 lands (app-owned, was P1)
 
 **Found 2026-09-17 reading an agent run's log at WARNING during the 2.20.0 adoption

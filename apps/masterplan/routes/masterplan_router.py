@@ -637,7 +637,7 @@ async def get_strategy_conclusion_proposals(
 
     result = await execute_with_pipeline(
         request=request,
-        route_name="masterplan.strategy.conclusion.propose",
+        route_name="masterplan.conclusion.propose",
         handler=handler,
         user_id=user_id,
         input_payload={"plan_id": plan_id},
@@ -672,7 +672,7 @@ async def dismiss_strategy_conclusion_route(
 
     result = await execute_with_pipeline(
         request=request,
-        route_name="masterplan.strategy.conclusion.dismiss",
+        route_name="masterplan.conclusion.dismiss",
         handler=handler,
         user_id=user_id,
         input_payload={"plan_id": plan_id, "strategy_id": strategy_id},

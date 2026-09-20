@@ -253,7 +253,7 @@ async def adapt_policy_thresholds_endpoint(
 
     result = await execute_with_pipeline(
         request=request,
-        route_name="analytics.policy_thresholds.adapt",
+        route_name="analytics.thresholds.adapt",
         handler=handler,
         user_id=user_id,
         metadata={"db": db},
