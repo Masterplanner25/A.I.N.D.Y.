@@ -11,9 +11,16 @@ requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "platform-team" }]
 dependencies = [
-  "aindy-runtime>=2.20.0,<3.0",
+  "aindy-runtime>=2.21.0,<3.0",
   "aindy-sdk>=1.0,<2.0",
   "anthropic>=0.40,<2.0",
+  # apps/search/services/seo_services.py imports both. Declared here since the 2.21.0 adoption
+  # (PACK-DEBT-6, the handoff's ask 4): they had arrived only because the runtime pinned them,
+  # and nothing in the runtime uses them — the runtime drops its pins two releases on. Floors
+  # are the versions it pinned; ranged, not pinned, for the same reason as aindy-sdk and
+  # anthropic (constraints.txt is not a lockfile).
+  "nltk>=3.10.3,<4.0",
+  "textstat>=0.7.13,<1.0",
 ]
 
 [project.optional-dependencies]
