@@ -7,7 +7,7 @@ Routes are served at /apps/agent/*.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -251,18 +251,28 @@ def reject_agent_run(
 def resume_agent_run(
     request: Request,
     run_id: str,
+    payload: dict | None = Body(default=None),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Release a run parked on a mid-plan WAIT step (RTR-1 Phase 2e approval action)."""
+    """Release a run parked on a mid-plan WAIT step (RTR-1 Phase 2e approval action).
+
+    Runtime 2.22.0 (FR-38, DEC-069): a run parked at the AUTHORITY GATE
+    (`wait_state.authority_gate`) needs a body, `{"decision": "skip" | "abort", "note": ...}`.
+    Without one the runtime refuses it (409) and the run stays parked; an unknown decision is
+    422. The body is passed through unread: the decision is the runtime's to interpret. An
+    ordinary plan-declared wait resumes as before, body or no body.
+    """
     user_id = _current_user_id(current_user)
     return _execute_agent(
         request,
         "agent.run.resume",
-        lambda _ctx: resume_agent_run_runtime(db=db, user_id=user_id, run_id=run_id),
+        lambda _ctx: resume_agent_run_runtime(
+            db=db, user_id=user_id, run_id=run_id, payload=payload
+        ),
         db=db,
         user_id=str(user_id),
-        input_payload={"run_id": run_id},
+        input_payload={"run_id": run_id, "payload": payload},
     )
 
 

@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-19"
+last_verified: "2026-09-23"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -20,12 +20,83 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-19:** FR-41 (`system_events.source` is 32 wide; a longer route name is never recorded) · FR-40 (FR-33's `warn` mode has no witness on `nodus_vm`) · FR-39 (the
+> **Open as of 2026-09-23:** FR-43 (`bootstrap-schema` cannot see a column widening, so 2.22.0's
+> 0020 was stamped over a `varchar(32)` — filed from the 2.22.0 adoption) · FR-14 recurrence half ·
+> FR-6 items 2–3. **FR-37 … FR-41 all shipped in 2.22.0** (ui-kit 2.1.0 for FR-37); FR-39 is
+> verified live, the rest are in `RUNTIME_2_22_0_UPGRADE.md`.
+>
+> **Was open as of 2026-09-19:** FR-41 (`system_events.source` is 32 wide; a longer route name is never recorded) · FR-40 (FR-33's `warn` mode has no witness on `nodus_vm`) · FR-39 (the
 > two hook contexts FR-36's fix did not reach — filed from the 2.20.0 verification) · FR-38 (the authority gate on `nodus_vm`, with the first observed
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-41 — `system_events.source` is `String(32)`; a route name longer than that fails its *required* `execution.started` on every request, at WARNING, and the request proceeds unrecorded 🔴 open (filed 2026-09-19, runtime 2.21.0)
+## FR-43 — `bootstrap-schema` compares column types with the length stripped, so 2.22.0's widening was invisible: it reported "no table changes", exited 0 and stamped `0020` over a `varchar(32)` 🔴 open (filed 2026-09-23, runtime 2.22.0)
+
+> **`AINDY/db/schema_contract.py::_normalize_type_name` compiles the type and keeps
+> `compiled.lower().split("(", 1)[0]`** — `VARCHAR(32)` and `VARCHAR(128)` both normalise to
+> `varchar`. So the drift check saw FR-41's widening as `compatible`, `ensure_runtime_schema`
+> changed nothing, and `_bootstrap_schema` went on to `stamp_runtime_alembic_head` — **the
+> revision that should have widened the column is now recorded as applied.** A later
+> `alembic upgrade head` on the runtime tree would skip it.
+
+### What we hit
+
+The 2.22.0 handoff §1: *"with it off (your default): `bootstrap-schema` exits **3** and the
+entrypoint stops."* On our compose stack, first boot of the 2.22.0 image, `AINDY_BOOTSTRAP_RECONCILE`
+off:
+
+```
+[entrypoint] runtime schema: aindy-runtime bootstrap-schema
+ok: runtime-owned tables already present (no table changes).
+ok: stamped alembic_version_runtime to revision 0020.
+```
+
+```
+SELECT character_maximum_length FROM information_schema.columns
+ WHERE table_name='system_events' AND column_name='source';   -- 32
+SELECT version_num FROM alembic_version_runtime;              -- 0020
+```
+
+The api booted healthy on a schema its own contract says is `2026-09-20`, one column narrower than
+the model. The handoff's verification step 2 (`exit 0 and "stamped 0020"`) **passes on the
+unwidened stack** — only the `information_schema` query beside it tells the truth, and it is the
+line an operator is most likely to skip.
+
+Two layers, both runtime:
+
+1. **The diff is blind to length** (above). Any future `String(n)` → `String(m)` — or a
+   `Numeric` precision change — will do the same.
+2. **Even detected, it would not have been exit 3.** A `column_type_mismatch` is classed
+   `REMEDIATION_OFFLINE_MIGRATION` (exit 4), and `_SAFE_RECONCILE_CODES` is `missing_table` /
+   `missing_column` only, so `--reconcile` has no widening in it either. The handoff promised a
+   path that does not exist for this change shape.
+
+Remedied on our stack out-of-band with 0020's own DDL
+(`ALTER TABLE system_events ALTER COLUMN source TYPE VARCHAR(128)`, metadata-only in PostgreSQL);
+`bootstrap-schema` re-run: exit 0, column 128. No row lost — at 32 no longer row could exist.
+
+### Ask
+
+1. **Compare length / precision / scale** for the types that carry them. A pure widening
+   (`varchar(n)` → `varchar(m)`, `m > n`) is additive and metadata-only in PostgreSQL — it
+   belongs in `_SAFE_RECONCILE_CODES` as its own code (`column_widen`), exit 3, applied by
+   `--reconcile`. A narrowing stays exit 4.
+2. **Never stamp a head the schema does not match.** `bootstrap-schema` stamping on a
+   create_all-built DB is the right baseline move once; stamping *over* a revision whose DDL was
+   never run is how a migration gets lost. Either run the pending revisions' DDL before stamping,
+   or refuse to stamp past a revision that is not reflected in the report.
+3. A test in the release gate that builds the previous head, upgrades the image, and asserts the
+   column — the handoff's verification should fail on the stack this happened to, and today it
+   passes.
+
+### Not asking for
+
+Automatic narrowing, or `AINDY_BOOTSTRAP_RECONCILE` changing meaning. Ours stays off; a schema
+change stays a decision — which is exactly why it has to be *visible* as one.
+
+---
+
+## FR-41 — `system_events.source` is `String(32)`; a route name longer than that fails its *required* `execution.started` on every request, at WARNING, and the request proceeds unrecorded ✅ SHIPPED in 2.22.0 (#730, Alembic 0020) — but 0020 did not apply on a create_all-built stack: FR-43
 
 > **`AINDY/db/models/system_event.py:19` — `source = Column(String(32), …)`. The pipeline writes
 > every request's `execution.started` / `completed` / `failed` with `source = metadata["source"]
@@ -62,7 +133,7 @@ than it is hidden now.
 
 ---
 
-## FR-40 — on `nodus_vm`, FR-33's `warn` mode has no witness: the counter is incremented and the WARNING logged in the worker, and neither reaches the api 🔴 open (filed 2026-09-17, runtime 2.20.0)
+## FR-40 — on `nodus_vm`, FR-33's `warn` mode has no witness: the counter is incremented and the WARNING logged in the worker, and neither reaches the api ✅ SHIPPED in 2.22.0 (#731, DEC-067)
 
 > **`tool_registry.execute_tool` counts `aindy_tool_args_validation_total{outcome, mode}` and,
 > under `warn`, logs `[AgentTool] … args do not match its declared schema` — in whichever process
@@ -103,7 +174,7 @@ owner's call; recorded in `RUNTIME_2_20_0_UPGRADE.md` §7.3.
 
 ---
 
-## FR-39 — the planner-context and tools-for-run hook contexts still hand the boundary a `uuid.UUID`; FR-36's fix and its test cover the completion-hook builder only 🔴 open (filed 2026-09-17, runtime 2.20.0)
+## FR-39 — the planner-context and tools-for-run hook contexts still hand the boundary a `uuid.UUID`; FR-36's fix and its test cover the completion-hook builder only ✅ SHIPPED in 2.22.0 (#729) — verified live 2026-09-23, the planner prompt carries the Infinity context for the first time
 
 Numbered after our FR-38; your ledger's *next available* still reads FR-37 — please reconcile on
 intake.
@@ -154,7 +225,7 @@ re-fetch the tenant by, so our fix has nothing to identify the user with until t
 
 ---
 
-## FR-38 — the authority gate is wired at `agent_execute_step` only; on the `nodus_vm` backend a denied tool fails the step and never negotiates 🔴 open (filed 2026-09-16, runtime 2.19.0) — with the first observed denial, as asked
+## FR-38 — the authority gate is wired at `agent_execute_step` only; on the `nodus_vm` backend a denied tool fails the step and never negotiates ✅ SHIPPED in 2.22.0 (#732/#734, DEC-068..070) — our resume route passes the decision body since the adoption — with the first observed denial, as asked
 
 > **`negotiate_capability_denial` has exactly one caller: `nodus_adapter.agent_execute_step`
 > (`:357`), the AGENT_FLOW node. On `AINDY_AGENT_EXECUTION_BACKEND=nodus_vm` a plan is compiled
@@ -210,7 +281,7 @@ inert and phase 3 has evidence only from the other backend.
 
 ---
 
-## FR-37 — `@aindy/ui-kit` unwraps by shape and never sees `X-AINDY-Envelope`; the discriminator FR-19 asked for has no consumer 🔴 open (filed 2026-09-16, ui-kit 2.0.0 / runtime 2.19.0)
+## FR-37 — `@aindy/ui-kit` unwraps by shape and never sees `X-AINDY-Envelope`; the discriminator FR-19 asked for has no consumer ✅ SHIPPED in ui-kit 2.1.0 (runtime #735) — the client cleanup is ours
 
 Filed here because the ui-kit is the runtime's UI (owner's ruling, 2026-09-16) and this register
 is where passbacks to the runtime side go — not on the kit's repo directly. This is FR-19's

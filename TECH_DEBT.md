@@ -184,7 +184,13 @@ source could not.
 
 ---
 
-## AGENT-PLANNER-CONTEXT-BOUNDARY-1: 🟡 app half FIXED 2026-09-17 — the planner has never seen the Infinity context; effective when FR-39 lands (app-owned, was P1)
+## AGENT-PLANNER-CONTEXT-BOUNDARY-1: ✅ CLOSED 2026-09-23 — the planner has never seen the Infinity context; FR-39 shipped in 2.22.0 and the provider now builds it (app-owned, was P1)
+
+**Closed 2026-09-23 on runtime 2.22.0, verified in the container** (`RUNTIME_2_22_0_UPGRADE.md` §3):
+the runtime's own `_get_planner_context` path, through the boundary, for the test account —
+`has_kpi_block True`, `has_reasoning_block True`, `context_block_len 680` (score 48.1, the ARM
+guidance line, the `review_plan` recommendation). The first plan built with the Infinity context
+is the next one anybody makes. The original record follows.
 
 **Found 2026-09-17 reading an agent run's log at WARNING during the 2.20.0 adoption
 (`RUNTIME_2_20_0_UPGRADE.md` §7.1):**

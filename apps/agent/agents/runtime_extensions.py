@@ -124,17 +124,17 @@ def build_planner_context(context: dict) -> dict:
     the context (always None) and `user_id` as handed (a `uuid.UUID` upstream, so
     `{"_redacted_type": "UUID"}` here), and every block below took its `except: return ""`
     path — every plan since the boundary landed (2026-05-20) was made from the base prompt plus
-    the tool catalog, blind to the score it exists to steer by. The runtime still passes the
-    UUID at `agent_runtime/shared.py:81` (FR-39); until that lands the tenant is absent here
-    and the prompt stays bare, but it is logged rather than swallowed, and the moment a string
-    arrives the blocks build against a real session.
+    the tool catalog, blind to the score it exists to steer by. Runtime 2.22.0 (FR-39, #729)
+    passes `user_id` as a string and documents `db` as absent by design, so the tenant arrives
+    and the blocks build against our own session. A missing tenant is still logged rather than
+    swallowed: that would be a runtime regression, and it should not be silent again.
     """
     run_type = context.get("run_type") or "default"
     user_id = _hook_user_id(context.get("user_id"))
     if not user_id:
         logger.warning(
             "[planner_context] no usable user_id in the hook context (got %r) — planning without "
-            "the Infinity context; runtime FR-39",
+            "the Infinity context; FR-39 shipped in runtime 2.22.0, so this is a regression",
             context.get("user_id"),
         )
         return {"system_prompt": PLANNER_SYSTEM_PROMPT, "context_block": ""}
