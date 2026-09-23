@@ -430,11 +430,12 @@ import of the 16-app graph). Three consequences, each measured 2026-09-16 and fi
   of them did, so the cost governor saw planning and nothing else on this backend; now the
   tenant window moves on tool steps too, and `AINDY_QUOTA_MAX_TENANT_TOKENS` (unset here) would
   refuse guest calls it never used to see.
-- **The authority gate (`register_tool(on_denial="wait")`) never fires** — `negotiate_capability_
-  denial` has one caller, `agent_execute_step`, the AGENT_FLOW node; on `nodus_vm` a denied tool
-  fails at `tool_registry.py:816` and the step fails (**FR-38**). Our `leadgen.act` declaration
-  is inert until that lands. To exercise the gate, run with
-  `AINDY_AGENT_EXECUTION_BACKEND=agent_flow` (explicit env always wins over the setdefault).
+- **The authority gate (`register_tool(on_denial="wait")`) fires on `nodus_vm` since 2.22.0**
+  (FR-38; proven 2026-09-23, `RUNTIME_2_22_0_UPGRADE.md` §4.1): a denied `leadgen.act` parks the
+  run and `POST /apps/agent/runs/{id}/resume {"decision": "skip"|"abort", "note"}` decides it.
+  **A park made by a process other than the api is invisible to the api until it restarts**
+  (agent waits rehydrate at boot only, FR-44): a resume then answers 200 `resuming` with
+  `waiters_notified: 0` and the run does not move. Read `waiters_notified`, not `run_status`.
 - **The worker needs this repo pip-installed** or it cannot `import apps` — see the Nodus test
   section below. A guest execution's memory is bounded by `AINDY_NODUS_MAX_MEMORY_MB` (256,
   compose) inside the container's `mem_limit` (1536m); `test_compose_memory_bounds.py` keeps the
@@ -539,7 +540,7 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43 filed 2026-09-23 |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43 and FR-44 filed 2026-09-23 |
 | Latest runtime adoption record | `docs/runtime/RUNTIME_2_22_0_UPGRADE.md` — one per release; the 2.20.0 doc's §6.2 is the exit-3 reconcile, proven once. **2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — it exits 0 and stamps; check the column, not the exit code** |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
