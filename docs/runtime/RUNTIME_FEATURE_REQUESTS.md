@@ -20,7 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-23:** FR-43 (`bootstrap-schema` cannot see a column widening, so 2.22.0's
+> **Open as of 2026-09-23:** FR-44 (the agent resume route answers `resuming` with no waiter —
+> found re-running the FR-38 denial on `nodus_vm`, which otherwise worked end to end) · FR-43 (`bootstrap-schema` cannot see a column widening, so 2.22.0's
 > 0020 was stamped over a `varchar(32)` — filed from the 2.22.0 adoption) · FR-14 recurrence half ·
 > FR-6 items 2–3. **FR-37 … FR-41 all shipped in 2.22.0** (ui-kit 2.1.0 for FR-37); FR-39 is
 > verified live, the rest are in `RUNTIME_2_22_0_UPGRADE.md`.
@@ -30,6 +31,46 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-44 — the agent resume route records a gate decision and answers `resuming` when no process holds the run's waiter; the run stays `waiting` until the next restart 🔴 open (filed 2026-09-23, runtime 2.22.0)
+
+> **`agents/runtime_api.py::resume_agent_run_runtime` → `_decide_authority_gate` writes the gated
+> step `skipped` and commits, then `publish_event(…, run_id=…)`, and returns
+> `authority_gate.run_status: "resuming"` whatever `publish_event` returned.** Agent-run waits
+> are registered in memory by the process that parked the run and re-registered only at boot
+> (`startup.py` → `core/agent_run_rehydration.rehydrate_waiting_agent_runs`). If the process
+> serving the resume is not the one that parked the run and has not booted since, `publish_event`
+> reaches 0 waiters: the decision is recorded, the response says `resuming`, and the run stays
+> `waiting` until some process restarts.
+
+### What we hit
+
+The FR-38 re-run on `nodus_vm` (`RUNTIME_2_22_0_UPGRADE.md` §4.1, run `bea83301…`): the park
+was made in a `docker exec` — the same manufacture that proved `agent_flow`'s cross-process
+resume on 09-16 — and the api had booted before it. `POST …/resume {"decision": "skip"}` → 200,
+`waiters_notified: 0`, step 0 `skipped`, run `waiting` for 3 minutes. After an api restart,
+the same request → `waiters_notified: 1` → `completed` in 11 s. So the gate and the rehydrated
+re-drive both work; only the on-demand half is missing.
+
+Where it matters beyond a manufacture: any deployment where the process that executes an agent
+run is not the one serving HTTP (a second api instance, a worker process, an operator script), and
+any park that happened after the serving process booted in such a topology.
+
+### Ask
+
+1. **Rehydrate on demand before publishing** — `rehydrate_waiting_agent_runs(db, run_ids=[run_id])`
+   already takes a scope and already guards on `scheduler.waiting_for(run_id)`; calling it in the
+   resume path when there is no live registration is the agent-run analog of what the flow resume
+   route has done since FR-31.
+2. **Do not report `resuming` for 0 waiters.** If nothing was woken, say so in `run_status`
+   (and, for the gate, ideally apply the decision only once a waiter exists, or re-drive directly)
+   — a 200 that says `resuming` while the run cannot move is the quiet failure again.
+
+### Not asking for
+
+A change to where waits live. Boot rehydration is right; this is only the gap between boots.
+
+---
+
 ## FR-43 — `bootstrap-schema` compares column types with the length stripped, so 2.22.0's widening was invisible: it reported "no table changes", exited 0 and stamped `0020` over a `varchar(32)` 🔴 open (filed 2026-09-23, runtime 2.22.0)
 
 > **`AINDY/db/schema_contract.py::_normalize_type_name` compiles the type and keeps
@@ -236,6 +277,12 @@ re-fetch the tenant by, so our fix has nothing to identify the user with until t
 > on that path.** This app defaults every real boot to `nodus_vm`
 > (`apps/agent/bootstrap.py:_select_execution_backend`, RTR-1 §5), so the gate we were asked to
 > declare a tool for cannot fire here.
+
+**2026-09-23, runtime 2.22.0 — re-run on `nodus_vm`, as the 2.22.0 handoff §6 asked:** the same
+manufacture now **parks** (`AUTHORITY_NEGOTIATED` → `WAITING`, `wait_state.authority_gate`,
+`no_variant`); our route refuses a bare resume (409) and an unknown decision (422); `skip` →
+step `skipped` → run `completed`, `steps_completed 0/1`, `wait_state` cleared. Run `bea83301…`,
+full table in `RUNTIME_2_22_0_UPGRADE.md` §4.1. One gap found on the way, filed as FR-44.
 
 **2026-09-18:** the 2.21.0 handoff (§6 ask 1) asks again for "the first observed denial". It is
 the section below, recorded 2026-09-16 — both backends, the `skip` resume included. Nothing

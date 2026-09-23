@@ -112,8 +112,50 @@ Linux CI).
 **No client surface resumes an agent run at all** — the only resume in `client/src` is the flow
 engine's. A gate-parked run is decided through the API until one exists. Noted, not built.
 
-**Handoff §6 ask 1 — re-run the manufactured `leadgen.act` denial on `nodus_vm`:** pending, next
-step of this adoption. Recorded here when done.
+### 4.1 Handoff §6 ask 1 — the manufactured denial, re-run on `nodus_vm` (2026-09-23)
+
+The 2026-09-16 manufacture, unchanged (FR-38 in the register): a one-step plan
+`leadgen.act {apply: false, channel: draft}` for the designated test account, executed in a
+`docker exec` under a token minted with `capability_ceiling=['execute_flow']` — the plan requires
+`['execute_flow', 'external_api_call']`, so `granted_tools: []`. Backend `nodus_vm` (our default,
+no override), `AINDY_AUTHORITY_NEGOTIATION=true`. Run **`bea83301-c771-49f7-adcd-9434ecd4662c`**.
+
+| | 2026-09-16, runtime 2.19.0 (run `3562ae93…`) | 2026-09-23, runtime 2.22.0 (run `bea83301…`) |
+|---|---|---|
+| after `execute_run` | **`failed`** — `step 0 (leadgen.act) failed: tool 'leadgen.act' not granted by capability token` | **`waiting`**, `steps 0 / 1`, no error |
+| agent events | `capability.denied` ×3, `AGENT_STEP_FAILED` | `EXECUTION_STARTED` → `AUTHORITY_NEGOTIATED {outcome: waiting}` → `WAITING` |
+| `wait_state` | — | `{event_type: agent.authority.decision, continuation: true, resume_segment_index: 0, authority_gate: {tool: leadgen.act, step_index: 0, negotiation_outcome: no_variant, decisions: [skip, abort], denied_error: …, tool_args: {apply: false, channel: draft}}}` |
+
+**The operator's half, over HTTP through OUR route** (`POST /apps/agent/runs/{id}/resume`, the
+#399 pass-through), as the test account:
+
+| body | answer | run after |
+|---|---|---|
+| none | **409** `Run is parked at the authority gate; resume needs a decision: skip \| abort` | `waiting` |
+| `{"decision": "maybe"}` | **422** `unknown authority-gate decision 'maybe'; the run stays parked` | `waiting` |
+| `{"decision": "skip", "note": …}` | **200**, `authority_gate.run_status: "resuming"`, **`waiters_notified: 0`** | step 0 → `skipped` with the note; **run stayed `waiting`** (3 min observed) |
+| api restarted, then `skip` again | **200**, **`waiters_notified: 1`** | `executing` → **`completed`** within 11 s |
+
+Final state: run `completed`, `steps_completed 0 / steps_total 1` (FR-34's fix, visible — a skip is
+not a success), step 0 `skipped` with `result {authority_gate: skip, note: …}`,
+`result.steps[0].replayed: true`, `COMPLETED` agent event, `agent.completed` system event.
+**`wait_state` cleared** (to JSON `null` — `IS NULL` reads false on it; read the value).
+The 09-16 "not cleared" observation does not reproduce, on the rehydrated path either.
+
+**Verdict for phase 3: the gate works on `nodus_vm`** — park, typed refusal, skip, re-drive,
+completion. With 09-16's `agent_flow` evidence the flip now has both backends.
+
+**One defect, filed as FR-44:** the first `skip` wrote its irreversible half (the step row
+`skipped`) and answered `resuming` while no process held the run's waiter — agent-run waits are
+re-registered **only at startup** (`startup.py` → `rehydrate_waiting_agent_runs`), and this park
+was made in a process that then exited. Nothing on the response distinguishes that from a real
+resume except `waiters_notified: 0`. It is partly the manufacture's shape (a park made outside
+the api), but the same holds for any park made by a process other than the one serving the
+resume — and the flow resume route has handled exactly this since FR-31.
+
+**FR-40 — no evidence from this run.** `aindy_tool_args_validation_total` has no samples on the
+api's `/metrics`: the only tool step was denied before argument validation and was then skipped,
+so nothing was validated. The read needs an ordinary `nodus_vm` run that executes a tool.
 
 ---
 
