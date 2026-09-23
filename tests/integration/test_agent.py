@@ -452,6 +452,25 @@ class TestAgentResume:
         assert r.status_code == 200, f"resume: {r.status_code} {r.text[:200]}"
         assert mock_resume.called, "resume_agent_run_runtime was not invoked"
         assert mock_resume.call_args.kwargs.get("run_id") == run_id
+        # No body → payload None: an ordinary plan-declared wait resumes as before.
+        assert mock_resume.call_args.kwargs.get("payload") is None
+
+    def test_resume_passes_gate_decision_through(self, client):
+        """FR-38 (runtime 2.22.0): a gate-parked run needs `{"decision", "note"}`; the route
+        hands the body to the runtime unread. Before 2.22.0 it dropped it, so a run parked at
+        the authority gate could only be resumed through the runtime's reference route."""
+        from unittest.mock import patch
+
+        token = _register_and_login(client)
+        run_id = str(uuid.uuid4())
+        body = {"decision": "skip", "note": "operator: skip the denied step"}
+        with patch(
+            "apps.agent.routes.agent_router.resume_agent_run_runtime",
+            return_value={"run_id": run_id, "status": "executing"},
+        ) as mock_resume:
+            r = client.post(f"/apps/agent/runs/{run_id}/resume", headers=_auth(token), json=body)
+        assert r.status_code == 200, f"resume: {r.status_code} {r.text[:200]}"
+        assert mock_resume.call_args.kwargs.get("payload") == body
 
 
 # ---------------------------------------------------------------------------
