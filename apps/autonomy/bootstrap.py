@@ -39,8 +39,11 @@ def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
     from AINDY.platform_layer.response_adapters import legacy_envelope_adapter
 
+    from apps._shared.envelope import stamped
+
+    # Stamped: the body IS the envelope, so it carries X-AINDY-Envelope (apps/_shared/envelope.py).
     for prefix in ("autonomy", "system", "coordination"):
-        register_response_adapter(prefix, legacy_envelope_adapter)
+        register_response_adapter(prefix, stamped(legacy_envelope_adapter))
 
 
 def _register_flow_results() -> None:

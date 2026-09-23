@@ -20,7 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-23:** FR-44 (the agent resume route answers `resuming` with no waiter —
+> **Open as of 2026-09-23:** FR-45 (the runtime's envelope adapters never stamp the header;
+> with ui-kit 2.1.0's latch that is load-order-dependent unwrapping; found adopting FR-37) · FR-44 (the agent resume route answers `resuming` with no waiter —
 > found re-running the FR-38 denial on `nodus_vm`, which otherwise worked end to end) · FR-43 (`bootstrap-schema` cannot see a column widening, so 2.22.0's
 > 0020 was stamped over a `varchar(32)` — filed from the 2.22.0 adoption) · FR-14 recurrence half ·
 > FR-6 items 2–3. **FR-37 … FR-41 all shipped in 2.22.0** (ui-kit 2.1.0 for FR-37); FR-39 is
@@ -31,6 +32,47 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-45 — the runtime's own envelope-bodied response adapters never set `X-AINDY-Envelope`, and ui-kit 2.1.0's latch turns that into load-order-dependent unwrapping 🔴 open (filed 2026-09-23, runtime 2.22.0 / ui-kit 2.1.0)
+
+> **`AINDY/core/response_adapter.py::adapt_response` stamps `X-AINDY-Envelope: v1` on its default
+> exit only**, and its comment says why: every other branch "returns something else". But two of
+> those branches call the runtime's own `platform_layer/response_adapters.py` functions whose
+> body IS an envelope: `raw_canonical_adapter` returns the canonical envelope verbatim,
+> `legacy_envelope_adapter` returns `{status, data, events, next_action, trace_id}`, and
+> `memory_execute_adapter` / `memory_completion_adapter` wrap the same. None of them stamps.
+> **ui-kit 2.1.0** (FR-37) resolves stamped bodies in `request()` and, after seeing one stamped
+> response, marks every unstamped body final, so `unwrapEnvelope` stops unwrapping. An
+> app that registers any of these adapters therefore gets its envelopes unwrapped before the
+> first stamped response and not after it.
+
+### What we hit
+
+Adopting ui-kit 2.1.0 (`RUNTIME_2_22_0_UPGRADE.md` §7.1): 26 of our 78 parameterless `/apps` GETs
+returned an envelope without the header (45 route names through `raw_canonical_adapter`, 8
+through the legacy one). Tasks, identity and `/apps/dashboard/overview` are stamped, so the bump
+as shipped would have blanked analytics, ARM and social on any session that had already opened
+one of those pages. We stamp them ourselves now (`apps/_shared/envelope.py`), guarded by a test over
+every adapter we register. That fixes our side only: any other app that registers these adapters
+has the same bug.
+
+### Ask
+
+1. **Stamp inside the runtime's envelope-bodied adapters** (`raw_canonical_adapter`,
+   `legacy_envelope_adapter`, `memory_execute_adapter`, `memory_completion_adapter`'s success
+   path). Their bodies meet the header's contract. Or have `adapt_response` stamp any adapter
+   response whose body carries `data` at the top level, and say so in the registration docs.
+   Leave `raw_json_adapter` unstamped.
+2. **ui-kit: export `_resetEnvelopeDetection`.** It is declared in `dist/api/_core.d.ts` but not
+   exported from `dist/index.js`, so a consumer's tests cannot reset the latch between cases.
+3. **ui-kit: document the latch** next to `unwrapEnvelope`: after the first stamped response it is
+   a no-op for everything, which is not what its name says.
+
+### Not asking for
+
+Removing the latch. It is the right behaviour once every envelope is stamped, which is what ask 1 delivers.
+
+---
+
 ## FR-44 — the agent resume route records a gate decision and answers `resuming` when no process holds the run's waiter; the run stays `waiting` until the next restart 🔴 open (filed 2026-09-23, runtime 2.22.0)
 
 > **`agents/runtime_api.py::resume_agent_run_runtime` → `_decide_authority_gate` writes the gated
@@ -328,7 +370,7 @@ inert and phase 3 has evidence only from the other backend.
 
 ---
 
-## FR-37 — `@aindy/ui-kit` unwraps by shape and never sees `X-AINDY-Envelope`; the discriminator FR-19 asked for has no consumer ✅ SHIPPED in ui-kit 2.1.0 (runtime #735) — the client cleanup is ours
+## FR-37 — `@aindy/ui-kit` unwraps by shape and never sees `X-AINDY-Envelope`; the discriminator FR-19 asked for has no consumer ✅ SHIPPED in ui-kit 2.1.0 (runtime #735) — adopted 2026-09-23, which needed our envelopes stamped first (FR-45)
 
 Filed here because the ui-kit is the runtime's UI (owner's ruling, 2026-09-16) and this register
 is where passbacks to the runtime side go — not on the kit's repo directly. This is FR-19's

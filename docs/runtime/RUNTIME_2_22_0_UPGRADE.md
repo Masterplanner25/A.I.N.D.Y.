@@ -193,11 +193,59 @@ reads 128). Verification step 3 had no traffic to read at the time of writing.
 
 ## 7. FR-37, PACK-DEBT-6, `[mcp]`
 
-- **FR-37:** `@aindy/ui-kit` 2.1.0 is published; the bump and the `client/src/api/*.js` unwrap
-  cleanup are a separate client PR.
+- **FR-37:** adopted 2026-09-23 — §7.1.
 - **`nltk` / `textstat`** leave the runtime's dependencies no earlier than 2026-10-01. We declared
   both in #391; nothing to do.
 - **`[mcp]` extra** no longer caps `mcp<2`. We do not install it.
+
+### 7.1 FR-37 — ui-kit 2.1.0, and why the bump was not a drop-in (FR-45)
+
+**What 2.1.0 does, read in the installed bundle:** `request()` reads `X-AINDY-Envelope`; a stamped
+body is resolved to `body.data` (or `null`) and marked. Once ONE stamped response has been seen, a
+module-level latch marks every later UNSTAMPED body as final too, and `unwrapEnvelope` passes a
+marked value through. So after the latch, `unwrapEnvelope` no longer unwraps anything.
+
+**Why that would have broken us:** the runtime stamps only `adapt_response`'s default exit. A
+route answered by a registered adapter is unstamped, including the runtime's own
+`raw_canonical_adapter`, whose body IS the canonical envelope, and `legacy_envelope_adapter`.
+Measured live, every parameterless `/apps` GET as the test account (78 × 200):
+
+| | before | after this change |
+|---|---|---|
+| stamped envelope | 8 (tasks, identity, dashboard) | **31** |
+| unstamped body with a `data` key | 26 (analytics, ARM, compute, social, autonomy/coordination, + 3 agent) | **3** (agent's hand-built list wrapper, read explicitly) |
+| bare, unstamped | 44 | 44 |
+
+Resolving every pipeline `route_name` against the registered adapters gave the full set: 45 names
+through `raw_canonical_adapter`, 8 through the legacy one, 1 exact (`social.feed.get`), 3 memory
+execute adapters. All their client consumers used `unwrapEnvelope`. After the latch, which any
+stamped response trips (the dashboard's own `/apps/dashboard/overview` is one), analytics, ARM,
+social and the agent console would have received the whole envelope, or not, depending on which
+page loaded first.
+
+**What changed, ours:**
+
+- `apps/_shared/envelope.py::stamped` wraps a response adapter to set `X-AINDY-Envelope: v1` on
+  success. Applied to every adapter whose body carries `data`: analytics / main, arm, autonomy /
+  system / coordination, social + `social.feed.get`, and the three memory execute adapters.
+  `test_response_adapters_stamp_envelopes.py` checks every adapter every app registers: a body
+  with `data` is stamped, a body without it is not (mutation-checked: 12 adapters fail with the
+  wrapper disabled).
+- `client/src/api/agent.js`: the agent router's `{data: [...]}` is hand-built, not an envelope.
+  The four list reads use `listOf` instead of `unwrapEnvelope`, so they work either side of the
+  latch. A test pins that case.
+- All 51 other `.then(unwrapEnvelope)` calls deleted (analytics 20, operator 9, arm 7, social 6,
+  tasks 5, identity 4). Every body they received is now either stamped (resolved in `request()`)
+  or bare (nothing to unwrap). Test stubs for stamped routes now send the header, as the server does.
+- `@aindy/ui-kit` `^2.0.0` → `^2.1.0`. The lockfile change is only the kit's 4 lines. npm on
+  Windows also dropped two nested optional `wasm32` packages, which was reverted.
+
+Client: 321/321 tests, lint clean, production build OK. Backend: unit suite, ruff, import check.
+
+**Filed as FR-45** (runtime + kit): the runtime's own envelope-bodied adapters should stamp,
+since every app that registers them has this latent bug; and the kit's latch assumes every
+envelope is stamped. `_resetEnvelopeDetection` is declared in the `.d.ts` but not exported
+from the bundle.
 
 ---
 
@@ -205,5 +253,12 @@ reads 128). Verification step 3 had no traffic to read at the time of writing.
 
 Row 1, `AINDY_MEMORY_RECALL_OWN_SESSION`: **wired, value empty → off.** `docker-compose.prod.yml:148`
 passes `${AINDY_MEMORY_RECALL_OWN_SESSION:-}` and `.env` does not set it; the runtime reads
-anything outside its truthy set as off (`memory/orchestrator.py:120`). No soak has started. Baseline
-at boot: `idle in transaction` = 0. Rows 2–6 wait behind row 1 (one flag at a time).
+anything outside its truthy set as off (`memory/orchestrator.py:120`).
+
+**Soak started 2026-09-23T20:30Z (owner):** `AINDY_MEMORY_RECALL_OWN_SESSION=true` in `.env`,
+confirmed in the container's environment. Baseline read just before the flip: `idle in
+transaction` 0, `aindy_db_pool_exhaustion_events_total` 0, `aindy_db_pool_checkedout` 1,
+`[MemoryOrchestrator] recall failed` 0 in the log. The last `memory.recall` agent step before the
+flip succeeded (run `1b99dc93…`, §5). Ends no earlier than 2026-09-30 (7 days), or 200 runs if
+that comes later. Read the same four signals, plus a `memory.recall` step succeeding, at the end.
+Rows 2–6 wait behind row 1 (one flag at a time).

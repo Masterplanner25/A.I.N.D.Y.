@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getAgentRuns, getAgentTools, getAgentSuggestions, getAgentTrust } from "../api/agent.js";
+import { getTasks } from "../api/tasks.js";
 
 function makeToken(payload) {
   const encoded = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -43,6 +44,27 @@ describe("agent api unwraps the wrapped reads", () => {
   it("getAgentSuggestions returns the suggestion array", async () => {
     stubResponse({ data: [] });
     await expect(getAgentSuggestions()).resolves.toEqual([]);
+  });
+
+  // ui-kit 2.1.0 latches: once it has seen ONE stamped response it treats every unstamped
+  // body as final, and `unwrapEnvelope` stops unwrapping it. The agent wrapper is unstamped,
+  // so while it went through `unwrapEnvelope` the console blanked or not depending on which
+  // page loaded first (FR-37, 2026-09-23). `listOf` reads it the same either side of the latch.
+  it("getAgentRuns returns the run array after a stamped response has been seen", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: (name) => (name === "X-AINDY-Envelope" ? "v1" : null) },
+        text: () => Promise.resolve(JSON.stringify({ status: "success", data: { tasks: [] } })),
+      })
+    );
+    await getTasks();
+    stubResponse({ data: [{ id: "r2", status: "completed" }] });
+    const runs = await getAgentRuns();
+    expect(Array.isArray(runs)).toBe(true);
+    expect(runs[0].id).toBe("r2");
   });
 
   // /apps/agent/trust returns a bare object with no `data` key. unwrapEnvelope is not

@@ -1,4 +1,4 @@
-import { adminRequest as authRequest, unwrapEnvelope } from "./_core.js";
+import { adminRequest as authRequest } from "./_core.js";
 import { ROUTES } from "./_routes.js";
 
 export function getFlowRuns(status = null, workflowType = null, limit = 20) {
@@ -34,7 +34,7 @@ export function runFlow(name, state = {}) {
   return authRequest(`/platform/flows/${encodeURIComponent(name)}/run`, {
     method: "POST",
     body: JSON.stringify({ state }),
-  }).then(unwrapEnvelope);
+  });
 }
 
 export function getFlowStrategies() {
@@ -81,7 +81,7 @@ export function getExecutionGraph(traceId) {
 // ── Webhooks (control-plane: subscription CRUD) ──────────────────────────────
 // GET returns a flat {webhooks:[…]}; DELETE returns 204 (empty body → resolves "").
 export function getWebhooks() {
-  return authRequest("/platform/webhooks", { method: "GET" }).then(unwrapEnvelope);
+  return authRequest("/platform/webhooks", { method: "GET" });
 }
 
 export function createWebhook({ event_type, callback_url, secret }) {
@@ -93,7 +93,7 @@ export function createWebhook({ event_type, callback_url, secret }) {
   return authRequest("/platform/webhooks", {
     method: "POST",
     body: JSON.stringify(body),
-  }).then(unwrapEnvelope);
+  });
 }
 
 export function deleteWebhook(subscriptionId) {
@@ -103,7 +103,8 @@ export function deleteWebhook(subscriptionId) {
 }
 
 // ── Admin users (control-plane: promotion) ───────────────────────────────────
-// GET returns a flat {users:[…]}; promote wraps in the {status,data} envelope.
+// GET returns a flat {users:[…]}; promote returns the stamped {status,data} envelope, which
+// ui-kit >= 2.1.0 resolves to `data` inside `request()`.
 export function getAdminUsers() {
   return authRequest("/platform/admin/users", { method: "GET" });
 }
@@ -111,34 +112,35 @@ export function getAdminUsers() {
 export function promoteUser(userId) {
   return authRequest(`/platform/admin/users/${encodeURIComponent(userId)}/promote`, {
     method: "POST",
-  }).then(unwrapEnvelope);
+  });
 }
 
 // ── Dead-Letter Queue (control-plane actions) ────────────────────────────────
 // /platform is runtime-owned (never /apps-mounted) and these queue routes wrap their
-// payload in the standard {status, data} envelope, so unwrap to a flat object.
+// payload in the standard {status, data} envelope — stamped, so `request()` resolves it to a
+// flat object (ui-kit >= 2.1.0, FR-37).
 export function getQueueHealth() {
-  return authRequest("/platform/queue/health", { method: "GET" }).then(unwrapEnvelope);
+  return authRequest("/platform/queue/health", { method: "GET" });
 }
 
 export function getDeadLetters(limit = 100) {
-  return authRequest(`/platform/queue/dead-letters?limit=${limit}`, { method: "GET" }).then(unwrapEnvelope);
+  return authRequest(`/platform/queue/dead-letters?limit=${limit}`, { method: "GET" });
 }
 
 export function replayDeadLetter(jobId) {
   return authRequest(`/platform/queue/dead-letters/${encodeURIComponent(jobId)}/replay`, {
     method: "POST",
-  }).then(unwrapEnvelope);
+  });
 }
 
 export function deleteDeadLetter(jobId) {
   return authRequest(`/platform/queue/dead-letters/${encodeURIComponent(jobId)}`, {
     method: "DELETE",
-  }).then(unwrapEnvelope);
+  });
 }
 
 export function drainDeadLetters() {
-  return authRequest("/platform/queue/dead-letters/drain", { method: "POST" }).then(unwrapEnvelope);
+  return authRequest("/platform/queue/dead-letters/drain", { method: "POST" });
 }
 
 export function getObservabilityDashboard(windowHours = 24) {

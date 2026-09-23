@@ -338,6 +338,13 @@ that INSERT, the runtime rolls back and continues at WARNING, and the route is n
 eight of ours were like that until 2026-09-19 (`ROUTE-NAME-EVENT-SOURCE-1`, FR-41).
 `test_route_names_fit_event_source.py` reads the width off the model and scans every call site.
 
+**An adapter whose body carries `data` must be wrapped in `stamped(...)`** (`apps/_shared/envelope.py`).
+ui-kit ≥ 2.1.0 unwraps only a response carrying `X-AINDY-Envelope`, and once it has seen one it
+leaves every unstamped body alone, so an unstamped envelope reaches the component whole. The
+runtime's own `raw_canonical_adapter` / `legacy_envelope_adapter` do not stamp (FR-45).
+`test_response_adapters_stamp_envelopes.py` checks every adapter we register. The client has no
+`unwrapEnvelope` calls any more. Do not add one: stamp the server side.
+
 **A pipeline handler returns data, not ORM rows, and every call passes `metadata={"db": db}`.**
 With the session in metadata the pipeline commits after the handler (events ride the handler's
 transaction since 2.21.0), `expire_on_commit` empties every loaded instance, and a handler that
@@ -541,7 +548,7 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43 and FR-44 filed 2026-09-23 |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23 |
 | Latest runtime adoption record | `docs/runtime/RUNTIME_2_22_0_UPGRADE.md` — one per release; the 2.20.0 doc's §6.2 is the exit-3 reconcile, proven once. **2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — it exits 0 and stamps; check the column, not the exit code** |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Tech debt tracker | `TECH_DEBT.md` |

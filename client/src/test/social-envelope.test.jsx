@@ -11,6 +11,9 @@ function stubEnvelope(data) {
   const fetchSpy = vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
+    // The live route stamps `X-AINDY-Envelope: v1`; ui-kit >= 2.1.0 resolves a stamped body to
+    // `data` inside `request()` (FR-37). A stub without the header is a bare body, not this route.
+    headers: { get: (name) => (name === "X-AINDY-Envelope" ? "v1" : null) },
     text: () =>
       Promise.resolve(
         JSON.stringify({

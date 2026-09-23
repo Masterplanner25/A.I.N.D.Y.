@@ -46,10 +46,13 @@ def _register_response_adapters() -> None:
         memory_completion_adapter,
     )
 
+    from apps._shared.envelope import stamped
+
     register_response_adapter("memory", raw_json_adapter)
-    register_response_adapter("memory.execute", memory_execute_adapter)
-    register_response_adapter("memory.execute.complete", memory_completion_adapter)
-    register_response_adapter("memory.nodus.execute", raw_canonical_adapter)
+    # Stamped: these bodies carry the payload under `data` (apps/_shared/envelope.py).
+    register_response_adapter("memory.execute", stamped(memory_execute_adapter))
+    register_response_adapter("memory.execute.complete", stamped(memory_completion_adapter))
+    register_response_adapter("memory.nodus.execute", stamped(raw_canonical_adapter))
 
 
 def _register_async_jobs() -> None:
