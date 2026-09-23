@@ -174,7 +174,7 @@ than it is hidden now.
 
 ---
 
-## FR-40 — on `nodus_vm`, FR-33's `warn` mode has no witness: the counter is incremented and the WARNING logged in the worker, and neither reaches the api ✅ SHIPPED in 2.22.0 (#731, DEC-067)
+## FR-40 — on `nodus_vm`, FR-33's `warn` mode has no witness: the counter is incremented and the WARNING logged in the worker, and neither reaches the api ✅ SHIPPED in 2.22.0 (#731, DEC-067) — verified live 2026-09-23: `outcome="valid"` samples for both steps of a `nodus_vm` run on the api's `/metrics`
 
 > **`tool_registry.execute_tool` counts `aindy_tool_args_validation_total{outcome, mode}` and,
 > under `warn`, logs `[AgentTool] … args do not match its declared schema` — in whichever process
