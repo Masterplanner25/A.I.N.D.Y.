@@ -71,8 +71,11 @@ def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
     from AINDY.platform_layer.response_adapters import raw_canonical_adapter
 
-    register_response_adapter("analytics", raw_canonical_adapter)
-    register_response_adapter("main", raw_canonical_adapter)
+    from apps._shared.envelope import stamped
+
+    # Stamped: the body IS the envelope, so it carries X-AINDY-Envelope (apps/_shared/envelope.py).
+    register_response_adapter("analytics", stamped(raw_canonical_adapter))
+    register_response_adapter("main", stamped(raw_canonical_adapter))
 
 
 def _register_events() -> None:

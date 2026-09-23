@@ -23,11 +23,14 @@ def _register_router() -> None:
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
     from AINDY.platform_layer.response_adapters import legacy_envelope_adapter
+    from apps._shared.envelope import stamped
     from apps.social.routes.social_router import social_feed_response_adapter
-    register_response_adapter("social", legacy_envelope_adapter)
+
+    # Stamped: the body IS the envelope, so it carries X-AINDY-Envelope (apps/_shared/envelope.py).
+    register_response_adapter("social", stamped(legacy_envelope_adapter))
     # Exact-route adapter takes precedence for the feed: adds the bridge-event
     # `events` channel while keeping `data` as the post list.
-    register_response_adapter("social.feed.get", social_feed_response_adapter)
+    register_response_adapter("social.feed.get", stamped(social_feed_response_adapter))
 
 
 def _register_syscalls() -> None:
