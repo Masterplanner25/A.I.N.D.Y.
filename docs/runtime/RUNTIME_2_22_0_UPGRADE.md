@@ -153,18 +153,32 @@ resume except `waiters_notified: 0`. It is partly the manufacture's shape (a par
 the api), but the same holds for any park made by a process other than the one serving the
 resume — and the flow resume route has handled exactly this since FR-31.
 
-**FR-40 — no evidence from this run.** `aindy_tool_args_validation_total` has no samples on the
-api's `/metrics`: the only tool step was denied before argument validation and was then skipped,
-so nothing was validated. The read needs an ordinary `nodus_vm` run that executes a tool.
+**FR-40 — no evidence from this run** (the only tool step was denied before argument validation,
+then skipped). Read on an ordinary run instead — §5.
 
 ---
 
 ## 5. FR-40 — `warn` is now observable on `nodus_vm`
 
-Nothing to change: `AINDY_TOOL_ARGS_VALIDATION` stays `warn`. The api's `/metrics` will carry
-`aindy_tool_args_validation_total{outcome=…}` after the first `nodus_vm` run; read it then. When
-`outcome="invalid"` reads zero across ordinary runs, the flip to `enforce` is the owner's call on
-evidence rather than on faith (the reason it was parked in `RUNTIME_2_20_0_UPGRADE.md`).
+Nothing to change: `AINDY_TOOL_ARGS_VALIDATION` stays `warn`.
+
+**Verified live 2026-09-23** with an ordinary run: the test account asked for a read-only
+`memory.recall` + `reasoning.evaluate` over the API; the planner (with the Infinity context, §3 — no
+`[planner_context]` WARNING) produced two low-risk steps, `memory.recall {limit: 5, query:
+"sprint-12"}` and `reasoning.evaluate {}`; approved through `/apps/agent/runs/{id}/approve`. Run
+**`1b99dc93-eed6-492e-82e5-91db11da3806`**: `completed`, `steps_completed 2 / 2`, both steps
+`success`, executed as a Nodus task graph (`nodus_events: task_graph_start {tasks: 2}` on its
+`execution.completed`). Baseline before the run: no samples. After, on the **api's** `/metrics`:
+
+```
+aindy_tool_args_validation_total{mode="warn",outcome="valid",tool="memory.recall"} 1.0
+aindy_tool_args_validation_total{mode="warn",outcome="valid",tool="reasoning.evaluate"} 1.0
+```
+
+On 2.20.0 / 2.21.0 these samples existed only in the worker. So `warn` is now observable here,
+and the recipe holds: when `outcome="invalid"` stays absent across ordinary runs, the flip to
+`enforce` is the owner's call on evidence. Two valid samples are not that evidence yet; the
+counter resets on an api restart, so read it over a stretch of real use.
 
 ---
 

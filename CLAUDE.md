@@ -156,9 +156,10 @@ def register() -> None:
     # dialect (`syscall_versioning._SCHEMA_TYPE_MAP`; note "number" means float ONLY — leave an
     # int-or-float property untyped). `execute_tool` checks args against the same schema before
     # dispatch: `AINDY_TOOL_ARGS_VALIDATION=warn` (default) counts and logs,
-    # `enforce` refuses the step. On `nodus_vm` (our default) the counter and the warn-mode
-    # WARNING both land in the WORKER and never reach `/metrics` or the api log (FR-40) — so
-    # `warn` is unobservable here and `enforce` is the only mode that shows a violation.
+    # `enforce` refuses the step. Since runtime 2.22.0 (FR-40) the tally rides the worker
+    # reply, so on `nodus_vm` (our default) `aindy_tool_args_validation_total` reaches the api's
+    # `/metrics` and the warn WARNING the api log (verified 2026-09-23). Read `outcome="invalid"`
+    # over real use; flip to `enforce` when it stays absent — the owner's call.
     # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
     # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
     # `register_syscalls` — which do not exist. Grepping for them returns nothing, which
