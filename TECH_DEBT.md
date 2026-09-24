@@ -1233,6 +1233,25 @@ than waiting behind a flag.
 
 ## RIPPLE-PINGS-NOT-ECHOES-1: ✅ DECIDED 2026-09-16 — the sweep is retired; citations are recorded by the author and verified by the system (app-owned, was P1)
 
+**Amended 2026-09-23 (owner): the three citations will not be recorded.** On looking at them
+again, none is a citation of an article in the sense the verifier checks. The closest, verbatim:
+
+> Shawn Knight's 2025 critique in The Masterplan Infinite Weave articulates the core objection:
+> "Measuring AI in IQ points is an arbitrary and misleading way to describe its development."
+
+That names the author, the publication and a verbatim sentence, but not the piece. The owner
+knows which article it came from; the page does not say. `page_cites` accepts a page only if it
+contains the drop point's URL or its distinctive title, so *Verify & record* would refuse all
+three (422). So "record the three citations" is withdrawn as an open item, not deferred. The
+recording path (#381) stays as built for a real citation when one arrives. RippleTrace still has
+**zero verified pings**.
+
+Noted, not built, and not a decision: an attributed verbatim quote is arguably stronger evidence
+than a title match, since the sentence is traceable to exactly one piece. A verifier that matched
+quoted text against the drop point's stored content would accept this example. It would need the
+article text stored per drop point, which `RIPPLETRACE-NO-CONTENT-1` records we do not have.
+
+
 **Decided 2026-09-16 (owner): no provider. The automated sweep is retired as a product decision,
 and the paid instrument with it.** The field had narrowed on its own — Bing Search APIs retired
 2025-08-11, Google Custom Search JSON closed to new customers and ending 2027-01-01 — leaving
@@ -1253,8 +1272,9 @@ kept `unverified` with the reason, does not score. Same ping identity as detecti
 (`ping_id_for`), so a hand-recorded page and a later-found one are one row. One button on each
 tracked piece: *I found a citation → Verify & record*. Discovery was the rare, expensive half;
 recording is the half this system can do honestly and for nothing — the same shape as #369's
-hand-entered contact. The owner's three citations, recorded, become the first verified pings this
-domain has ever had, and `narrative_score` and `build_strategies` finally stand on real echoes.
+hand-entered contact. ~~The owner's three citations, recorded, become the first verified pings this
+domain has ever had~~ — withdrawn 2026-09-23, see the amendment above: none names the piece, so
+none would verify.
 
 **Kept, inert:** `mention_search` (Perplexity), `ripple_detection`, the 6-hourly job and the
 per-drop-point *Check* button — behind `AINDY_RIPPLE_MENTION_DETECTION`, off. Nothing removed;
