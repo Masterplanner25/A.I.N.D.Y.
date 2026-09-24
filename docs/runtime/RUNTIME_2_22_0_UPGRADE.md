@@ -242,6 +242,11 @@ page loaded first.
 
 Client: 321/321 tests, lint clean, production build OK. Backend: unit suite, ruff, import check.
 
+**Verified in the browser 2026-09-23 (owner)**, on Vite against the rebuilt api (main through
+#402). The Dashboard was opened first, so the kit's latch was tripped before the other screens
+loaded: the harder case. Analytics / scores, ARM, social, and the agent console (runs, tools)
+all rendered their data. None showed the envelope.
+
 **Filed as FR-45** (runtime + kit): the runtime's own envelope-bodied adapters should stamp,
 since every app that registers them has this latent bug; and the kit's latch assumes every
 envelope is stamped. `_resetEnvelopeDetection` is declared in the `.d.ts` but not exported
