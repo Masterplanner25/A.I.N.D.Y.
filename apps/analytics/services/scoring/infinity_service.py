@@ -167,8 +167,17 @@ def _sigmoid_score(value: float, midpoint: float, steepness: float = 1.0) -> flo
 # ── KPI Calculators ──────────────────────────────────────────────────────────
 
 def calculate_execution_speed(user_id: str, db: Session) -> tuple:
+    """Execution Speed Score (0-100) — see `_execution_speed_with_sample`.
+
+    Returns (score: float, data_points_used: int)
     """
-    Execution Speed Score (0-100).
+    score, recent, _completed = _execution_speed_with_sample(user_id, db)
+    return score, recent
+
+
+def _execution_speed_with_sample(user_id: str, db: Session) -> tuple:
+    """
+    Execution Speed Score (0-100), plus the lifetime completion count it was computed from.
 
     Measures: task completion velocity vs the user's own historical baseline.
 
@@ -181,7 +190,8 @@ def calculate_execution_speed(user_id: str, db: Session) -> tuple:
       ratio < 1.0 = slower than usual → score < 50
       ratio = 1.0 = exactly on average → score = 50
 
-    Returns (score: float, data_points_used: int)
+    Returns (score: float, data_points_used: int, lifetime_completions: int). The third value
+    gates this KPI's weight in the master (`EXECUTION_SPEED_FULL_WEIGHT_AT`, §9.4 option C).
     """
     try:
         now = datetime.now(timezone.utc)
@@ -210,7 +220,7 @@ def calculate_execution_speed(user_id: str, db: Session) -> tuple:
             if end_time is not None
         )
         if not completed_end_times:
-            return 50.0, recent
+            return 50.0, recent, len(completed_tasks)
 
         first_end = completed_end_times[0]
         if first_end.tzinfo is None:
@@ -227,11 +237,11 @@ def calculate_execution_speed(user_id: str, db: Session) -> tuple:
             ratio = current_velocity / historical_avg
 
         score = _sigmoid_score(ratio, 1.0, steepness=3.0)
-        return score, recent
+        return score, recent, total_completed
 
     except Exception as e:
         logger.warning("execution_speed calc failed: %s", e)
-        return 50.0, 0
+        return 50.0, 0, 0
 
 
 def calculate_decision_efficiency(user_id: str, db: Session) -> tuple:
@@ -541,7 +551,11 @@ def calculate_infinity_score(
     try:
         _ensure_orchestrated()
         from apps.analytics.models import UserScore, ScoreHistory
-        from .kpi_weight_service import get_effective_weights
+        from .kpi_weight_service import (
+            EXECUTION_SPEED_FULL_WEIGHT_AT,
+            get_effective_weights,
+            sample_gated_weights,
+        )
         from .three_axis_composition import advisory_enabled, compute_advisory_breakdown
         user_db_id = _db_user_id(user_id)
         for attempt in range(_SCORE_WRITE_RETRY_LIMIT):
@@ -583,13 +597,21 @@ def calculate_infinity_score(
                     previous_master = float(existing.master_score or 0.0)
                     previous_version = int(existing.lock_version or 0)
 
-                    exec_speed, dp1 = calculate_execution_speed(user_id, db)
+                    exec_speed, dp1, speed_samples = _execution_speed_with_sample(user_id, db)
                     decision_eff, dp2 = calculate_decision_efficiency(user_id, db)
                     ai_boost, dp3 = calculate_ai_productivity_boost(user_id, db)
                     focus_qual, dp4 = calculate_focus_quality(user_id, db)
                     plan_progress, dp5 = calculate_masterplan_progress(user_id, db)
                     total_data_points = dp1 + dp2 + dp3 + dp4 + dp5
-                    effective_weights = get_effective_weights(db, user_id)
+                    # §9.4 option C: execution_speed weighs in proportion to how many completions
+                    # it rests on, up to EXECUTION_SPEED_FULL_WEIGHT_AT. Applied here only; the
+                    # learned per-user weights are never rewritten by it.
+                    effective_weights = sample_gated_weights(
+                        get_effective_weights(db, user_id),
+                        kpi="execution_speed",
+                        samples=speed_samples,
+                        full_at=EXECUTION_SPEED_FULL_WEIGHT_AT,
+                    )
 
                     master = round(
                         exec_speed * effective_weights["execution_speed"] +

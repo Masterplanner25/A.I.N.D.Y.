@@ -1,6 +1,6 @@
 ---
 title: "Infinity Score — the three-axis model (Volume / Worth / Trajectory)"
-last_verified: "2026-09-20"
+last_verified: "2026-09-23"
 api_version: "1.0"
 status: draft
 owner: "app-team"
@@ -312,10 +312,44 @@ lifetime denominator. Two hours later #18 aged out too. The design did exactly w
 | **B** | Interim: baseline on prior history only | one expression in `calculate_execution_speed`; a completion can no longer lower the ratio through the denominator; window dropouts still move it | a formula change ahead of the consolidation, to a KPI that is going away |
 | **C** | Interim: weight by per-KPI sample size | `execution_speed` contributes at reduced weight until `N` completions exist (say 10), with the freed weight spread across the other KPIs — the confidence idea applied where it bites | touches `kpi_weight_service` effective-weights; the same migration path §8 #2 needs anyway |
 
-**Recorded 2026-09-20, decision pending.** The recommendation, for what it is worth: **A**, with
+**Recorded 2026-09-20; decided 2026-09-23 — C, §9.5.** The recommendation, for what it is worth: **A**, with
 this section as the standing explanation — because the KPI is being retired and both interim
 fixes are work on a number Phase C deletes. If the score is going to be *watched* before Phase
 C ships, **C** is the smaller honest change: it makes the label and the weight agree.
+
+### 9.5 Decided 2026-09-23 (owner): **C**
+
+The recommendation above assumed the score would not be watched before Phase C drives it. Two
+things changed that. The three-axis model is built but only recorded here (shadow on, advisory
+off), and making it drive the score is listed in `BUILD_PLAN.md` as *"Blocked, and not by soak"*,
+so A meant indefinitely. And since runtime 2.22.0 (FR-39) the planner's prompt carries these KPIs.
+
+**Built:** `kpi_weight_service.sample_gated_weights` + `EXECUTION_SPEED_FULL_WEIGHT_AT = 10`.
+`execution_speed`'s weight in the master is scaled by `min(1, lifetime completions / 10)` and the
+freed share goes to the other four KPIs in proportion to their own weights. It is applied only
+where `calculate_infinity_score` composes the master, and the per-user learned weights in
+`user_kpi_weights` are never rewritten by it. The completion count comes from the same task fetch
+(`_execution_speed_with_sample`); `calculate_execution_speed` keeps its two-value contract.
+`test_execution_speed_sample_gate.py`.
+
+**The 09-20 day, recomputed from the stored KPI values** (the "before" column reproduces the
+stored `master_score` exactly on all four rows):
+
+| recalc | completions | before | Δ | with C | Δ |
+|---|---|---|---|---|---|
+| 09-19 07:00 scheduled | 2 | 47.42 | | 48.16 | |
+| 09-20 05:03 #28 completed | 3 | 45.38 | **−2.04** | 49.70 | **+1.54** |
+| 09-20 07:00 scheduled (#18 ages out) | 3 | 41.64 | −3.74 | 48.57 | −1.12 |
+| 09-20 20:07 #25 completed | 4 | 48.02 | +6.38 | 53.98 | +5.40 |
+
+**Expect one step on the first recalc after deploy:** about 48 → 54 with today's KPI values,
+caused by the weights, not by work. It lands in `score_history` and the three-axis shadow
+ledger like any other recalc; read it as the change, not as progress.
+
+**Not changed:** the KPI value itself. The planner's guidance line (*"Execution speed is low —
+bias toward task.create"*, `apps/agent/agents/runtime_extensions.py`) still reads the raw value
+against 40. C fixes the value's weight in the score; it does not change what the planner is told.
+That line would need its own gate if it becomes a problem.
 
 **How to re-derive:** `select calculated_at, trigger_event, execution_speed_score, master_score,
 score_delta from score_history where user_id = … order by calculated_at` against the tasks'
