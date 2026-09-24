@@ -85,6 +85,43 @@ def get_effective_weights(db: Session, user_id) -> dict[str, float]:
         return dict(KPI_WEIGHTS)
 
 
+#: `execution_speed` carries its full weight only from this many lifetime completions on.
+#: Below it the weight ramps linearly (`samples / N`) and the freed share goes to the other four
+#: KPIs in proportion to their own weights. Owner's decision 2026-09-23, option C of
+#: `INFINITY_SCORE_MODEL.md` §9.4: at four completions the KPI swung 44.66 → 11.92 in a day
+#: because two tasks aged out of the 14-day window, while carrying the same 0.25 it would carry
+#: on forty. The `confidence` label already said "few data points"; this makes the weight agree.
+EXECUTION_SPEED_FULL_WEIGHT_AT = 10
+
+
+def sample_gated_weights(
+    weights: dict[str, float],
+    *,
+    kpi: str,
+    samples: int,
+    full_at: int,
+) -> dict[str, float]:
+    """Scale one KPI's weight by ``min(1, samples / full_at)``; give the rest back pro rata.
+
+    Pure: returns a new dict summing to what ``weights`` summed to. Applied to the weights a score
+    is computed with, never written to `user_kpi_weights` — the learned weights stay the learned
+    weights, and the gate lifts on its own as completions accrue.
+    """
+    scale = 1.0 if full_at <= 0 else max(0.0, min(1.0, samples / full_at))
+    if scale >= 1.0 or kpi not in weights:
+        return dict(weights)
+    gated = dict(weights)
+    freed = gated[kpi] * (1.0 - scale)
+    gated[kpi] = gated[kpi] * scale
+    others = {k: v for k, v in gated.items() if k != kpi}
+    others_total = sum(others.values())
+    if others_total <= 0:
+        return dict(weights)
+    for key, value in others.items():
+        gated[key] = value + freed * (value / others_total)
+    return gated
+
+
 def adapt_kpi_weights(db: Session, user_id) -> dict:
     """
     Run one bounded adaptation pass for the user's KPI weights.
