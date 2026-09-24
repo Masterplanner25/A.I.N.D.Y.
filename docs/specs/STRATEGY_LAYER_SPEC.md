@@ -998,6 +998,22 @@ The plan card now shows OBJECTIVES above PHASES: *Ethical AI Framework · 1 stra
   one tier down) and returns when the attached work changes. Unlike pace, the rule is binary and
   needs no calibration. On the live plan nothing proposes yet — three strategies, two with one
   open task each — which is the correct state; the first strategy to finish will be asked.
+
+  **First real use, 2026-09-23 (owner): both proposals answered NOT DONE.** *Build Intellectual
+  Property* (Platform Enablement) and *Build a working technical prototype* (Partnership
+  Development) were proposed on `work_complete` after their one attached task each finished on
+  09-20: *Write a chapter for the Masterplan Project* (4 h) and *Code the Single File Engine*
+  (5 h). As tasks they had been estimated at 205 h and 194 h, so the rule fired at about 2 % of
+  the effort the owner expected. That is what NOT DONE is for (*"it was under-tasked. Asks again
+  when its tasks change"*). Recorded: `conclude_dismissed_task_count 1` on both, status `active`,
+  no outcome, and both `masterplan.conclusion.dismiss` runs in the ledger. No verdict was
+  given, so the judged-outcome path has still never been used.
+
+  What it showed about the rule, not changed: "every attached task done" cannot tell a finished
+  approach from one that was only ever given one task. The promoted estimate would tell them
+  apart, but §6 Q5 keeps it as description text on purpose (a strategy owns no number). The
+  dismissal is the designed answer, and it held. If this recurs, the fix belongs at promotion time
+  (prompting the owner to break the estimate into tasks), not in the rule.
 * **Feeding the algorithm — already answered on 09-11, as a shadow.** `objective_rollup` IS the
   attainment term of `MASTERPLAN_GOAL_ATTAINMENT_SPEC` phase 2 (attribution-based, hours-weighted,
   recorded beside the live score on every score event). What remains is that spec's phase-3 flip,
