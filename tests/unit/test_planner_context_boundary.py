@@ -147,3 +147,15 @@ def test_the_session_is_closed_even_when_a_block_raises(monkeypatch):
     # each block is best-effort on its own; the prompt is still the base prompt
     assert out["context_block"] == ""
     assert len(opened) == 1 and opened[0].closed is True
+
+
+def test_the_planner_is_told_that_pending_tasks_lower_the_score(monkeypatch):
+    """Owner, 2026-09-25: the first real goal ended in three `task.create` steps and its own
+    recalc took -8.64 (decision efficiency 68 -> 50, masterplan progress 88 -> 70) — both KPIs
+    are completion ratios. The planner had never been told; it must be, on every plan that
+    carries the KPI block."""
+    seen: dict = {}
+    _patch_jobs(monkeypatch, seen)
+    block = runtime_extensions._build_kpi_context_block(USER, _Session())
+    assert "Pending tasks lower the score" in block
+    assert "every task created lowers both" in block
