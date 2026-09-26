@@ -146,6 +146,12 @@ findings, previewable before it is sent and approved as part of that goal. The o
 step between the two halves. That covers "research, then act on it" across runs, with a human in
 between. It does not cover a single unattended run, which is still this ask.
 
+**Same day (#412): the planned-placeholder `memory.write` is stopped at both ends.** The planner is told a
+step cannot read an earlier result, so it must not plan a "findings" note; and the completion hook
+saves each run's ACTUAL findings (the same digest, server-side, one node per run). A third
+placeholder had been written by run `95819c6f`; it was deleted and that run's real findings saved
+in its place. Recall now ranks them first (0.951).
+
 ### Not asking for
 
 The planner re-planning after every step (a different, larger feature), or free-form expressions in

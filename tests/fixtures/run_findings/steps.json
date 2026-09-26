@@ -1,0 +1,11 @@
+[
+  {"tool_name": "memory.recall", "status": "success", "result": {"count": 2, "nodes": [
+    {"id": "n1", "source": "genesis_conversation", "content": "Genesis conversation: user said 'I plan to use my AI Search Optimization techniques'"},
+    {"id": "n2", "source": "system_event:arm.config.suggest", "content": "execution.started from arm.config.suggest"}]}},
+  {"tool_name": "research.query", "status": "success", "result": {"raw_result": "Human-AI teaming: calibrate trust with confidence signals.\n- Keep humans in the loop for consequential decisions."}},
+  {"tool_name": "memory.write", "status": "success", "result": {"node_id": "bebe3ee6"}},
+  {"tool_name": "search.query", "status": "success", "result": {"results": [{"title": "Co-creation patterns", "snippet": "iterate together", "url": "https://example.org/co"}, {"title": null, "snippet": null}]}},
+  {"tool_name": "reasoning.evaluate", "status": "success", "result": {"decision_type": "reprioritize_tasks", "reason": "execution_or_decision_below_threshold", "next_action_title": "Reprioritize current tasks around execution bottlenecks"}},
+  {"tool_name": "task.create", "status": "success", "result": {"name": "Synthesize Human-AI collaboration research into synergy laws draft", "status": "pending", "task_id": "40"}},
+  {"tool_name": "research.query", "status": "failed", "result": {"raw_result": "must not appear"}}
+]

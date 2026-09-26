@@ -69,3 +69,17 @@ describe("composeFollowUpGoal / splitGoal", () => {
     expect(splitGoal("Create the tasks")).toEqual({ ask: "Create the tasks", hasFindings: false });
   });
 });
+
+// The server saves the same digest to memory when a run completes (apps/agent/services/
+// run_findings.py). Both implementations are held to one fixture so they cannot drift.
+describe("parity with the server-side digest", () => {
+  it("matches tests/fixtures/run_findings", async () => {
+    // vitest runs from client/ (locally and in app-ci.yml); jsdom's import.meta.url is not file:.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const dir = resolve(process.cwd(), "..", "tests", "fixtures", "run_findings");
+    const steps = JSON.parse(readFileSync(resolve(dir, "steps.json"), "utf-8"));
+    const expected = readFileSync(resolve(dir, "expected_digest.txt"), "utf-8").replace(/\r\n/g, "\n");
+    expect(buildFindingsDigest(steps)).toBe(expected);
+  });
+});
