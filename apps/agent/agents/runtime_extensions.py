@@ -64,6 +64,13 @@ def _build_kpi_context_block(user_id, db) -> str:
             f"- Masterplan progress:  {snapshot['masterplan_progress']:.1f}",
             "",
             "Scoring guidance:",
+            # Owner, 2026-09-25: the first real goal ended in three task.create steps and the
+            # run's own recalc took -8.64 — decision efficiency 68 -> 50, masterplan progress
+            # 88 -> 70. Both are completed / (completed + pending + in_progress), so a created
+            # task lowers them until it is done. The planner was never told.
+            "- Pending tasks lower the score: decision efficiency and masterplan progress are "
+            "completed tasks / all open and completed tasks, so every task created lowers both "
+            "until it is completed",
         ]
 
         if snapshot["focus_quality"] < 40:

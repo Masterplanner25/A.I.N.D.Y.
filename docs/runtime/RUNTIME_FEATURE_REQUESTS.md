@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-23"
+last_verified: "2026-09-25"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -20,7 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-23:** FR-45 (the runtime's envelope adapters never stamp the header;
+> **Open as of 2026-09-25:** FR-46 (plan steps cannot use each other's results; found on the
+> owner's first real agent goal) · FR-45 (the runtime's envelope adapters never stamp the header;
 > with ui-kit 2.1.0's latch that is load-order-dependent unwrapping; found adopting FR-37) · FR-44 (the agent resume route answers `resuming` with no waiter —
 > found re-running the FR-38 denial on `nodus_vm`, which otherwise worked end to end) · FR-43 (`bootstrap-schema` cannot see a column widening, so 2.22.0's
 > 0020 was stamped over a `varchar(32)` — filed from the 2.22.0 adoption) · FR-14 recurrence half ·
@@ -32,6 +33,65 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-46 — a plan's steps cannot use each other's results: every step's `args` are fixed at planning time, so "research X, then use it to…" runs the second half blind 🔴 open (filed 2026-09-25, runtime 2.22.0)
+
+> **A plan step is `{"tool", "args", "risk_level", "description"}`, and `args` is a literal.**
+> On `nodus_vm` the compiler bakes it into the workflow's input payload as written
+> (`runtime/agent_plan_compiler.py::compile_agent_segment`, `input_payload[args_key] = args`); on
+> `agent_flow` the node reads `step.get("args", {})` (`runtime/nodus_adapter.py:326`). Each step's
+> RESULT is kept (`__step_N_result`, `agent_steps.result`), but nothing substitutes it into a
+> later step's arguments, the plan format has no syntax that could ask for it, and the planner is
+> never told either way. The planner writes every argument before any step has run.
+
+### What we hit
+
+The first real goal the owner gave the agent (2026-09-25, run `02e9e214-0b16-4f5d-967f-e077425a5e06`,
+Claude planner, `nodus_vm`, approved, `completed 6/6`):
+
+> *Research SEO, AI Search and Marketing Strategies. Then use the research to create a strategy to
+> market aindy-runtime and the A.I.N.D.Y. app*
+
+| step | tool | what happened |
+|---|---|---|
+| 0 | `research.query` | **real research came back**: Infrasity on AEO for developer tools, Voctos on SEO / GEO / AEO, concrete practices (JSON-LD, answer-first copy, quotable statistics) |
+| 1 | `search.query` (`seo_analysis`) | ran |
+| 2 | `memory.write` | stored **the sentence the planner wrote before step 0 ran**: *"Marketing research synthesis …: consolidated findings on SEO, AI-search/answer-engine optimization, and B2B SaaS/dev-tool marketing strategies to inform the go-to-market strategy."* No finding in it |
+| 3–5 | `task.create` ×3 | *Define positioning & messaging…*, *Build SEO & AI-search (AEO/GEO) content plan…*, *Draft go-to-market channel & campaign strategy…*: the planner's priors, written before the research existed |
+
+Every step succeeded and the run is `completed`, so nothing records a failure. "Then use the
+research" is the most natural shape of goal a person gives an agent, and on this runtime its
+second half is always planned blind. The success status is what makes it the quiet kind of failure.
+
+### Ask
+
+1. **A reference syntax in `args`** that the executing backend resolves from an earlier step's
+   result before dispatch, e.g. `{"$from_step": 0, "path": "raw_result"}` as an argument value.
+   Resolve it in the one place both backends pass through before `execute_tool`, so `nodus_vm`
+   and `agent_flow` agree. Validate the reference at plan time (the step exists and is earlier,
+   the path is well-formed) and resolve it at run time, with a failed resolution failing the step
+   and not passing the literal on.
+2. **Say so in the planner's contract.** The runtime renders the tool catalog and owns the plan
+   format; the planner needs one line saying a step may take an earlier step's output, with the
+   syntax. Without it no model will use the feature. (The base system prompt is ours,
+   `PLANNER_SYSTEM_PROMPT`; we will add the line on our side once the syntax exists.)
+3. **Settle how `args_schema` (FR-33) treats a reference**: validate the resolved value, not
+   the placeholder. Otherwise `AINDY_TOOL_ARGS_VALIDATION=enforce` would refuse every step that uses one.
+4. **Size.** A research result is 2 KB here and cut mid-word (*"…The goal is no"*). Whether that
+   cut is the tool's or the runtime's, a reference that carries a truncated result carries the
+   truncation. Please say where the limit is and whether a reference sees the full result.
+
+### Until then, ours
+
+The workaround is two runs: research first, then a second goal that quotes the findings, so the
+planner has them in hand. We are not working around it in the plan format.
+
+### Not asking for
+
+The planner re-planning after every step (a different, larger feature), or free-form expressions in
+arguments. One reference form, resolved by the runtime, is enough for "use what you just found".
+
+---
+
 ## FR-45 — the runtime's own envelope-bodied response adapters never set `X-AINDY-Envelope`, and ui-kit 2.1.0's latch turns that into load-order-dependent unwrapping 🔴 open (filed 2026-09-23, runtime 2.22.0 / ui-kit 2.1.0)
 
 > **`AINDY/core/response_adapter.py::adapt_response` stamps `X-AINDY-Envelope: v1` on its default
