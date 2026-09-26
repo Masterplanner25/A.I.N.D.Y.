@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-25"
+last_verified: "2026-09-26"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -20,7 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-25:** FR-46 (plan steps cannot use each other's results; found on the
+> **Open as of 2026-09-26:** FR-47 (ui-kit's 30 s request timeout cannot be raised per call;
+> agent planning outruns it and produced duplicate runs) · FR-46 (plan steps cannot use each other's results; found on the
 > owner's first real agent goal) · FR-45 (the runtime's envelope adapters never stamp the header;
 > with ui-kit 2.1.0's latch that is load-order-dependent unwrapping; found adopting FR-37) · FR-44 (the agent resume route answers `resuming` with no waiter —
 > found re-running the FR-38 denial on `nodus_vm`, which otherwise worked end to end) · FR-43 (`bootstrap-schema` cannot see a column widening, so 2.22.0's
@@ -33,6 +34,42 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-47 — `@aindy/ui-kit` aborts every request at 30 s with no per-call override; agent planning takes longer, so the console reports a failure for a run that is created seconds later 🔴 open (filed 2026-09-26, ui-kit 2.1.0)
+
+> **`request()` in the kit (`dist/index.js`, the `ie` function) starts
+> `setTimeout(() => controller.abort(), 3e4)` on every call and maps the `AbortError` to
+> `ApiError(408, "Request timed out after 30 seconds.")`.** The options object is spread into
+> `fetch`; nothing in it changes the 30 s. A caller's own `signal` can only abort *sooner*.
+
+### What we hit
+
+Creating an agent run is one synchronous request that includes planning (a Claude call). On
+2026-09-26 the owner's goals took **36 s** (run `214ac631`: request started 05:03:33, plan created
+05:04:07, response 05:04:09). The browser gave up at 30 s and the Agent console showed the 408 as a
+failure. The server finished and created the run anyway, and the owner, reasonably, submitted
+again. **That happened twice in one morning**: duplicate runs `6d3fbd85` and `7adfdb84`, each
+rejected by hand. Multi-step plans routinely take 30–40 s, so this is the normal case, not a tail.
+
+### Ours, until then (#410)
+
+`createAgentRun` treats a 408 as "still planning": it tells the user so, then polls the run list
+until a run with that goal appears (newer than the click; `created_at` is written when planning
+finishes), for up to 90 s. That recovers the run and prevents the duplicate, but it is a workaround
+for a timeout the caller knows is wrong.
+
+### Ask
+
+1. **A per-call timeout**, e.g. `request(path, { timeoutMs: 90000 })`, defaulting to today's
+   30 s, with `0` meaning "no kit timeout; the caller's `signal` governs".
+2. **Keep the 408 mapping, but only for the kit's own timeout.** Today a caller-supplied `signal`
+   that aborts also comes back as "timed out after 30 seconds", which is untrue for that case.
+
+### Not asking for
+
+A longer global default. 30 s is right for almost every call; the one that needs more knows it.
+
+---
+
 ## FR-46 — a plan's steps cannot use each other's results: every step's `args` are fixed at planning time, so "research X, then use it to…" runs the second half blind 🔴 open (filed 2026-09-25, runtime 2.22.0)
 
 > **A plan step is `{"tool", "args", "risk_level", "description"}`, and `args` is a literal.**
