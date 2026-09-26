@@ -137,6 +137,12 @@ services:
       # the local, non-production profile only — it is the evidence the runtime's phase 3
       # flip waits on, and the gate cannot widen authority (no `grant` decision exists).
       AINDY_AUTHORITY_NEGOTIATION: "${AINDY_AUTHORITY_NEGOTIATION:-}"
+      # FR-46 (runtime 2.24.0, default off): a plan step's argument may be
+      # {"$from_step": N, "path": ...}, resolved from an earlier step's result before the tool
+      # runs. On, the runtime's tool catalog teaches the form and our planner rule follows
+      # (`planner_system_prompt`). Set in .env for the evidence run the runtime's default flip
+      # waits on (APP_HANDOFF_v2.24.0 §8 ask 1). The nodus_vm worker inherits it from this process.
+      AINDY_PLAN_STEP_REFERENCES: "${AINDY_PLAN_STEP_REFERENCES:-}"
       # ── Shadow / advisory flags (LIVE_VERIFICATION_SCOPE phase 2c) ──────────────
       # These MUST be declared here to reach the container. Compose reads .env for
       # interpolation only — a variable set in .env but absent from this block is
