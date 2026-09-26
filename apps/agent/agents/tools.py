@@ -16,7 +16,8 @@ def register() -> None:
         "memory.recall",
         risk="low",
         description=(
-            "Recall relevant memory nodes for a given query. Read-only; returns {count, nodes[]}. "
+            "Recall relevant memory nodes for a given query. Read-only; returns {count, nodes[]}, "
+            "each node with content, source and similarity. "
             "Note: recall ranks by similarity over the user's own nodes, which are mostly system "
             "telemetry — expect event summaries, not prose."
         ),

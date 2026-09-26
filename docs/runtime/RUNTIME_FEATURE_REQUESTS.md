@@ -20,6 +20,9 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
+> **Open as of 2026-09-26:** FR-48 (the planner never sees a tool's result shape, so a `$from_step`
+> path is a guess; filed from the FR-46 evidence run).
+>
 > **As of 2026-09-26, runtime 2.24.0 / ui-kit 2.1.1 answered FR-43 … FR-47** (`RUNTIME_2_24_0_UPGRADE.md`);
 > FR-46 ships default-off with its evidence run owed. Still open: FR-14 recurrence half, FR-6 items 2–3.
 >
@@ -37,6 +40,54 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-48 — the planner is told each tool's arguments but never its result, so a `$from_step` path is a guess; the first FR-46 evidence run guessed wrong 🔴 open (filed 2026-09-26, runtime 2.24.0)
+
+> **The catalog line is `- name: description (risk=…) args={…}`, from `args_schema` (FR-33).
+> Nothing describes what a tool returns.** FR-46's reference form is
+> `{"$from_step": N, "path": "a.b"}`, and the path is into step N's RESULT, so the planner has to
+> know a result shape it has never been shown. `validate_plan_references` checks that a path is
+> well-formed, not that it exists, so a wrong path passes planning and fails at run time, after the
+> steps before it have already run.
+
+### What we hit
+
+The FR-46 evidence run (`APP_HANDOFF_v2.24.0` §8 ask 1), run
+`615b67ea-fe43-4e8f-a344-97a58ed06cd0`, `AINDY_PLAN_STEP_REFERENCES=1`, the owner's original goal.
+The planner **did** use a reference, so the feature reached it:
+
+```
+0 research.query  {"query": "2026 SEO, AI search (LLM/GEO) optimization, …"}
+1 search.query    {"query": "…", "search_type": "seo_analysis"}
+2 memory.write    {"content": {"$from_step": 0, "path": "results"}, …}
+```
+
+But `research.query` returns `{"raw_result": …}`; `results` is `search.query`'s key. Step 2 failed
+`step reference could not be resolved: args.content: step 0's result has no 'results'`, which is
+DEC-075 working as designed: no placeholder was written and the tool was never called with the
+literal. The research had already run and been paid for, and three `task.create` steps behind it
+never ran.
+
+**Ours, same day (#415):** every tool description now states its return shape (`Returns
+{raw_result}: … reference it with path "raw_result"`), and a test checks the stated keys against
+what each tool that shapes its own result actually returns. That is prose in the one channel we
+have. The runtime can do better.
+
+### Ask
+
+1. **`register_tool(..., result_schema={...})`**, in the same dialect as `args_schema`, rendered in
+   the catalog next to `args={…}` (e.g. `returns={raw_result: string}`).
+2. **Check reference paths against it at plan time.** `validate_plan_references` already refuses a
+   malformed path. With a result schema it can refuse a path to a key the referenced tool does not
+   return, before step 0 runs, so a bad plan is re-planned instead of half-executed.
+3. Until a tool declares one, keep today's behaviour (no check), so adopting it is incremental.
+
+### Not asking for
+
+Validating the result at run time against the schema. The point is the planner's knowledge and a
+plan-time refusal, not a second enforcement layer.
+
+---
+
 ## FR-47 — `@aindy/ui-kit` aborts every request at 30 s with no per-call override; agent planning takes longer, so the console reports a failure for a run that is created seconds later ✅ SHIPPED in ui-kit 2.1.1 (per-call `timeoutMs`) — adopted 2026-09-26: run creation asks for 90 s, the #410 poll is gone
 
 > **`request()` in the kit (`dist/index.js`, the `ie` function) starts

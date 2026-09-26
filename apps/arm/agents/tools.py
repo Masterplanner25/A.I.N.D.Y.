@@ -22,7 +22,8 @@ def register() -> None:
         description=(
             "Analyze ONE SOURCE FILE with the ARM code-reasoning engine (architecture and "
             "integrity scores plus a summary). It cannot analyze a topic, a memory, or prior "
-            "step output — only a file path under the project root."
+            "step output — only a file path under the project root. Returns {summary, "
+            "architecture_score, integrity_score, analysis_id}."
         ),
         # FR-33 (runtime 2.20.0): the argument contract, rendered into the planner catalog as
         # `args={…}` and checked before dispatch under AINDY_TOOL_ARGS_VALIDATION. Types are
@@ -46,7 +47,10 @@ def register() -> None:
     register_tool(
         "arm.generate",
         risk="medium",
-        description="Generate or refactor code with the ARM code-generation engine.",
+        description=(
+            "Generate or refactor code with the ARM code-generation engine. Returns "
+            "{generated_code, explanation, generation_id}."
+        ),
         args_schema={
             "required": ["prompt"],
             "properties": {
@@ -67,7 +71,7 @@ def register() -> None:
         risk="low",
         description=(
             "Apply gated, reversible self-tuning config changes from ARM's own metrics. "
-            "Dry run unless apply=true."
+            "Dry run unless apply=true. Returns {status, applied[], skipped[], log_id, dry_run}."
         ),
         args_schema={
             "required": [],

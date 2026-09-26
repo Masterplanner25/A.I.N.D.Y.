@@ -21,7 +21,8 @@ def register() -> None:
         risk="medium",
         description=(
             "Unified search over leadgen, research, SEO, and memory surfaces. "
-            "Returns a ranked SearchResponse (query, search_type, results[], search_score, memory)."
+            "Returns {query, search_type, results[], search_score, memory}, a ranked SearchResponse; "
+            "each result has title, snippet and url."
         ),
         # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.
         args_schema={
@@ -43,7 +44,10 @@ def register() -> None:
     register_tool(
         "leadgen.search",
         risk="medium",
-        description="Search for B2B leads matching a query. Returns scored leads; does not contact anyone.",
+        description=(
+            "Search for B2B leads matching a query; does not contact anyone. Returns "
+            "{leads[], count}."
+        ),
         args_schema={"required": ["query"], "properties": {"query": {"type": "string"}}},
         capability="tool:leadgen.search",
         required_capability="external_api_call",
@@ -53,7 +57,10 @@ def register() -> None:
     register_tool(
         "research.query",
         risk="low",
-        description="Query external sources for research on a topic.",
+        description=(
+            "Query external sources for research on a topic. Returns {raw_result}: the "
+            "research as one text string (reference it with path \"raw_result\")."
+        ),
         args_schema={"required": ["query"], "properties": {"query": {"type": "string"}}},
         capability="tool:research.query",
         required_capability="external_api_call",
@@ -68,7 +75,8 @@ def register() -> None:
             "Dry run unless apply=true; with channel='email' and AINDY_SEARCH_OUTREACH_SEND on it "
             "REALLY sends to a hand-entered contact. Every action is tracked and revertible. If "
             "this step is refused for lack of authority the run parks for an operator decision "
-            "(skip/abort) rather than failing."
+            "(skip/abort) rather than failing. Returns {status, actions[], skipped[], count, "
+            "dry_run, would_act}."
         ),
         args_schema={
             "required": [],
