@@ -11,6 +11,8 @@ import { Toast } from "../shared/Toast";
 import { useToast } from "../../utils/useToast";
 import { safeMap } from "../../utils/safe";
 import Genesis from "./Genesis";
+import StepResult from "./StepResult";
+import { buildFindingsDigest, composeFollowUpGoal, splitGoal } from "../../utils/runFindings";
 
 // The user-facing face for the agent: goal -> plan -> approve -> execute -> result.
 // Sits on the same agent HTTP surface the admin console uses (client/src/api/agent.js),
@@ -71,6 +73,9 @@ export default function Assistant() {
   const [steps, setSteps] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [followUp, setFollowUp] = useState("");
+  const [attachFindings, setAttachFindings] = useState(true);
+  const [showFindings, setShowFindings] = useState(false);
   const { toast, showToast, clearToast } = useToast();
 
   // The agent surface returns three different shapes: the create/approve responses wrap the
@@ -93,14 +98,17 @@ export default function Assistant() {
     let cancelled = false;
     const tick = async () => {
       try {
+        // Both reads before either write. setRun can flip the run terminal, which tears this
+        // effect down and sets `cancelled` — reading steps after it dropped the FINAL steps, the
+        // only ones carrying results, and a completed run kept the previous tick's (2026-09-26).
         const r = await getAgentRun(runId);
-        if (cancelled) return;
-        setRun(r);
         // /runs/{id}/steps returns { data: [...] }, not a bare array — unwrap it, else
         // steps never populated and the run showed the static plan the whole time.
         const s = await getAgentRunSteps(runId).catch(() => []);
+        if (cancelled) return;
         const stepList = Array.isArray(s) ? s : Array.isArray(s?.data) ? s.data : [];
-        if (!cancelled && stepList.length) setSteps(stepList);
+        if (stepList.length) setSteps(stepList);
+        setRun(r);
       } catch (e) {
         if (!cancelled) showToast(e?.message || "Lost the run — check your connection.");
       }
@@ -113,15 +121,16 @@ export default function Assistant() {
     };
   }, [runId, terminal, showToast]);
 
-  const submit = async (e) => {
-    e?.preventDefault?.();
-    if (!goal.trim() || submitting) return;
+  const startRun = async (goalText) => {
+    if (!goalText.trim() || submitting) return;
     setSubmitting(true);
     setSteps([]);
     setRun(null);
+    setFollowUp("");
+    setShowFindings(false);
     try {
       const r = await createAgentRun(
-        { goal: goal.trim() },
+        { goal: goalText.trim() },
         { onStillPlanning: () => showToast("Still planning — this can take up to a minute. No need to resubmit.") }
       );
       setRun(r); // the poll effect picks up runId and takes over
@@ -130,6 +139,20 @@ export default function Assistant() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const submit = (e) => {
+    e?.preventDefault?.();
+    return startRun(goal);
+  };
+
+  // What this run found, ready to hand to the next one (FR-46: a run cannot pass its own results
+  // between steps, so Collaborator carries them between runs, visibly).
+  const findings = status === "completed" ? buildFindingsDigest(steps) : "";
+  const continueRun = (e) => {
+    e?.preventDefault?.();
+    if (!followUp.trim()) return;
+    return startRun(composeFollowUpGoal(followUp, attachFindings ? findings : ""));
   };
 
   const approve = async () => {
@@ -254,7 +277,14 @@ export default function Assistant() {
       {modeBar}
       <div className="w-full max-w-2xl px-6 py-12 flex flex-col">
         <div className="flex items-start justify-between gap-3 mb-2">
-          <h1 className="text-lg font-bold text-white leading-snug flex-1">{run.goal}</h1>
+          <div className="flex-1">
+            <h1 className="text-lg font-bold text-white leading-snug">{splitGoal(run.goal).ask}</h1>
+            {splitGoal(run.goal).hasFindings && (
+              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mt-1">
+                With findings from the previous run
+              </p>
+            )}
+          </div>
           <button
             onClick={reset}
             className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-zinc-300 border border-zinc-800 rounded-sm px-2 py-1 shrink-0"
@@ -291,6 +321,11 @@ export default function Assistant() {
               </div>
               {step.error_message && (
                 <p className="text-xs text-red-400 mt-2 pl-7">{step.error_message}</p>
+              )}
+              {step.result && String(step.status || "").toLowerCase() === "success" && (
+                <div className="mt-2 pl-7">
+                  <StepResult tool={step.tool_name} result={step.result} />
+                </div>
               )}
             </div>
           ))}
@@ -339,6 +374,55 @@ export default function Assistant() {
               New request →
             </button>
           </div>
+        )}
+
+        {status === "completed" && (
+          <form onSubmit={continueRun} className="mt-6 space-y-2">
+            <p className="text-[10px] uppercase tracking-wider text-zinc-500">Continue from this</p>
+            <textarea
+              value={followUp}
+              onChange={(e) => setFollowUp(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) continueRun(e);
+              }}
+              placeholder="What should happen next, using what this run found?"
+              rows={2}
+              className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-hidden focus:border-[#00ffaa]/50 resize-none custom-scrollbar"
+            />
+            {findings ? (
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-400">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={attachFindings}
+                    onChange={(e) => setAttachFindings(e.target.checked)}
+                  />
+                  Attach this run&apos;s findings ({findings.length.toLocaleString()} characters)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowFindings((v) => !v)}
+                  className="text-[10px] uppercase tracking-wider text-[#00ffaa] hover:underline"
+                >
+                  {showFindings ? "Hide" : "Preview"}
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-zinc-600">This run found nothing to carry forward.</p>
+            )}
+            {showFindings && findings && (
+              <pre className="max-h-64 overflow-auto custom-scrollbar text-[10px] text-zinc-400 whitespace-pre-wrap border border-zinc-800/60 rounded-lg p-3">
+                {findings}
+              </pre>
+            )}
+            <button
+              type="submit"
+              disabled={!followUp.trim() || submitting}
+              className="w-full px-4 py-2.5 rounded-xl bg-[#00ffaa] text-black text-xs font-bold uppercase tracking-wider hover:bg-[#00ffaa]/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {submitting ? "Starting…" : "Continue"}
+            </button>
+          </form>
         )}
 
         <Toast toast={toast} onDismiss={clearToast} />
