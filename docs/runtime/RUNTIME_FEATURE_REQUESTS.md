@@ -20,7 +20,10 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-26:** FR-47 (ui-kit's 30 s request timeout cannot be raised per call;
+> **As of 2026-09-26, runtime 2.24.0 / ui-kit 2.1.1 answered FR-43 … FR-47** (`RUNTIME_2_24_0_UPGRADE.md`);
+> FR-46 ships default-off with its evidence run owed. Still open: FR-14 recurrence half, FR-6 items 2–3.
+>
+> **Was open as of 2026-09-26:** FR-47 (ui-kit's 30 s request timeout cannot be raised per call;
 > agent planning outruns it and produced duplicate runs) · FR-46 (plan steps cannot use each other's results; found on the
 > owner's first real agent goal) · FR-45 (the runtime's envelope adapters never stamp the header;
 > with ui-kit 2.1.0's latch that is load-order-dependent unwrapping; found adopting FR-37) · FR-44 (the agent resume route answers `resuming` with no waiter —
@@ -34,7 +37,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-47 — `@aindy/ui-kit` aborts every request at 30 s with no per-call override; agent planning takes longer, so the console reports a failure for a run that is created seconds later 🔴 open (filed 2026-09-26, ui-kit 2.1.0)
+## FR-47 — `@aindy/ui-kit` aborts every request at 30 s with no per-call override; agent planning takes longer, so the console reports a failure for a run that is created seconds later ✅ SHIPPED in ui-kit 2.1.1 (per-call `timeoutMs`) — adopted 2026-09-26: run creation asks for 90 s, the #410 poll is gone
 
 > **`request()` in the kit (`dist/index.js`, the `ie` function) starts
 > `setTimeout(() => controller.abort(), 3e4)` on every call and maps the `AbortError` to
@@ -70,7 +73,7 @@ A longer global default. 30 s is right for almost every call; the one that needs
 
 ---
 
-## FR-46 — a plan's steps cannot use each other's results: every step's `args` are fixed at planning time, so "research X, then use it to…" runs the second half blind 🔴 open (filed 2026-09-25, runtime 2.22.0)
+## FR-46 — a plan's steps cannot use each other's results: every step's `args` are fixed at planning time, so "research X, then use it to…" runs the second half blind 🟡 SHIPPED in 2.24.0 (#764), default OFF (`AINDY_PLAN_STEP_REFERENCES`) — our planner rule follows the flag; the evidence run is owed (handoff §8 ask 1)
 
 > **A plan step is `{"tool", "args", "risk_level", "description"}`, and `args` is a literal.**
 > On `nodus_vm` the compiler bakes it into the workflow's input payload as written
@@ -159,7 +162,7 @@ arguments. One reference form, resolved by the runtime, is enough for "use what 
 
 ---
 
-## FR-45 — the runtime's own envelope-bodied response adapters never set `X-AINDY-Envelope`, and ui-kit 2.1.0's latch turns that into load-order-dependent unwrapping 🔴 open (filed 2026-09-23, runtime 2.22.0 / ui-kit 2.1.0)
+## FR-45 — the runtime's own envelope-bodied response adapters never set `X-AINDY-Envelope`, and ui-kit 2.1.0's latch turns that into load-order-dependent unwrapping ✅ SHIPPED in 2.24.0 (#759) — the runtime's envelope adapters stamp themselves; our `stamped()` stays for our own adapter
 
 > **`AINDY/core/response_adapter.py::adapt_response` stamps `X-AINDY-Envelope: v1` on its default
 > exit only**, and its comment says why: every other branch "returns something else". But two of
@@ -200,7 +203,7 @@ Removing the latch. It is the right behaviour once every envelope is stamped, wh
 
 ---
 
-## FR-44 — the agent resume route records a gate decision and answers `resuming` when no process holds the run's waiter; the run stays `waiting` until the next restart 🔴 open (filed 2026-09-23, runtime 2.22.0)
+## FR-44 — the agent resume route records a gate decision and answers `resuming` when no process holds the run's waiter; the run stays `waiting` until the next restart ✅ SHIPPED in 2.24.0 (#760) — verified live 2026-09-26: park in a separate process, resume over HTTP, `waiters_notified: 1`, completed, no restart
 
 > **`agents/runtime_api.py::resume_agent_run_runtime` → `_decide_authority_gate` writes the gated
 > step `skipped` and commits, then `publish_event(…, run_id=…)`, and returns
@@ -240,7 +243,7 @@ A change to where waits live. Boot rehydration is right; this is only the gap be
 
 ---
 
-## FR-43 — `bootstrap-schema` compares column types with the length stripped, so 2.22.0's widening was invisible: it reported "no table changes", exited 0 and stamped `0020` over a `varchar(32)` 🔴 open (filed 2026-09-23, runtime 2.22.0)
+## FR-43 — `bootstrap-schema` compares column types with the length stripped, so 2.22.0's widening was invisible: it reported "no table changes", exited 0 and stamped `0020` over a `varchar(32)` ✅ SHIPPED in 2.24.0 (#761) — widenings are compared (exit 3, `--reconcile` widens); our already-widened stack exits 0
 
 > **`AINDY/db/schema_contract.py::_normalize_type_name` compiles the type and keeps
 > `compiled.lower().split("(", 1)[0]`** — `VARCHAR(32)` and `VARCHAR(128)` both normalise to

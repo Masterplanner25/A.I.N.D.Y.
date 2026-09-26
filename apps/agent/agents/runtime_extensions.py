@@ -47,6 +47,31 @@ Rules:
 """
 
 
+#: The step-result rule when runtime step references are ON (FR-46, runtime 2.24.0,
+#: `AINDY_PLAN_STEP_REFERENCES`). The runtime's tool catalog then carries the reference syntax
+#: (`PLANNER_REFERENCE_LINE`), and the flag-off rule above ("a step cannot read an earlier step's
+#: result") would contradict it. This one points at the syntax without restating it.
+_STEP_RESULT_RULE_OFF = """- Every step's args are written now, before any step runs: a step cannot read an earlier
+  step's result. So never plan memory.write to save a "summary" or "findings" of earlier steps;
+  it would save your guess, not the results. The system saves each run's real findings to memory
+  when the run completes. memory.write is for content you can write now, e.g. from findings
+  already given in the goal
+"""
+_STEP_RESULT_RULE_ON = """- To give a step what an earlier step found, pass the step-reference form described with the
+  tools as the argument value. Never write your own summary of results a step has not produced
+  yet: reference them. The system also saves each run's real findings to memory when it completes
+"""
+
+
+def planner_system_prompt() -> str:
+    """The base planner prompt, with the step-result rule that matches the runtime's flag."""
+    from AINDY.agents.step_references import step_references_enabled
+
+    if step_references_enabled():
+        return PLANNER_SYSTEM_PROMPT.replace(_STEP_RESULT_RULE_OFF, _STEP_RESULT_RULE_ON)
+    return PLANNER_SYSTEM_PROMPT
+
+
 def _build_kpi_context_block(user_id, db) -> str:
     try:
         from AINDY.platform_layer.registry import get_job
@@ -204,7 +229,7 @@ def build_planner_context(context: dict) -> dict:
             "the Infinity context; FR-39 shipped in runtime 2.22.0, so this is a regression",
             context.get("user_id"),
         )
-        return {"system_prompt": PLANNER_SYSTEM_PROMPT, "context_block": ""}
+        return {"system_prompt": planner_system_prompt(), "context_block": ""}
 
     # An in-process caller may hand us a real session; the boundary never does.
     db = context.get("db")
@@ -220,7 +245,7 @@ def build_planner_context(context: dict) -> dict:
             + _build_kpi_context_block(user_id, db)
             + _build_reasoning_context_block(user_id, db)
         )
-        prompt = PLANNER_SYSTEM_PROMPT + kpi_context
+        prompt = planner_system_prompt() + kpi_context
         try:
             from AINDY.memory.memory_helpers import enrich_context, format_memories_for_prompt
 

@@ -72,12 +72,19 @@ def test_an_envelope_body_is_stamped_and_a_bare_body_is_not(monkeypatch):
     )
 
 
-def test_an_error_response_is_not_stamped():
-    from AINDY.platform_layer.response_adapters import raw_canonical_adapter
+def test_our_wrapper_does_not_stamp_an_error_response():
+    """Our `stamped()` rule. Since runtime 2.24.0 (FR-45) the runtime's own envelope adapters stamp
+    themselves whenever the body carries `data`, error statuses included; that is theirs, and
+    harmless (the kit throws on a non-2xx before it reads the header). This pins only our wrapper,
+    against a stub adapter that sets no header of its own."""
+    from fastapi.responses import JSONResponse
 
     from apps._shared.envelope import stamped
 
-    response = stamped(raw_canonical_adapter)(
-        route_name="x", canonical=dict(CANONICAL), status_code=422, trace_headers={}
-    )
-    assert "X-AINDY-Envelope" not in response.headers
+    def _bare(**kwargs):
+        return JSONResponse(status_code=kwargs["status_code"], content=kwargs["canonical"])
+
+    error = stamped(_bare)(route_name="x", canonical=dict(CANONICAL), status_code=422, trace_headers={})
+    ok = stamped(_bare)(route_name="x", canonical=dict(CANONICAL), status_code=200, trace_headers={})
+    assert "X-AINDY-Envelope" not in error.headers
+    assert ok.headers.get("X-AINDY-Envelope") == "v1"

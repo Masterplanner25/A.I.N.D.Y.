@@ -130,7 +130,27 @@ def _handle_research_query(payload: dict, ctx: SyscallContext) -> dict:
         raise ValueError("sys.v1.research.query requires 'query'")
 
     raw = web_search(query)
-    return {"raw_result": raw[:2000] if raw else ""}
+    return {"raw_result": _research_excerpt(raw)}
+
+
+#: The agent's research result. It was `raw[:2000]` from the initial extraction, which cut mid-word
+#: with no marker ("…The goal is no", 2026-09-25) and, since runtime 2.24.0, would be what a
+#: `$from_step` reference carries to the next step (FR-46 ask 4: the runtime truncates nothing,
+#: this cut is ours). 6000 matches the findings digest's cap (`apps/agent/services/run_findings.py`).
+RESEARCH_RESULT_MAX_CHARS = 6000
+RESEARCH_TRUNCATED_MARKER = " … [truncated]"
+
+
+def _research_excerpt(raw: str | None, limit: int = RESEARCH_RESULT_MAX_CHARS) -> str:
+    """At most `limit` characters, cut at a word boundary and marked when anything was dropped."""
+    text = raw or ""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    boundary = max(cut.rfind(" "), cut.rfind("\n"))
+    if boundary > limit // 2:
+        cut = cut[:boundary]
+    return cut.rstrip() + RESEARCH_TRUNCATED_MARKER
 
 
 def _outcome_weights_for(db, user_id, query: str) -> dict[str, float] | None:
