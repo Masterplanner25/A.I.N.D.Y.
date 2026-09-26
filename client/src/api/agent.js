@@ -30,11 +30,51 @@ export function getFederatedMemory(query, namespaces = null, limit = 5) {
   });
 }
 
-export function createAgentRun(payload) {
-  return authRequest(ROUTES.AGENT.CREATE_RUN, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+// Planning a multi-step goal takes 30–40 s (36 s measured on 2026-09-26). ui-kit aborts every
+// request at 30 s — not configurable per call (FR-47) — and throws ApiError 408. The server keeps
+// going and creates the run anyway, so the console reported a failure for a run that arrived six
+// seconds later, and a retry made a duplicate (twice that day). On a 408 we wait for the run to
+// appear instead: the list is newest-first and `created_at` is written when planning FINISHES,
+// so the run we want is newer than the click (minus a small clock allowance).
+export const CREATE_RECOVERY = { pollMs: 3000, maxMs: 90000, clockSkewMs: 15000 };
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForPlannedRun(goal, startedAt, { pollMs, maxMs, clockSkewMs }) {
+  const deadline = startedAt + maxMs;
+  while (Date.now() < deadline) {
+    await sleep(pollMs);
+    let runs;
+    try {
+      runs = await getAgentRuns(null, 10);
+    } catch {
+      continue;
+    }
+    const hit = runs.find(
+      (r) => r?.goal === goal && Date.parse(r?.created_at) >= startedAt - clockSkewMs
+    );
+    if (hit) return hit;
+  }
+  return null;
+}
+
+export async function createAgentRun(payload, { onStillPlanning, recovery = CREATE_RECOVERY } = {}) {
+  const startedAt = Date.now();
+  try {
+    return await authRequest(ROUTES.AGENT.CREATE_RUN, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    if (e?.status !== 408) throw e;
+    onStillPlanning?.();
+    const run = await waitForPlannedRun(payload?.goal, startedAt, recovery);
+    if (run) return run;
+    throw new Error(
+      "Planning is still running on the server. Check the run list before submitting again.",
+      { cause: e }
+    );
+  }
 }
 
 export function getAgentRuns(status = null, limit = 20) {

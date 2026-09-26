@@ -180,7 +180,7 @@ describe("AgentConsole", () => {
     fireEvent.click(screen.getByRole("button", { name: /run agent/i }));
 
     await waitFor(() => {
-      expect(mockCreateAgentRun).toHaveBeenCalledWith({ goal: "Plan launch sequence" });
+      expect(mockCreateAgentRun).toHaveBeenCalledWith({ goal: "Plan launch sequence" }, expect.any(Object));
     });
   });
 });
