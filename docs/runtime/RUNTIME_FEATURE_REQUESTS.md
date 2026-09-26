@@ -140,6 +140,12 @@ run. It does not cover results a run produces, which is what this FR asks for.
 The workaround is two runs: research first, then a second goal that quotes the findings, so the
 planner has them in hand. We are not working around it in the plan format.
 
+**2026-09-26: the two-run workaround is now the product (#411).** Collaborator shows each step's
+result and offers *Continue from this*: the next goal carries a digest of the completed run's
+findings, previewable before it is sent and approved as part of that goal. The owner stays the
+step between the two halves. That covers "research, then act on it" across runs, with a human in
+between. It does not cover a single unattended run, which is still this ask.
+
 ### Not asking for
 
 The planner re-planning after every step (a different, larger feature), or free-form expressions in
