@@ -119,6 +119,61 @@ def _build_reasoning_context_block(user_id, db) -> str:
         return ""
 
 
+def _build_date_line() -> str:
+    """Today's date. The planner had no clock: on 2026-09-26 it gave five tasks due dates in June
+    2025 (run `abf834d4`), fifteen months in the past."""
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    return f"\n\nToday's date: {today} (UTC). Any due_date must be on or after it.\n"
+
+
+def _build_plan_context_block(user_id, db) -> str:
+    """The user's active MasterPlan with its real IDs, so a plan can attach work to it.
+
+    On 2026-09-26 the planner invented `strategy_id: "aindy-runtime-gtm"` for five `task.create`
+    steps (run `abf834d4`): it planned a recall to find the ID, but a step cannot read an earlier
+    step's result (FR-46) and no tool lists strategies. The IDs have to be here, before the plan is
+    written. Read through the `masterplan.planning_context` job — no cross-app import.
+    """
+    try:
+        from AINDY.platform_layer.registry import get_job
+
+        planning_context = get_job("masterplan.planning_context")
+        if planning_context is None:
+            return ""
+        plan = planning_context(user_id=user_id, db=db)
+        if not plan:
+            return ""
+
+        lines = [
+            "",
+            "## User's MasterPlan (use these exact IDs; never invent one)",
+            f"masterplan_id: {plan['masterplan_id']}",
+        ]
+        phase = plan.get("current_phase")
+        if phase:
+            lines.append(f"Current phase: {phase['name']} (phase_id: {phase['id']})")
+        strategies = plan.get("strategies") or []
+        if strategies:
+            lines.append(
+                "Open strategies. To attach a task to one, pass BOTH masterplan_id and "
+                "strategy_id to task.create:"
+            )
+            for s in strategies:
+                serves = f", serves {s['objective']}" if s.get("objective") else ""
+                lines.append(
+                    f"- {s['name']} (strategy_id: {s['id']}{serves}; "
+                    f"{s['tasks_completed']}/{s['tasks_total']} tasks done)"
+                )
+        else:
+            lines.append("No open strategies: create tasks with masterplan_id only.")
+        return "\n".join(lines) + "\n"
+    except Exception as exc:
+        logger.warning("[planner_context] plan context skipped: %s", exc)
+        return ""
+
+
 def build_planner_context(context: dict) -> dict:
     """The planner's system prompt: base prompt + the user's Infinity context.
 
@@ -154,7 +209,12 @@ def build_planner_context(context: dict) -> dict:
 
         db = SessionLocal()
     try:
-        kpi_context = _build_kpi_context_block(user_id, db) + _build_reasoning_context_block(user_id, db)
+        kpi_context = (
+            _build_date_line()
+            + _build_plan_context_block(user_id, db)
+            + _build_kpi_context_block(user_id, db)
+            + _build_reasoning_context_block(user_id, db)
+        )
         prompt = PLANNER_SYSTEM_PROMPT + kpi_context
         try:
             from AINDY.memory.memory_helpers import enrich_context, format_memories_for_prompt

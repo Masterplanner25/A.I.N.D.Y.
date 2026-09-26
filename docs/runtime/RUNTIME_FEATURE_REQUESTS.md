@@ -80,6 +80,24 @@ second half is always planned blind. The success status is what makes it the qui
    cut is the tool's or the runtime's, a reference that carries a truncated result carries the
    truncation. Please say where the limit is and whether a reference sees the full result.
 
+### Two more runs, 2026-09-26 — the cost compounds
+
+- **`214ac631`** (*"Recall what I've recorded about marketing aindy-runtime, then research what's
+  missing"*): the recall's top hit (similarity 0.93) was the **placeholder written by `02e9e214`**,
+  and the run wrote a second placeholder over the new research. Memory filled with notes *about*
+  research that contained none, and recall ranked them first. Both were deleted at the owner's
+  request (`sys.v1.memory.delete`).
+- **`abf834d4`** (tasks for the first two weeks, *"attached to the right strategy"*): the planner
+  planned a `memory.recall` *"so tasks can be attached to the right strategy_id"*, then gave five
+  `task.create` steps `strategy_id: "aindy-runtime-gtm"`, an ID it made up because the recall's
+  result could not reach them. It failed on our guard (`strategy_id requires a masterplan_id`), so
+  nothing was written. `args_schema` validation passed all three attempts: a made-up ID is a valid
+  string.
+
+What we did on our side (#409): the plan's real IDs and today's date go into the planner's prompt,
+so this case no longer needs a step reference at all. That covers facts that exist before the
+run. It does not cover results a run produces, which is what this FR asks for.
+
 ### Until then, ours
 
 The workaround is two runs: research first, then a second goal that quotes the findings, so the

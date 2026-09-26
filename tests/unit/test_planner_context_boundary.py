@@ -144,8 +144,8 @@ def test_the_session_is_closed_even_when_a_block_raises(monkeypatch):
 
     out = runtime_extensions.build_planner_context({"run_type": "default", "user_id": USER})
 
-    # each block is best-effort on its own; the prompt is still the base prompt
-    assert out["context_block"] == ""
+    # each job-fed block is best-effort on its own; only the date survives, since it needs no job
+    assert out["context_block"] == runtime_extensions._build_date_line()
     assert len(opened) == 1 and opened[0].closed is True
 
 
@@ -159,3 +159,53 @@ def test_the_planner_is_told_that_pending_tasks_lower_the_score(monkeypatch):
     block = runtime_extensions._build_kpi_context_block(USER, _Session())
     assert "Pending tasks lower the score" in block
     assert "every task created lowers both" in block
+
+
+def test_the_planner_is_told_todays_date():
+    """2026-09-26, run abf834d4: with no clock the planner dated five tasks June 2025."""
+    from datetime import datetime, timezone
+
+    line = runtime_extensions._build_date_line()
+    assert f"Today's date: {datetime.now(timezone.utc).date().isoformat()} (UTC)" in line
+
+
+_PLAN = {
+    "masterplan_id": 10,
+    "current_phase": {"id": "phase-uuid", "name": "Foundation Building"},
+    "strategies": [
+        {"id": "strat-uuid-1", "name": "Build Intellectual Property", "status": "active",
+         "objective": "Platform Enablement", "phase": "Foundation Building",
+         "tasks_total": 1, "tasks_completed": 1},
+    ],
+}
+
+
+def _patch_plan_job(monkeypatch, plan):
+    import AINDY.platform_layer.registry as registry
+
+    monkeypatch.setattr(
+        registry, "get_job",
+        lambda name: (lambda *, user_id, db: plan) if name == "masterplan.planning_context" else None,
+    )
+
+
+def test_the_planner_gets_the_real_plan_ids(monkeypatch):
+    """2026-09-26, run abf834d4: with no strategy in its prompt the planner invented
+    `strategy_id: "aindy-runtime-gtm"`. The real IDs must be in the prompt before planning."""
+    _patch_plan_job(monkeypatch, _PLAN)
+    block = runtime_extensions._build_plan_context_block(USER, _Session())
+    assert "masterplan_id: 10" in block
+    assert "Current phase: Foundation Building (phase_id: phase-uuid)" in block
+    assert "Build Intellectual Property (strategy_id: strat-uuid-1, serves Platform Enablement; 1/1 tasks done)" in block
+    assert "never invent one" in block
+
+
+def test_no_open_strategies_says_so(monkeypatch):
+    _patch_plan_job(monkeypatch, dict(_PLAN, strategies=[]))
+    block = runtime_extensions._build_plan_context_block(USER, _Session())
+    assert "No open strategies" in block
+
+
+def test_no_active_plan_adds_nothing(monkeypatch):
+    _patch_plan_job(monkeypatch, None)
+    assert runtime_extensions._build_plan_context_block(USER, _Session()) == ""
