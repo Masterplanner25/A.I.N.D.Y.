@@ -38,6 +38,11 @@ Rules:
 - Keep plans concise (3-7 steps maximum)
 - Be specific in args - use realistic values based on the goal
 - overall_risk must match the highest step risk_level
+- Every step's args are written now, before any step runs: a step cannot read an earlier
+  step's result. So never plan memory.write to save a "summary" or "findings" of earlier steps;
+  it would save your guess, not the results. The system saves each run's real findings to memory
+  when the run completes. memory.write is for content you can write now, e.g. from findings
+  already given in the goal
 - Return ONLY the JSON object, no markdown, no extra text
 """
 
@@ -308,6 +313,46 @@ def _hook_user_id(value) -> str | None:
     return text or None
 
 
+def _save_run_findings(db, run, user_id: str) -> str | None:
+    """Save what the run actually found as one memory node; return its id, or None.
+
+    Owner, 2026-09-26: three runs in a row planned a `memory.write` "summary" of research that had
+    not run yet (FR-46), and recall ranked those placeholders first. The planner is now told not
+    to; this does what it was trying to do, from the steps' real results. Best-effort: a failure
+    here must never stop the Infinity loop below it.
+    """
+    from AINDY.agents.tool_syscalls import invoke_tool_syscall
+    from AINDY.db.models import AgentStep
+
+    from apps.agent.services.run_findings import build_findings_digest, goal_ask
+
+    rows = (
+        db.query(AgentStep)
+        .filter(AgentStep.run_id == run.id)
+        .order_by(AgentStep.step_index.asc())
+        .all()
+    )
+    digest = build_findings_digest(
+        {"tool_name": r.tool_name, "status": r.status, "result": r.result} for r in rows
+    )
+    if not digest:
+        return None
+    ask = goal_ask(getattr(run, "goal", "")).strip()
+    data = invoke_tool_syscall(
+        "sys.v1.memory.write",
+        {
+            "content": f"Findings from an agent run: {ask}\n\n{digest}",
+            "tags": ["agent_findings", f"agent_run:{run.id}"],
+            "node_type": "insight",
+            "source": "agent_findings",
+        },
+        user_id=user_id,
+        capability="memory.write",
+    )
+    node = data.get("node") if isinstance(data, dict) else None
+    return str(node.get("id")) if isinstance(node, dict) and node.get("id") else None
+
+
 def handle_agent_run_completed(context: dict):
     """Enforce the Infinity loop after an agent run completes.
 
@@ -349,6 +394,16 @@ def handle_agent_run_completed(context: dict):
         result_payload = run.result if isinstance(run.result, dict) else {}
         if result_payload.get("loop_enforced"):
             return None
+
+        # The run's real findings, once (the id on run.result is the "already saved" marker).
+        if "findings_node_id" not in result_payload:
+            try:
+                result_payload = {
+                    **result_payload,
+                    "findings_node_id": _save_run_findings(db, run, user_id),
+                }
+            except Exception as exc:  # noqa: BLE001 — never block the Infinity loop
+                logger.warning("[agent_findings] save skipped for run %s: %s", run_id, exc)
 
         execute_infinity_orchestrator = get_job("analytics.infinity_execute")
         if execute_infinity_orchestrator is None:

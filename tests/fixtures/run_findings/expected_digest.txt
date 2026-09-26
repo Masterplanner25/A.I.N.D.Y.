@@ -1,0 +1,16 @@
+[memory.recall]
+- Genesis conversation: user said 'I plan to use my AI Search Optimization techniques'
+
+[research.query]
+Human-AI teaming: calibrate trust with confidence signals.
+- Keep humans in the loop for consequential decisions.
+
+[search.query]
+- Co-creation patterns: iterate together (https://example.org/co)
+
+[reasoning.evaluate]
+Recommendation: reprioritize_tasks (because execution_or_decision_below_threshold)
+Reprioritize current tasks around execution bottlenecks
+
+[task.create]
+Created task: Synthesize Human-AI collaboration research into synergy laws draft
