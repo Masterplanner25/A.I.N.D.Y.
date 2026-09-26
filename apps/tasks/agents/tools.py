@@ -19,7 +19,7 @@ def register() -> None:
     register_tool(
         "task.create",
         risk="low",
-        description="Create a new task in the user's task list.",
+        description="Create a new task in the user's task list. Returns {task_id, name, status}.",
         # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.
         # `estimated_hours` carries no type on purpose: the dispatcher's "number" means
         # `float` only, and a planner writes `2` as readily as `2.0`.
@@ -44,7 +44,10 @@ def register() -> None:
     register_tool(
         "task.complete",
         risk="medium",
-        description="Mark a task as complete by its exact name.",
+        description=(
+            "Mark a task as complete by its exact name. Its result is a status report: "
+            "do not reference its fields from a later step."
+        ),
         args_schema={
             "required": ["task_name"],
             "properties": {"task_name": {"type": "string", "description": "the exact task name"}},
