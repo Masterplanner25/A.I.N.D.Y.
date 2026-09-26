@@ -107,6 +107,8 @@ def _register_jobs() -> None:
     register_job("goals.calculate_alignment", _calculate_goal_alignment)
     register_job("goals.update_from_execution", _update_goals_from_execution)
     register_job("scheduler.masterplan_eta", _scheduler_recalculate_all_etas)
+    # Read by the agent planner-context provider: the plan, phase and open strategies with IDs.
+    register_job("masterplan.planning_context", _planning_context)
 
 
 def _register_scheduled_jobs() -> None:
@@ -285,6 +287,11 @@ def _genesis_synthesize(*args, **kwargs):
 def _genesis_audit(*args, **kwargs):
     from apps.masterplan.services.genesis_ai import validate_draft_integrity
     return validate_draft_integrity(*args, **kwargs)
+
+
+def _planning_context(*args, **kwargs):
+    from apps.masterplan.services.planning_context import build_planning_context
+    return build_planning_context(*args, **kwargs)
 
 
 def _rank_goals(*args, **kwargs):
