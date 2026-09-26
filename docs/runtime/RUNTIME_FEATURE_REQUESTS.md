@@ -124,7 +124,7 @@ A longer global default. 30 s is right for almost every call; the one that needs
 
 ---
 
-## FR-46 — a plan's steps cannot use each other's results: every step's `args` are fixed at planning time, so "research X, then use it to…" runs the second half blind 🟡 SHIPPED in 2.24.0 (#764), default OFF (`AINDY_PLAN_STEP_REFERENCES`) — our planner rule follows the flag; the evidence run is owed (handoff §8 ask 1)
+## FR-46 — a plan's steps cannot use each other's results: every step's `args` are fixed at planning time, so "research X, then use it to…" runs the second half blind ✅ SHIPPED in 2.24.0 (#764), default OFF — evidence run PASSED 2026-09-26 (run `19dcf508`: `memory.write` stored step 0's `raw_result` byte for byte); the first attempt found FR-48
 
 > **A plan step is `{"tool", "args", "risk_level", "description"}`, and `args` is a literal.**
 > On `nodus_vm` the compiler bakes it into the workflow's input payload as written

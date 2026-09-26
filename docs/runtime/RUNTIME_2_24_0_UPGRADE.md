@@ -78,8 +78,46 @@ handoff) needs no branch here.
   returns up to **6000** characters (the findings-digest cap), cut at a word boundary and marked
   ` … [truncated]` (`apps/search/syscalls.py::_research_excerpt`, `test_research_excerpt.py`).
   `search_service.raw_excerpt` is the Search page's preview, not an agent input; it is unchanged.
-- **Owed: the evidence run** (handoff §8 ask 1). Turn the flag on and re-run the owner's goal. The
-  pass condition is that the `memory.write` step stores step 0's findings.
+### 5.1 The FR-46 evidence run (handoff §8 ask 1): **passed on the second attempt**
+
+`AINDY_PLAN_STEP_REFERENCES=1`, wired into compose (#414; `.env` alone never reaches the process).
+The owner's original goal, *"Research SEO, AI Search and Marketing Strategies. Then use the research
+to create a strategy to market aindy-runtime and the A.I.N.D.Y. app"*, submitted in Collaborator
+and approved by the owner.
+
+**First attempt, run `615b67ea` — failed safely, and found FR-48.** The planner used a reference,
+`memory.write {"content": {"$from_step": 0, "path": "results"}}`, but `research.query` returns
+`{raw_result}`. `results` is `search.query`'s key. The step failed with
+`step reference could not be resolved: args.content: step 0's result has no 'results'`. No
+placeholder was written and the tool was never called with the literal (DEC-075, as designed). The
+planner is shown tool arguments, never results, so the path was a guess. Ours (#415): every
+tool description states its return shape, and a test checks the keys against each tool's real
+result. The runtime's half is FR-48 (`result_schema`, and path checks at plan time).
+
+**Second attempt, run `19dcf508-c452-4a36-9e0f-3794f4d55ebc` — passed.** `completed 5/5`:
+
+```
+2 memory.write  plan:     {"content": {"$from_step": 0, "path": "raw_result"}, …}
+                recorded: {"content": "GEO vs AEO vs SEO: The 2026 Field Guide for B2B SaaS Marketers\nhttps://www…", …}
+```
+
+- `agent_steps[2].tool_args.content` **equals** `agent_steps[0].result.raw_result`, byte for byte
+  (SQL equality: `t`), 5000 characters. The stored memory node holds the same 5000 characters.
+- Under the old `raw[:2000]` cut (§5), 60% of it would have been lost mid-word.
+- The completion hook also saved the run's findings (#412, node `f20ab0ea…`).
+
+**Pass condition met:** the `memory.write` step stored step 0's findings, not a sentence written
+before step 0 ran. The flag stays on here.
+
+Two observations, neither a failure:
+
+1. **The research is now in memory twice**: the referenced `memory.write` and the completion
+   hook's findings node. Harmless; when a run already saved its research through a reference, the
+   hook's copy is redundant. A small follow-up of ours.
+2. **The two `task.create` names are still the planner's own wording** (*"Draft go-to-market
+   marketing strategy … using SEO/AI-search research"*). A reference substitutes a value; it
+   cannot make the planner write new text from findings it has not seen. "Turn the research into
+   specific tasks" still needs a second planning pass: Collaborator's *Continue from this* (#411).
 
 ## 6. IDEM-14, nodus-lang 5.15.0
 
