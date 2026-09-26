@@ -1,66 +1,53 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { createAgentRun } from "../api/agent.js";
+// Creating a run plans it inline: 36 s measured on 2026-09-26, past ui-kit's default 30 s. The
+// timeout fired, the console showed a failure for a run created seconds later, and a retry made a
+// duplicate — twice. ui-kit 2.1.1 takes a per-call timeout (FR-47); run creation asks for 90 s.
 
-// ui-kit aborts every request at 30 s and throws ApiError 408. Planning a multi-step goal took
-// 36 s on 2026-09-26: the server created the run six seconds after the browser gave up, the
-// console reported a failure, and a retry made a duplicate — twice that day. On a 408,
-// createAgentRun waits for the run to appear rather than failing (FR-47 is the kit's half).
+const { mockAuthRequest } = vi.hoisted(() => ({ mockAuthRequest: vi.fn() }));
 
-function makeToken(payload) {
-  const encoded = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  return `header.${encoded}.signature`;
-}
+vi.mock("../api/_core.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  authRequest: mockAuthRequest,
+}));
 
-const GOAL = "Create the tasks for the first two weeks";
-const FAST = { pollMs: 1, maxMs: 200, clockSkewMs: 15000 };
+const { createAgentRun, CREATE_RUN_TIMEOUT_MS } = await import("../api/agent.js");
 
-function stubFetch({ post, runs }) {
-  const fetchSpy = vi.fn((url, opts) => {
-    if (opts?.method === "POST") return post();
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      text: () => Promise.resolve(JSON.stringify({ data: runs() })),
-    });
-  });
-  vi.stubGlobal("fetch", fetchSpy);
-  return fetchSpy;
-}
+describe("createAgentRun gives planning 90 seconds", () => {
+  // No beforeEach touching the spy: with this vitest, a spy reset or cleared in a hook that then
+  // rejects fails the test on its own (bisected 2026-09-26). Each test sets its own implementation.
 
-const aborted = () => Promise.reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
-
-describe("createAgentRun survives the kit's 30 s timeout", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-    vi.unstubAllGlobals();
-    window.localStorage.setItem("token", makeToken({ sub: "u-1" }));
+  it("asks the kit for a 90 s timeout on this one call", async () => {
+    mockAuthRequest.mockResolvedValue({ run_id: "r-1" });
+    await expect(createAgentRun({ goal: "Plan the launch" })).resolves.toEqual({ run_id: "r-1" });
+    const [, opts] = mockAuthRequest.mock.lastCall;
+    expect(CREATE_RUN_TIMEOUT_MS).toBe(90_000);
+    expect(opts.timeoutMs).toBe(90_000);
+    expect(JSON.parse(opts.body)).toEqual({ goal: "Plan the launch" });
   });
 
-  it("returns the run the server finished planning after the browser gave up", async () => {
-    const planned = { run_id: "r-new", goal: GOAL, status: "pending_approval", created_at: new Date().toISOString() };
-    stubFetch({ post: aborted, runs: () => [planned] });
-    const onStillPlanning = vi.fn();
-    const run = await createAgentRun({ goal: GOAL }, { onStillPlanning, recovery: FAST });
-    expect(run.run_id).toBe("r-new");
-    expect(onStillPlanning).toHaveBeenCalledTimes(1);
+  it("says the run may still arrive when even 90 s runs out, instead of inviting a duplicate", async () => {
+    const timeout = Object.assign(new Error("timed out"), { status: 408 });
+    mockAuthRequest.mockImplementation(() => Promise.reject(timeout));
+    let caught;
+    try {
+      await createAgentRun({ goal: "Plan the launch" });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught?.message).toMatch(/may still finish: check the run list before submitting again/);
+    expect(caught?.cause).toBe(timeout);
   });
 
-  it("does not claim an older run with the same goal, or a newer run with another goal", async () => {
-    const older = { run_id: "r-old", goal: GOAL, created_at: new Date(Date.now() - 10 * 60000).toISOString() };
-    const other = { run_id: "r-other", goal: "something else", created_at: new Date().toISOString() };
-    stubFetch({ post: aborted, runs: () => [other, older] });
-    await expect(createAgentRun({ goal: GOAL }, { recovery: FAST })).rejects.toThrow(
-      /still running on the server/
-    );
-  });
-
-  it("rethrows anything that is not the timeout, without polling", async () => {
-    const fetchSpy = stubFetch({
-      post: () => Promise.resolve({ ok: false, status: 422, text: () => Promise.resolve("bad goal") }),
-      runs: () => [],
-    });
-    await expect(createAgentRun({ goal: GOAL }, { recovery: FAST })).rejects.toMatchObject({ status: 422 });
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  it("passes any other error through unchanged", async () => {
+    const err = Object.assign(new Error("bad goal"), { status: 422 });
+    mockAuthRequest.mockImplementation(() => Promise.reject(err));
+    let caught;
+    try {
+      await createAgentRun({ goal: "x" });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBe(err);
   });
 });

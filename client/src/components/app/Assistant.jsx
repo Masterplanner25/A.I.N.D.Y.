@@ -129,10 +129,7 @@ export default function Assistant() {
     setFollowUp("");
     setShowFindings(false);
     try {
-      const r = await createAgentRun(
-        { goal: goalText.trim() },
-        { onStillPlanning: () => showToast("Still planning — this can take up to a minute. No need to resubmit.") }
-      );
+      const r = await createAgentRun({ goal: goalText.trim() });
       setRun(r); // the poll effect picks up runId and takes over
     } catch (e) {
       showToast(e?.message || "Couldn't start — is the agent reachable?");

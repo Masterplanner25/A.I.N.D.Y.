@@ -560,10 +560,7 @@ function AgentConsoleContent() {
     setSubmitting(true);
     setError(null);
     try {
-      const run = await createAgentRun(
-        { goal: goal.trim() },
-        { onStillPlanning: () => showToast("Still planning — this can take up to a minute. No need to resubmit.") }
-      );
+      const run = await createAgentRun({ goal: goal.trim() });
       setGoal("");
       await loadRuns();
       setSelectedRun(run);

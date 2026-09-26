@@ -30,48 +30,25 @@ export function getFederatedMemory(query, namespaces = null, limit = 5) {
   });
 }
 
-// Planning a multi-step goal takes 30–40 s (36 s measured on 2026-09-26). ui-kit aborts every
-// request at 30 s — not configurable per call (FR-47) — and throws ApiError 408. The server keeps
-// going and creates the run anyway, so the console reported a failure for a run that arrived six
-// seconds later, and a retry made a duplicate (twice that day). On a 408 we wait for the run to
-// appear instead: the list is newest-first and `created_at` is written when planning FINISHES,
-// so the run we want is newer than the click (minus a small clock allowance).
-export const CREATE_RECOVERY = { pollMs: 3000, maxMs: 90000, clockSkewMs: 15000 };
+// Creating a run plans it inline (a Claude call): 30–40 s for a multi-step goal, 36 s measured on
+// 2026-09-26. ui-kit's default 30 s timeout fired first, the console showed a failure for a run
+// the server created seconds later, and a retry made a duplicate (twice that day). ui-kit 2.1.1
+// takes a per-call timeout (FR-47), so this call asks for 90 s and the #410 poll-on-408 is gone.
+export const CREATE_RUN_TIMEOUT_MS = 90_000;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitForPlannedRun(goal, startedAt, { pollMs, maxMs, clockSkewMs }) {
-  const deadline = startedAt + maxMs;
-  while (Date.now() < deadline) {
-    await sleep(pollMs);
-    let runs;
-    try {
-      runs = await getAgentRuns(null, 10);
-    } catch {
-      continue;
-    }
-    const hit = runs.find(
-      (r) => r?.goal === goal && Date.parse(r?.created_at) >= startedAt - clockSkewMs
-    );
-    if (hit) return hit;
-  }
-  return null;
-}
-
-export async function createAgentRun(payload, { onStillPlanning, recovery = CREATE_RECOVERY } = {}) {
-  const startedAt = Date.now();
+export async function createAgentRun(payload) {
   try {
     return await authRequest(ROUTES.AGENT.CREATE_RUN, {
       method: "POST",
       body: JSON.stringify(payload),
+      timeoutMs: CREATE_RUN_TIMEOUT_MS,
     });
   } catch (e) {
+    // Since 2.1.1 a 408 means the kit's own timer fired — here, after 90 s. Run creation has no
+    // idempotency key, so the run may still arrive: say so rather than invite a duplicate.
     if (e?.status !== 408) throw e;
-    onStillPlanning?.();
-    const run = await waitForPlannedRun(payload?.goal, startedAt, recovery);
-    if (run) return run;
     throw new Error(
-      "Planning is still running on the server. Check the run list before submitting again.",
+      "Planning took longer than 90 seconds. It may still finish: check the run list before submitting again.",
       { cause: e }
     );
   }

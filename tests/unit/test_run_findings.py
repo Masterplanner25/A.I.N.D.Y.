@@ -138,3 +138,19 @@ def test_findings_are_saved_once(monkeypatch):
     _hook(monkeypatch, run, lambda db, r, user_id: calls.append(1) or "node-2")
     assert calls == []
     assert run.result["findings_node_id"] == "node-0"
+
+
+def test_the_step_result_rule_follows_the_runtime_flag(monkeypatch):
+    """Runtime 2.24.0 (FR-46): with AINDY_PLAN_STEP_REFERENCES on, the runtime's catalog teaches
+    the `$from_step` form. Our flag-off rule ("a step cannot read an earlier step's result") would
+    then contradict it, so the rule is chosen by the same function the runtime uses."""
+    monkeypatch.delenv("AINDY_PLAN_STEP_REFERENCES", raising=False)
+    off = runtime_extensions.planner_system_prompt()
+    assert off == runtime_extensions.PLANNER_SYSTEM_PROMPT
+    assert "a step cannot read an earlier" in off
+
+    monkeypatch.setenv("AINDY_PLAN_STEP_REFERENCES", "1")
+    on = runtime_extensions.planner_system_prompt()
+    assert "a step cannot read an earlier" not in on
+    assert "step-reference form described with the" in on
+    assert "Never write your own summary of results" in on
