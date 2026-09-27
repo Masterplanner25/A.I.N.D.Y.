@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   createAgentRun,
   getAgentRun,
+  getAgentRuns,
   approveAgentRun,
   rejectAgentRun,
   getAgentRunSteps,
@@ -76,7 +77,21 @@ export default function Assistant() {
   const [followUp, setFollowUp] = useState("");
   const [attachFindings, setAttachFindings] = useState(true);
   const [showFindings, setShowFindings] = useState(false);
+  const [recentRuns, setRecentRuns] = useState([]);
   const { toast, showToast, clearToast } = useToast();
+
+  // The open run lives in the URL (`?run=<id>`), not only in component state. Held in state
+  // alone, it was gone the moment the owner left the page (2026-09-26), including a run still
+  // awaiting approval. A reload, back or a bookmark now reopens it; the empty screen lists
+  // recent runs for a return through the nav link, which carries no `?run=`.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const runParam = searchParams.get("run");
+  const setRunParam = (id) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("run", id);
+    else next.delete("run");
+    setSearchParams(next, { replace: true });
+  };
 
   // The agent surface returns three different shapes: the create/approve responses wrap the
   // run in an execution envelope (run_id under execution_record, plan under result.plan,
@@ -121,6 +136,59 @@ export default function Assistant() {
     };
   }, [runId, terminal, showToast]);
 
+  // Open the run the URL names — on arrival, reload, back/forward, or a link.
+  useEffect(() => {
+    if (!runParam || runParam === runId) return undefined;
+    let cancelled = false;
+    getAgentRun(runParam)
+      .then((r) => {
+        if (cancelled) return;
+        setSteps([]);
+        setRun(r);
+      })
+      .catch(() => {
+        if (!cancelled) showToast("That run could not be opened.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runParam, runId, showToast]);
+
+  // A finished run is never polled, so a reopened one loads its steps (and their results) once.
+  useEffect(() => {
+    if (!runId || !terminal || steps.length) return undefined;
+    let cancelled = false;
+    getAgentRunSteps(runId)
+      .then((s) => {
+        if (!cancelled && Array.isArray(s)) setSteps(s);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, terminal, steps.length]);
+
+  // Recent runs for the empty screen: the way back to a run after leaving the page.
+  const idle = !run;
+  useEffect(() => {
+    if (!idle) return undefined;
+    let cancelled = false;
+    getAgentRuns(null, 8)
+      .then((runs) => {
+        if (!cancelled) setRecentRuns(Array.isArray(runs) ? runs : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [idle]);
+
+  const openRun = (r) => {
+    setSteps([]);
+    setRun(r);
+    setRunParam(r?.run_id);
+  };
+
   const startRun = async (goalText) => {
     if (!goalText.trim() || submitting) return;
     setSubmitting(true);
@@ -131,6 +199,7 @@ export default function Assistant() {
     try {
       const r = await createAgentRun({ goal: goalText.trim() });
       setRun(r); // the poll effect picks up runId and takes over
+      setRunParam(r?.run_id ?? r?.execution_record?.run_id);
     } catch (e) {
       showToast(e?.message || "Couldn't start — is the agent reachable?");
     } finally {
@@ -179,14 +248,26 @@ export default function Assistant() {
     setRun(null);
     setSteps([]);
     setGoal("");
+    setRunParam(null);
   };
+
+  // Awaiting your approval first (a run that cannot move until you act), then newest first.
+  const orderedRecent = [...recentRuns].sort((a, b) => {
+    const wa = AWAITING.has(String(a?.status || "").toLowerCase()) ? 0 : 1;
+    const wb = AWAITING.has(String(b?.status || "").toLowerCase()) ? 0 : 1;
+    return wa - wb || String(b?.created_at || "").localeCompare(String(a?.created_at || ""));
+  });
 
   // Mode: one face, two engines — "agent" (do X) or "genesis" (author/revise the plan).
   // Driven by ?mode=genesis so it's linkable (e.g. the MasterPlan "Initialize via Genesis" entry).
-  const [searchParams, setSearchParams] = useSearchParams();
   const mode = searchParams.get("mode") === "genesis" ? "genesis" : "agent";
-  const setMode = (m) =>
-    setSearchParams(m === "genesis" ? { mode: "genesis" } : {}, { replace: true });
+  // Switching modes keeps `?run=`, so going to Plan and back returns to the same run.
+  const setMode = (m) => {
+    const next = new URLSearchParams(searchParams);
+    if (m === "genesis") next.set("mode", "genesis");
+    else next.delete("mode");
+    setSearchParams(next, { replace: true });
+  };
 
   const modeBar = (
     <div className="fixed top-3 left-1/2 -translate-x-1/2 z-30 flex gap-1 rounded-full border border-zinc-800 bg-zinc-950/90 p-1 shadow-lg shadow-black/40 backdrop-blur-sm">
@@ -249,6 +330,24 @@ export default function Assistant() {
                 {submitting ? "Starting…" : "Run"}
               </button>
             </form>
+            {runParam && (
+              <p className="mt-6 text-xs text-zinc-500 font-mono animate-pulse">Opening run…</p>
+            )}
+            {orderedRecent.length > 0 && (
+              <div className="mt-8 space-y-2">
+                <p className="text-[10px] uppercase tracking-wider text-zinc-600">Recent runs</p>
+                {safeMap(orderedRecent, (r) => (
+                  <button
+                    key={r.run_id}
+                    onClick={() => openRun(r)}
+                    className="flex w-full items-center gap-3 text-left border border-zinc-800/60 hover:border-zinc-700 rounded-lg px-3 py-2 transition-colors"
+                  >
+                    <span className="flex-1 truncate text-xs text-zinc-300">{splitGoal(r.goal).ask}</span>
+                    <Badge status={String(r.status || "").toLowerCase()} />
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="mt-8 space-y-2">
               <p className="text-[10px] uppercase tracking-wider text-zinc-600">Try</p>
               {safeMap(EXAMPLES, (ex, i) => (

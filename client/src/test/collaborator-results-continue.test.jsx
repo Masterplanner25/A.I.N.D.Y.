@@ -33,6 +33,8 @@ const {
 vi.mock("../api/agent.js", () => ({
   createAgentRun: mockCreateAgentRun,
   getAgentRun: mockGetAgentRun,
+  // The empty screen lists recent runs; these tests start from a fresh one.
+  getAgentRuns: () => Promise.resolve([]),
   approveAgentRun: mockApproveAgentRun,
   rejectAgentRun: mockRejectAgentRun,
   getAgentRunSteps: mockGetAgentRunSteps,
@@ -79,6 +81,9 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Collaborator keeps the open run in `?run=`; the router uses real history, so reset it or one
+  // test's run reopens in the next.
+  window.history.replaceState({}, "", "/");
   mockCreateAgentRun.mockResolvedValue({ status: "PENDING_APPROVAL", execution_record: { run_id: RUN_ID } });
   mockGetAgentRun.mockResolvedValue(COMPLETED); // completes on the very first poll
   // A real network round-trip, longer than testing-library's 50 ms act-flush interval, so React
