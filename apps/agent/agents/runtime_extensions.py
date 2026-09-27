@@ -349,7 +349,7 @@ def _save_run_findings(db, run, user_id: str) -> str | None:
     from AINDY.agents.tool_syscalls import invoke_tool_syscall
     from AINDY.db.models import AgentStep
 
-    from apps.agent.services.run_findings import build_findings_digest, goal_ask
+    from apps.agent.services.run_findings import build_findings_digest, goal_ask, steps_already_saved
 
     rows = (
         db.query(AgentStep)
@@ -357,8 +357,13 @@ def _save_run_findings(db, run, user_id: str) -> str | None:
         .order_by(AgentStep.step_index.asc())
         .all()
     )
+    # A result the run already stored through a `$from_step` reference is not saved twice.
+    plan_steps = (run.plan or {}).get("steps") if isinstance(run.plan, dict) else None
+    already = steps_already_saved(plan_steps or [], {r.step_index: r.status for r in rows})
     digest = build_findings_digest(
-        {"tool_name": r.tool_name, "status": r.status, "result": r.result} for r in rows
+        {"tool_name": r.tool_name, "status": r.status, "result": r.result}
+        for r in rows
+        if r.step_index not in already
     )
     if not digest:
         return None

@@ -490,6 +490,13 @@ def _handle_task_get_user_tasks(payload: dict, ctx: SyscallContext) -> dict:
                     # (docs/infinity/INFINITY_SCORE_MODEL.md).
                     "duration": float(task.duration or 0.0),
                     "time_spent": float(task.time_spent or 0.0),
+                    # Scoring leaves a pending task that is not yet due out of the completion
+                    # ratios (owner, 2026-09-26): a task that is not due is not late.
+                    "due_date": (
+                        task.due_date.isoformat()
+                        if isinstance(task.due_date, datetime)
+                        else None
+                    ),
                 }
                 for task in tasks
             ]

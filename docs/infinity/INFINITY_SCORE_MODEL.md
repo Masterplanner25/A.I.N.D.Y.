@@ -351,6 +351,27 @@ bias toward task.create"*, `apps/agent/agents/runtime_extensions.py`) still read
 against 40. C fixes the value's weight in the score; it does not change what the planner is told.
 That line would need its own gate if it becomes a problem.
 
+### 9.6 Planned work read as missed work — decided 2026-09-26 (owner): leave not-yet-due tasks out
+
+The same failure shape as §9, in two more KPIs. `decision_efficiency` (completed ÷ completed +
+pending + in-progress) and `masterplan_progress` (completed ÷ all tasks) counted every task the
+moment it was created. Once the agent could plan into the MasterPlan (#409), planning read as
+falling behind. On 2026-09-26 the owner's agent runs added 15 pending tasks, 11 of them not yet due,
+and with nothing late:
+
+| | before planning | after |
+|---|---|---|
+| decision_efficiency | 68.0 | 32.6 |
+| masterplan_progress | 88.0 | 52.6 |
+| master_score | 54.91 | 39.13 |
+
+Options: A leave it; **B leave a pending task whose due date is in the future out of both ratios
+until the date arrives**; C phase it in as the date approaches. **B**, because a task that is not
+due is not late, and the rule can be said in one sentence. `_not_yet_due` in
+`infinity_service.py`; `sys.v1.task.get_user_tasks` now carries `due_date`. Still counted: tasks
+with no due date (open-ended work is owed now), `in_progress` tasks (started), and overdue ones.
+History is not rewritten; the next recalc reads the new rule. `test_scoring_not_yet_due.py`.
+
 **How to re-derive:** `select calculated_at, trigger_event, execution_speed_score, master_score,
 score_delta from score_history where user_id = … order by calculated_at` against the tasks'
 `end_time` values; the window is `SCORING_WINDOW_DAYS = 14`.
