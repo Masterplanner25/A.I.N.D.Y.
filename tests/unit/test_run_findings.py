@@ -154,3 +154,20 @@ def test_the_step_result_rule_follows_the_runtime_flag(monkeypatch):
     assert "a step cannot read an earlier" not in on
     assert "step-reference form described with the" in on
     assert "Never write your own summary of results" in on
+
+
+def test_a_step_already_saved_by_reference_is_not_saved_again():
+    """Run 19dcf508: memory.write stored step 0's research through a reference, then the hook
+    saved it again. Only a SUCCESSFUL memory.write counts as having saved it."""
+    from apps.agent.services.run_findings import steps_already_saved
+
+    plan = [
+        {"tool": "research.query", "args": {"query": "q"}},
+        {"tool": "search.query", "args": {"query": "q"}},
+        {"tool": "memory.write", "args": {"content": {"$from_step": 0, "path": "raw_result"}, "tags": []}},
+    ]
+    assert steps_already_saved(plan, {0: "success", 1: "success", 2: "success"}) == {0}
+    assert steps_already_saved(plan, {0: "success", 1: "success", 2: "failed"}) == set()
+    assert steps_already_saved(plan, {}) == set()
+    nested = [{"tool": "memory.write", "args": {"content": [{"x": {"$from_step": 3}}]}}]
+    assert steps_already_saved(nested, {0: "success"}) == {3}

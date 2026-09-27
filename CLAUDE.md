@@ -158,8 +158,10 @@ def register() -> None:
     # dispatch: `AINDY_TOOL_ARGS_VALIDATION=warn` (default) counts and logs,
     # `enforce` refuses the step. Since runtime 2.22.0 (FR-40) the tally rides the worker
     # reply, so on `nodus_vm` (our default) `aindy_tool_args_validation_total` reaches the api's
-    # `/metrics` and the warn WARNING the api log (verified 2026-09-23). Read `outcome="invalid"`
-    # over real use; flip to `enforce` when it stays absent — the owner's call.
+    # `/metrics` and the warn WARNING the api log (verified 2026-09-23). **This stack runs
+    # `enforce` since 2026-09-26** (owner, after 38 steps / 11 runs with zero `invalid`; wired in
+    # compose — `.env` alone never reaches the process). A new tool's schema must be right before
+    # it ships: under enforce a mismatch refuses the step. It checks shape, not truth.
     # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
     # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
     # `register_syscalls` — which do not exist. Grepping for them returns nothing, which

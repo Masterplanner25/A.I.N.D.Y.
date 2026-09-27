@@ -143,6 +143,12 @@ services:
       # (`planner_system_prompt`). Set in .env for the evidence run the runtime's default flip
       # waits on (APP_HANDOFF_v2.24.0 §8 ask 1). The nodus_vm worker inherits it from this process.
       AINDY_PLAN_STEP_REFERENCES: "${AINDY_PLAN_STEP_REFERENCES:-}"
+      # FR-33/FR-40: `off` | `warn` (the runtime's default, and this default when unset) |
+      # `enforce`, which refuses a step whose args fail the tool's args_schema before dispatch.
+      # Owner, 2026-09-26: enforce here, after 38 steps / 11 runs with zero `invalid`. It checks
+      # shape, not truth: an invented ID of the right type still passes. The nodus_vm worker
+      # inherits it from this process.
+      AINDY_TOOL_ARGS_VALIDATION: "${AINDY_TOOL_ARGS_VALIDATION:-}"
       # ── Shadow / advisory flags (LIVE_VERIFICATION_SCOPE phase 2c) ──────────────
       # These MUST be declared here to reach the container. Compose reads .env for
       # interpolation only — a variable set in .env but absent from this block is

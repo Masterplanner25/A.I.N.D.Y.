@@ -120,6 +120,22 @@ def _get_user_tasks_for_scoring(user_id: str, db: Session) -> list[dict]:
     return _dispatch_task_syscall(user_id, db).get("tasks", [])
 
 
+def _not_yet_due(task: dict, now: datetime | None = None) -> bool:
+    """A pending task whose due date is still in the future — planned work, not a miss.
+
+    Owner's call, 2026-09-26 (option B): decision_efficiency and masterplan_progress are both
+    completed ÷ all tasks, so every task planned counted as a miss the moment it was created. That
+    day's agent planning took the master score 54.9 → 39.1 while nothing was late (11 of 15
+    pending tasks were not yet due). Such a task stays out of both ratios until its date arrives.
+    A task with no due date, or one already started (`in_progress`), still counts: open-ended work
+    is owed now.
+    """
+    if task.get("status") != "pending":
+        return False
+    due = _parse_task_end_time(task.get("due_date"))
+    return due is not None and due > (now or datetime.now(timezone.utc))
+
+
 @contextmanager
 def orchestrator_score_context():
     token = _ORCHESTRATOR_ACTIVE.set(True)
@@ -252,6 +268,7 @@ def calculate_decision_efficiency(user_id: str, db: Session) -> tuple:
 
     Formula:
       completion_rate = completed / (completed + pending + in_progress)
+        — a pending task not yet due is left out (`_not_yet_due`, owner 2026-09-26)
       arm_avg = average (architecture_score + integrity_score) / 2 in last 14 days
       arm_quality = arm_avg / 10  (0-1 scale)
       score = (completion_rate × 60) + (arm_quality × 40)
@@ -262,11 +279,12 @@ def calculate_decision_efficiency(user_id: str, db: Session) -> tuple:
         from apps.arm.public import get_analysis_quality_signals
 
         tasks = _get_user_tasks_for_scoring(user_id, db)
+        now = datetime.now(timezone.utc)
 
         completed = sum(1 for task in tasks if task.get("status") == "completed")
         pending = sum(
             1 for task in tasks
-            if task.get("status") in {"pending", "in_progress"}
+            if task.get("status") in {"pending", "in_progress"} and not _not_yet_due(task, now)
         )
 
         total = completed + pending
@@ -426,6 +444,7 @@ def calculate_masterplan_progress(user_id: str, db: Session) -> tuple:
 
     Formula:
       completion_pct = completed_tasks / total_tasks
+        — a pending task not yet due is left out (`_not_yet_due`, owner 2026-09-26)
       schedule_score = sigmoid(days_ahead_behind, midpoint=0, steepness=0.05)
         positive (ahead) → score > 50
         negative (behind) → score < 50
@@ -448,7 +467,11 @@ def calculate_masterplan_progress(user_id: str, db: Session) -> tuple:
         if not plan:
             return 50.0, 0
 
-        tasks = _get_user_tasks_for_scoring(user_id, db)
+        now = datetime.now(timezone.utc)
+        tasks = [
+            task for task in _get_user_tasks_for_scoring(user_id, db)
+            if not _not_yet_due(task, now)
+        ]
         total = len(tasks)
         completed = sum(1 for task in tasks if task.get("status") == "completed")
 

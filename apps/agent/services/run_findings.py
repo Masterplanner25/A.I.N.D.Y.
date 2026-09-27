@@ -61,6 +61,39 @@ def step_findings(tool_name: str, result: Any) -> str | None:
     return None
 
 
+def _referenced_steps(value: Any) -> set[int]:
+    """Every `{"$from_step": N}` step index anywhere inside a plan step's args."""
+    found: set[int] = set()
+    if isinstance(value, dict):
+        if "$from_step" in value and isinstance(value.get("$from_step"), int):
+            found.add(value["$from_step"])
+        for inner in value.values():
+            found |= _referenced_steps(inner)
+    elif isinstance(value, list):
+        for inner in value:
+            found |= _referenced_steps(inner)
+    return found
+
+
+def steps_already_saved(plan_steps: Iterable[dict], step_status: dict[int, str]) -> set[int]:
+    """Steps whose result a SUCCESSFUL `memory.write` in the same run already stored by reference.
+
+    Owner, 2026-09-26: run `19dcf508` stored step 0's research through
+    `memory.write {"content": {"$from_step": 0, …}}`, and the completion hook then saved the same
+    research again. The completion hook leaves these out. The references are read from the PLAN's
+    args, because the recorded `tool_args` are already resolved. Plan position and `step_index`
+    coincide for plans made only of tool steps, which is every plan this app's planner writes.
+    """
+    saved: set[int] = set()
+    for index, step in enumerate(plan_steps or []):
+        if not isinstance(step, dict) or step.get("tool") != "memory.write":
+            continue
+        if str(step_status.get(index) or "").lower() != "success":
+            continue
+        saved |= _referenced_steps(step.get("args"))
+    return saved
+
+
 def build_findings_digest(steps: Iterable[dict]) -> str:
     """Every successful step's findings, labelled by tool, capped at MAX_FINDINGS_CHARS.
 
