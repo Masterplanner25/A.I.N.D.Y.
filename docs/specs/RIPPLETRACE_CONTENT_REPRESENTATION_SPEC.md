@@ -8,6 +8,8 @@ owner: "app-team"
 
 # RippleTrace holds references to your work, not a representation of it
 
+> **2026-09-27:** the §5 options and §6 questions are taken up in [`WORK_MODEL_SPEC.md`](./WORK_MODEL_SPEC.md) §5: all three options, in order, bounded, as phase B beneath the Work model.
+
 **Status:** DRAFT. Nothing built. Written 2026-09-07, the day RippleTrace produced its first
 three strategies and they all said the same thing.
 
