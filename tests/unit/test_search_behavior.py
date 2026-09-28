@@ -389,3 +389,81 @@ def test_leadgen_preview_search_node_end_to_end(monkeypatch, db_session, user_id
     result = out["output_patch"]["leadgen_preview_search_result"]
     assert result["results"][0]["company"] == "Lead Co"
     assert result["results"][0]["title"] == "Lead Co"
+
+
+def _two_leads(monkeypatch, leadgen_service):
+    monkeypatch.setattr(leadgen_service, "is_pipeline_active", lambda: False)
+    monkeypatch.setattr(
+        leadgen_service, "run_ai_search",
+        lambda q, user_id=None, db=None: [
+            {"company": "First", "url": "https://first.io", "context": "c1"},
+            {"company": "Second", "url": "https://second.io", "context": "c2"},
+        ],
+    )
+    monkeypatch.setattr(
+        leadgen_service, "score_lead",
+        lambda lead: {
+            "fit_score": 70, "intent_score": 70, "data_quality_score": 70,
+            "overall_score": 70, "reasoning": "ok",
+        },
+    )
+
+
+def test_outside_a_pipeline_each_lead_leaves_a_typed_memory_note(monkeypatch, db_session, user_id):
+    """Run 195777b0: the agent's worker is outside a pipeline, the only caller that reaches the note.
+
+    The note was written without `node_type`, `memory_nodes.node_type` is NOT NULL, and the step
+    failed after saving its first lead, three times over on retry.
+    """
+    from apps.search.services import leadgen_service
+
+    notes = []
+    monkeypatch.setattr(leadgen_service, "create_memory_node", lambda **kw: notes.append(kw))
+    _two_leads(monkeypatch, leadgen_service)
+
+    results = leadgen_service.create_lead_results(db_session, "agents", user_id=user_id)
+
+    assert len(results) == 2
+    assert [n["node_type"] for n in notes] == ["outcome", "outcome"]
+
+
+def test_a_failed_memory_note_does_not_lose_the_leads(monkeypatch, db_session, user_id):
+    from apps.search.models.leadgen_model import LeadGenResult
+    from apps.search.services import leadgen_service
+
+    def refuse(**kw):
+        raise RuntimeError("memory_nodes.node_type is NOT NULL")
+
+    monkeypatch.setattr(leadgen_service, "create_memory_node", refuse)
+    _two_leads(monkeypatch, leadgen_service)
+
+    results = leadgen_service.create_lead_results(db_session, "agents", user_id=user_id)
+
+    assert {row.company for row, _ in results} == {"First", "Second"}
+    assert {r.company for r in db_session.query(LeadGenResult).all()} == {"First", "Second"}
+
+
+def test_a_lead_is_saved_once_per_url(monkeypatch, db_session, user_id):
+    """A retried step or a repeated search re-scores the saved lead instead of adding a copy."""
+    from apps.search.models.leadgen_model import LeadGenResult
+    from apps.search.services import leadgen_service
+
+    monkeypatch.setattr(leadgen_service, "create_memory_node", lambda **kw: None)
+    _two_leads(monkeypatch, leadgen_service)
+    first = leadgen_service.create_lead_results(db_session, "agents", user_id=user_id)
+    ids = {row.company: row.id for row, _ in first}
+
+    monkeypatch.setattr(
+        leadgen_service, "score_lead",
+        lambda lead: {
+            "fit_score": 40, "intent_score": 40, "data_quality_score": 40,
+            "overall_score": 40, "reasoning": "re-scored",
+        },
+    )
+    again = leadgen_service.create_lead_results(db_session, "platforms", user_id=user_id)
+
+    rows = db_session.query(LeadGenResult).all()
+    assert len(rows) == 2
+    assert {row.company: row.id for row, _ in again} == ids
+    assert {r.overall_score for r in rows} == {40}
+    assert {r.query for r in rows} == {"platforms"}

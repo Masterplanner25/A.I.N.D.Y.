@@ -286,34 +286,61 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
             data_quality_score=score.get("data_quality_score"),
         )
 
-        db_entry = LeadGenResult(
-            query=query,
-            user_id=uuid.UUID(str(user_id)) if user_id else None,
-            company=lead["company"],
-            url=lead["url"],
-            context=lead["context"],
-            fit_score=score["fit_score"],
-            intent_score=score["intent_score"],
-            data_quality_score=score["data_quality_score"],
-            overall_score=score["overall_score"],
-            reasoning=score["reasoning"],
-            # LeadGenResult.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
-            created_at=datetime.now(timezone.utc)
+        fields = {
+            "query": query,
+            "company": lead["company"],
+            "context": lead["context"],
+            "fit_score": score["fit_score"],
+            "intent_score": score["intent_score"],
+            "data_quality_score": score["data_quality_score"],
+            "overall_score": score["overall_score"],
+            "reasoning": score["reasoning"],
+        }
+        user_uuid = uuid.UUID(str(user_id))
+        # One lead per url per user. A retried step or a repeated search used to save the same page
+        # again (run 195777b0 left three Onereach rows), and `leadgen.act` dedups by lead id, so each
+        # copy would have been drafted to. A lead already saved is re-scored in place; its
+        # hand-entered contact and its outreach history stay attached to the one row.
+        db_entry = (
+            db.query(LeadGenResult)
+            .filter(LeadGenResult.user_id == user_uuid, LeadGenResult.url == lead["url"])
+            .order_by(LeadGenResult.id)
+            .first()
         )
-
-        db.add(db_entry)
+        if db_entry is not None:
+            for key, value in fields.items():
+                setattr(db_entry, key, value)
+        else:
+            db_entry = LeadGenResult(
+                user_id=user_uuid,
+                url=lead["url"],
+                # LeadGenResult.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+                created_at=datetime.now(timezone.utc),
+                **fields,
+            )
+            db.add(db_entry)
         db.commit()
         db.refresh(db_entry)
 
-        # 🧠 Log symbolic memory node
+        # 🧠 Log symbolic memory node. Reached only outside a pipeline, which until 2026-09-28 meant
+        # never: the Search page runs inside one. The agent's `leadgen.search` runs in the Nodus
+        # worker, outside one, and its first call (run 195777b0) failed here because `node_type` was
+        # not passed and `memory_nodes.node_type` is NOT NULL. The step was retried, and each retry
+        # saved the first lead again before failing. A note is a side effect, so it may not undo a
+        # lead that is already scored and saved.
         if not is_pipeline_active():
-            create_memory_node(
-                content=f"Lead Discovered: {lead['company']} | {lead['context']} | Score: {score['overall_score']}",
-                source="leadgen",
-                tags=["leadgen", "aindy", "infinity", "ai-search"],
-                db=db,
-                user_id=user_id,
-            )
+            try:
+                create_memory_node(
+                    content=f"Lead Discovered: {lead['company']} | {lead['context']} | Score: {score['overall_score']}",
+                    source="leadgen",
+                    tags=["leadgen", "aindy", "infinity", "ai-search"],
+                    db=db,
+                    user_id=user_id,
+                    node_type="outcome",
+                )
+            except Exception as exc:
+                db.rollback()
+                logger.warning("[LeadGen] memory note for %s failed (non-fatal): %s", lead["company"], exc)
 
         logger.info("[LeadGen] Logged %s (%s)", lead["company"], score["overall_score"])
         results.append((db_entry, search_score))
