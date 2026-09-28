@@ -147,7 +147,13 @@ def run_ai_search(query: str, user_id: str = None, db=None):
     example_results = []
     try:
         payload = search_leads(query, db=db, user_id=user_id, max_results=3)
-        example_results = payload.get("results") or []
+        # Only rows that point somewhere are leads. `search_leads` answers a failed or empty
+        # retrieval with a url-less "External Search" row for its preview surface; scored and
+        # saved, that row became a lead named "External Search" (reachable from the agent's
+        # `leadgen.search` since 2026-09-28).
+        example_results = [row for row in (payload.get("results") or []) if row.get("url")]
+        if payload.get("retrieval_error") and not example_results:
+            raise RuntimeError(payload["retrieval_error"])
     except Exception as e:
         retrieval_failed = e
         logger.warning("[LeadGen] External search failed: %s", e)
@@ -197,34 +203,6 @@ def run_ai_search(query: str, user_id: str = None, db=None):
             logging.warning(f"LeadGen memory write failed: {e}")
 
     return example_results
-
-
-def _extract_leads_from_text(text: str, max_results: int = 3) -> list[dict]:
-    urls = re.findall(r"https?://[^\s,;]+", text)
-    leads = []
-    for url in urls[:max_results]:
-        leads.append(
-            {
-                "company": url.replace("https://", "").split("/")[0],
-                "url": url,
-                "context": f"Found via text search: {text[:100]}",
-            }
-        )
-    return leads
-
-
-def _extract_leads_from_response(payload: dict, max_results: int = 3) -> list[dict]:
-    results = payload.get("results", []) if payload else []
-    leads = []
-    for entry in results[:max_results]:
-        leads.append(
-            {
-                "company": entry.get("title") or entry.get("company", ""),
-                "url": entry.get("url") or entry.get("href"),
-                "context": entry.get("snippet") or entry.get("description") or "",
-            }
-        )
-    return leads
 
 
 def score_lead(lead_data: dict):
