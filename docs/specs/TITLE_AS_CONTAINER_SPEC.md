@@ -8,6 +8,8 @@ owner: "app-team"
 
 # The title is a container, and the system reads it as a bag of words
 
+> **2026-09-27:** open question 3 (*who owns a container*) and §4b's *"decide ownership later"* are answered in [`WORK_MODEL_SPEC.md`](./WORK_MODEL_SPEC.md) §3.3: RippleTrace keeps the container, masterplan owns the Work. The status line below predates §4b, which was built.
+
 **Status:** DRAFT. Nothing built. Written 2026-09-07, the day the corpus-aware theme fix
 (#306) was deployed and the strategies still said `chatgpt`.
 

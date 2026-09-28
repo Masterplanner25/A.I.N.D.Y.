@@ -8,6 +8,8 @@ owner: "app-team"
 
 # Starting position — accounting for what happened before the system
 
+> **2026-09-27:** a Work ([`WORK_MODEL_SPEC.md`](./WORK_MODEL_SPEC.md)) is the natural `basis` a declared baseline cites (§7 there). The gate below was *"a plan to attach it to"*: the owner's real MasterPlan has existed since the 2026-09-05 lock, and `GENESIS-TURN-LATENCY-1` closed 2026-09-16. FR-15 (distributed mode) is still open on the runtime side and does not affect a single-instance stack.
+
 **Status:** spec, not started. Written 2026-08-16.
 
 > **Implementation is deliberately gated on

@@ -8,6 +8,8 @@ owner: "app-team"
 
 # Worldview and Knowledge
 
+> **2026-09-27:** open decision 4 (*where knowledge/work lives*) is answered for layer 4 in [`WORK_MODEL_SPEC.md`](./WORK_MODEL_SPEC.md) §3: a small declared store for intent, projections over existing domains for measurement. Layers 2–3 (positions) stay here.
+
 **Origin:** an owner conversation. §2 is audited fact; the rest is proposal.
 
 **Framing constraint, stated first because it changes the design.** A.I.N.D.Y. is a *persistent
