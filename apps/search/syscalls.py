@@ -29,8 +29,10 @@ def _handle_leadgen_search(payload: dict, ctx: SyscallContext) -> dict:
         raw = create_lead_results(db, query, user_id=ctx.user_id)
         serialized = [
             {
+                "id": row.id,
                 "company": row.company,
                 "url": row.url,
+                "context": row.context,
                 "fit_score": row.fit_score,
                 "intent_score": row.intent_score,
                 "data_quality_score": row.data_quality_score,

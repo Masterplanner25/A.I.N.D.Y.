@@ -45,8 +45,9 @@ def register() -> None:
         "leadgen.search",
         risk="medium",
         description=(
-            "Search for B2B leads matching a query; does not contact anyone. Returns "
-            "{leads[], count}."
+            "Search for B2B leads matching a query. Each lead is scored (fit, intent, data "
+            "quality) and saved, so leadgen.act can draft outreach for the qualified ones later. "
+            "Does not contact anyone. Returns {leads[], count}."
         ),
         args_schema={"required": ["query"], "properties": {"query": {"type": "string"}}},
         capability="tool:leadgen.search",
@@ -112,8 +113,12 @@ def search_query(args: dict, user_id: str, db) -> dict:
 
 
 def leadgen_search(args: dict, user_id: str, db) -> dict:
-    data = _dispatch_tool_syscall("sys.v1.leadgen.search_ai", args, user_id, capability="leadgen.search_ai")
-    return {"leads": data.get("leads", []), "count": data.get("count", 0)}
+    # The SCORED and SAVED search, the same one the Search page uses. Until 2026-09-28 this called
+    # `sys.v1.leadgen.search_ai`, the raw twin: leads came back unscored (`score: null`), nothing
+    # was saved, and `leadgen.act` (which works from saved leads) could never follow up on
+    # anything the agent found (run 8cdb97ef).
+    data = _dispatch_tool_syscall("sys.v1.leadgen.search", args, user_id, capability="leadgen.search")
+    return {"leads": data.get("search_results", []), "count": data.get("count", 0)}
 
 
 def research_query(args: dict, user_id: str, db) -> dict:

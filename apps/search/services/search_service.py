@@ -335,20 +335,66 @@ def _extract_leads_from_response(payload: Any, max_results: int = 3) -> list[dic
     return []
 
 
+_URL = re.compile(r"https?://[^\s)]+")
+_URL_LINE = re.compile(r"^\s*(https?://[^\s)]+)\s*$")
+# A result title ends in its site: "AEO for Developer Tools - Infrasity", "… | Fast.io".
+_SITE_SUFFIX = re.compile(r"\s(?:[-–—|])\s([^-–—|]{2,40})$")
+LEAD_CONTEXT_CHARS = 240
+
+
+def _domain_company(url: str) -> str:
+    domain = urlparse(url).netloc or url
+    return domain.replace("www.", "").split(".")[0].replace("-", " ").title() or "Unknown"
+
+
 def _extract_leads_from_text(text: str, max_results: int = 3) -> list[dict[str, str]]:
-    urls = re.findall(r"https?://[^\s)]+", text or "")
-    seen = set()
+    """Leads from the web search's text: one per distinct URL, each with ITS OWN context.
+
+    The search text is a run of result blocks, a title line, then the URL line, then that result's
+    text. Until 2026-09-28 every lead's context was the first 240 characters of the WHOLE text
+    (so all three leads in run 8cdb97ef carried AMAX's snippet) and its company was the first
+    word of the domain ("Linkedin" for a LinkedIn post, "Fast" for fast.io's article). Now a lead
+    takes the title line above its URL, the text below it up to the next result, and a company
+    from the title's site suffix before falling back to the domain. A URL inside a paragraph gets
+    the text around it.
+    """
+    lines = (text or "").splitlines()
+    url_lines = [i for i, line in enumerate(lines) if _URL_LINE.match(line)]
+    seen: set[str] = set()
     leads: list[dict[str, str]] = []
-    for url in urls:
+
+    for n, i in enumerate(url_lines):
+        url = _URL_LINE.match(lines[i]).group(1)
         if url in seen:
             continue
         seen.add(url)
-        domain = urlparse(url).netloc or url
-        company = domain.replace("www.", "").split(".")[0].replace("-", " ").title()
+        title = lines[i - 1].strip() if i > 0 else ""
+        # The block ends where the next result's title line begins.
+        end = url_lines[n + 1] - 1 if n + 1 < len(url_lines) else len(lines)
+        body = " ".join(line.strip() for line in lines[i + 1:end] if line.strip() and line.strip() != "...")
+        suffix = _SITE_SUFFIX.search(title)
         leads.append({
-            "company": company or "Unknown",
+            "company": suffix.group(1).strip() if suffix else _domain_company(url),
+            "title": title or _domain_company(url),
             "url": url,
-            "context": (text or "")[:240],
+            "context": (body or title)[:LEAD_CONTEXT_CHARS],
+        })
+        if len(leads) >= max_results:
+            return leads
+
+    # URLs inside prose, not on their own line: the text around each one.
+    raw = text or ""
+    for match in _URL.finditer(raw):
+        url = match.group(0)
+        if url in seen:
+            continue
+        seen.add(url)
+        start = max(0, match.start() - LEAD_CONTEXT_CHARS // 2)
+        window = raw[start:match.end() + LEAD_CONTEXT_CHARS // 2].replace("\n", " ").strip()
+        leads.append({
+            "company": _domain_company(url),
+            "url": url,
+            "context": window[:LEAD_CONTEXT_CHARS],
         })
         if len(leads) >= max_results:
             break
@@ -359,6 +405,7 @@ def search_leads(query: str, db=None, user_id: str | None = None, max_results: i
     def _build(memory: dict[str, Any]) -> dict[str, Any]:
         raw = ""
         leads: list[dict[str, str]] = []
+        retrieval_error: str | None = None
         try:
             from apps.search.services.research_engine import web_search
 
@@ -374,6 +421,7 @@ def search_leads(query: str, db=None, user_id: str | None = None, max_results: i
                 leads = _extract_leads_from_text(raw, max_results=max_results)
         except Exception as exc:
             logger.warning("search_leads external retrieval failed: %s", exc)
+            retrieval_error = str(exc) or type(exc).__name__
 
         if not leads:
             leads = [
@@ -395,6 +443,10 @@ def search_leads(query: str, db=None, user_id: str | None = None, max_results: i
             "results": enriched,
             "memory": memory,
             "raw_excerpt": (raw or "")[:1000],
+            # The preview surface shows the url-less "External Search" row above; the scored
+            # path (`run_ai_search`) must not save it as a lead, and reads this to tell a
+            # failed retrieval from an empty one.
+            "retrieval_error": retrieval_error,
         }
 
     return execute_durable_search(
