@@ -69,7 +69,7 @@ route bug, a flow bug, a syscall bug, or a runtime pipeline bug. All are in play
 | Component | Repo | Role |
 |---|---|---|
 | Runtime API | `aindy-runtime` | FastAPI server, syscall dispatcher, flow engine, scheduler |
-| 16 domain apps | A.I.N.D.Y. | Routes, flows, models, bootstrap |
+| A.I.N.D.Y. (16 domains) | A.I.N.D.Y. | Routes, flows, models, bootstrap |
 | Product UI | `client/` | React SPA — the product surface |
 | Platform UI | **both — unresolved** | `aindy-runtime` serves one at `/platform/`; this repo also builds `client/platform.html`. See the 2026-08-22 status entry and FR-21. |
 | Postgres | docker-compose | Persistent state |

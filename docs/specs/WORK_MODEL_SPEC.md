@@ -42,7 +42,7 @@ seeing any of it**. That is new here (§3.2, §6).
 
 | Where | What it holds |
 |---|---|
-| **MasterPlan** `structure_json.key_assets` | five strings: *"Nodus (orchestration DSL)", "Aindy-runtime (self-hosted runtime for AI agents)", "A.I.N.D.Y. (persistent execution partner)", "30+ companion packages", "16 domain apps on Aindy-runtime"*. No record behind any of them, no relation between them, and not passed to the planner (`masterplan.planning_context` sends IDs and strategies only) |
+| **MasterPlan** `structure_json.key_assets` | five strings: *"Nodus (orchestration DSL)", "Aindy-runtime (self-hosted runtime for AI agents)", "A.I.N.D.Y. (persistent execution partner)", "30+ companion packages", "16 domain apps on Aindy-runtime"* (the last was wrong, by the owner's correction on 2026-09-28: A.I.N.D.Y. is one platform with 16 domains; removed from the live plan that day). No record behind any of them, no relation between them, and not passed to the planner (`masterplan.planning_context` sends IDs and strategies only) |
 | **MasterPlan** objectives | three generic domains: *Ethical AI Framework, Partnership Development, Platform Enablement* |
 | **RippleTrace** | 214 drop points (DEV 143, Substack 46, YouTube 15, Medium 10), Feb 2025 → May 2026: title, URL, platform, date. **No text.** Two confirmed containers: *2025 ChatGPT Case Study Series* (42 drops at decision) and *2025 ChatGPT/AI The Duality Of Progress* (53). Four content feeds, all `ok` |
 | **Identity** | a profile with every field empty; **0 observations**, `identity_signals` 0 rows |
