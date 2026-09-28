@@ -48,7 +48,27 @@ def register() -> None:
     _register_flows()
     _register_flow_results()
     _register_flow_plans()
+    _register_jobs()
     _register_health_check()
+
+
+def _register_jobs() -> None:
+    from AINDY.platform_layer.registry import register_job
+
+    # Read by masterplan's market proposals (MARKET_MODEL_SPEC §4.1): saved leads nobody acted on
+    # are proposed as market entities, and retired from leads once the owner answers.
+    register_job("search.unactioned_leads", _unactioned_leads)
+    register_job("search.retire_lead", _retire_lead)
+
+
+def _unactioned_leads(*args, **kwargs):
+    from apps.search.services.leadgen_service import unactioned_leads
+    return unactioned_leads(*args, **kwargs)
+
+
+def _retire_lead(*args, **kwargs):
+    from apps.search.services.leadgen_service import retire_lead
+    return retire_lead(*args, **kwargs)
 
 
 def _register_models() -> None:

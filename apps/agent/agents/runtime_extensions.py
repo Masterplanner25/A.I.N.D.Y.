@@ -226,6 +226,28 @@ def _build_work_context_block(user_id, db) -> str:
         return ""
 
 
+def _build_market_context_block(user_id, db) -> str:
+    """Who the owner's work is for (MARKET_MODEL_SPEC §6): confirmed segments and entries only.
+
+    Run 8b75d75d (2026-09-28) planned a marketing strategy with no market in its context, reached
+    for `leadgen.search` to answer a market question, and saved a competitor's listicle, an
+    analyst's article and a trade-press story as leads. Every status is printed, because a planner
+    told a hypothesis is a fact plans outreach where it should gather evidence. Read through
+    `masterplan.market_context`; best-effort.
+    """
+    try:
+        from AINDY.platform_layer.registry import get_job
+
+        market_context = get_job("masterplan.market_context")
+        if market_context is None:
+            return ""
+        ctx = market_context(user_id=user_id, db=db)
+        return (ctx or {}).get("block") or ""
+    except Exception as exc:
+        logger.warning("[planner_context] market context skipped: %s", exc)
+        return ""
+
+
 def build_planner_context(context: dict) -> dict:
     """The planner's system prompt: base prompt + the user's Infinity context.
 
@@ -265,6 +287,7 @@ def build_planner_context(context: dict) -> dict:
             _build_date_line()
             + _build_plan_context_block(user_id, db)
             + _build_work_context_block(user_id, db)
+            + _build_market_context_block(user_id, db)
             + _build_kpi_context_block(user_id, db)
             + _build_reasoning_context_block(user_id, db)
         )

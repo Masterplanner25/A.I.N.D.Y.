@@ -41,6 +41,7 @@ _SHAPED = {
     "freelance.performance": ("apps.freelance.agents.tools", "freelance_performance"),
     "leadgen.search": ("apps.search.agents.tools", "leadgen_search"),
     "leadgen.act": ("apps.search.agents.tools", "leadgen_act"),
+    "market.propose": ("apps.masterplan.agents.tools", "market_propose"),
 }
 
 

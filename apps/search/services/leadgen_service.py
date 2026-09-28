@@ -349,6 +349,43 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
     return results
 
 
+def unactioned_leads(*, user_id: str, db: Session) -> list[dict]:
+    """Saved leads no outreach was ever made for. Masterplan proposes them as market entities
+    (`MARKET_MODEL_SPEC.md` §4.1): the first three the agent saved were a competitor's listicle, an
+    analyst's article and a trade-press story, market research filed as leads (run 8b75d75d)."""
+    from apps.search.models.lead_action import LeadAction
+
+    uid = uuid.UUID(str(user_id))
+    acted = {row.lead_id for row in db.query(LeadAction.lead_id).filter(LeadAction.lead_id.isnot(None))}
+    rows = (
+        db.query(LeadGenResult)
+        .filter(LeadGenResult.user_id == uid)
+        .order_by(LeadGenResult.id.asc())
+        .all()
+    )
+    return [
+        {"id": row.id, "company": row.company, "url": row.url, "context": row.context,
+         "query": row.query, "overall_score": row.overall_score}
+        for row in rows
+        if row.id not in acted
+    ]
+
+
+def retire_lead(*, user_id: str, lead_id: int, db: Session) -> bool:
+    """Remove a saved lead the owner has re-filed as market research. Never one with outreach."""
+    from apps.search.models.lead_action import LeadAction
+
+    uid = uuid.UUID(str(user_id))
+    row = db.query(LeadGenResult).filter(LeadGenResult.id == lead_id, LeadGenResult.user_id == uid).first()
+    if row is None:
+        return False
+    if db.query(LeadAction.id).filter(LeadAction.lead_id == row.id).first() is not None:
+        return False
+    db.delete(row)
+    db.flush()
+    return True
+
+
 def list_leads(db: Session, user_id: str) -> list[dict]:
     """Return all persisted LeadGenResult rows for a user, newest first."""
     from apps.search.models.leadgen_model import LeadGenResult
