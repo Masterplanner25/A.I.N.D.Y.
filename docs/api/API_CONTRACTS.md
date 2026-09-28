@@ -96,6 +96,7 @@ Mutable domain features. All paths below are prefixed with `/apps`.
 - `apps/tasks/routes/task_router.py` (router prefix `/tasks`) **[JWT auth required]** ? `/apps/tasks/create`, `/apps/tasks/start`, etc.
 - `apps/masterplan/routes/goals_router.py` (router prefix `/goals`) **[JWT auth required]** ? `/apps/goals/`
 - `apps/masterplan/routes/masterplan_router.py` (router prefix `/masterplans`) **[JWT auth required]** ? `/apps/masterplans/`
+- `apps/masterplan/routes/works_router.py` (router prefix `/works`) **[JWT auth required]** → `/apps/works`, `/apps/works/proposals`, etc. The Work model (`WORK_MODEL_SPEC.md`); registered by `apps.masterplan.bootstrap`.
 - `apps/masterplan/routes/genesis_router.py` (router prefix `/genesis`) **[JWT auth required]** ? `/apps/genesis/session`, `/apps/genesis/message`, etc.
 - `apps/automation/routes/automation_router.py` (router prefix `/automation`) **[JWT auth required]** ? `/apps/automation/logs`, etc.
 - `AINDY/routes/memory_router.py` (router prefix `/memory`) **[JWT auth required]** ? `/apps/memory/nodes`, `/apps/memory/recall`, etc.
