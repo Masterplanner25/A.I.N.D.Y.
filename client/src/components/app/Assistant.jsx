@@ -12,6 +12,7 @@ import { Toast } from "../shared/Toast";
 import { useToast } from "../../utils/useToast";
 import { safeMap } from "../../utils/safe";
 import Genesis from "./Genesis";
+import WorkPanel from "./WorkPanel";
 import StepResult from "./StepResult";
 import { buildFindingsDigest, composeFollowUpGoal, splitGoal } from "../../utils/runFindings";
 
@@ -260,11 +261,14 @@ export default function Assistant() {
 
   // Mode: one face, two engines — "agent" (do X) or "genesis" (author/revise the plan).
   // Driven by ?mode=genesis so it's linkable (e.g. the MasterPlan "Initialize via Genesis" entry).
-  const mode = searchParams.get("mode") === "genesis" ? "genesis" : "agent";
+  // Three modes, one face: "agent" (do X), "genesis" (author the plan), "work" (what you have made
+  // and how it fits: WORK_MODEL_SPEC §4).
+  const modeParam = searchParams.get("mode");
+  const mode = modeParam === "genesis" || modeParam === "work" ? modeParam : "agent";
   // Switching modes keeps `?run=`, so going to Plan and back returns to the same run.
   const setMode = (m) => {
     const next = new URLSearchParams(searchParams);
-    if (m === "genesis") next.set("mode", "genesis");
+    if (m === "genesis" || m === "work") next.set("mode", m);
     else next.delete("mode");
     setSearchParams(next, { replace: true });
   };
@@ -274,6 +278,7 @@ export default function Assistant() {
       {safeMap([
         ["agent", "Agent"],
         ["genesis", "Plan"],
+        ["work", "Work"],
       ], ([m, label]) => (
         <button
           key={m}
@@ -287,6 +292,18 @@ export default function Assistant() {
       ))}
     </div>
   );
+
+  // ── Work mode: what you have made, in your words, and how it fits ──
+  if (mode === "work") {
+    return (
+      <div className="min-h-screen bg-[#09090b] text-zinc-100 flex justify-center">
+        {modeBar}
+        <div className="w-full max-w-2xl px-6 py-16">
+          <WorkPanel />
+        </div>
+      </div>
+    );
+  }
 
   // ── Plan mode: the Genesis plan-authoring engine, folded into the one face ──
   if (mode === "genesis") {
