@@ -56,11 +56,13 @@ def _register_routers() -> None:
     from AINDY.platform_layer.registry import register_router
     from apps.masterplan.routes.genesis_router import router as genesis_router
     from apps.masterplan.routes.goals_router import router as goals_router
+    from apps.masterplan.routes.works_router import router as works_router
     from apps.masterplan.routes.masterplan_router import router as masterplan_router
     from apps.masterplan.routes.score_router import router as score_router
 
     register_router(genesis_router)
     register_router(goals_router)
+    register_router(works_router)
     register_router(masterplan_router)
     register_router(score_router)
 
@@ -109,6 +111,8 @@ def _register_jobs() -> None:
     register_job("scheduler.masterplan_eta", _scheduler_recalculate_all_etas)
     # Read by the agent planner-context provider: the plan, phase and open strategies with IDs.
     register_job("masterplan.planning_context", _planning_context)
+    # The planner's "your work" block (WORK_MODEL_SPEC §6): confirmed and declared works only.
+    register_job("masterplan.work_context", _work_context)
 
 
 def _register_scheduled_jobs() -> None:
@@ -287,6 +291,11 @@ def _genesis_synthesize(*args, **kwargs):
 def _genesis_audit(*args, **kwargs):
     from apps.masterplan.services.genesis_ai import validate_draft_integrity
     return validate_draft_integrity(*args, **kwargs)
+
+
+def _work_context(*args, **kwargs):
+    from apps.masterplan.services.work_service import work_context
+    return work_context(*args, **kwargs)
 
 
 def _planning_context(*args, **kwargs):

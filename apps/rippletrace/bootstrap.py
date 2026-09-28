@@ -10,6 +10,7 @@ def register() -> None:
     _register_routers()
     _register_response_adapters()
     _register_syscalls()
+    _register_jobs()
     _register_flow_strategy()
     _register_flow_results()
     _register_required_flow_nodes()
@@ -126,6 +127,20 @@ def _register_scheduled_jobs() -> None:
         trigger="interval",
         trigger_kwargs={"minutes": DETECTION_JOB_INTERVAL_MINUTES},
     )
+
+
+def _register_jobs() -> None:
+    """Read by masterplan's Work proposals (`WORK_MODEL_SPEC` §4.1): the owner's confirmed series
+    become proposed Works. Through the job registry, so masterplan imports nothing of ours."""
+    from AINDY.platform_layer.registry import register_job
+
+    register_job("rippletrace.confirmed_containers", _confirmed_containers)
+
+
+def _confirmed_containers(*, user_id, db):
+    from apps.rippletrace.services.container_service import list_containers
+
+    return [c for c in list_containers(db, user_id) if c.get("status") == "confirmed"]
 
 
 def _register_syscalls() -> None:

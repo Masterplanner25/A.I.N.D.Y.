@@ -8,7 +8,7 @@ owner: "app-team"
 
 # The Work model — what you have made, and how it fits together
 
-**Status:** DRAFT. Nothing built. Written 2026-09-27 from the owner's question, after the agent's
+**Status:** phase A BUILT 2026-09-27 (#420); B and C not started. Written 2026-09-27 from the owner's question, after the agent's
 first week of real work on the MasterPlan.
 
 **The owner, which is the whole spec:**
@@ -136,10 +136,12 @@ over; six verbs cover the owner's own description above.
 - **Work → plan:** `work_objectives` (`work_id`, `objective_id`) and optionally a strategy. *"Nodus
   serves Platform Enablement."* This is the missing half of `objective_rollup`, which today counts
   hours toward an objective and cannot say *what* was built for it.
-- **Work → drop points:** a RippleTrace container gains a nullable `work_id`. The container stays
-  RippleTrace's (it is how drops are grouped, and how new drops join at ingest); the Work owns
-  intent. The two confirmed containers become the first two series Works. This answers
-  `TITLE_AS_CONTAINER` open question 3: RippleTrace holds the reference, masterplan holds the work.
+- **Work → drop points:** a series Work carries the container's id (`works.container_id`, a soft
+  reference). *Built 2026-09-27 this way round rather than as a `work_id` on the container: the link
+  lives with the domain that owns intent, and RippleTrace's table is untouched.* The container stays
+  RippleTrace's (it is how drops are grouped, and how new drops join at ingest). The two confirmed
+  containers are the first two series proposals. This answers `TITLE_AS_CONTAINER` open question 3:
+  RippleTrace holds the reference, masterplan holds the work.
 - **Work → published text:** through its drop points, once §5 stores the text.
 
 ### 3.4 History, not overwrite

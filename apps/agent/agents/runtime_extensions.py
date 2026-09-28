@@ -204,6 +204,28 @@ def _build_plan_context_block(user_id, db) -> str:
         return ""
 
 
+def _build_work_context_block(user_id, db) -> str:
+    """What the owner has made and how it fits (WORK_MODEL_SPEC §6): confirmed works only.
+
+    Owner, 2026-09-27: *"this system has no idea I'm the author of the 2025 ChatGPT Case Study
+    Series … no idea how aindy-runtime, A.I.N.D.Y., Nodus … fit together."* The marketing run of
+    2026-09-25 planned from general best practice because nothing told it the owner had already
+    published 214 pieces in this territory. Read through `masterplan.work_context`; best-effort.
+    """
+    try:
+        from AINDY.platform_layer.registry import get_job
+
+        work_context = get_job("masterplan.work_context")
+        if work_context is None:
+            return ""
+        ctx = work_context(user_id=user_id, db=db)
+        # Rendered by masterplan (`render_work_block`), so Collaborator shows the same text.
+        return (ctx or {}).get("block") or ""
+    except Exception as exc:
+        logger.warning("[planner_context] work context skipped: %s", exc)
+        return ""
+
+
 def build_planner_context(context: dict) -> dict:
     """The planner's system prompt: base prompt + the user's Infinity context.
 
@@ -242,6 +264,7 @@ def build_planner_context(context: dict) -> dict:
         kpi_context = (
             _build_date_line()
             + _build_plan_context_block(user_id, db)
+            + _build_work_context_block(user_id, db)
             + _build_kpi_context_block(user_id, db)
             + _build_reasoning_context_block(user_id, db)
         )

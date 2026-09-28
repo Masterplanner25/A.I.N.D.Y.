@@ -1,6 +1,6 @@
 ---
 title: "App HTTP REST API Reference"
-last_verified: "2026-09-10"
+last_verified: "2026-09-27"
 api_version: "1.0"
 status: current
 owner: "apps-team"
@@ -2473,6 +2473,70 @@ Start Task
 **Body:** name: string (required)
 
 **Response 200:** unspecified
+
+### Works
+
+What the owner has made, how the works relate, and which plan objectives they serve (`WORK_MODEL_SPEC.md`). A Work holds intent (summary in the owner's words, role, lifecycle), never measurement. Nothing is inferred into it: proposals are derived on demand and written only when the owner confirms them. Refusals are `{error: "work_refused", message}`.
+
+#### GET /apps/works
+List Works — every work, its links, its objectives, and the closed vocabularies (`kinds`, `roles`, `statuses`, `relations`)
+
+**Response 200:** works: [{id, name, kind, summary, role, status, started_on, ended_on, url, declared_target, container_id, provenance, created_at, objectives: [{id, name}]}], links: [{id, from_work_id, to_work_id, relation, note}], vocabulary
+
+#### POST /apps/works
+Declare a Work — `name` and `summary` required; `kind` (project · product · series · practice · publication · other, default project), `role` (creator · author · maintainer · contributor, default creator), `status` (active · finished · paused · planned, default active), `started_on`/`ended_on` (YYYY-MM-DD), `url`, `declared_target`
+
+**Response 200:** the work (`provenance: "declared"`); 422 on a missing summary or an unknown vocabulary value; 409 when a work of that name exists
+
+#### PATCH /apps/works/{work_id}
+Edit a Work — any field of `POST /apps/works`; changed fields are recorded in `work_revisions`, never overwritten silently
+
+**Parameters:** work_id (path): string
+
+**Response 200:** the work; 404 when not yours
+
+#### DELETE /apps/works/{work_id}
+Delete a Work, with its links, objective ties and revisions
+
+**Parameters:** work_id (path): string
+
+**Response 200:** deleted, id
+
+#### POST /apps/works/{work_id}/links
+Relate two Works — `{to_work_id, relation, note?}`; `relation` is one of built_on · executes · demonstrates · part_of · informs · precedes
+
+**Parameters:** work_id (path): string
+
+**Response 200:** the link; 422 on an unknown relation or a self-link; 409 when it exists; 404 when either work is not yours
+
+#### DELETE /apps/works/links/{link_id}
+Remove a relation
+
+**Parameters:** link_id (path): string
+
+**Response 200:** deleted, id
+
+#### PUT /apps/works/{work_id}/objectives
+Set the objectives a Work serves — `{objective_ids: [...]}`, replacing the current set; only objectives of the owner's own plans
+
+**Parameters:** work_id (path): string
+
+**Response 200:** work_id, objective_ids; 404 when an objective is not in your plan
+
+#### GET /apps/works/proposals
+Work proposals — what the system can already see and asks about: the active MasterPlan's `key_assets`, and the series confirmed in RippleTrace. Reads only; answered, dismissed and already-existing ones drop out
+
+**Response 200:** proposals: [{key, source: "key_asset" | "container", question, evidence, name, summary, kind, role, status, container_id}]
+
+#### POST /apps/works/proposals/confirm
+Confirm a proposal — `{key, name?, summary?, kind?, role?, status?}`; the owner's fields replace the suggestion, and a proposal with no description needs a `summary`
+
+**Response 200:** the work (`provenance: "confirmed"`); 404 when the proposal is no longer open; 422 without a summary
+
+#### POST /apps/works/proposals/dismiss
+Dismiss a proposal — `{key}`; it is not asked again
+
+**Response 200:** dismissed, key; 404 when the proposal is no longer open
 
 ### analytics
 
