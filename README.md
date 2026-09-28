@@ -7,7 +7,8 @@ happened, and lets the record change what it does next. It is built around the *
 Algorithm** — a scored model of how you actually execute — and everything else in this repository
 exists either to feed that algorithm or to act on what it says.
 
-**This repository is A.I.N.D.Y. itself:** sixteen domain applications and the client. It is *not*
+**This repository is A.I.N.D.Y. itself:** one platform, organised into sixteen domains (the
+`apps/` modules), and the client. It is *not*
 the runtime it executes on, and that difference matters more than it looks — see
 [Three layers, three names](#three-layers-three-names).
 
