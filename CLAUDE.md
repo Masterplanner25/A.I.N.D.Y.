@@ -86,7 +86,7 @@ profile-gated, and the runtime's rate limiter uses Redis storage with no fallbac
 
 This repo owns:
 
-- `apps/` — 16 domain app modules
+- `apps/` — A.I.N.D.Y.'s 16 domains, one module each
 - `client/` — React/Vite frontend
 - `aindy_plugins.json` — app-owned plugin manifest
 - `alembic/` — app-owned DB migrations
@@ -95,7 +95,11 @@ This repo owns:
 It does **not** own `AINDY/`. Runtime code, runtime-only entrypoints, and runtime-only
 docs live in `aindy-runtime` and are consumed as a published dependency.
 
-### 16 domain apps
+### 16 domains (one platform)
+
+**A.I.N.D.Y. is one app with 16 domains, not 16 apps** (owner, 2026-09-28). The code calls each
+`apps/<domain>/` module a "domain app" and the plugin machinery treats each as a unit, but that
+is packaging. Product-facing wording says domains.
 
 `tasks`, `analytics`, `arm`, `authorship`, `automation`, `autonomy`,
 `dashboard`, `freelance`, `identity`, `masterplan`, `memory`, `network_bridge`,
