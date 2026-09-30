@@ -234,6 +234,16 @@ individuals as leads is the owner's call, not a default.
   segment in Collaborator's Market mode.
 - Auto-suppress groups outcomes by `segment:<id>` when a lead has one, by query otherwise.
 
+**The judge, reworked the same day.** The first prompt asked for the verdict and called hiring for the
+problem "strong buyer evidence"; on job boards every result is, so the owner's first two searches saved
+13 of 13 at 80–90, including Vercel (building its own workflow product), OneTrust (a governance vendor),
+two digital agencies, and an agency under *regulated enterprise*. Now the model reports facts
+(`org_type`: end_user · vendor · agency · publisher · other; `matches_buyer`, including the buyer's
+organisation type; `problem_evidence`) with anchored scores, and `classify` decides: only a matching
+end user is a buyer; vendor → alternative, agency → intermediary, publisher → voice. The hiring query
+also carries the buyer's kind of organisation, and each search re-judges the segment's saved leads it
+did not return (≤ 20, none with outreach), so a lead saved by the old judge is re-filed.
+
 ---
 
 ## 6. What the agent sees

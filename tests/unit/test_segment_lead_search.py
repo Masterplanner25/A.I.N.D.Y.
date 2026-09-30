@@ -87,14 +87,16 @@ RESULTS = [
     {"title": "Broken", "url": "https://broken.example/", "snippet": "?"},
 ]
 
+# The judge reports facts; `classify` decides. Shapes as the reworked prompt returns them.
 VERDICTS = {
     "https://job-boards.greenhouse.io/openteams/jobs/4735509005": {
-        "is_buyer": True, "kind": "buyer", "organisation": "OpenTeams", "fit_score": 85, "intent_score": 80,
-        "data_quality_score": 70, "overall_score": 82, "reasoning": "Hiring to build an internal agent platform."},
+        "organisation": "OpenTeams", "org_type": "end_user", "matches_buyer": True, "problem_evidence": True,
+        "fit_score": 85, "intent_score": 80, "data_quality_score": 70, "overall_score": 88,
+        "reasoning": "Hiring to build an internal agent platform."},
     "https://www.gumloop.com/blog/ai-agent-orchestration-platform": {
-        "is_buyer": False, "kind": "alternative", "organisation": "Gumloop", "overall_score": 0,
-        "reasoning": "A vendor listing competing platforms."},
-    "https://cats.example/": {"is_buyer": False, "kind": "irrelevant", "organisation": "Cats", "reasoning": "Unrelated."},
+        "organisation": "Gumloop", "org_type": "vendor", "matches_buyer": False, "problem_evidence": False,
+        "overall_score": 10, "reasoning": "Sells an orchestration platform."},
+    "https://cats.example/": {"organisation": "Cats", "org_type": "other", "reasoning": "Unrelated."},
 }
 
 
@@ -130,7 +132,7 @@ def test_a_buyer_is_saved_with_its_segment_and_the_rest_are_not_leads(db, user, 
     out = segment_lead_search(db, user_id=user, segment=segment["id"], search=_search([]), judge=_judge)
 
     [lead] = db.query(LeadGenResult).all()
-    assert (lead.company, lead.segment_id, lead.overall_score) == ("OpenTeams", segment["id"], 82)
+    assert (lead.company, lead.segment_id, lead.overall_score) == ("OpenTeams", segment["id"], 88)
     assert (out["count"], out["proposed"], out["dropped"], out["failed"]) == (
         1, [{"kind": "alternative", "name": "Gumloop"}], 1, 1)
     [proposal] = market_service.list_proposals(db, user)["proposals"]
@@ -184,3 +186,87 @@ def test_suppression_groups_outcomes_by_segment_not_by_reworded_query():
 
     assert segment_key("seg-1", "platform engineer agents") == segment_key("seg-1", "self-hosted runtime engineer")
     assert segment_key(None, "legacy query") == "legacy query"
+
+
+@pytest.mark.parametrize("facts,decision", [
+    ({"org_type": "end_user", "matches_buyer": True, "problem_evidence": True}, "buyer"),
+    # Owner's first run (2026-09-30): each of these was saved as a buyer at 85-90.
+    ({"org_type": "vendor", "matches_buyer": True, "problem_evidence": True}, "alternative"),   # Vercel
+    ({"org_type": "agency", "matches_buyer": True, "problem_evidence": True}, "intermediary"),  # Livefront
+    ({"org_type": "publisher"}, "voice"),
+    ({"org_type": "end_user", "matches_buyer": False, "problem_evidence": True}, "drop"),     # not regulated
+    ({"org_type": "end_user", "matches_buyer": True, "problem_evidence": False}, "drop"),
+    ({"org_type": "other"}, "drop"),
+    ({}, "drop"),
+])
+def test_the_code_decides_from_the_judges_facts(facts, decision):
+    from apps.search.services.segment_search import classify
+
+    assert classify(facts) == decision
+
+
+def test_a_lead_saved_by_a_laxer_judgement_is_refiled_when_rejudged(db, user, jobs, segment):
+    """Vercel, saved as a buyer by the first judge, is re-judged a vendor: it leaves the leads and
+    is proposed as an alternative."""
+    from apps.masterplan.services import market_service
+    from apps.search.models.leadgen_model import LeadGenResult
+    from apps.search.services.leadgen_service import save_lead
+    from apps.search.services.segment_search import segment_lead_search
+
+    url = "https://job-boards.greenhouse.io/vercel/jobs/6207796004"
+    save_lead(db, user_id=user, url=url, fields={"company": "Vercel", "query": "q", "context": "c",
+                                                  "overall_score": 85, "segment_id": segment["id"]})
+    db.commit()
+
+    def search(query, **kw):
+        return [{"title": "Software Engineer, Workflows", "url": url, "snippet": "Build Vercel Workflow."}]
+
+    def judge(result, brief):
+        return {"organisation": "Vercel", "org_type": "vendor", "matches_buyer": False,
+                "problem_evidence": False, "reasoning": "Builds its own workflow product."}
+
+    out = segment_lead_search(db, user_id=user, segment=segment["id"], search=search, judge=judge)
+    assert (out["count"], out["retired"], out["proposed"]) == (0, 1, [{"kind": "alternative", "name": "Vercel"}])
+    assert db.query(LeadGenResult).count() == 0
+    assert market_service.list_proposals(db, user)["proposals"][0]["name"] == "Vercel"
+
+
+def test_the_hiring_query_carries_the_buyers_kind_of_organisation():
+    from apps.search.services.segment_search import build_query, buyer_organisation
+
+    buyer = "MLOps or AI infrastructure lead in a regulated enterprise (finance, healthcare, gov)"
+    assert buyer_organisation(buyer) == "regulated enterprise finance healthcare gov"
+    query = build_query({"buyer": buyer, "category_terms": ["governed agent execution"]}, "hiring")
+    assert query == "governed agent execution engineer regulated enterprise finance healthcare gov"
+
+
+def test_saved_leads_the_search_did_not_return_are_rejudged_too(db, user, jobs, segment):
+    """The owner's first run saved 13 leads; the reworked query returns different postings, so
+    re-judging only what comes back would leave most of them. A lead with outreach is left alone."""
+    import uuid as _uuid
+
+    from apps.search.models.lead_action import LeadAction
+    from apps.search.models.leadgen_model import LeadGenResult
+    from apps.search.services.leadgen_service import save_lead
+    from apps.search.services.segment_search import segment_lead_search
+
+    agency = save_lead(db, user_id=user, url="https://job-boards.greenhouse.io/livefront/jobs/1",
+                       fields={"company": "Livefront", "query": "q", "context": "Build agents for clients.",
+                               "overall_score": 85, "segment_id": segment["id"]})
+    contacted = save_lead(db, user_id=user, url="https://job-boards.greenhouse.io/robotsandpencils/jobs/2",
+                          fields={"company": "Robots and Pencils", "query": "q", "context": "c",
+                                  "overall_score": 88, "segment_id": segment["id"]})
+    db.add(LeadAction(user_id=_uuid.UUID(user), lead_id=contacted.id, status="sent", channel="email"))
+    db.commit()
+
+    judged = []
+
+    def judge(result, brief):
+        judged.append(result["url"])
+        return {"organisation": result["title"], "org_type": "agency", "reasoning": "Builds for clients."}
+
+    out = segment_lead_search(db, user_id=user, segment=segment["id"], search=lambda q, **kw: [], judge=judge)
+
+    assert judged == [agency.url]  # the contacted lead is never re-judged
+    assert (out["rejudged"], out["retired"], out["proposed"]) == (1, 1, [{"kind": "intermediary", "name": "Livefront"}])
+    assert [r.company for r in db.query(LeadGenResult).all()] == ["Robots and Pencils"]

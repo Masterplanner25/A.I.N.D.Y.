@@ -339,7 +339,9 @@ export default function MarketPanel() {
                   <p className="text-zinc-400">
                     {found[s.id].count} buyer{found[s.id].count === 1 ? "" : "s"} saved to Leads
                     {found[s.id].proposed?.length ? ` · ${found[s.id].proposed.length} proposed above as market entries` : ""}
-                    {found[s.id].dropped ? ` · ${found[s.id].dropped} not relevant` : ""}
+                    {found[s.id].already_known?.length ? ` · ${found[s.id].already_known.length} already in your market` : ""}
+                    {found[s.id].retired ? ` · ${found[s.id].retired} earlier lead${found[s.id].retired === 1 ? "" : "s"} moved out of Leads` : ""}
+                    {found[s.id].dropped ? ` · ${found[s.id].dropped} not this segment` : ""}
                   </p>
                   {safeMap(found[s.id].leads || [], (lead) => (
                     <p key={lead.id} className="text-zinc-300">
