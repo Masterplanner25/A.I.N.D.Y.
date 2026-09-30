@@ -1,6 +1,6 @@
 ---
 title: "The Market Model — who your work is for, and where they are"
-last_verified: "2026-09-28"
+last_verified: "2026-09-30"
 api_version: "1.0"
 status: draft
 owner: "app-team"
@@ -9,7 +9,8 @@ owner: "app-team"
 # The Market model — who your work is for, and where they are
 
 **Status:** phase A BUILT 2026-09-28 (owner took §9 decisions 1–4 as recommended); phase B BUILT
-2026-09-30 (§5.6); C not started. Written 2026-09-28, the day the agent's lead search first worked end to end and returned
+2026-09-30 (§5.6). **Lead-finding PARKED 2026-09-30 as data-limited, by the owner (§8.1)**; C not
+started, and waits on outreach that phase B's leads may never produce. Written 2026-09-28, the day the agent's lead search first worked end to end and returned
 three results that were not leads.
 
 **The owner, which is the whole spec:**
@@ -302,6 +303,55 @@ until A exists B's non-buyer results have nowhere to go but back into `leadgen_r
 **Until B ships** (recommended ahead of A, a one-line change): amend `leadgen.search`'s description to
 say it returns web results, not verified buyers, so the planner stops reaching for it to answer
 market questions.
+
+### 8.1 Lead-finding parked: the ceiling is the data, not the code (2026-09-30)
+
+> *"I think we've reached the limit of what's feasibly possible for us to build without say better
+> data. Lead finding is a pretty hard thing to do in the first place but it gets a bit harder when
+> the data is damn near impossible to find."* The owner, after the fourth round on phase B.
+
+**Every round improved the judgement; none changed the input.** Four passes on the same two segments:
+
+| Round | PR | What changed | What it showed |
+|---|---|---|---|
+| 1 | #431 | job boards, the segment's words, one judgement per result | 13 of 13 saved as buyers at 80–90, vendors and agencies included |
+| 2 | #432 | the model reports facts, the code decides; re-judging saved leads | vendors and agencies re-filed; then too strict (an internal platform called a vendor), corrected |
+| 3 | #433 | `gpt-4o` at temperature 0; organisations must be named by the result | consistent verdicts across runs; no invented names |
+| — | — | the owner's observation | everything comes from job boards |
+
+**Why more code will not move it.** A search provider returns what is publicly indexed, and the public
+signal that an organisation would buy a self-hosted agent runtime is thin:
+
+- **Job postings** (the one source §5.1 found that returns organisations with the problem) name a
+  company, never a person, and mean the company has *chosen to build*. The hardest pitch there is.
+- **Forums and engineering blogs** (§5.1's other sources, reachable through `where=channels` once a
+  segment has confirmed channels) name people with the problem, but sparsely and unsystematically.
+- **People search** returns named profiles; saving individuals as leads was never approved.
+
+Commercial lead data (contact databases, intent data, tracked behaviour) comes from sources this system
+does not have and should not imitate by scraping. Better prompts judge the same thin input better;
+they cannot add to it.
+
+**What stays, and is worth keeping:**
+
+- **The market record** (phase A): two segments held as bets, their alternatives (Vercel, GitLab,
+  OneTrust, Superserve, Backbase, Anthropic), a partner type (agencies), the voices shaping the
+  category, all confirmed by the owner, in every planner context. Marketing runs no longer start from
+  zero. That was §2's problem, and it is solved independently of lead quality.
+- **The honest search** (phase B): *Find buyers* still runs, and no longer files an article or a vendor
+  as a buyer. It stays available for an occasional look. It is not a pipeline.
+- **The learning close keyed by segment** (§5.4): correct, and idle until outreach happens.
+
+**Where buyers are more likely to come from is not search.** The owner has 214 published pieces on AI
+Search Optimization and builds in public. For an author, buyers usually arrive from the work: a reader
+of a series, someone who found the runtime's docs, a conversation that started from a piece. That is
+the plan's own *Establish Authority* strategy, and its data is the owner's, not a provider's. The lever
+there is `WORK_MODEL_SPEC` phase B (the published writing, recallable by the agent), not more lead search.
+
+**Reopen when**, and only when, the input changes: a lead-data provider with contacts and consent, an
+inbound source (form submissions, docs sign-ups, replies to published pieces) that names people who
+came to the work, or real outreach outcomes for phase C to learn from. Until one of those exists, a
+proposal to improve lead-finding is a proposal to judge the same thin data again.
 
 ---
 
