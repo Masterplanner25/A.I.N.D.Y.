@@ -166,7 +166,30 @@ masterplan_id), `615b67ea` (an unresolvable step reference, FR-46's evidence run
   missing rows the caller wrote and has not committed. Nothing in the window was built to test
   that, and nothing reported it.
 
-**Verdict: clean for 7 days, at low volume. The flag stays on and the window continues to 200 runs.**
-Evidence goes to the runtime as that: *no failure seen in 7 days and 7 recalls*, not *proven*.
-Before each api rebuild from now on, grep the outgoing container's log for `recall failed` so a
-recreate no longer erases the absence signal.
+**Verdict, as first written:** clean for 7 days at low volume; the window continues to 200 runs.
+
+### 8.1 Corrected the same day: the volume was never low
+
+The 200 was read as *agent runs*, which at one owner's pace is months. But the flag changes **every
+memory recall**, and agent `memory.recall` steps are the rarest kind. The runtime's request pipeline
+recalls after every successful authenticated request (`_safe_recall_memory_count`), and since #393
+every route of ours hands it a session, so every one goes through the own-session path. Agent planning
+and Nodus execution recall too.
+
+- **1,332** authenticated requests completed in the window (`system_events`, `execution.completed`
+  with a user), each one a recall through the flagged path, plus the 7 agent steps. Past 200 six
+  times over, with the pool and transaction signals clean throughout.
+- **Their failures have no witness.** The pipeline's recall failure is recorded as a request side
+  effect and logged at DEBUG; neither is persisted (0 of 1,614 completed events carry
+  `side_effects`). Filed as **FR-49**, which asks for a counter.
+- **The behaviour change, audited.** Nine places in our apps recall. Eight recall before they write
+  or never write. Task completion writes a note and then recalls, and is safe twice: under a request
+  the note is queued until the handler returns, and it is an `outcome` note while the recall asks for
+  `decision`. Agent plans that write in one step and recall in a later one are safe because each tool
+  step dispatches with no caller session, so the runtime's handler commits its own write.
+  `tests/unit/test_recall_own_session_safe.py` holds both facts.
+
+**Verdict: row 1 is complete.** Seven days, 1,339 recalls through the flagged path, clean signals,
+and no dependency on the one behaviour it changes. Reported to the runtime in FR-49, with the
+caveats: `idle in transaction` was never sampled during a recall, and the pipeline's recalls cannot
+show a failure until FR-49 lands. The flag stays on here. Rows 2–6 can start, one at a time.
