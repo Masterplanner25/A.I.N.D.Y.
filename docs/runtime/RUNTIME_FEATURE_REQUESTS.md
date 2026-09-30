@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-26"
+last_verified: "2026-09-30"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -20,8 +20,9 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-26:** FR-48 (the planner never sees a tool's result shape, so a `$from_step`
-> path is a guess; filed from the FR-46 evidence run).
+> **Open as of 2026-09-30:** FR-49 (a failed pipeline recall is dropped at DEBUG and never persisted;
+> filed with soak row 1's evidence) · FR-48 (the planner never sees a tool's result shape, so a
+> `$from_step` path is a guess; filed from the FR-46 evidence run).
 >
 > **As of 2026-09-26, runtime 2.24.0 / ui-kit 2.1.1 answered FR-43 … FR-47** (`RUNTIME_2_24_0_UPGRADE.md`);
 > FR-46 ships default-off with its evidence run owed. Still open: FR-14 recurrence half, FR-6 items 2–3.
@@ -40,6 +41,52 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-49 — a failed memory recall on the request pipeline is dropped at DEBUG and never persisted, so the soak register's row 1 cannot see the recalls it is about 🔴 open (filed 2026-09-30, runtime 2.24.0) — with soak row 1's evidence
+
+> **Every successful authenticated pipeline request recalls memory**
+> (`execution_pipeline/pipeline.py` → `_safe_recall_memory_count`, `signals.py:221`), which makes it
+> by far the busiest caller of the path `AINDY_MEMORY_RECALL_OWN_SESSION` changes. When that recall
+> raises, `_record_side_effect(ctx, "memory.recall", status="failed")` writes into
+> `ctx.metadata["side_effects"]` and the exception is logged at **DEBUG**
+> (`execution.memory_recall_skipped`). The side effects are not in the persisted event: across
+> 1,614 `execution.completed` rows on our stack, **0** carry a `side_effects` key. So a failing
+> recall there is invisible to the log at INFO, to `/metrics` and to the event table.
+
+### Why it matters now
+
+Soak register row 1's absence signal is *"no `[MemoryOrchestrator] recall failed` in the api log"*.
+That line comes from the orchestrator's own path, not this one. The pipeline's recall, the one that
+runs on every request, has no failure witness at all, so *"we saw no failures"* is true and says
+little about most of the recalls the flag touched.
+
+### Asks
+
+1. A counter, `aindy_memory_recall_failures_total{site}` (`site="pipeline"` here, and the other
+   `get_context` callers as they adopt it), so the absence signal is a number that survives a
+   container recreate's lost log.
+2. The pipeline's recall failure at **WARNING**, rate-limited if it is noisy.
+3. Optionally, the `side_effects` map in the persisted `execution.completed` payload (it is already
+   assembled per request).
+
+### Soak register row 1 — evidence from our stack
+
+`AINDY_MEMORY_RECALL_OWN_SESSION=true` from 2026-09-23T20:30Z to the 2026-09-30 readout
+(`RUNTIME_2_24_0_UPGRADE.md` §8), runtime 2.22.0 → 2.24.0:
+
+| | |
+|---|---|
+| Recalls through the flagged path | **1,332** authenticated requests completed (each runs the pipeline recall), plus **7** agent `memory.recall` steps, all successful. Agent planning and Nodus execution recall too; not counted |
+| `idle in transaction` | 0, at baseline and at readout |
+| `aindy_db_pool_exhaustion_events_total` | 0 |
+| `aindy_db_pool_checkedout` | 0–5, returning to 0 (scheduler ticks) |
+| `[MemoryOrchestrator] recall failed` | 0 where read; the api was recreated ~6 times, so the log covers the 09-25 read and 09-30 only |
+| The behaviour change (uncommitted writes invisible to recall) | audited in our nine recall sites: none depends on it (`tests/unit/test_recall_own_session_safe.py`) |
+
+**What it does not show:** `idle in transaction` was sampled at rest, not during a recall-heavy
+run, and the 1,332 pipeline recalls have no failure witness (this FR). Our verdict: **no failure
+seen in 7 days and 1,339 recalls, with no dependency on the changed behaviour.** Evidence for the
+flip, not proof. The flag stays on here.
+
 ## FR-48 — the planner is told each tool's arguments but never its result, so a `$from_step` path is a guess; the first FR-46 evidence run guessed wrong 🔴 open (filed 2026-09-26, runtime 2.24.0)
 
 > **The catalog line is `- name: description (risk=…) args={…}`, from `args_schema` (FR-33).

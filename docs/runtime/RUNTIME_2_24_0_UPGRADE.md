@@ -130,3 +130,66 @@ Two observations, neither a failure:
 `npm ci` on Windows fails with `EPERM` on `lightningcss-win32-x64-msvc` while Vite is running,
 because the dev server holds the native module open. It also deletes `node_modules` first, so Vite
 breaks until the install finishes. Stop Vite, install, then restart it detached.
+
+## 8. Soak register row 1 — the 7-day readout (2026-09-30)
+
+`AINDY_MEMORY_RECALL_OWN_SESSION=true`, on since 2026-09-23T20:30Z, confirmed in the container's
+environment at the reading. Read against the baseline in `RUNTIME_2_22_0_UPGRADE.md` §8 and the
+register's row 1 (`aindy-runtime/docs/upgrades/SOAK_REGISTER.md`).
+
+| Signal | Baseline (09-23) | 09-30 |
+|---|---|---|
+| `idle in transaction` | 0 | **0**, sampled six times over a minute; `pg_stat_activity` held 1 active, 6 idle |
+| `aindy_db_pool_exhaustion_events_total` | 0 | **0** (pool size 20, pressure ratio 0) |
+| `aindy_db_pool_checkedout` | 1 | **0–5, returning to 0** across the minute: scheduler ticks, not held connections |
+| `[MemoryOrchestrator] recall failed` | 0 | **0** in the current container's log (see the gap below); 0 at the 09-25 mid-window read |
+| `memory.recall` steps succeeding (presence) | — | **7 of 7 succeeded**, 09-26 → 09-28; none failed |
+
+**Failed runs in the window: 3 of 15, none recall-related.** `abf834d4` (task.create without a
+masterplan_id), `615b67ea` (an unresolvable step reference, FR-46's evidence run) and `195777b0`
+(`leadgen.search`'s memory note without `node_type`, fixed in #425).
+
+**What the readout does not show, stated rather than implied:**
+
+- **Volume: short of 200 runs.** 15 agent runs and 120 flow runs in the window. Our §8 terms were
+  *7 days, or 200 runs if that comes later*, so on its own terms the window is not finished. The
+  time half is met and every signal is clean; the volume half is not.
+- **The presence signal was never sampled during a recall.** The register asks for `idle in
+  transaction` *during a recall-heavy run*. Every reading was at rest. The seven recall steps
+  succeeded, which is half of the presence signal; whether the caller's transaction stayed short
+  during them was not observed.
+- **The log has gaps.** The api container was recreated at least six times in the window (each
+  merge that went live). `docker logs` covers only the current container (since 2026-09-30T15:03Z);
+  the stretches between the 09-25 read and today were never read. The step table and the pool
+  counters are the durable evidence; the log is not.
+- **The one behaviour change was not exercised on purpose.** The register's failure mode is recall
+  missing rows the caller wrote and has not committed. Nothing in the window was built to test
+  that, and nothing reported it.
+
+**Verdict, as first written:** clean for 7 days at low volume; the window continues to 200 runs.
+
+### 8.1 Corrected the same day: the volume was never low
+
+The 200 was read as *agent runs*, which at one owner's pace is months. But the flag changes **every
+memory recall**, and agent `memory.recall` steps are the rarest kind. The runtime's request pipeline
+recalls after every successful authenticated request (`_safe_recall_memory_count`), and since #393
+every route of ours hands it a session, so every one goes through the own-session path. Agent planning
+and Nodus execution recall too.
+
+- **1,332** authenticated requests completed in the window (`system_events`, `execution.completed`
+  with a user), each one a recall through the flagged path, plus the 7 agent steps. Past 200 six
+  times over, with the pool and transaction signals clean throughout.
+- **Their failures have no witness.** The pipeline's recall failure is recorded as a request side
+  effect and logged at DEBUG; neither is persisted (0 of 1,614 completed events carry
+  `side_effects`). Filed as **FR-49**, which asks for a counter.
+- **The behaviour change, audited.** Nine places in our apps recall. Eight recall before they write
+  or never write. Task completion writes a note and then recalls, and is safe twice: under a request
+  the note is queued until the handler returns, and it is an `outcome` note while the recall asks for
+  `decision`. Agent plans that write in one step and recall in a later one are safe because each tool
+  step dispatches with no caller session, so the runtime's handler commits its own write.
+  `tests/unit/test_recall_own_session_safe.py` holds both facts.
+
+**Verdict: row 1 is complete.** Seven days, 1,339 recalls through the flagged path, clean signals,
+and no dependency on the one behaviour it changes. Reported to the runtime in FR-49, with the
+caveats: `idle in transaction` was never sampled during a recall, and the pipeline's recalls cannot
+show a failure until FR-49 lands. The flag stays on here. Rows 2–6 can start, one at a time.
