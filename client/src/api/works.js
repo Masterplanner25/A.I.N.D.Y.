@@ -45,3 +45,12 @@ export function confirmWorkProposal(body) {
 export function dismissWorkProposal(key) {
   return authRequest("/apps/works/proposals/dismiss", json("POST", { key }));
 }
+
+// Your published writing, stored and recallable (WORK_MODEL_SPEC §5). Served by RippleTrace.
+export function getPublishedWriting() {
+  return authRequest("/apps/rippletrace/content/archive", { method: "GET" });
+}
+
+export function storePublishedWriting() {
+  return authRequest("/apps/rippletrace/content/archive", { method: "POST" });
+}

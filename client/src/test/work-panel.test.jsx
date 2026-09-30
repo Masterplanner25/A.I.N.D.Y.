@@ -20,6 +20,8 @@ const api = vi.hoisted(() => ({
   addWorkLink: vi.fn(),
   removeWorkLink: vi.fn(),
   setWorkObjectives: vi.fn(),
+  getPublishedWriting: vi.fn(),
+  storePublishedWriting: vi.fn(),
 }));
 
 vi.mock("../api/works.js", () => api);
@@ -55,6 +57,11 @@ beforeEach(() => {
     agent_block: "## The user's work\n- aindy-runtime (project, creator, active): Self-hosted runtime for AI agents.; executes Nodus",
   });
   api.listWorkProposals.mockResolvedValue({ proposals: [PROPOSAL] });
+  api.getPublishedWriting.mockResolvedValue({
+    pieces: 214, stored: 60, recallable: 40, no_text: 15, pending: 139,
+    platforms: { DEV: { pieces: 143, recallable: 30, no_text: 0 }, YouTube: { pieces: 15, recallable: 0, no_text: 15 } },
+  });
+  api.storePublishedWriting.mockResolvedValue({ status: { pieces: 214, stored: 100, recallable: 80, no_text: 15, pending: 99, platforms: {} } });
   for (const fn of ["confirmWorkProposal", "dismissWorkProposal", "createWork", "addWorkLink", "setWorkObjectives"]) {
     api[fn].mockResolvedValue({});
   }
@@ -113,6 +120,14 @@ describe("Collaborator's Work mode", () => {
     await waitFor(() => expect(api.createWork).toHaveBeenCalledWith(expect.objectContaining({
       name: "A.I.N.D.Y.", summary: "Persistent execution partner.", kind: "project",
     })));
+  });
+
+  it("shows how much published writing the agent can recall, and stores a batch on request", async () => {
+    renderPanel();
+    expect(await screen.findByText("40 of 214 pieces recallable by the agent")).toBeInTheDocument();
+    expect(screen.getByText(/DEV 30\/143 · YouTube 0\/15 \(15 with no text\)/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /store a batch now/i }));
+    await waitFor(() => expect(api.storePublishedWriting).toHaveBeenCalled());
   });
 
   it("shows exactly what the agent is told", async () => {

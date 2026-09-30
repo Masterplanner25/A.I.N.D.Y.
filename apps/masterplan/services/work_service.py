@@ -458,3 +458,15 @@ def works_overview(db: Session, user_id: Any) -> dict:
     listing = list_works(db, user_id)
     listing["agent_block"] = render_work_block(work_context(user_id=user_id, db=db))
     return listing
+
+
+def works_by_container(*, user_id: Any, db: Session) -> dict[str, list[str]]:
+    """RippleTrace container id → the owner's Works for that series (`works.container_id`). Read by
+    RippleTrace through `masterplan.works_by_container`, to tag published writing with its Work."""
+    uid = parse_user_id(user_id)
+    if uid is None:
+        return {}
+    out: dict[str, list[str]] = {}
+    for work in db.query(Work).filter(Work.user_id == uid, Work.container_id.isnot(None)).all():
+        out.setdefault(work.container_id, []).append(work.name)
+    return out

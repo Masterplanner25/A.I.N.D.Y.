@@ -1082,3 +1082,45 @@ async def dismiss_container(
     return await execute_with_pipeline(
         request, "rippletrace_containers_dismiss", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
+
+
+# ── Published writing (WORK_MODEL_SPEC §5, phase B) ───────────────────────────────────────
+
+
+@router.get("/content/archive")
+@limiter.limit("60/minute")
+async def content_archive_status(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """How much of your published writing is stored and recallable, per platform."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.rippletrace.services.content_archive import archive_status
+        return archive_status(db, user_id=user_id)
+
+    return await execute_with_pipeline(
+        request, "rippletrace.content.status", materialized(handler), user_id=user_id, metadata={"db": db}
+    )
+
+
+@router.post("/content/archive")
+@limiter.limit("6/minute")
+async def content_archive_step(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Store and remember a batch now, rather than waiting for the scheduled run. One platform
+    request per piece fetched, with a short pause between them."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.rippletrace.services.content_archive import archive_step
+        return archive_step(db, user_id=user_id)
+
+    return await execute_with_pipeline(
+        request, "rippletrace.content.archive", materialized(handler), user_id=user_id, metadata={"db": db}
+    )

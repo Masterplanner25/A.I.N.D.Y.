@@ -522,6 +522,10 @@ class FeedEntry:
     summary: str = ""
     published_at: datetime | None = None
     tags: list[str] = field(default_factory=list)
+    # The fullest body the feed carries, as published (HTML or text): RSS `content:encoded`
+    # (Substack, Medium), else the description (DEV puts the whole article there); Atom
+    # `content`, else `summary`. `content_archive` decides whether it is the article or an excerpt.
+    content: str = ""
 
 
 @dataclass
@@ -594,6 +598,7 @@ def _parse_atom(root, base_url: str) -> ParsedFeed:
                 url=urljoin(base_url, href),
                 title=_child_text(element, "title"),
                 summary=_child_text(element, "summary") or _child_text(element, "content"),
+                content=_child_text(element, "content") or _child_text(element, "summary"),
                 published_at=_parse_timestamp(
                     _child_text(element, "published") or _child_text(element, "updated")
                 ),
@@ -637,6 +642,7 @@ def _parse_rss(root, base_url: str) -> ParsedFeed:
                 url=urljoin(base_url, href),
                 title=_child_text(element, "title"),
                 summary=_child_text(element, "description"),
+                content=_child_text(element, "encoded") or _child_text(element, "description"),
                 published_at=_parse_timestamp(
                     _child_text(element, "pubdate")
                     or _child_text(element, "date")

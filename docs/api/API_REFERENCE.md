@@ -1908,6 +1908,16 @@ Create Drop Point
 
 **Response 200:** unspecified
 
+#### GET /apps/rippletrace/content/archive
+Published writing status (`WORK_MODEL_SPEC.md` §5) — how much of the owner's writing is stored and recallable, per platform
+
+**Response 200:** pieces, stored, recallable, no_text, pending, platforms: {<platform>: {pieces, stored, recallable, no_text}}
+
+#### POST /apps/rippletrace/content/archive
+Store and remember a batch now — fetches the text of up to 40 pieces that have none (DEV and Substack by their own url, Medium from its feed; YouTube has none), then writes memory chunks (source `published_work`, tagged with the piece, its series and the owner's Works) for up to 40 pieces whose text changed. The same step runs by itself every 10 minutes
+
+**Response 200:** fetched, none, failed, remembered, chunks, status: {the status above}
+
 #### GET /apps/rippletrace/containers/candidates
 List Container Candidates
 
