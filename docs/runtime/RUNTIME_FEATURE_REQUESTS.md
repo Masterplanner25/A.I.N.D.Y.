@@ -20,8 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-30:** FR-49 (a failed pipeline recall is dropped at DEBUG and never persisted;
-> filed with soak row 1's evidence) · FR-48 (the planner never sees a tool's result shape, so a
+> **Open as of 2026-09-30:** FR-50 (`POST /memory/recall` fails for a query-only recall) · FR-49
+> (pipeline recall failures uncounted; built upstream in #782, unreleased) · FR-48 (the planner never sees a tool's result shape, so a
 > `$from_step` path is a guess; filed from the FR-46 evidence run).
 >
 > **As of 2026-09-26, runtime 2.24.0 / ui-kit 2.1.1 answered FR-43 … FR-47** (`RUNTIME_2_24_0_UPGRADE.md`);
@@ -41,7 +41,28 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-49 — a failed memory recall on the request pipeline is dropped at DEBUG and never persisted, so the soak register's row 1 cannot see the recalls it is about 🔴 open (filed 2026-09-30, runtime 2.24.0) — with soak row 1's evidence
+## FR-50 — `POST /memory/recall` fails for a query-only recall: it passes `tags=None` and `node_type=None` into `sys.v1.memory.read`, whose input schema rejects both 🔴 open (filed 2026-09-30, runtime 2.24.0)
+
+> **The route's own guard allows a query alone** (`if not body.query and not body.tags: 400`), then
+> dispatches `{"query", "tags": body.tags, "limit", "node_type": body.node_type}`
+> (`routes/memory_router.py`, `recall_memories`). With either field omitted the dispatcher refuses:
+>
+> ```
+> {"detail": {"error": "memory_syscall_failed", "message": "Input validation failed for
+>  'sys.v1.memory.read': Field 'tags': expected type 'list', got 'NoneType'; Field 'node_type':
+>  expected type 'string', got 'NoneType'"}}
+> ```
+
+Found 2026-09-30 testing Work model phase B: the owner's published writing, now in memory, was
+recalled correctly once both fields were sent (`"tags": [], "node_type": "insight"`), so the defect is
+the route's, not recall's. The agent's `memory.recall` tool is unaffected: it dispatches the syscall
+with only the keys it has. The same handler's sibling already does the safe thing (`"tags": body.tags
+or []`, line ~302).
+
+**Ask:** drop `None` values before dispatch (or `tags or []`, and omit `node_type` when absent), and a
+route test for a query-only recall.
+
+## FR-49 — a failed memory recall on the request pipeline is dropped at DEBUG and never persisted, so the soak register's row 1 cannot see the recalls it is about 🟡 BUILT upstream (#782, recall failures counted by site and stage), unreleased — filed 2026-09-30 with soak row 1's evidence
 
 > **Every successful authenticated pipeline request recalls memory**
 > (`execution_pipeline/pipeline.py` → `_safe_recall_memory_count`, `signals.py:221`), which makes it
