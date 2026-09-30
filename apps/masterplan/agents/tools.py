@@ -49,7 +49,9 @@ def register() -> None:
             "buyer), or an alternative (competitor), channel (where buyers gather), intermediary "
             "(reseller, integrator), voice (analyst, publication) or exemplar (an organisation that "
             "fits a segment). Use it for market research findings instead of leadgen.search or "
-            "memory.write. Proposes only; the user confirms. Returns {proposed, key, reason}."
+            "memory.write. To attach research as evidence, pass a research.query step's result as "
+            "`sources` ({\"$from_step\": N, \"path\": \"raw_result\"}): each linked result becomes "
+            "its own evidence. Proposes only; the user confirms. Returns {proposed, key, reason}."
         ),
         args_schema={
             "required": ["kind", "name"],
@@ -66,7 +68,11 @@ def register() -> None:
                 "problem": {"type": "string", "description": "for a segment: the problem in the buyer's words"},
                 "category_terms": {"type": "array", "description": "for a segment: what buyers call it"},
                 "works": {"type": "array", "description": "for a segment: names of the user's works serving it"},
-                "evidence": {"type": "array", "description": "[{claim, source_url}]: what supports it"},
+                "evidence": {"type": "array", "description": "[{claim, source_url}]; source_url is ONE link"},
+                "sources": {
+                    "type": "string",
+                    "description": "a research.query raw_result; each linked result becomes evidence",
+                },
             },
         },
         capability="tool:market.propose",
