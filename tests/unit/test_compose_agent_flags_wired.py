@@ -15,6 +15,10 @@ pytestmark = pytest.mark.app_profile
 COMPOSE = Path(__file__).resolve().parents[2] / "docker-compose.prod.yml"
 
 
-@pytest.mark.parametrize("flag", ["AINDY_PLAN_STEP_REFERENCES", "AINDY_TOOL_ARGS_VALIDATION", "AINDY_AUTHORITY_NEGOTIATION"])
+# The soak-register flags too: a soak whose flag never reaches the process measures nothing.
+@pytest.mark.parametrize("flag", [
+    "AINDY_PLAN_STEP_REFERENCES", "AINDY_TOOL_ARGS_VALIDATION", "AINDY_AUTHORITY_NEGOTIATION",
+    "AINDY_MEMORY_RECALL_OWN_SESSION", "AINDY_SYSCALL_IDEMPOTENCY_STRICT",
+])
 def test_the_flag_is_passed_to_the_api(flag):
     assert f'{flag}: "${{{flag}:-}}"' in COMPOSE.read_text(encoding="utf-8")

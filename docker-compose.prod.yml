@@ -158,6 +158,10 @@ services:
       #
       # Root-cause fix for DB-NODUS-BUDGET-1, shipped default-off in 2.0.0 pending soak.
       AINDY_MEMORY_RECALL_OWN_SESSION: "${AINDY_MEMORY_RECALL_OWN_SESSION:-}"
+      # Soak register row 2 (FR-27): a concurrent duplicate of an EXACTLY_ONCE syscall waits on an
+      # advisory lock and replays, instead of degrading and running again. Probe 2026-09-30: with it
+      # off, 8 concurrent identical calls ran the handler 8 times; with it on, once.
+      AINDY_SYSCALL_IDEMPOTENCY_STRICT: "${AINDY_SYSCALL_IDEMPOTENCY_STRICT:-}"
       # SHADOW flags compute and record without changing behaviour — safe to leave on.
       AINDY_INFINITY_THREE_AXIS_SHADOW: "${AINDY_INFINITY_THREE_AXIS_SHADOW:-}"
       AINDY_INFINITY_LEARNED_SHADOW: "${AINDY_INFINITY_LEARNED_SHADOW:-}"
