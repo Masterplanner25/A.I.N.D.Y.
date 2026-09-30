@@ -8,8 +8,9 @@ owner: "app-team"
 
 # The Market model — who your work is for, and where they are
 
-**Status:** draft, nothing built. Written 2026-09-28, the day the agent's lead search first worked end
-to end and returned three results that were not leads.
+**Status:** phase A BUILT 2026-09-28 (owner took §9 decisions 1–4 as recommended); B and C not
+started. Written 2026-09-28, the day the agent's lead search first worked end to end and returned
+three results that were not leads.
 
 **The owner, which is the whole spec:**
 
@@ -138,10 +139,13 @@ are kept, and no cold forms.
 
 1. **Seed proposals from what already exists** (no fetching, no model calls):
    - the three saved "leads" become three **entity proposals** with their evidence, and are then
-     removed from `leadgen_results` once answered (§8, phase A);
+     removed from `leadgen_results` once answered (§8, phase A). *As built: every saved lead with no
+     outreach is asked about; confirming re-files it and retires the lead, dismissing leaves it a lead;*
    - `search_history`'s six queries become **one segment proposal** each for the two buyers they
      circle (*platform/AI engineering teams*; *brands and AI-visibility buyers*), with the queries as
-     `research` evidence;
+     `research` evidence. *Built 2026-09-28 as two proposals recorded once through `market.propose`'s
+     own path, not as code: grouping free-text queries into buyers needs judgement, and a rule
+     written for six queries would be a rule about this owner's data;*
    - each confirmed Work with no segment asks *"who is this for?"*, the question the Work panel
      never asked.
 2. **The agent proposes; it never confirms.** A new tool, **`market.propose`**, writes proposals only:

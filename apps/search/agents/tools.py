@@ -45,9 +45,11 @@ def register() -> None:
         "leadgen.search",
         risk="medium",
         description=(
-            "Search for B2B leads matching a query. Each lead is scored (fit, intent, data "
-            "quality) and saved, so leadgen.act can draft outreach for the qualified ones later. "
-            "Does not contact anyone. Returns {leads[], count}."
+            "Search the open web for B2B leads matching a query. Each result is scored and saved "
+            "as a lead for leadgen.act. The results are web pages, NOT verified buyers: a market "
+            "question (competitors, analysts, channels, who the buyer is) returns articles about "
+            "the market, so answer those with research.query and record findings with "
+            "market.propose instead. Does not contact anyone. Returns {leads[], count}."
         ),
         args_schema={"required": ["query"], "properties": {"query": {"type": "string"}}},
         capability="tool:leadgen.search",

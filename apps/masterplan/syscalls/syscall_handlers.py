@@ -574,12 +574,34 @@ def _as_uuid(value):
         return None
 
 
+def _handle_market_propose(payload: dict, ctx: SyscallContext) -> dict:
+    """sys.v1.market.propose — record a market proposal for the owner to answer (MARKET_MODEL_SPEC §4.2).
+
+    The agent's only way into the market. It never confirms: the owner does, in Collaborator.
+    """
+    from apps.masterplan.services.market_service import propose
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return propose(db, ctx.user_id, dict(payload or {}), source="agent")
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_masterplan_syscall_handlers() -> None:
     """Register all masterplan domain syscall handlers.
 
     Called once at application startup from apps/bootstrap.py.
     Safe to call multiple times — idempotent.
     """
+    register_syscall(
+        name="sys.v1.market.propose",
+        handler=_handle_market_propose,
+        capability="market.propose",
+        description="Propose a market segment or entry for the owner to confirm.",
+        stable=False,
+    )
     register_syscall(
         name="sys.v1.masterplan.assert_owned",
         handler=_handle_assert_masterplan_owned,

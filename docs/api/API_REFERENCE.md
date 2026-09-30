@@ -2474,6 +2474,73 @@ Start Task
 
 **Response 200:** unspecified
 
+### Market
+
+Who the owner's work is for, what surrounds that buyer, and why each bet is believed (`MARKET_MODEL_SPEC.md`). A segment is a bet with a status (hypothesis · testing · validated · abandoned) and needs a buyer; entries are one of five kinds (alternative · channel · intermediary · voice · exemplar). The agent proposes (`market.propose`); only the owner confirms. Refusals are `{error: "market_refused", message}`.
+
+#### GET /apps/market
+The market — segments (with the works that serve them and their evidence), entries, the owner's works, the vocabularies, and `agent_block`, the exact text the planner is sent
+
+**Response 200:** segments: [{id, name, buyer, problem, trigger, category_terms, status, provenance, created_at, works: [{id, name}], evidence: [...]}], entities: [{id, segment_id, kind, name, url, note, provenance, created_at, evidence: [...]}], works_available, vocabulary, agent_block
+
+#### GET /apps/market/proposals
+Market proposals — saved leads nobody acted on (were they market research?), and what the agent proposed. Reads only; answered ones drop out
+
+**Response 200:** proposals: [{key, source: "lead" | "agent", question, kind, name, url, note, segment, buyer, problem, trigger, category_terms, works, evidence: [{claim, source_url}], lead_id}]
+
+#### POST /apps/market/proposals/confirm
+Confirm a proposal — `{key, kind?, name?, url?, note?, segment_id?, buyer?, problem?, trigger?, category_terms?, status?, work_ids?}`; the owner's fields replace the suggestion. A lead proposal needs a `kind`, a segment needs a `buyer`. Its evidence is carried across; a confirmed lead proposal retires the saved lead (never one with outreach)
+
+**Response 200:** kind, record, lead_retired; 404 when the proposal is no longer open; 422 without a kind or a buyer
+
+#### POST /apps/market/proposals/dismiss
+Dismiss a proposal — `{key}`; it is not asked again. A dismissed lead proposal stays a lead
+
+**Response 200:** dismissed, key; 404 when the proposal is no longer open
+
+#### POST /apps/market/segments
+Declare a segment — `name` and `buyer` required; `problem`, `trigger`, `category_terms: [...]`, `status` (default hypothesis), `work_ids`
+
+**Response 200:** the segment (`provenance: "declared"`); 422 without a buyer or on an unknown status; 409 when a segment of that name exists
+
+#### PATCH /apps/market/segments/{segment_id}
+Edit a segment or move its status; changed fields are recorded in `market_revisions`
+
+**Parameters:** segment_id (path): string
+
+**Response 200:** the segment; 404 when not yours
+
+#### DELETE /apps/market/segments/{segment_id}
+Delete a segment, with its work ties, evidence and revisions; its entries are kept, untied
+
+**Parameters:** segment_id (path): string
+
+**Response 200:** deleted, id
+
+#### PUT /apps/market/segments/{segment_id}/works
+Set the works that serve a segment — `{work_ids: [...]}`, replacing the current set; only the owner's works
+
+**Parameters:** segment_id (path): string
+
+**Response 200:** segment_id, work_ids; 404 when a work is not yours
+
+#### POST /apps/market/entities
+Add an entry — `{kind, name, url?, note?, segment_id?}`
+
+**Response 200:** the entry; 422 on an unknown kind
+
+#### DELETE /apps/market/entities/{entity_id}
+Remove an entry, with its evidence
+
+**Parameters:** entity_id (path): string
+
+**Response 200:** deleted, id
+
+#### POST /apps/market/evidence
+Record evidence — `{claim, segment_id | entity_id, source_url?, stance: supports | contradicts}`
+
+**Response 200:** the evidence (`source_kind: "owner"`); 422 unless exactly one of segment_id / entity_id
+
 ### Works
 
 What the owner has made, how the works relate, and which plan objectives they serve (`WORK_MODEL_SPEC.md`). A Work holds intent (summary in the owner's words, role, lifecycle), never measurement. Nothing is inferred into it: proposals are derived on demand and written only when the owner confirms them. Refusals are `{error: "work_refused", message}`.

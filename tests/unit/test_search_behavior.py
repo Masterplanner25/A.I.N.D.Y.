@@ -467,3 +467,28 @@ def test_a_lead_is_saved_once_per_url(monkeypatch, db_session, user_id):
     assert {row.company: row.id for row, _ in again} == ids
     assert {r.overall_score for r in rows} == {40}
     assert {r.query for r in rows} == {"platforms"}
+
+
+def test_unactioned_leads_skip_leads_with_outreach_and_retire_never_removes_one(db_session, user_id):
+    """masterplan re-files saved leads as market research (MARKET_MODEL_SPEC §4.1) through these jobs."""
+    import uuid as _uuid
+
+    from apps.search.models.lead_action import LeadAction
+    from apps.search.models.leadgen_model import LeadGenResult
+    from apps.search.services import leadgen_service
+
+    uid = _uuid.UUID(str(user_id))
+    listicle = LeadGenResult(user_id=uid, query="q", company="Onereach", url="https://o", context="c",
+                             fit_score=1, intent_score=1, data_quality_score=1, overall_score=81, reasoning="r")
+    contacted = LeadGenResult(user_id=uid, query="q", company="Acme", url="https://a", context="c",
+                              fit_score=1, intent_score=1, data_quality_score=1, overall_score=86, reasoning="r")
+    db_session.add_all([listicle, contacted])
+    db_session.commit()
+    db_session.add(LeadAction(user_id=uid, lead_id=contacted.id, status="sent", channel="email"))
+    db_session.commit()
+
+    assert [lead["company"] for lead in leadgen_service.unactioned_leads(user_id=user_id, db=db_session)] == ["Onereach"]
+    assert leadgen_service.retire_lead(user_id=user_id, lead_id=contacted.id, db=db_session) is False
+    assert leadgen_service.retire_lead(user_id=user_id, lead_id=listicle.id, db=db_session) is True
+    db_session.commit()
+    assert [r.company for r in db_session.query(LeadGenResult).all()] == ["Acme"]

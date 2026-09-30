@@ -135,25 +135,27 @@ def register() -> None:
     #   from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
     # `platform_layer.registry` exports a `register_syscall` too, and it is the wrong one —
     # it writes into a dict the SyscallDispatcher never reads. Every one of this repo's
-    # 74 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
+    # 75 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
     # this block used to say otherwise.
     #
     # Measured 2026-09-16 rather than carried forward: 97 registered at app-profile boot,
     # 23 of them the runtime's own (import `AINDY.kernel.syscall_registry` alone to see that
     # number), so 74 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
-    # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`). The previous
+    # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`; +1 on
+    # 09-28: `sys.v1.market.propose`, so 75 of 98). The previous
     # figure of 90 was stale, which is the same failure the runtime-floor lines above had —
     # a number nobody re-derives is a number that drifts. To re-derive: boot the app profile,
     # then `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())`.
     #
     # AGENT TOOLS: use `register_run_tool_provider` (a callable returning the tool list),
     # NOT `register_agent_tool` (static registration). No app uses the static form; the
-    # 16 live tools all arrive through a provider. `iter_agent_tools()` returns 0. Of the
-    # 16, 15 are ours (7 `apps/*/agents/tools.py` modules; counted 2026-09-16) and one is the
+    # 17 live tools all arrive through a provider. `iter_agent_tools()` returns 0. Of the
+    # 17, 16 are ours (7 `apps/*/agents/tools.py` modules; 15 counted 2026-09-16, + `market.propose`
+    # 2026-09-28) and one is the
     # runtime's `runtime.selftest`. The planner sees ONE LINE per tool — `- name: description
     # (risk=…) args={…}` — the last part rendered from the tool's
     # `register_tool(..., args_schema={"required": [...], "properties": {k: {"type": ...}}})`
-    # (runtime 2.20.0, FR-33). Every one of our 15 declares one and
+    # (runtime 2.20.0, FR-33). Every one of our 16 declares one and
     # `test_agent_tool_args_schema.py` enforces it: a tool without a schema gives the planner
     # nothing but prose, it guesses the keys, and the step fails at execution (`arm.analyze` said
     # "or a topic", took `file_path`, failed 4 of 4 runs on 09-13). Types are the dispatcher's
