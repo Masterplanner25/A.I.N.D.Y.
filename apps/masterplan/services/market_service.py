@@ -75,18 +75,67 @@ def _terms(value: Any) -> list[str]:
     return out[:_TERM_LIMIT]
 
 
-def _evidence_items(value: Any) -> list[dict]:
-    """Evidence as the agent or a proposal hands it: dicts with a claim, or bare sentences."""
+_SINGLE_URL = re.compile(r"^https?://\S+$")
+_URL_LINE = re.compile(r"^\s*(https?://\S+)\s*$")
+EVIDENCE_LIMIT = 10
+SOURCES_LIMIT = 6
+
+
+def sources_evidence(text: Any, limit: int = SOURCES_LIMIT) -> list[dict]:
+    """Evidence from a research result: one item per linked result, its own url and its own words.
+
+    `research.query` returns web results as blocks of title, url, then snippet. A plan hands that
+    whole text over by step reference, and until 2026-09-30 it arrived as one evidence item whose
+    `source_url` was 1,000 characters of search text (run 8134573e). Each block now becomes one
+    claim ("title: snippet") with the block's own url.
+    """
+    lines = str(text or "").splitlines()
+    url_lines = [i for i, line in enumerate(lines) if _URL_LINE.match(line)]
+    out: list[dict] = []
+    seen: set[str] = set()
+    for n, i in enumerate(url_lines):
+        url = _URL_LINE.match(lines[i]).group(1)
+        if url in seen:
+            continue
+        seen.add(url)
+        title = lines[i - 1].strip() if i > 0 and not _URL_LINE.match(lines[i - 1]) else ""
+        end = url_lines[n + 1] - 1 if n + 1 < len(url_lines) else len(lines)
+        snippet = " ".join(line.strip() for line in lines[i + 1:end] if line.strip())
+        claim = f"{title}: {snippet}" if title and snippet else (title or snippet)
+        if claim:
+            out.append({"claim": claim[:400], "source_url": url[:1000]})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _evidence_items(value: Any, sources: Any = None) -> list[dict]:
+    """Evidence as the agent or a proposal hands it: dicts with a claim, bare sentences, or a research
+    result. A `source_url` that is not one link is a research result handed over whole, and is
+    expanded into its linked results rather than stored as a link."""
     out = []
     for item in value if isinstance(value, (list, tuple)) else []:
         if isinstance(item, dict):
             claim = _text(item.get("claim"), 1000)
-            url = _text(item.get("source_url") or item.get("url"), 1000)
+            url = str(item.get("source_url") or item.get("url") or "").strip()
+            if url and not _SINGLE_URL.match(url):
+                expanded = sources_evidence(url)
+                if expanded:
+                    out.extend(expanded)
+                    continue
+                url = ""
         else:
-            claim, url = _text(item, 1000), None
+            claim, url = _text(item, 1000), ""
         if claim:
-            out.append({"claim": claim, "source_url": url})
-    return out[:10]
+            out.append({"claim": claim, "source_url": url[:1000] or None})
+    out.extend(sources_evidence(sources))
+    unique, seen = [], set()
+    for item in out:
+        marker = (item["source_url"] or "", item["claim"])
+        if marker not in seen:
+            seen.add(marker)
+            unique.append(item)
+    return unique[:EVIDENCE_LIMIT]
 
 
 # ── Serialisation ──────────────────────────────────────────────────────────────────────────
@@ -420,7 +469,7 @@ def propose(db: Session, user_id: Any, args: dict, *, source: str = "agent") -> 
         "trigger": _text(args.get("trigger")),
         "category_terms": _terms(args.get("category_terms")),
         "works": [str(w) for w in (args.get("works") or []) if w][:10],
-        "evidence": _evidence_items(args.get("evidence")),
+        "evidence": _evidence_items(args.get("evidence"), args.get("sources")),
     }
     row = MarketProposal(user_id=uid, proposal_key=f"{source}:{uuid.uuid4()}", source=source,
                          payload=payload, status="open")

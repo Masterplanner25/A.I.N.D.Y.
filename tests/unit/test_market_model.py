@@ -230,3 +230,56 @@ def test_the_overview_shows_the_exact_block_the_agent_is_sent(db_session, no_job
     _segment(db_session)
     overview = ms.market_overview(db_session, USER)
     assert overview["agent_block"] == ms.market_context(user_id=USER, db=db_session)["block"]
+
+
+# ── evidence from research (run 8134573e) ─────────────────────────────────────────────────
+
+RESEARCH = (
+    "How to Deploy AI Agents in 2026\n"
+    "https://zentor.ai/blog/how-to-deploy-ai-agent-2026-guide\n"
+    "The hard part is turning that demo into a reliable production workflow.\n"
+    "\n"
+    "Agentic Infrastructure: What Actually Goes in the Stack\n"
+    "https://www.augmentcode.com/guides/agentic-infrastructure-stack\n"
+    "Agentic infrastructure is the set of runtime systems and orchestration.\n"
+    "More of the same snippet."
+)
+
+
+def test_a_research_result_becomes_one_evidence_item_per_linked_result():
+    items = ms.sources_evidence(RESEARCH)
+    assert [i["source_url"] for i in items] == [
+        "https://zentor.ai/blog/how-to-deploy-ai-agent-2026-guide",
+        "https://www.augmentcode.com/guides/agentic-infrastructure-stack",
+    ]
+    assert items[0]["claim"] == "How to Deploy AI Agents in 2026: The hard part is turning that demo into a reliable production workflow."
+    assert items[1]["claim"].endswith("orchestration. More of the same snippet.")
+
+
+def test_a_research_result_handed_over_as_a_source_url_is_expanded_not_stored_as_a_link(db_session, no_jobs):
+    """What run 8134573e did: `source_url` was a step reference to the whole research result."""
+    ms.propose(db_session, USER, {"kind": "segment", "name": "Platform teams", "evidence": [
+        {"claim": "Findings on teams adopting self-hosted runtimes", "source_url": RESEARCH},
+    ]})
+    [proposal] = ms.list_proposals(db_session, USER)["proposals"]
+    assert [e["source_url"] for e in proposal["evidence"]] == [
+        "https://zentor.ai/blog/how-to-deploy-ai-agent-2026-guide",
+        "https://www.augmentcode.com/guides/agentic-infrastructure-stack",
+    ]
+
+
+def test_sources_attach_research_beside_the_agents_own_claims(db_session, no_jobs):
+    ms.propose(db_session, USER, {
+        "kind": "voice", "name": "Futurum Group",
+        "evidence": [{"claim": "Names the category AgentOps.", "source_url": "https://futurum.example/agentops"}],
+        "sources": RESEARCH,
+    })
+    [proposal] = ms.list_proposals(db_session, USER)["proposals"]
+    assert len(proposal["evidence"]) == 3
+    assert proposal["evidence"][0] == {"claim": "Names the category AgentOps.", "source_url": "https://futurum.example/agentops"}
+
+
+def test_a_non_link_source_url_with_nothing_to_expand_is_dropped_not_kept(db_session, no_jobs):
+    ms.propose(db_session, USER, {"kind": "voice", "name": "X", "evidence": [{"claim": "c", "source_url": "see above"}]})
+    [proposal] = ms.list_proposals(db_session, USER)["proposals"]
+    assert proposal["evidence"] == [{"claim": "c", "source_url": None}]
