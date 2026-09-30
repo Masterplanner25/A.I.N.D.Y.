@@ -244,6 +244,13 @@ end user is a buyer; vendor → alternative, agency → intermediary, publisher 
 also carries the buyer's kind of organisation, and each search re-judges the segment's saved leads it
 did not return (≤ 20, none with outreach), so a lead saved by the old judge is re-filed.
 
+**Then the judge's model and names.** On the owner's re-run, `gpt-4o-mini` at default temperature
+flipped Superserve between vendor and buyer across runs, kept Robots and Pencils (an agency) as a buyer,
+and proposed an anonymous posting as an organisation called "AI security company". The judge is now
+`gpt-4o` at temperature 0 (`AINDY_SEGMENT_JUDGE_MODEL` overrides; about $0.10 per Find buyers press),
+and an organisation must be named by the result itself (the model's name found in it and not a
+description, or the job board's employer slug); otherwise the result is dropped as `unnamed`.
+
 ---
 
 ## 6. What the agent sees

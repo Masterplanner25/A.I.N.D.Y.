@@ -77,6 +77,61 @@ def company_from_result(url: str, title: str) -> str:
     return (host.split(".")[0] if host else "").replace("-", " ").title() or "Unknown"
 
 
+_NAME_NOISE = {"inc", "llc", "ltd", "co", "corp", "corporation", "the", "gmbh", "plc", "limited"}
+
+
+def _words(text: str) -> list[str]:
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).split()
+
+
+def _named_in(name: str, result: dict) -> bool:
+    """Whether a name appears in the result itself: every word of it in the title, url or snippet,
+    or the words run together in the address (a job board's `/robotsandpencils/` slug)."""
+    words = [w for w in _words(name) if w not in _NAME_NOISE]
+    if not words:
+        return False
+    haystack = " ".join(str(result.get(k) or "") for k in ("title", "url", "snippet"))
+    present = set(_words(haystack))
+    return all(w in present for w in words) or "".join(words) in "".join(_words(haystack))
+
+
+#: A "name" ending in one of these is a description ("an AI security company", "a fintech startup").
+_DESCRIPTORS = {"company", "startup", "firm", "organisation", "organization", "business", "employer",
+                "client", "provider", "vendor", "agency", "team", "enterprise"}
+
+
+def _is_description(name: str) -> bool:
+    words = _words(name)
+    return not words or words[0] in {"a", "an"} or words[-1] in _DESCRIPTORS
+
+
+def _address_or_title_employer(result: dict) -> str | None:
+    """The employer a job board's address or title gives, or a site name the title ends with.
+    Never a bare host label: an anonymous careers site is not an organisation called "Careers"."""
+    url, title = result.get("url") or "", result.get("title") or ""
+    host = _host(url)
+    if any(host == board or host.endswith("." + board) for board in JOB_BOARDS):
+        return company_from_result(url, title)
+    suffix = _SITE_SUFFIX.search(title)
+    return suffix.group(1).strip() if suffix else None
+
+
+def grounded_organisation(claimed: str, result: dict) -> str | None:
+    """The organisation a result is about, only if the result names it. The model's name when the
+    result contains it and it is a name, not a description; otherwise the employer the job board's
+    address or the title gives; otherwise none.
+
+    An anonymous posting became a market proposal named "AI security company" (owner's run,
+    2026-09-30): a description the model wrote, not an organisation anyone can look up."""
+    claimed = (claimed or "").strip()
+    if claimed and not _is_description(claimed) and _named_in(claimed, result):
+        return claimed
+    fallback = _address_or_title_employer(result)
+    if fallback and not _is_description(fallback) and _named_in(fallback, result):
+        return fallback
+    return None
+
+
 _BUYER_ORGANISATION = re.compile(r"\b(?:in|at|for)\s+(?:a|an|the)?\s*(.+)$", re.I)
 
 
@@ -166,8 +221,21 @@ def classify(verdict: dict) -> str:
     return KIND_FOR_ORG_TYPE.get(org_type, "drop")
 
 
+#: The judge's model, at temperature 0. gpt-4o-mini at its default temperature, on a title and a
+#: snippet, flipped the same company between runs (Superserve: vendor on one, buyer at 80 on the
+#: next) and did not know Robots and Pencils is an agency (owner's run, 2026-09-30). About $0.10 per
+#: Find buyers press at ~28 calls, against ~$0.01 before. `AINDY_SEGMENT_JUDGE_MODEL` overrides.
+JUDGE_MODEL = "gpt-4o"
+
+
+def _judge_model() -> str:
+    import os
+
+    return (os.getenv("AINDY_SEGMENT_JUDGE_MODEL") or "").strip() or JUDGE_MODEL
+
+
 def judge_result(result: dict, brief: dict) -> dict:
-    """One gpt-4o-mini call: the facts about a result (§5.3). `classify` turns them into a decision."""
+    """One model call: the facts about a result (§5.3). `classify` turns them into a decision."""
     from AINDY.config import settings
     from AINDY.platform_layer.external_call_service import perform_external_call
     from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
@@ -179,17 +247,19 @@ def judge_result(result: dict, brief: dict) -> dict:
         f"THE SELLER'S WORK THAT SERVES THEM: {works}\n\n"
         f"RESULT\nTitle: {result.get('title')}\nURL: {result.get('url')}\nSnippet: {result.get('snippet')}"
     )
+    model = _judge_model()
     completion = perform_external_call(
         service_name="openai",
         endpoint="chat.completions.create",
-        model="gpt-4o-mini",
+        model=model,
         method="openai.chat",
         extra={"purpose": "segment_lead_judgement", "segment": brief["name"]},
         operation=lambda: chat_completion(
             get_openai_client(),
-            model="gpt-4o-mini",
+            model=model,
             messages=[{"role": "system", "content": _JUDGE_PROMPT}, {"role": "user", "content": user}],
             timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
+            temperature=0,
         ),
     )
     text = (completion.choices[0].message.content or "").strip()
@@ -282,9 +352,15 @@ def segment_lead_search(
             failed += 1
             logger.warning("[segment_search] judgement failed for %s: %s", url, exc)
             continue
-        organisation = str(verdict.get("organisation") or "").strip() or company_from_result(url, row.get("title", ""))
         context = " ".join(p for p in (row.get("title"), row.get("snippet")) if p)[:1000]
         decision = classify(verdict)
+        organisation = grounded_organisation(str(verdict.get("organisation") or ""), row)
+        if organisation is None:
+            # Nothing in the result names an organisation: not a lead, and not a market entry.
+            dropped.append({"name": str(verdict.get("organisation") or ""), "kind": "unnamed",
+                            "org_type": str(verdict.get("org_type") or ""),
+                            "reason": "the result does not name the organisation"})
+            continue
         if decision == "buyer":
             lead = save_lead(db, user_id=user_id, url=url, fields={
                 "query": query,
@@ -332,7 +408,8 @@ def segment_lead_search(
             continue
         rejudged += 1
         decision = classify(verdict)
-        organisation = str(verdict.get("organisation") or "").strip() or company
+        organisation = grounded_organisation(str(verdict.get("organisation") or ""),
+                                             {"title": company, "url": url, "snippet": context}) or company
         if decision == "buyer":
             save_lead(db, user_id=user_id, url=url, fields={
                 key: _score(verdict, key) for key in ("fit_score", "intent_score", "data_quality_score", "overall_score")
