@@ -193,3 +193,46 @@ and Nodus execution recall too.
 and no dependency on the one behaviour it changes. Reported to the runtime in FR-49, with the
 caveats: `idle in transaction` was never sampled during a recall, and the pipeline's recalls cannot
 show a failure until FR-49 lands. The flag stays on here. Rows 2–6 can start, one at a time.
+
+## 9. Soak register row 2 — `AINDY_SYSCALL_IDEMPOTENCY_STRICT`, on since 2026-09-30T15:39Z
+
+FR-27's strict half of `IDEM-11`: a concurrent duplicate of an `EXACTLY_ONCE` syscall waits on an
+advisory lock and replays the winner's result, instead of degrading to `AT_LEAST_ONCE` and running
+the handler again. The gate itself (`AINDY_SYSCALL_IDEMPOTENCY`, default on) was already live here:
+`effect_records` held 482 rows (`flow.run` 358, `memory.write` 64, `nodus.execute` 43, …), every
+one `success` or `failed`, never contended.
+
+**Wired first.** Compose did not pass the flag, so `.env` alone would have done nothing (the
+row 1 lesson). Added beside row 1's; `test_compose_agent_flags_wired.py` now covers both soak flags.
+
+### 9.1 Presence: a deliberate duplicate, because our traffic never makes one
+
+The register warns that zero `replayed`/`reclaimed` after 200 runs proves nothing. One user's
+requests do not race themselves, so the presence signal was produced on purpose:
+`scripts/soak_idempotency_probe.py`, run in the api container against this stack's Postgres.
+A throwaway `EXACTLY_ONCE` syscall (0.2 s handler) counts its own runs; 8 threads released by a
+barrier dispatch it with the same payload and run scope; five bursts per phase.
+
+| Phase | Handler runs per 8-way burst | Gate outcomes |
+|---|---|---|
+| A. gate off (liveness) | 8, 8, 8, 8, 8 | none |
+| B. gate on, strict off (**the setting until today**) | **8, 8, 8, 8, 8** | reserved 5, **degraded 35** |
+| C. gate on, strict on | **1, 1, 1, 1, 1** | reserved 5, **replayed 35**, 0 errors |
+
+**B is the finding.** With a handler that takes 0.2 s, the non-strict gate gave no protection under
+contention at all: every duplicate lost the insert race to the live pending row, degraded and ran.
+The runtime's own soak measured 2 of 8 with an instant handler; a realistic handler is worse. C is
+row 2's presence signal, met: exactly once, the rest replayed. Probe rows were deleted afterwards.
+
+### 9.2 Absence baseline, and the first reading after the flip
+
+| | Before (strict off) | After (strict on) |
+|---|---|---|
+| `GET /apps/scores/me` (runs `sys.v1.flow.run`), 30 calls, test account | p50 1,055 ms, p95 1,517 ms, one 10 s outlier, 30/30 OK | p50 880 ms, p95 1,284 ms, max 2,990 ms, 30/30 OK |
+| `aindy_effect_gate_outcomes_total` | none since that morning's restart | `reserved` 30 (every flow run engaged the gate), `degraded` 0 |
+
+**Read at the end of the window:** `degraded` and `degraded_lock_timeout` stay at 0 (a
+`degraded_lock_timeout` is a loser that waited out the 300 s ceiling: a handler slower than the
+lock), p95 of the same route unchanged, and the probe rerun with the flag as the api has it. The
+counters reset on every api recreate, so read `/metrics/` before each rebuild, as with row 1's log.
+Ends no earlier than 2026-10-07.
