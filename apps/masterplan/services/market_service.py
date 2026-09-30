@@ -698,3 +698,40 @@ def market_overview(db: Session, user_id: Any) -> dict:
     listing = list_market(db, user_id)
     listing["agent_block"] = render_market_block(market_context(user_id=user_id, db=db))
     return listing
+
+
+# ── What search reads (phase B, §5): a segment to search inside ──────────────────────────
+
+
+def segment_brief(*, user_id: Any, segment: str, db: Session) -> dict | None:
+    """A confirmed segment as lead search needs it, found by id or by name: who the buyer is, their
+    problem and words, the channels confirmed for it, and the owner's works that serve it (the fit a
+    result is judged against, in the owner's words). Read by search through `masterplan.segment_brief`.
+    """
+    uid = parse_user_id(user_id)
+    if uid is None or not segment:
+        return None
+    row = db.query(MarketSegment).filter(MarketSegment.user_id == uid, MarketSegment.id == str(segment)).first()
+    if row is None:
+        row = _segment_by_name(db, uid, str(segment))
+    if row is None:
+        return None
+    work_ids = [j.work_id for j in db.query(SegmentWork).filter(SegmentWork.segment_id == row.id).all()]
+    works = db.query(Work).filter(Work.id.in_(work_ids)).all() if work_ids else []
+    channels = (
+        db.query(MarketEntity)
+        .filter(MarketEntity.user_id == uid, MarketEntity.segment_id == row.id, MarketEntity.kind == "channel")
+        .all()
+    )
+    return {
+        **serialize_segment(row),
+        "works": [{"name": w.name, "summary": w.summary} for w in works],
+        "channels": [{"name": c.name, "url": c.url} for c in channels],
+    }
+
+
+def propose_from_search(*, user_id: Any, args: dict, db: Session) -> dict:
+    """A lead-search result that is not a buyer, proposed as what it is (§5.3). Read by search
+    through `masterplan.market_propose`, so a competitor's listicle becomes an `alternative`
+    proposal instead of a lead."""
+    return propose(db, user_id, args, source="lead_search")

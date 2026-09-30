@@ -73,6 +73,15 @@ def _outreach_send_enabled() -> bool:
     return os.getenv("AINDY_SEARCH_OUTREACH_SEND", "").strip().lower() in _SEND_ENABLED_VALUES
 
 
+def segment_key(segment_id: str | None, query: str | None) -> str | None:
+    """What auto-suppress groups outcomes by. A lead found inside a market segment is grouped by the
+    segment (MARKET_MODEL_SPEC §5.4); an older lead, by its query. Keyed on the query alone, a segment
+    could never accumulate outcomes: the agent rewords every query."""
+    if segment_id:
+        return f"segment:{segment_id}"
+    return query
+
+
 def evaluate_lead_action_gate(
     leads: list[dict],
     actioned_lead_ids: set,
@@ -105,11 +114,12 @@ def evaluate_lead_action_gate(
         overall = lead.get("overall_score") or 0
         data_quality = lead.get("data_quality_score")
         query = lead.get("query")
+        segment = segment_key(lead.get("segment_id"), query)
 
         if lead_id in actioned_lead_ids:
             skipped.append({"lead_id": lead_id, "company": company, "reason": "already actioned"})
             continue
-        if query is not None and query in suppressed:
+        if segment is not None and segment in suppressed:
             skipped.append(
                 {"lead_id": lead_id, "company": company,
                  "reason": "segment auto-suppressed (low conversion)"}
@@ -177,6 +187,7 @@ class LeadExecutionService:
                 "url": row.url,
                 "context": row.context,
                 "query": row.query,
+                "segment_id": row.segment_id,
                 "overall_score": row.overall_score,
                 "data_quality_score": row.data_quality_score,
                 "contact_email": row.contact_email,
@@ -216,16 +227,19 @@ class LeadExecutionService:
         rate <= SUPPRESS_MAX_CONVERSION_RATE.
         """
         rows = (
-            self.db.query(LeadAction.lead_query, LeadAction.outcome)
+            self.db.query(LeadAction.lead_query, LeadGenResult.segment_id, LeadAction.outcome)
+            .outerjoin(LeadGenResult, LeadGenResult.id == LeadAction.lead_id)
             .filter(
                 LeadAction.user_id == self.user_uuid,
                 LeadAction.outcome.isnot(None),
-                LeadAction.lead_query.isnot(None),
             )
             .all()
         )
         totals: dict[str, list[int]] = {}  # segment -> [converted, total]
-        for segment, outcome in rows:
+        for query, segment_id, outcome in rows:
+            segment = segment_key(segment_id, query)
+            if segment is None:
+                continue
             counts = totals.setdefault(segment, [0, 0])
             counts[1] += 1
             if outcome == "converted":

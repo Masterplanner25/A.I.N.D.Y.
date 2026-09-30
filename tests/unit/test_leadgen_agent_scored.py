@@ -76,20 +76,36 @@ def test_max_results_and_duplicates():
     assert len(_extract_leads_from_text(RAW, max_results=2)) == 2
 
 
-def test_the_agent_tool_runs_the_scored_search(monkeypatch):
+def test_with_a_segment_the_agent_tool_searches_inside_it(monkeypatch):
+    """MARKET_MODEL_SPEC §5 (2026-09-30): the saved search is the one inside a segment."""
     from apps.search.agents import tools
 
     calls = []
 
     def fake_dispatch(name, args, user_id, *, capability):
-        calls.append((name, capability))
-        return {"search_results": [{"id": 7, "company": "AMAX", "overall_score": 72}], "count": 1}
+        calls.append((name, args, capability))
+        return {"leads": [{"id": 7, "company": "OpenTeams", "overall_score": 82}], "count": 1,
+                "segment": "Platform teams", "proposed": [{"kind": "alternative", "name": "Gumloop"}]}
 
     monkeypatch.setattr(tools, "_dispatch_tool_syscall", fake_dispatch)
-    out = tools.leadgen_search({"query": "aeo"}, "user-1", None)
+    out = tools.leadgen_search({"segment": "Platform teams"}, "user-1", None)
 
-    assert calls == [("sys.v1.leadgen.search", "leadgen.search")]
-    assert out == {"leads": [{"id": 7, "company": "AMAX", "overall_score": 72}], "count": 1}
+    assert calls == [("sys.v1.leadgen.search_segment", {"segment": "Platform teams", "where": "hiring"}, "leadgen.search")]
+    assert out["saved"] is True and out["count"] == 1 and out["proposed"][0]["name"] == "Gumloop"
+
+
+def test_without_a_segment_it_is_a_web_search_that_saves_nothing(monkeypatch):
+    """§9 decision 4: outside a segment nothing is saved, so leadgen.act never drafts to an article."""
+    from apps.search.agents import tools
+
+    calls = []
+    monkeypatch.setattr(tools, "_dispatch_tool_syscall",
+                        lambda name, args, user_id, *, capability: calls.append(name) or {"leads": [{"company": "X"}]})
+    out = tools.leadgen_search({"query": "aeo"}, "user-1", None)
+    assert calls == ["sys.v1.leadgen.search_ai"]
+    assert (out["saved"], out["count"], out["segment"]) == (False, 1, None)
+    with pytest.raises(ValueError):
+        tools.leadgen_search({}, "user-1", None)
 
 
 def test_a_failed_retrieval_is_not_saved_as_a_lead(monkeypatch):

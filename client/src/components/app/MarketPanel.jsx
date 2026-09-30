@@ -6,6 +6,7 @@ import {
   deleteMarketEntity,
   deleteSegment,
   dismissMarketProposal,
+  findSegmentBuyers,
   getMarket,
   listMarketProposals,
   setSegmentWorks,
@@ -84,6 +85,8 @@ export default function MarketPanel() {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [searching, setSearching] = useState(null);
+  const [found, setFound] = useState({});
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +125,21 @@ export default function MarketPanel() {
       return false;
     } finally {
       setBusy(false);
+    }
+  };
+
+  // One web search and a judgement per result, so it takes a while and is never double-fired.
+  const findBuyers = async (segment) => {
+    setSearching(segment.id);
+    setError("");
+    try {
+      const result = await findSegmentBuyers(segment.id);
+      setFound((prev) => ({ ...prev, [segment.id]: result }));
+      await load();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setSearching(null);
     }
   };
 
@@ -309,6 +327,29 @@ export default function MarketPanel() {
 
               {around.length > 0 && <div className="space-y-2">{safeMap(around, entityRow)}</div>}
               <Evidence items={s.evidence} />
+
+              <div className="flex items-center gap-3">
+                <button className={QUIET} disabled={busy || searching !== null} onClick={() => findBuyers(s)}>
+                  {searching === s.id ? "Searching…" : "Find buyers"}
+                </button>
+                <span className="text-[10px] text-zinc-600">companies hiring for this problem, last month</span>
+              </div>
+              {found[s.id] && (
+                <div className="space-y-1 text-[11px]">
+                  <p className="text-zinc-400">
+                    {found[s.id].count} buyer{found[s.id].count === 1 ? "" : "s"} saved to Leads
+                    {found[s.id].proposed?.length ? ` · ${found[s.id].proposed.length} proposed above as market entries` : ""}
+                    {found[s.id].dropped ? ` · ${found[s.id].dropped} not relevant` : ""}
+                  </p>
+                  {safeMap(found[s.id].leads || [], (lead) => (
+                    <p key={lead.id} className="text-zinc-300">
+                      <a href={lead.url} target="_blank" rel="noreferrer" className="underline">{lead.company}</a>
+                      <span className="ml-2 text-zinc-500">{Math.round(lead.overall_score || 0)}</span>
+                      {lead.reasoning && <span className="ml-2 text-zinc-500">{lead.reasoning}</span>}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

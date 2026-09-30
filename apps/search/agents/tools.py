@@ -45,13 +45,23 @@ def register() -> None:
         "leadgen.search",
         risk="medium",
         description=(
-            "Search the open web for B2B leads matching a query. Each result is scored and saved "
-            "as a lead for leadgen.act. The results are web pages, NOT verified buyers: a market "
-            "question (competitors, analysts, channels, who the buyer is) returns articles about "
-            "the market, so answer those with research.query and record findings with "
-            "market.propose instead. Does not contact anyone. Returns {leads[], count}."
+            "Find BUYERS inside one of the user's confirmed market segments (name it in `segment`; "
+            "the segments are in your context). It searches where that buyer shows up (job boards "
+            "hiring for the problem by default; where='channels' for the segment's confirmed "
+            "channels), judges each result, saves the buyers as leads leadgen.act can draft "
+            "outreach for, and proposes the rest (competitors, analysts) as market entries. "
+            "Without a segment it is a plain web search that saves nothing. Market questions "
+            "(who the buyer is, competitors) belong to research.query + market.propose. Does not "
+            "contact anyone. Returns {leads[], count, saved, segment, proposed[]}."
         ),
-        args_schema={"required": ["query"], "properties": {"query": {"type": "string"}}},
+        args_schema={
+            "required": [],
+            "properties": {
+                "segment": {"type": "string", "description": "a confirmed segment's name"},
+                "where": {"type": "string", "description": "hiring (default) | channels | web"},
+                "query": {"type": "string", "description": "only without a segment: a plain web search"},
+            },
+        },
         capability="tool:leadgen.search",
         required_capability="external_api_call",
         category="leadgen",
@@ -115,12 +125,25 @@ def search_query(args: dict, user_id: str, db) -> dict:
 
 
 def leadgen_search(args: dict, user_id: str, db) -> dict:
-    # The SCORED and SAVED search, the same one the Search page uses. Until 2026-09-28 this called
-    # `sys.v1.leadgen.search_ai`, the raw twin: leads came back unscored (`score: null`), nothing
-    # was saved, and `leadgen.act` (which works from saved leads) could never follow up on
-    # anything the agent found (run 8cdb97ef).
-    data = _dispatch_tool_syscall("sys.v1.leadgen.search", args, user_id, capability="leadgen.search")
-    return {"leads": data.get("search_results", []), "count": data.get("count", 0)}
+    # Inside a segment (MARKET_MODEL_SPEC §5): judged, and only buyers saved. Outside one, a plain
+    # web search that saves nothing (§9 decision 4). History: until 2026-09-28 this was the raw
+    # search, unscored and unsaved (run 8cdb97ef); then the scored search, which saved a
+    # competitor's listicle, an analyst's article and a trade story as leads (run 8b75d75d),
+    # because it searched the open web for a topic.
+    segment = str(args.get("segment") or "").strip()
+    if segment:
+        data = _dispatch_tool_syscall(
+            "sys.v1.leadgen.search_segment", {"segment": segment, "where": args.get("where") or "hiring"},
+            user_id, capability="leadgen.search",
+        )
+        return {"leads": data.get("leads", []), "count": data.get("count", 0), "saved": True,
+                "segment": data.get("segment"), "proposed": data.get("proposed", [])}
+    query = str(args.get("query") or "").strip()
+    if not query:
+        raise ValueError("leadgen.search needs a segment (or, for a plain web search, a query)")
+    data = _dispatch_tool_syscall("sys.v1.leadgen.search_ai", {"query": query}, user_id, capability="leadgen.search_ai")
+    leads = data.get("leads", [])
+    return {"leads": leads, "count": len(leads), "saved": False, "segment": None, "proposed": []}
 
 
 def research_query(args: dict, user_id: str, db) -> dict:

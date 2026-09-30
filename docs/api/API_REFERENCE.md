@@ -908,6 +908,11 @@ Preview Lead Search
 
 **Response 200:** unspecified
 
+#### POST /apps/leadgen/segment-search
+Find buyers inside a confirmed market segment (`MARKET_MODEL_SPEC.md` §5) — `{segment, where?}`; `segment` is a confirmed segment's id or name, `where` is `hiring` (job boards, default) · `channels` (the segment's confirmed channel entries) · `web`. Results are from the last month; each is judged against the segment and the works that serve it. Buyers are saved as leads tagged with the segment; non-buyers are proposed as market entries; irrelevant ones are dropped. One web search, and one model call per result
+
+**Response 200:** segment, segment_status, where, query, leads: [{id, company, url, context, overall_score, reasoning}], count, proposed: [{kind, name}], dropped, failed; 422 when the segment is not confirmed, or has no channels for `where=channels`
+
 #### PATCH /apps/leadgen/leads/{lead_id}/contact
 Set Lead Contact — enter (or clear) the recipient address for one of your leads by hand.
 Discovery never sets it; the `email` channel sends only to leads that have one.

@@ -30,6 +30,10 @@ class LeadGenResult(Base):
     # Entered by hand (PATCH /leadgen/leads/{id}/contact) — never discovered or guessed. The
     # `email` channel sends only to a lead that has one; a lead without stays queued.
     contact_email = Column(String, nullable=True)
+    # The market segment this lead was found inside (MARKET_MODEL_SPEC §5.4). A soft reference: the
+    # segment is masterplan's. Keys the learning close's suppression, which keyed on the reworded
+    # query string and so could never accumulate outcomes. Null for a search outside a segment.
+    segment_id = Column(String, nullable=True, index=True)
 
     # --- Infinity Algorithm Scoring ---
     fit_score = Column(Float)           # Solution / Market Fit

@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
   setSegmentWorks: vi.fn(),
   createMarketEntity: vi.fn(),
   deleteMarketEntity: vi.fn(),
+  findSegmentBuyers: vi.fn(),
 }));
 
 vi.mock("../api/market.js", () => api);
@@ -132,6 +133,19 @@ describe("Collaborator's Market mode", () => {
     const nodus = await screen.findByRole("checkbox", { name: "Nodus" });
     await userEvent.click(nodus);
     await waitFor(() => expect(api.setSegmentWorks).toHaveBeenCalledWith("s-1", ["w-rt", "w-nd"]));
+  });
+
+  it("finds buyers inside a segment and says where everything went", async () => {
+    api.findSegmentBuyers.mockResolvedValue({
+      segment: SEGMENT.name, count: 1, dropped: 2, proposed: [{ kind: "alternative", name: "Gumloop" }],
+      leads: [{ id: 9, company: "OpenTeams", url: "https://job-boards.greenhouse.io/openteams/jobs/1",
+        overall_score: 82, reasoning: "Hiring to build an internal agent platform." }],
+    });
+    renderPanel();
+    await userEvent.click(await screen.findByRole("button", { name: /find buyers/i }));
+    await waitFor(() => expect(api.findSegmentBuyers).toHaveBeenCalledWith("s-1"));
+    expect(await screen.findByText(/1 buyer saved to Leads · 1 proposed above as market entries · 2 not relevant/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "OpenTeams" })).toHaveAttribute("href", "https://job-boards.greenhouse.io/openteams/jobs/1");
   });
 
   it("shows exactly what the agent is told", async () => {

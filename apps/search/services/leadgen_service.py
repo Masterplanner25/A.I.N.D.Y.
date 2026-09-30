@@ -263,6 +263,37 @@ Each score must be a number between 0 and 100.
 
 
 
+def save_lead(db: Session, *, user_id, url: str, fields: dict) -> LeadGenResult:
+    """Save a scored lead, once per url per user. Flushes; the caller commits.
+
+    A retried step or a repeated search used to save the same page again (run 195777b0 left three
+    Onereach rows), and `leadgen.act` dedups by lead id, so each copy would have been drafted to.
+    A lead already saved is re-scored in place; its hand-entered contact and its outreach history
+    stay attached to the one row.
+    """
+    user_uuid = uuid.UUID(str(user_id))
+    db_entry = (
+        db.query(LeadGenResult)
+        .filter(LeadGenResult.user_id == user_uuid, LeadGenResult.url == url)
+        .order_by(LeadGenResult.id)
+        .first()
+    )
+    if db_entry is not None:
+        for key, value in fields.items():
+            setattr(db_entry, key, value)
+    else:
+        db_entry = LeadGenResult(
+            user_id=user_uuid,
+            url=url,
+            # LeadGenResult.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+            created_at=datetime.now(timezone.utc),
+            **fields,
+        )
+        db.add(db_entry)
+    db.flush()
+    return db_entry
+
+
 def create_lead_results(db: Session, query: str, user_id: str = None):
     """
     Runs the full pipeline:
@@ -296,29 +327,7 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
             "overall_score": score["overall_score"],
             "reasoning": score["reasoning"],
         }
-        user_uuid = uuid.UUID(str(user_id))
-        # One lead per url per user. A retried step or a repeated search used to save the same page
-        # again (run 195777b0 left three Onereach rows), and `leadgen.act` dedups by lead id, so each
-        # copy would have been drafted to. A lead already saved is re-scored in place; its
-        # hand-entered contact and its outreach history stay attached to the one row.
-        db_entry = (
-            db.query(LeadGenResult)
-            .filter(LeadGenResult.user_id == user_uuid, LeadGenResult.url == lead["url"])
-            .order_by(LeadGenResult.id)
-            .first()
-        )
-        if db_entry is not None:
-            for key, value in fields.items():
-                setattr(db_entry, key, value)
-        else:
-            db_entry = LeadGenResult(
-                user_id=user_uuid,
-                url=lead["url"],
-                # LeadGenResult.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
-                created_at=datetime.now(timezone.utc),
-                **fields,
-            )
-            db.add(db_entry)
+        db_entry = save_lead(db, user_id=user_id, url=lead["url"], fields=fields)
         db.commit()
         db.refresh(db_entry)
 

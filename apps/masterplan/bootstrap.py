@@ -117,6 +117,10 @@ def _register_jobs() -> None:
     register_job("masterplan.work_context", _work_context)
     # The planner's market block (MARKET_MODEL_SPEC §6): confirmed segments and entries, status printed.
     register_job("masterplan.market_context", _market_context)
+    # Lead search inside a segment (MARKET_MODEL_SPEC §5): the segment to search, and where its
+    # non-buyer results go.
+    register_job("masterplan.segment_brief", _segment_brief)
+    register_job("masterplan.market_propose", _market_propose)
 
 
 def _register_scheduled_jobs() -> None:
@@ -300,6 +304,16 @@ def _genesis_audit(*args, **kwargs):
 def _work_context(*args, **kwargs):
     from apps.masterplan.services.work_service import work_context
     return work_context(*args, **kwargs)
+
+
+def _segment_brief(*args, **kwargs):
+    from apps.masterplan.services.market_service import segment_brief
+    return segment_brief(*args, **kwargs)
+
+
+def _market_propose(*args, **kwargs):
+    from apps.masterplan.services.market_service import propose_from_search
+    return propose_from_search(*args, **kwargs)
 
 
 def _market_context(*args, **kwargs):

@@ -53,6 +53,22 @@ def _handle_leadgen_search(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_leadgen_search_segment(payload: dict, ctx: SyscallContext) -> dict:
+    """Lead search inside a confirmed market segment (MARKET_MODEL_SPEC §5)."""
+    from apps.search.services.segment_search import segment_lead_search
+
+    segment = str(payload.get("segment") or "").strip()
+    if not segment:
+        raise ValueError("sys.v1.leadgen.search_segment requires 'segment'")
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return segment_lead_search(db, user_id=ctx.user_id, segment=segment,
+                                   where=payload.get("where") or "hiring")
+    finally:
+        if owns_session:
+            db.close()
+
+
 def _handle_leadgen_search_ai(payload: dict, ctx: SyscallContext) -> dict:
     from apps.search.services.leadgen_service import run_ai_search
 
@@ -294,6 +310,13 @@ def register_search_syscall_handlers() -> None:
         handler=_handle_leadgen_search,
         capability="leadgen.search",
         description="B2B lead search via create_lead_results.",
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.leadgen.search_segment",
+        handler=_handle_leadgen_search_segment,
+        capability="leadgen.search",
+        description="Lead search inside a confirmed market segment: buyers saved, the rest proposed.",
         stable=False,
     )
     register_syscall(

@@ -8,8 +8,8 @@ owner: "app-team"
 
 # The Market model — who your work is for, and where they are
 
-**Status:** phase A BUILT 2026-09-28 (owner took §9 decisions 1–4 as recommended); B and C not
-started. Written 2026-09-28, the day the agent's lead search first worked end to end and returned
+**Status:** phase A BUILT 2026-09-28 (owner took §9 decisions 1–4 as recommended); phase B BUILT
+2026-09-30 (§5.6); C not started. Written 2026-09-28, the day the agent's lead search first worked end to end and returned
 three results that were not leads.
 
 **The owner, which is the whole spec:**
@@ -208,6 +208,31 @@ confident the research sounded.
   segment**, and that market questions belong to `research.query` + `market.propose`.
 - `market.propose` is described as the place research findings about competitors, channels and
   category names go.
+
+### 5.6 As built, 2026-09-30
+
+**§5.1's verifications, run first** against the real provider with the platform-teams segment's words:
+
+| Search | What came back |
+|---|---|
+| Open web, last month | listicles (*"Best AI Agent Platforms 2026"*, *"10 best orchestration platforms"*) |
+| **Job boards** (Greenhouse, Lever, Ashby), last month | **companies hiring for the problem**: Similarweb, OpenTeams, EarnIn, AmTech Software, Firmus. The employer is in the title or the address |
+| HN, Reddit, GitHub, last month | GitHub repos of self-hosted agent runtimes: alternatives and voices |
+| `search_type: people` | LinkedIn profiles of named people in the role |
+
+So `where` is `hiring` by default (job boards), `channels` (the segment's confirmed `channel`
+entries, refused when it has none) or `web`. **People search is not built:** saving named
+individuals as leads is the owner's call, not a default.
+
+- `research_engine.web_search_results` sends `search_domain_filter` and `search_recency_filter`.
+- `segment_search.segment_lead_search`: the segment (through `masterplan.segment_brief`), a query in its
+  words, one `gpt-4o-mini` judgement per result against the segment and its works (buyer or not; if
+  not, which kind of entry). Buyers are saved with `leadgen_results.segment_id` (`sg1leadseg0001`) and
+  deduplicated by url; non-buyers go to `masterplan.market_propose`, source `lead_search`.
+- `leadgen.search` (the agent tool): with `segment`, the search above; without one, a plain web search
+  that saves nothing (§9 decision 4). `POST /apps/leadgen/segment-search`, and **Find buyers** on each
+  segment in Collaborator's Market mode.
+- Auto-suppress groups outcomes by `segment:<id>` when a lead has one, by query otherwise.
 
 ---
 
