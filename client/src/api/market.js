@@ -45,3 +45,8 @@ export function createMarketEntity(body) {
 export function deleteMarketEntity(entityId) {
   return authRequest(`/apps/market/entities/${encodeURIComponent(entityId)}`, { method: "DELETE" });
 }
+
+// Lead search inside a segment (MARKET_MODEL_SPEC §5). Served by search, at /apps/leadgen.
+export function findSegmentBuyers(segment, where = "hiring") {
+  return authRequest("/apps/leadgen/segment-search", json("POST", { segment, where }));
+}

@@ -76,12 +76,16 @@ def test_every_app_tool_says_what_it_returns():
     assert not missing, f"tools whose description does not state a return shape: {missing}"
 
 
+# Tools that refuse to run on empty args get the smallest args they accept.
+_ARGS = {"leadgen.search": {"segment": "Platform teams"}}
+
+
 @pytest.mark.parametrize("tool_name", sorted(_SHAPED))
 def test_the_stated_keys_are_the_real_keys(tool_name, monkeypatch):
     module_name, fn_name = _SHAPED[tool_name]
     module = importlib.import_module(module_name)
     monkeypatch.setattr(module, "_dispatch_tool_syscall", lambda *a, **k: {})
-    real = set(getattr(module, fn_name)({}, "u-1", None).keys())
+    real = set(getattr(module, fn_name)(dict(_ARGS.get(tool_name, {})), "u-1", None).keys())
     stated = _stated_keys(_app_tools()[tool_name]["description"])
     assert stated == real, f"{tool_name}: description says {sorted(stated)}, tool returns {sorted(real)}"
 

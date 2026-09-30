@@ -189,6 +189,34 @@ def preview_lead_search(
     return _execute_leadgen(request, "leadgen.search", handler, db=db, user_id=user_id, input_payload={"query": query})
 
 
+class SegmentSearchBody(BaseModel):
+    segment: str
+    where: str = "hiring"
+
+
+@router.post("/segment-search")
+@limiter.limit("10/minute")
+def segment_lead_search_route(
+    request: Request,
+    body: SegmentSearchBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Find buyers inside a confirmed market segment (MARKET_MODEL_SPEC §5): buyers saved as leads,
+    the rest proposed as market entries. One web search and one model call per result."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.search.services.segment_search import SegmentSearchRefused, segment_lead_search
+        try:
+            return segment_lead_search(db, user_id=user_id, segment=body.segment, where=body.where)
+        except SegmentSearchRefused as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _execute_leadgen(request, "leadgen.segment_search", handler, db=db, user_id=user_id,
+                            input_payload=body.model_dump())
+
+
 @router.get("/")
 @limiter.limit("60/minute")
 def list_all_leads(

@@ -135,14 +135,14 @@ def register() -> None:
     #   from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
     # `platform_layer.registry` exports a `register_syscall` too, and it is the wrong one —
     # it writes into a dict the SyscallDispatcher never reads. Every one of this repo's
-    # 75 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
+    # 76 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
     # this block used to say otherwise.
     #
     # Measured 2026-09-16 rather than carried forward: 97 registered at app-profile boot,
     # 23 of them the runtime's own (import `AINDY.kernel.syscall_registry` alone to see that
     # number), so 74 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
     # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`; +1 on
-    # 09-28: `sys.v1.market.propose`, so 75 of 98). The previous
+    # 09-28: `sys.v1.market.propose`; +1 on 09-30: `sys.v1.leadgen.search_segment`, so 76 of 99). The previous
     # figure of 90 was stale, which is the same failure the runtime-floor lines above had —
     # a number nobody re-derives is a number that drifts. To re-derive: boot the app profile,
     # then `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())`.
