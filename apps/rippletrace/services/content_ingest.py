@@ -554,7 +554,7 @@ def _ingest_feed_entries(
 def _ingest_entry(
     db: Session, *, entry: FeedEntry, user_id: str | None
 ) -> tuple[DropPointDB, bool]:
-    return upsert_drop_point(
+    row, created = upsert_drop_point(
         db,
         user_id=user_id,
         url=entry.url,
@@ -563,6 +563,15 @@ def _ingest_entry(
         tags=entry.tags,
         published_at=entry.published_at,
     )
+    # WORK_MODEL_SPEC §5 step 1: the feed already carried the article; keep it this time. Best
+    # effort, like container tagging: a poll must not fail because the text could not be kept.
+    try:
+        from apps.rippletrace.services.content_archive import keep_feed_content
+
+        keep_feed_content(row, entry.content)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("[rippletrace] feed content not kept for %s: %s", entry.url, exc)
+    return row, created
 
 
 def _mark_polled(

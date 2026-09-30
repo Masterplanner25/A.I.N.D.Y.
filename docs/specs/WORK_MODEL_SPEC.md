@@ -8,7 +8,7 @@ owner: "app-team"
 
 # The Work model — what you have made, and how it fits together
 
-**Status:** phase A BUILT 2026-09-27 (#420); B and C not started. Written 2026-09-27 from the owner's question, after the agent's
+**Status:** phase A BUILT 2026-09-27 (#420); phase B BUILT 2026-09-30 (§5.1, as built); C not started. Written 2026-09-27 from the owner's question, after the agent's
 first week of real work on the MasterPlan.
 
 **The owner, which is the whole spec:**
@@ -181,6 +181,35 @@ the plan; this describes the work the plan is about.
 ## 5. The evidence layer: your writing, stored (Level 2)
 
 Answers `RIPPLETRACE_CONTENT_REPRESENTATION_SPEC` §5–§6. All three options, in order, each bounded.
+
+### 5.1 As built, 2026-09-30
+
+**The verifications, run first** against each platform, read-only:
+
+| Platform | Pieces | Where the text is | Result |
+|---|---|---|---|
+| DEV | 143 | public API by the piece's url (`/api/articles/{user}/{slug}` → `body_markdown`); it lists all 143. The feed carries the newest 12 whole, in `description` | all fetchable |
+| Substack | 46 | per-post API by url (`/api/v1/posts/{slug}` → `body_html`), back to Feb 2025; the archive listing pages short and looked like 23. The feed carries the newest 20 whole (`content:encoded`) | all fetchable |
+| Medium | 10 | the feed only (`content:encoded`): 10 items, 9 with a body | the feed covers them |
+| YouTube | 15 | no text without transcripts | out of scope, marked `none` |
+
+Pieces run 5–11k characters (~1.8 MB in all); embedding them is about $0.05, once.
+
+- **Storage** on `drop_points` (`dp1content0001`): `content_text` (capped at 50,000), `content_source`
+  (`feed` · `api` · `none`), `content_fetched_at`, `content_hash`, and `content_memory_hash`, the hash the
+  memory chunks were written from.
+- **Going forward:** a feed poll keeps a body of 1,500+ characters (an excerpt is not kept).
+- **Backfill:** `content_archive.backfill_content`, 40 pieces a batch, a 0.5 s pause between platform
+  requests, through RippleTrace's guarded `fetch_url`. A platform with no text or a piece that is gone
+  (404/410) is marked `none`; a transient failure is retried next run.
+- **Memory:** each piece is chunked at paragraph boundaries (~1,500 characters), one memory node per
+  chunk: source `published_work`, `node_type` insight, tags `published_work`, the platform,
+  `drop:<id>`, `series:<name>` and `work:<name>` (through `masterplan.works_by_container`). Written
+  again only when the text's hash changes. Embeddings follow in the background (nodes are saved
+  `embedding_pending`).
+- **When:** a scheduled job (`rippletrace_archive_published_work`, every 10 minutes) runs both until the
+  catalogue is done; `POST /apps/rippletrace/content/archive` runs a batch now. The Work panel shows
+  *N of M pieces recallable by the agent*, per platform.
 
 1. **Going forward, keep what the feeds already deliver** (that spec's option 1). Feed ingest
    already fetches each new post and throws the body away (`strip_html(…, limit=2000)` is for

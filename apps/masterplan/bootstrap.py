@@ -120,6 +120,8 @@ def _register_jobs() -> None:
     # Lead search inside a segment (MARKET_MODEL_SPEC §5): the segment to search, and where its
     # non-buyer results go.
     register_job("masterplan.segment_brief", _segment_brief)
+    # The owner's Works per RippleTrace series, so published writing is tagged with its Work (WORK_MODEL_SPEC §5).
+    register_job("masterplan.works_by_container", _works_by_container)
     register_job("masterplan.market_propose", _market_propose)
 
 
@@ -304,6 +306,11 @@ def _genesis_audit(*args, **kwargs):
 def _work_context(*args, **kwargs):
     from apps.masterplan.services.work_service import work_context
     return work_context(*args, **kwargs)
+
+
+def _works_by_container(*args, **kwargs):
+    from apps.masterplan.services.work_service import works_by_container
+    return works_by_container(*args, **kwargs)
 
 
 def _segment_brief(*args, **kwargs):

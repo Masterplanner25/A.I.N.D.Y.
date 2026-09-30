@@ -5,10 +5,12 @@ import {
   createWork,
   deleteWork,
   dismissWorkProposal,
+  getPublishedWriting,
   listWorkProposals,
   listWorks,
   removeWorkLink,
   setWorkObjectives,
+  storePublishedWriting,
   updateWork,
 } from "../../api/works.js";
 import { safeMap } from "../../utils/safe";
@@ -62,11 +64,14 @@ export default function WorkPanel() {
   const [linkDrafts, setLinkDrafts] = useState({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [writing, setWriting] = useState(null);
 
   const load = useCallback(async () => {
     try {
       const [works, open] = await Promise.all([listWorks(), listWorkProposals()]);
       setData(works);
+      // Best effort: the writing status is RippleTrace's, and Work mode stands without it.
+      getPublishedWriting().then(setWriting).catch(() => setWriting(null));
       const list = Array.isArray(open?.proposals) ? open.proposals : [];
       setProposals(list);
       setDrafts((prev) => {
@@ -119,6 +124,30 @@ export default function WorkPanel() {
       </div>
 
       {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
+
+      {writing && writing.pieces > 0 && (
+        <section className="border border-zinc-800/60 rounded-lg p-4 space-y-2">
+          <p className="text-[10px] uppercase tracking-wider text-zinc-600">Your published writing</p>
+          <p className="text-sm text-zinc-200">
+            {writing.recallable} of {writing.pieces} pieces recallable by the agent
+          </p>
+          <p className="text-[11px] text-zinc-500">
+            {safeMap(Object.entries(writing.platforms || {}), ([platform, p]) =>
+              `${platform} ${p.recallable}/${p.pieces}${p.no_text ? ` (${p.no_text} with no text)` : ""}`).join(" · ")}
+          </p>
+          {(writing.pending > 0 || writing.stored > writing.recallable) && (
+            <div className="flex items-center gap-3">
+              <button className={QUIET} disabled={busy}
+                onClick={() => act(async () => setWriting((await storePublishedWriting())?.status || writing))}>
+                Store a batch now
+              </button>
+              <span className="text-[10px] text-zinc-600">
+                {writing.pending} to fetch · it also runs by itself every 10 minutes
+              </span>
+            </div>
+          )}
+        </section>
+      )}
 
       {proposals.length > 0 && (
         <section className="space-y-3">

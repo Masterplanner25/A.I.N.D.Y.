@@ -21,6 +21,18 @@ class DropPointDB(Base):
     # score columns because "we looked and found nothing" and "we never looked" are
     # different states, and only the second is worth spending another search on.
     mentions_checked_at = Column(DateTime(timezone=True), nullable=True)
+    # The piece's own text (WORK_MODEL_SPEC §5, phase B). Capped at CONTENT_MAX_CHARS in
+    # content_archive; the catalogue measured 2026-09-30 runs 5-11k characters a piece. Until
+    # this the feeds delivered it and ingestion kept only a 2,000-character summary for themes,
+    # so memory recall returned telemetry about the owner's writing and never the writing.
+    content_text = Column(Text, nullable=True)
+    # feed (the poll kept it), api (DEV / Substack by url), none (the platform gives no text)
+    content_source = Column(String(16), nullable=True)
+    content_fetched_at = Column(DateTime(timezone=True), nullable=True)
+    # sha256 of content_text: the memory chunks carry it, so unchanged text is never re-written.
+    content_hash = Column(String(64), nullable=True)
+    # The content_hash the memory chunks were written from; differs from content_hash when they are due.
+    content_memory_hash = Column(String(64), nullable=True)
 
 
 class PingDB(Base):

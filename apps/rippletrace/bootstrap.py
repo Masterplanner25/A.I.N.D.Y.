@@ -120,6 +120,17 @@ def _register_scheduled_jobs() -> None:
     # Registered unconditionally; the handler itself no-ops unless
     # AINDY_RIPPLE_MENTION_DETECTION is set, so the flag can be flipped without a
     # redeploy and the job shows up in the registry either way.
+    # WORK_MODEL_SPEC §5: fetch the text of published pieces and write it into memory, a batch
+    # per run until the catalogue is done, then only what is new. Guarded like the feed poll.
+    from apps.rippletrace.services.content_archive import JOB_INTERVAL_MINUTES, archive_published_work
+
+    register_scheduled_job(
+        "rippletrace_archive_published_work",
+        archive_published_work,
+        name="Store and remember published writing",
+        trigger="interval",
+        trigger_kwargs={"minutes": JOB_INTERVAL_MINUTES},
+    )
     register_scheduled_job(
         "rippletrace_detect_mentions",
         detect_due_mentions,
