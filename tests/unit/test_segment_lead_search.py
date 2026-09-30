@@ -270,3 +270,68 @@ def test_saved_leads_the_search_did_not_return_are_rejudged_too(db, user, jobs, 
     assert judged == [agency.url]  # the contacted lead is never re-judged
     assert (out["rejudged"], out["retired"], out["proposed"]) == (1, 1, [{"kind": "intermediary", "name": "Livefront"}])
     assert [r.company for r in db.query(LeadGenResult).all()] == ["Robots and Pencils"]
+
+
+@pytest.mark.parametrize("claimed,result,expected", [
+    # the model's name, found in the result
+    ("Culture Amp", {"title": "Staff Engineer", "url": "https://job-boards.greenhouse.io/cultureamp/jobs/1",
+                     "snippet": "Join Culture Amp."}, "Culture Amp"),
+    # run together in a job board's address
+    ("Robots and Pencils", {"title": "Engineer", "url": "https://job-boards.greenhouse.io/robotsandpencils/jobs/2",
+                            "snippet": ""}, "Robots and Pencils"),
+    ("Amtech LLC", {"title": "Senior AI Engineer at Amtech", "url": "https://x.example/1", "snippet": ""}, "Amtech LLC"),
+    # the model described instead of naming: fall back to the employer in the address
+    ("AI security company", {"title": "Senior AI Engineer", "url": "https://job-boards.greenhouse.io/protectai/jobs/3",
+                             "snippet": "We are an AI security company."}, "Protectai"),
+    # nothing names it anywhere: none
+    ("AI security company", {"title": "Senior AI Engineer (Remote)", "url": "https://careers.example/jobs/9",
+                             "snippet": "Stealth startup."}, None),
+])
+def test_an_organisation_must_be_named_by_the_result(claimed, result, expected):
+    from apps.search.services.segment_search import grounded_organisation
+
+    assert grounded_organisation(claimed, result) == expected
+
+
+def test_an_unnamed_result_is_neither_a_lead_nor_a_proposal(db, user, jobs, segment):
+    from apps.masterplan.services import market_service
+    from apps.search.models.leadgen_model import LeadGenResult
+    from apps.search.services.segment_search import segment_lead_search
+
+    def search(query, **kw):
+        return [{"title": "Senior AI Engineer (Remote)", "url": "https://careers.example/jobs/9", "snippet": "Stealth."}]
+
+    def judge(result, brief):
+        return {"organisation": "AI security company", "org_type": "vendor", "reasoning": "Builds AI security."}
+
+    out = segment_lead_search(db, user_id=user, segment=segment["id"], search=search, judge=judge)
+    assert (out["count"], out["proposed"], out["dropped_detail"][0]["kind"]) == (0, [], "unnamed")
+    assert db.query(LeadGenResult).count() == 0
+    assert market_service.list_proposals(db, user)["proposals"] == []
+
+
+def test_the_judge_runs_at_temperature_zero_on_the_stronger_model(monkeypatch):
+    from types import SimpleNamespace
+
+    from apps.search.services import segment_search
+
+    seen = {}
+
+    def fake_call(**kw):
+        return kw["operation"]()
+
+    def fake_chat(client, **kw):
+        seen.update(kw)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"org_type": "other"}'))])
+
+    import AINDY.platform_layer.external_call_service as ext
+    import AINDY.platform_layer.openai_client as oc
+
+    monkeypatch.setattr(ext, "perform_external_call", fake_call)
+    monkeypatch.setattr(oc, "chat_completion", fake_chat)
+    monkeypatch.setattr(oc, "get_openai_client", lambda: None)
+    monkeypatch.delenv("AINDY_SEGMENT_JUDGE_MODEL", raising=False)
+
+    segment_search.judge_result({"title": "t", "url": "u", "snippet": "s"},
+                                {"name": "S", "buyer": "b", "works": [], "category_terms": []})
+    assert (seen["model"], seen["temperature"]) == ("gpt-4o", 0)
