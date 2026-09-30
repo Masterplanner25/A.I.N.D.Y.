@@ -909,9 +909,9 @@ Preview Lead Search
 **Response 200:** unspecified
 
 #### POST /apps/leadgen/segment-search
-Find buyers inside a confirmed market segment (`MARKET_MODEL_SPEC.md` §5) — `{segment, where?}`; `segment` is a confirmed segment's id or name, `where` is `hiring` (job boards, default) · `channels` (the segment's confirmed channel entries) · `web`. Results are from the last month; each is judged against the segment and the works that serve it. Buyers are saved as leads tagged with the segment; non-buyers are proposed as market entries; irrelevant ones are dropped. One web search, and one model call per result
+Find buyers inside a confirmed market segment (`MARKET_MODEL_SPEC.md` §5) — `{segment, where?}`; `segment` is a confirmed segment's id or name, `where` is `hiring` (job boards, default) · `channels` (the segment's confirmed channel entries) · `web`. Results are from the last month. For each, the model reports facts (organisation type, fit to the segment's buyer, evidence of the problem) and the code decides: only an end user that fits is a buyer, saved as a lead tagged with the segment; a vendor is proposed as an alternative, an agency as an intermediary, a publisher as a voice; anything else is dropped. The segment's saved leads this search did not return are judged again (up to 20, none with outreach begun), and one that no longer qualifies leaves the leads. One web search, and one model call per result and per re-judged lead
 
-**Response 200:** segment, segment_status, where, query, leads: [{id, company, url, context, overall_score, reasoning}], count, proposed: [{kind, name}], dropped, failed; 422 when the segment is not confirmed, or has no channels for `where=channels`
+**Response 200:** rejudged, segment, segment_status, where, query, leads: [{id, company, url, context, overall_score, reasoning}], count, proposed: [{kind, name}], dropped, dropped_detail: [{name, kind, org_type, reason}], retired, failed; 422 when the segment is not confirmed, or has no channels for `where=channels`
 
 #### PATCH /apps/leadgen/leads/{lead_id}/contact
 Set Lead Contact — enter (or clear) the recipient address for one of your leads by hand.

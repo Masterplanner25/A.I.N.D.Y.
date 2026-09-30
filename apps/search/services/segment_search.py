@@ -12,10 +12,11 @@ Now a search starts from a segment the owner confirmed, and:
   words: the open web returned listicles; the job-board filter returned Similarweb, OpenTeams,
   EarnIn, AmTech Software and Firmus, each hiring for the problem.
 - **what** — the query is built from the segment's own words, not the planner's paraphrase.
-- **is it a buyer** — each result is judged against the segment's buyer and problem and the owner's
-  works that serve it, in one model call. A buyer is saved as a lead tagged with the segment. A
-  result that is not a buyer is proposed as what it is (an alternative, a voice, …) through
-  masterplan, instead of being filed as a lead. An irrelevant one is dropped.
+- **is it a buyer** — one model call per result reports facts (what kind of organisation, whether it
+  fits the segment's buyer, whether it has the problem) and `classify` decides. Only an end user that
+  fits is a buyer, saved as a lead tagged with the segment. A vendor is proposed as an alternative,
+  an agency as an intermediary, a publisher as a voice, through masterplan. Anything else is dropped,
+  and a lead an earlier judgement saved that no longer qualifies leaves the leads.
 
 Masterplan owns segments; this reads them through `masterplan.segment_brief` and proposes through
 `masterplan.market_propose`, so nothing here imports masterplan.
@@ -76,12 +77,31 @@ def company_from_result(url: str, title: str) -> str:
     return (host.split(".")[0] if host else "").replace("-", " ").title() or "Unknown"
 
 
+_BUYER_ORGANISATION = re.compile(r"\b(?:in|at|for)\s+(?:a|an|the)?\s*(.+)$", re.I)
+
+
+def buyer_organisation(buyer: str) -> str:
+    """The kind of organisation in a segment's buyer description, as search words:
+    *"MLOps lead in a regulated enterprise (finance, healthcare, gov)"* → *"regulated enterprise
+    finance healthcare gov"*. Empty when the description names none."""
+    match = _BUYER_ORGANISATION.search(buyer or "")
+    if not match:
+        return ""
+    return " ".join(re.sub(r"[(),/]+", " ", match.group(1)).split()[:8])
+
+
 def build_query(brief: dict, where: str) -> str:
-    """The segment's own words. For job boards, what the buyer would hire for; elsewhere, the
-    problem as the buyer says it."""
+    """The segment's own words. For job boards, what the buyer would hire for, and in what kind of
+    organisation; elsewhere, the problem as the buyer says it.
+
+    The organisation words were added 2026-09-30: built from the category terms alone, the two
+    segments' job-board searches returned the same companies (Clariti Cloud, Firmus and Livefront
+    turned up for either), and nothing in the query said *regulated*."""
     terms = [t for t in (brief.get("category_terms") or []) if t][:3]
+    organisation = buyer_organisation(brief.get("buyer", ""))
     if where == "hiring":
-        return (" ".join(terms) + " engineer").strip() if terms else f"{brief['buyer']}"
+        base = (" ".join(terms) + " engineer").strip() if terms else f"{brief['buyer']}"
+        return f"{base} {organisation}".strip()
     problem = (brief.get("problem") or "").strip()
     return " ".join(part for part in (problem[:200], " ".join(terms[:2])) if part) or brief["buyer"]
 
@@ -100,21 +120,54 @@ def _domains(brief: dict, where: str) -> list[str] | None:
     return None
 
 
-_JUDGE_PROMPT = """You qualify B2B leads for one market segment. Decide whether this web result shows a
-PROSPECTIVE BUYER in the segment: an organisation that has the problem and could buy the seller's work.
-Hiring for the problem is strong buyer evidence. A listicle, a vendor of a competing product, an analyst,
-a publication or a personal project is NOT a buyer.
+# The judge reports FACTS and the code decides (§5.3, reworked 2026-09-30). The first prompt asked
+# for the verdict directly and called hiring for the problem "strong buyer evidence"; on job boards
+# every result is hiring for the problem, so it passed all 13 of the owner's results at 80-90,
+# including Vercel (building its own workflow product), OneTrust (a governance vendor) and two
+# digital agencies, and placed a digital agency in "regulated enterprise".
+ORG_TYPES = ("end_user", "vendor", "agency", "publisher", "other")
 
-Return ONLY a JSON object with these keys:
-is_buyer (true/false),
-kind (when not a buyer: alternative | channel | intermediary | voice | exemplar | irrelevant; when a buyer: "buyer"),
-organisation (the organisation the result is about, not the website that published it),
-fit_score, intent_score, data_quality_score, overall_score (numbers 0-100; 0 when not a buyer),
-reasoning (one sentence)."""
+_JUDGE_PROMPT = """You check one web result against one market segment for a seller. Report facts; do not decide.
+Use what you know about well-known organisations as well as the result text.
+
+organisation: the organisation the result is about (the employer in a job posting, not the job board).
+org_type, exactly one of:
+  end_user  - an organisation that uses agents in its own business, or builds agent features INTO its
+              own product in a different category, or builds an internal platform for its own use.
+              It could buy the seller's work to do so.
+  vendor    - an organisation whose product FOR SALE is itself in the seller's category: an agent runtime,
+              agent or workflow orchestration platform, or AI agent infrastructure sold to others.
+              A company adding agents to its CRM, banking or marketing product is NOT a vendor.
+  agency    - a consultancy, agency or systems integrator that builds for clients
+  publisher - a media site, analyst, blog, listicle or directory
+  other     - anything else
+matches_buyer: true only if the organisation fits the segment's BUYER description, including any
+  organisation type, size or industry it names (e.g. "regulated enterprise" means finance, healthcare,
+  government or similar; a software agency is not one). false if the result gives no reason to think so.
+problem_evidence: true only if the result shows this organisation has the segment's problem.
+fit_score, intent_score, data_quality_score, overall_score: 0-100, anchored:
+  85-100 only when org_type is end_user AND matches_buyer AND problem_evidence all clearly hold;
+  60-84 when those hold but one is uncertain; below 60 otherwise.
+reasoning: one sentence naming the deciding fact.
+
+Return ONLY a JSON object with those keys."""
+
+#: What a non-buyer is proposed as. An end user that fails the segment is not evidence about it.
+KIND_FOR_ORG_TYPE = {"vendor": "alternative", "agency": "intermediary", "publisher": "voice"}
+
+
+def classify(verdict: dict) -> str:
+    """"buyer", an entry kind, or "drop": the decision the judge's facts imply."""
+    org_type = str(verdict.get("org_type") or "").strip().lower()
+    if org_type == "end_user":
+        if verdict.get("matches_buyer") is True and verdict.get("problem_evidence") is True:
+            return "buyer"
+        return "drop"
+    return KIND_FOR_ORG_TYPE.get(org_type, "drop")
 
 
 def judge_result(result: dict, brief: dict) -> dict:
-    """One gpt-4o-mini call: buyer or not, what it is, and the scores (§5.3)."""
+    """One gpt-4o-mini call: the facts about a result (§5.3). `classify` turns them into a decision."""
     from AINDY.config import settings
     from AINDY.platform_layer.external_call_service import perform_external_call
     from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
@@ -144,6 +197,40 @@ def judge_result(result: dict, brief: dict) -> dict:
     return json.loads(match.group(0) if match else text)
 
 
+def _existing_lead_id(db: Session, user_id: Any, url: str) -> int | None:
+    import uuid
+
+    from apps.search.models.leadgen_model import LeadGenResult
+
+    row = (
+        db.query(LeadGenResult.id)
+        .filter(LeadGenResult.user_id == uuid.UUID(str(user_id)), LeadGenResult.url == url)
+        .first()
+    )
+    return row[0] if row else None
+
+
+#: Saved leads re-judged per search, at most: one model call each.
+REJUDGE_LIMIT = 20
+
+
+def _unseen_segment_leads(db: Session, user_id: Any, segment_id: str, seen: set[str]) -> list[tuple]:
+    """The segment's saved leads, not returned by this search, with no outreach begun."""
+    import uuid
+
+    from apps.search.models.lead_action import LeadAction
+    from apps.search.models.leadgen_model import LeadGenResult
+
+    acted = {row[0] for row in db.query(LeadAction.lead_id).filter(LeadAction.lead_id.isnot(None))}
+    rows = (
+        db.query(LeadGenResult.id, LeadGenResult.url, LeadGenResult.company, LeadGenResult.context)
+        .filter(LeadGenResult.user_id == uuid.UUID(str(user_id)), LeadGenResult.segment_id == segment_id)
+        .order_by(LeadGenResult.id)
+        .all()
+    )
+    return [tuple(r) for r in rows if r[1] not in seen and r[0] not in acted][:REJUDGE_LIMIT]
+
+
 def _score(verdict: dict, key: str) -> float:
     try:
         return max(0.0, min(100.0, float(verdict.get(key) or 0)))
@@ -164,7 +251,7 @@ def segment_lead_search(
     """Search inside a confirmed segment. Buyers are saved as leads tagged with the segment; the rest
     are proposed as market entries or dropped. Commits."""
     from AINDY.platform_layer.registry import get_job
-    from apps.search.services.leadgen_service import save_lead
+    from apps.search.services.leadgen_service import retire_lead, save_lead
 
     where = str(where or "hiring").strip().lower()
     if where not in WHERE_VALUES:
@@ -182,7 +269,7 @@ def segment_lead_search(
     propose = get_job("masterplan.market_propose")
 
     rows = search(query, domains=domains, recency=RECENCY, max_results=max_results)
-    leads, proposed, dropped, failed = [], [], [], 0
+    leads, proposed, known, dropped, failed, retired = [], [], [], [], 0, 0
     seen: set[str] = set()
     for row in rows:
         url = (row.get("url") or "").strip()
@@ -197,7 +284,8 @@ def segment_lead_search(
             continue
         organisation = str(verdict.get("organisation") or "").strip() or company_from_result(url, row.get("title", ""))
         context = " ".join(p for p in (row.get("title"), row.get("snippet")) if p)[:1000]
-        if verdict.get("is_buyer") is True:
+        decision = classify(verdict)
+        if decision == "buyer":
             lead = save_lead(db, user_id=user_id, url=url, fields={
                 "query": query,
                 "company": organisation[:300],
@@ -212,19 +300,63 @@ def segment_lead_search(
             leads.append({"id": lead.id, "company": lead.company, "url": url, "context": context[:300],
                           "overall_score": lead.overall_score, "reasoning": lead.reasoning})
             continue
-        kind = str(verdict.get("kind") or "").strip().lower()
-        if kind in ENTITY_KINDS and propose is not None:
+        # A lead saved by an earlier, laxer judgement and not a buyer now leaves the leads (unless
+        # outreach has begun on it, which retire_lead refuses), so re-running a search re-files it.
+        earlier = _existing_lead_id(db, user_id, url)
+        if earlier is not None and retire_lead(user_id=str(user_id), lead_id=earlier, db=db):
+            retired += 1
+        if decision in ENTITY_KINDS and propose is not None:
             outcome = propose(user_id=str(user_id), db=db, args={
-                "kind": kind, "name": organisation, "url": url, "segment": brief["name"],
+                "kind": decision, "name": organisation, "url": url, "segment": brief["name"],
                 "note": str(verdict.get("reasoning") or "")[:500] or None,
                 "evidence": [{"claim": context[:400], "source_url": url}],
             })
             if outcome.get("proposed"):
-                proposed.append({"kind": kind, "name": organisation})
-                continue
-        dropped.append({"name": organisation, "kind": kind or "irrelevant"})
+                proposed.append({"kind": decision, "name": organisation})
+            else:
+                known.append({"kind": decision, "name": organisation})
+            continue
+        dropped.append({"name": organisation, "kind": decision,
+                        "org_type": str(verdict.get("org_type") or ""), "reason": str(verdict.get("reasoning") or "")[:200]})
+    # The segment's saved leads this search did not return are judged again too, on what was stored
+    # (title and snippet). Without this a lead saved by an earlier, laxer judgement would stay a lead
+    # until its posting happened to come back: the owner's first run saved 13, and the reworked
+    # query returns different postings.
+    rejudged = 0
+    for lead_id, url, company, context in _unseen_segment_leads(db, user_id, brief["id"], seen):
+        try:
+            verdict = judge({"title": company, "url": url, "snippet": context}, brief)
+        except Exception as exc:
+            failed += 1
+            logger.warning("[segment_search] re-judgement failed for %s: %s", url, exc)
+            continue
+        rejudged += 1
+        decision = classify(verdict)
+        organisation = str(verdict.get("organisation") or "").strip() or company
+        if decision == "buyer":
+            save_lead(db, user_id=user_id, url=url, fields={
+                key: _score(verdict, key) for key in ("fit_score", "intent_score", "data_quality_score", "overall_score")
+            } | {"reasoning": str(verdict.get("reasoning") or "")[:1000]})
+            continue
+        if not retire_lead(user_id=str(user_id), lead_id=lead_id, db=db):
+            continue  # outreach has begun on it; a person decides, not a re-judgement
+        retired += 1
+        if decision in ENTITY_KINDS and propose is not None:
+            outcome = propose(user_id=str(user_id), db=db, args={
+                "kind": decision, "name": organisation, "url": url, "segment": brief["name"],
+                "note": str(verdict.get("reasoning") or "")[:500] or None,
+                "evidence": [{"claim": (context or "")[:400], "source_url": url}],
+            })
+            if outcome.get("proposed"):
+                proposed.append({"kind": decision, "name": organisation})
+            else:
+                known.append({"kind": decision, "name": organisation})
+            continue
+        dropped.append({"name": organisation, "kind": decision,
+                        "org_type": str(verdict.get("org_type") or ""), "reason": str(verdict.get("reasoning") or "")[:200]})
     db.commit()
     return {
+        "rejudged": rejudged,
         "segment": brief["name"],
         "segment_status": brief["status"],
         "where": where,
@@ -232,6 +364,10 @@ def segment_lead_search(
         "leads": sorted(leads, key=lambda lead: lead["overall_score"] or 0, reverse=True),
         "count": len(leads),
         "proposed": proposed,
+        # Non-buyers already in the market (a proposal open, or an entry confirmed): not asked twice.
+        "already_known": known,
         "dropped": len(dropped),
+        "dropped_detail": dropped,
+        "retired": retired,
         "failed": failed,
     }

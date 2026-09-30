@@ -137,14 +137,14 @@ describe("Collaborator's Market mode", () => {
 
   it("finds buyers inside a segment and says where everything went", async () => {
     api.findSegmentBuyers.mockResolvedValue({
-      segment: SEGMENT.name, count: 1, dropped: 2, proposed: [{ kind: "alternative", name: "Gumloop" }],
+      segment: SEGMENT.name, count: 1, dropped: 2, retired: 1, proposed: [{ kind: "alternative", name: "Gumloop" }],
       leads: [{ id: 9, company: "OpenTeams", url: "https://job-boards.greenhouse.io/openteams/jobs/1",
         overall_score: 82, reasoning: "Hiring to build an internal agent platform." }],
     });
     renderPanel();
     await userEvent.click(await screen.findByRole("button", { name: /find buyers/i }));
     await waitFor(() => expect(api.findSegmentBuyers).toHaveBeenCalledWith("s-1"));
-    expect(await screen.findByText(/1 buyer saved to Leads · 1 proposed above as market entries · 2 not relevant/)).toBeInTheDocument();
+    expect(await screen.findByText(/1 buyer saved to Leads · 1 proposed above as market entries · 1 earlier lead moved out of Leads · 2 not this segment/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "OpenTeams" })).toHaveAttribute("href", "https://job-boards.greenhouse.io/openteams/jobs/1");
   });
 
