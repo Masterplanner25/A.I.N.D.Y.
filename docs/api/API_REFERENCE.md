@@ -2563,10 +2563,10 @@ What the owner has made, how the works relate, and which plan objectives they se
 #### GET /apps/works
 List Works — every work, its links, its objectives, and the closed vocabularies (`kinds`, `roles`, `statuses`, `relations`)
 
-**Response 200:** works: [{id, name, kind, summary, role, status, started_on, ended_on, url, declared_target, container_id, provenance, created_at, objectives: [{id, name}]}], links: [{id, from_work_id, to_work_id, relation, note}], vocabulary
+**Response 200:** works: [{id, name, kind, summary, role, status, started_on, ended_on, url, declared_target, success_criteria, container_id, provenance, created_at, objectives: [{id, name}]}], links: [{id, from_work_id, to_work_id, relation, note}], vocabulary
 
 #### POST /apps/works
-Declare a Work — `name` and `summary` required; `kind` (project · product · series · practice · publication · other, default project), `role` (creator · author · maintainer · contributor, default creator), `status` (active · finished · paused · planned, default active), `started_on`/`ended_on` (YYYY-MM-DD), `url`, `declared_target`
+Declare a Work — `name` and `summary` required; `kind` (project · product · series · practice · publication · other, default project), `role` (creator · author · maintainer · contributor, default creator), `status` (active · finished · paused · planned, default active), `started_on`/`ended_on` (YYYY-MM-DD), `url`, `declared_target`, `success_criteria` (how you judge it, in your words; told to the planner and to `content.draft`)
 
 **Response 200:** the work (`provenance: "declared"`); 422 on a missing summary or an unknown vocabulary value; 409 when a work of that name exists
 

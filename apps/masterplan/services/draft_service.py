@@ -42,6 +42,10 @@ Cite a source inline as [S1], [S2] wherever you use it. Never attribute to the p
 OWN WORK sources do not say. Do not invent statistics, results or quotes. When the sources do not cover
 part of the brief, say so plainly rather than filling the gap with generic advice.
 
+When you are given THE PERSON'S OWN DEFINITION OF SUCCESS, any goals, metrics or measures of success
+in the document come from it. Do not substitute industry metrics (rankings, indexing rates, citation
+counts, engagement) unless their definition calls for them.
+
 Output markdown: the first line is the title as '# Title', then the document. Do not add a sources
 list at the end; it is appended for you."""
 
@@ -172,7 +176,17 @@ def write_draft(db: Session, user_id: Any, *, brief: str, sources: Any = None, t
     if not brief:
         raise ValueError("content.draft needs a brief: what to write, for whom, and why")
     blocks = normalize_sources(sources)
-    text = (complete or _complete)(brief, _render_sources(blocks))
+    context = _render_sources(blocks)
+    # The owner's own measure of success, from their Works (declared, never inferred). Added after a
+    # plan built on their writing still closed on industry metrics (2026-09-30).
+    from apps.masterplan.services.work_service import success_definitions
+
+    definitions = success_definitions(user_id=uid, db=db, work=work)
+    if definitions:
+        context += "\n\nTHE PERSON'S OWN DEFINITION OF SUCCESS\n" + "\n".join(
+            f"- {d['work']}: {d['success']}" for d in definitions
+        )
+    text = (complete or _complete)(brief, context)
     if not text:
         raise RuntimeError("the drafting model returned nothing")
 
