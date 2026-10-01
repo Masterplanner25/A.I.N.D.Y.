@@ -16,10 +16,11 @@ def register() -> None:
         "memory.recall",
         risk="low",
         description=(
-            "Recall relevant memory nodes for a given query. Read-only; returns {count, nodes[]}, "
-            "each node with content, source and similarity. "
-            "Note: recall ranks by similarity over the user's own nodes, which are mostly system "
-            "telemetry — expect event summaries, not prose."
+            "Recall the user's memory for a query, including their own PUBLISHED WRITING (about 200 "
+            "articles, source published_work, passages tagged with the piece, its series and work). "
+            "Pass tags=[\"published_work\"] to recall only their writing. Read-only; returns "
+            "{count, nodes[]}, each node with content, source and similarity. To write from what it "
+            "returns, pass it to content.draft as sources ({\"$from_step\": N, \"path\": \"nodes\"})."
         ),
         # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.
         args_schema={
@@ -28,6 +29,7 @@ def register() -> None:
                 "query": {"type": "string"},
                 "limit": {"type": "integer", "description": "default 5"},
                 "node_type": {"type": "string"},
+                "tags": {"type": "array", "description": "e.g. [\"published_work\"] for the user's own writing"},
             },
         },
         capability="tool:memory.recall",

@@ -11,7 +11,7 @@ conclusions.
 """
 import uuid
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import JSON, Column, Date, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from AINDY.db.database import Base
@@ -104,3 +104,30 @@ class WorkProposalDismissal(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     proposal_key = Column(String(400), nullable=False, index=True)
     dismissed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class WorkDraft(Base):
+    """Something the agent wrote for the owner: a plan, an outline, an article draft.
+
+    Owner, 2026-09-30: *"where does the output go once it does generate/do something?"* Until this,
+    a run's writing went to a step result, a memory node and a task: places the agent can reach and
+    the owner cannot read. A draft is a document, listed in Collaborator's Work mode with the run
+    that wrote it and the sources it drew on.
+    """
+
+    __tablename__ = "work_drafts"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    # The agent run that wrote it, when one did (a soft reference: runs are the runtime's).
+    run_id = Column(String, nullable=True, index=True)
+    # The Work it is for, when the brief named one.
+    work_id = Column(String, ForeignKey("works.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = Column(String(300), nullable=False)
+    brief = Column(Text, nullable=False)
+    body = Column(Text, nullable=False)
+    # [{"title", "url", "platform", "kind"}]: what it was written from, in citation order ([S1] …).
+    sources = Column(JSON, nullable=True)
+    model = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

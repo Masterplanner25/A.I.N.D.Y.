@@ -481,6 +481,16 @@ def handle_agent_run_completed(context: dict):
             except Exception as exc:  # noqa: BLE001 — never block the Infinity loop
                 logger.warning("[agent_findings] save skipped for run %s: %s", run_id, exc)
 
+        # The drafts this run wrote (content.draft) get its id, so Collaborator can show which run
+        # wrote what. Best-effort, like the findings above.
+        try:
+            attach = get_job("masterplan.attach_drafts_to_run")
+            if attach is not None:
+                attach(user_id=user_id, run_id=str(run.id),
+                       since=getattr(run, "started_at", None) or getattr(run, "created_at", None), db=db)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[agent_drafts] attach skipped for run %s: %s", run_id, exc)
+
         execute_infinity_orchestrator = get_job("analytics.infinity_execute")
         if execute_infinity_orchestrator is None:
             raise RuntimeError("No registered infinity orchestration job")

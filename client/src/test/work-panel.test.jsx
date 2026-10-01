@@ -22,6 +22,10 @@ const api = vi.hoisted(() => ({
   setWorkObjectives: vi.fn(),
   getPublishedWriting: vi.fn(),
   storePublishedWriting: vi.fn(),
+  listDrafts: vi.fn(),
+  getDraft: vi.fn(),
+  updateDraft: vi.fn(),
+  deleteDraft: vi.fn(),
 }));
 
 vi.mock("../api/works.js", () => api);
@@ -61,6 +65,7 @@ beforeEach(() => {
     pieces: 214, stored: 60, recallable: 40, no_text: 15, pending: 139,
     platforms: { DEV: { pieces: 143, recallable: 30, no_text: 0 }, YouTube: { pieces: 15, recallable: 0, no_text: 15 } },
   });
+  api.listDrafts.mockResolvedValue({ drafts: [] });
   api.storePublishedWriting.mockResolvedValue({ status: { pieces: 214, stored: 100, recallable: 80, no_text: 15, pending: 99, platforms: {} } });
   for (const fn of ["confirmWorkProposal", "dismissWorkProposal", "createWork", "addWorkLink", "setWorkObjectives"]) {
     api[fn].mockResolvedValue({});

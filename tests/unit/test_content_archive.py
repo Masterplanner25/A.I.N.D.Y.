@@ -174,3 +174,27 @@ def test_memory_carries_the_piece_its_series_and_its_work_and_is_rewritten_only_
 
     status = archive_status(db, user_id=str(owner))
     assert (status["pieces"], status["stored"], status["recallable"], status["pending"]) == (1, 1, 1, 0)
+
+
+def test_front_matter_and_images_are_not_what_a_piece_says():
+    from apps.rippletrace.services.content_archive import to_text
+
+    raw = ("---\ntitle: 2025 ChatGPT Case Study: AI Search Optimization\npublished: true\n---\n\n"
+           "![](https://cdn.example/a.png)\n\n#### **How to Make AI Models Recognize Your Work**\n\n"
+           "Most people think SEO is the key. <img src=\"x.png\"> It changed.")
+    text = to_text(raw)
+    assert not text.startswith("---") and "cdn.example" not in text and "<img" not in text
+    assert text.startswith("#### **How to Make AI Models Recognize Your Work**")
+
+
+def test_text_stored_before_the_clean_up_is_recleaned_and_its_memory_becomes_due(db, owner):
+    from apps.rippletrace.services.content_archive import reclean_stored, store_content
+
+    row = _drop(db, owner, "DEV", "dirty")
+    store_content(row, "---\ntitle: x\n---\n\n![](https://cdn.example/a.png)\n\nThe argument.", "api")
+    row.content_memory_hash = row.content_hash  # its memory was written from the dirty text
+    db.commit()
+
+    assert reclean_stored(db, user_id=str(owner)) == 1
+    assert row.content_text == "The argument." and row.content_memory_hash != row.content_hash
+    assert reclean_stored(db, user_id=str(owner)) == 0  # idempotent

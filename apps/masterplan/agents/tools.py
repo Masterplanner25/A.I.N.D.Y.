@@ -80,10 +80,42 @@ def register() -> None:
         category="planning",
         egress_scope="internal",
     )(market_propose)
+    register_tool(
+        "content.draft",
+        risk="low",
+        description=(
+            "WRITE a document for the user: a plan, outline, article or post draft. Use this for any "
+            "prose (arm.generate is for code). Pass what to write from as `sources` by step reference: "
+            "memory.recall's result ({\"$from_step\": N, \"path\": \"nodes\"}) for the user's own "
+            "published writing, and/or research.query's ({\"$from_step\": N, \"path\": \"raw_result\"}). "
+            "It builds on the user's own work first and cites each source. The draft is saved for the "
+            "user to read in Collaborator; do not also memory.write it. Returns {draft_id, title, body, "
+            "sources_used[]}."
+        ),
+        args_schema={
+            "required": ["brief"],
+            "properties": {
+                "brief": {"type": "string", "description": "what to write, for whom, and why"},
+                "sources": {"description": "step reference(s) to recalled nodes or research text"},
+                "title": {"type": "string"},
+                "work": {"type": "string", "description": "the name of the user's Work it is for, if one"},
+            },
+        },
+        capability="tool:content.draft",
+        required_capability="external_api_call",
+        category="writing",
+        egress_scope="external_llm",
+    )(content_draft)
 
 
 def genesis_message(args: dict, user_id: str, db) -> dict:
     return _dispatch_tool_syscall("sys.v1.genesis.message", args, user_id, capability="genesis.message")
+
+
+def content_draft(args: dict, user_id: str, db) -> dict:
+    data = _dispatch_tool_syscall("sys.v1.content.draft", args, user_id, capability="content.draft")
+    return {"draft_id": data.get("draft_id"), "title": data.get("title"), "body": data.get("body"),
+            "sources_used": data.get("sources_used", [])}
 
 
 def market_propose(args: dict, user_id: str, db) -> dict:

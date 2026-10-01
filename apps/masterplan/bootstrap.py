@@ -122,6 +122,8 @@ def _register_jobs() -> None:
     register_job("masterplan.segment_brief", _segment_brief)
     # The owner's Works per RippleTrace series, so published writing is tagged with its Work (WORK_MODEL_SPEC §5).
     register_job("masterplan.works_by_container", _works_by_container)
+    # Drafts a run wrote get the run's id when it completes (tools are not handed their run).
+    register_job("masterplan.attach_drafts_to_run", _attach_drafts_to_run)
     register_job("masterplan.market_propose", _market_propose)
 
 
@@ -306,6 +308,11 @@ def _genesis_audit(*args, **kwargs):
 def _work_context(*args, **kwargs):
     from apps.masterplan.services.work_service import work_context
     return work_context(*args, **kwargs)
+
+
+def _attach_drafts_to_run(*args, **kwargs):
+    from apps.masterplan.services.draft_service import attach_run
+    return attach_run(*args, **kwargs)
 
 
 def _works_by_container(*args, **kwargs):
