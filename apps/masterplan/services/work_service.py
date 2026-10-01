@@ -22,6 +22,7 @@ from apps.masterplan.work_model import (
     Work,
     WorkLink,
     WorkObjective,
+    WorkPresence,
     WorkProposalDismissal,
     WorkRevision,
 )
@@ -163,8 +164,13 @@ def list_works(db: Session, user_id: Any) -> dict:
         if plan is not None
         else []
     )
+    presence_by_work: dict[str, list[dict]] = {}
+    for row in (db.query(WorkPresence).filter(WorkPresence.user_id == uid).order_by(WorkPresence.created_at.asc()).all()
+                if ids else []):
+        presence_by_work.setdefault(row.work_id, []).append(serialize_presence(row))
     return {
-        "works": [{**serialize_work(w), "objectives": objectives_by_work.get(w.id, [])} for w in works],
+        "works": [{**serialize_work(w), "objectives": objectives_by_work.get(w.id, []),
+                   "presence": presence_by_work.get(w.id, [])} for w in works],
         "objectives_available": [{"id": o.id, "name": o.name} for o in available],
         "links": [
             {"id": link.id, "from_work_id": link.from_work_id, "to_work_id": link.to_work_id,
@@ -218,7 +224,8 @@ def delete_work(db: Session, user_id: Any, work_id: str) -> dict:
     uid = _uid(user_id)
     work = _owned_work(db, uid, work_id)
     for model, column in ((WorkLink, WorkLink.from_work_id), (WorkLink, WorkLink.to_work_id),
-                          (WorkObjective, WorkObjective.work_id), (WorkRevision, WorkRevision.work_id)):
+                          (WorkObjective, WorkObjective.work_id), (WorkRevision, WorkRevision.work_id),
+                          (WorkPresence, WorkPresence.work_id)):
         db.query(model).filter(column == work.id).delete(synchronize_session=False)
     db.delete(work)
     db.commit()
@@ -489,3 +496,66 @@ def success_definitions(*, user_id: Any, db: Session, work: str | None = None) -
         named = [w for w in rows if _normalize(w.name) == _normalize(work)]
         rows = named or rows
     return [{"work": w.name, "success": w.success_criteria} for w in rows]
+
+
+
+# ── Presence: where a Work is on the web, in the owner's words (RESOLUTION_CHECK_SPEC §2.2) ──
+
+
+def serialize_presence(row: WorkPresence) -> dict:
+    return {"id": row.id, "work_id": row.work_id, "platform": row.platform, "url": row.url,
+            "self_description": row.self_description}
+
+
+def _presence_fields(data: dict, *, partial: bool) -> dict:
+    out: dict[str, Any] = {}
+    if "platform" in data or not partial:
+        platform = str(data.get("platform") or "").strip()
+        if not platform:
+            raise _refuse(422, "name the platform: LinkedIn, Facebook, your website …")
+        out["platform"] = platform[:64]
+    if "url" in data:
+        url = str(data.get("url") or "").strip() or None
+        if url and not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        if url and len(url) > 500:
+            raise _refuse(422, "url is too long")
+        out["url"] = url
+    if "self_description" in data:
+        out["self_description"] = str(data.get("self_description") or "").strip() or None
+    return out
+
+
+def add_presence(db: Session, user_id: Any, work_id: str, data: dict) -> dict:
+    uid = _uid(user_id)
+    work = _owned_work(db, uid, work_id)
+    row = WorkPresence(user_id=uid, work_id=work.id, **_presence_fields(data, partial=False))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return serialize_presence(row)
+
+
+def _owned_presence(db: Session, uid, presence_id: str) -> WorkPresence:
+    row = db.query(WorkPresence).filter(WorkPresence.id == presence_id, WorkPresence.user_id == uid).first()
+    if row is None:
+        raise _refuse(404, "presence not found")
+    return row
+
+
+def update_presence(db: Session, user_id: Any, presence_id: str, data: dict) -> dict:
+    uid = _uid(user_id)
+    row = _owned_presence(db, uid, presence_id)
+    for field, value in _presence_fields(data, partial=True).items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return serialize_presence(row)
+
+
+def remove_presence(db: Session, user_id: Any, presence_id: str) -> dict:
+    uid = _uid(user_id)
+    row = _owned_presence(db, uid, presence_id)
+    db.delete(row)
+    db.commit()
+    return {"deleted": True, "id": presence_id}

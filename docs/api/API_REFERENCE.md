@@ -2556,6 +2556,27 @@ Record evidence — `{claim, segment_id | entity_id, source_url?, stance: suppor
 
 **Response 200:** the evidence (`source_kind: "owner"`); 422 unless exactly one of segment_id / entity_id
 
+### Resolution
+
+The resolution check (`RESOLUTION_CHECK_SPEC.md`): does AI search resolve the owner's entities, correctly and connected. Questions are generated from the owner's confirmed Works, links and presence; asked of Perplexity, ChatGPT (OpenAI, web search) and Claude (web search); each answer judged against the confirmed facts. A check is answered a few questions a minute by the scheduled `masterplan_resolution_tick`. Refusals are `{error: "resolution_refused", message}`.
+
+#### GET /apps/resolution
+The latest check, answer by answer, and the owner's own self-descriptions side by side
+
+**Response 200:** latest: {id, scope, status, engines, calls, questions: [{key, kind, text, subject, link?}], expected, answered, answers: [{question_key, engine, answer, citations, claims, scores: {resolution, other_entities, claims_correct, claims_incorrect, claims_unverifiable, facts_covered, facts_total, links_stated, links_total, own_sources_cited, citations}, error}], created_at, finished_at} | null, self_descriptions: [{work, kind, platform, url, self_description}], entities
+
+#### POST /apps/resolution/runs
+Start a check — `{scope: core | full}` (default core: the person and brand, three projects, three links)
+
+**Response 200:** the run (`status: "pending"`); 409 while another check is running; 422 when there is nothing to check
+
+#### GET /apps/resolution/runs/{run_id}
+One check, answer by answer
+
+**Parameters:** run_id (path): string
+
+**Response 200:** as `latest` above; 404 when not yours
+
 ### Works
 
 What the owner has made, how the works relate, and which plan objectives they serve (`WORK_MODEL_SPEC.md`). A Work holds intent (summary in the owner's words, role, lifecycle), never measurement. Nothing is inferred into it: proposals are derived on demand and written only when the owner confirms them. Refusals are `{error: "work_refused", message}`.
@@ -2581,6 +2602,27 @@ Edit a Work — any field of `POST /apps/works`; changed fields are recorded in 
 Delete a Work, with its links, objective ties and revisions
 
 **Parameters:** work_id (path): string
+
+**Response 200:** deleted, id
+
+#### POST /apps/works/{work_id}/presence
+Where a Work is on the web — `{platform, url?, self_description?}`: its header or bio there, in the owner's words. Declared, never crawled; a control and a connection for the resolution check
+
+**Parameters:** work_id (path): string
+
+**Response 200:** the presence entry; 422 without a platform; 404 when the work is not yours
+
+#### PATCH /apps/works/presence/{presence_id}
+Edit a presence entry
+
+**Parameters:** presence_id (path): string
+
+**Response 200:** the presence entry; 404 when not yours
+
+#### DELETE /apps/works/presence/{presence_id}
+Remove a presence entry
+
+**Parameters:** presence_id (path): string
 
 **Response 200:** deleted, id
 

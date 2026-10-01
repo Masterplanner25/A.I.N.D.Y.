@@ -4,7 +4,17 @@ from apps.masterplan.goal_state import GoalState
 from apps.masterplan.goals import Goal
 from apps.masterplan.masterplan import GenesisSessionDB, MasterPlan
 from apps.masterplan.strategy_layer import PlanObjective, PlanPhase, PlanStrategy
-from apps.masterplan.work_model import Work, WorkDraft, WorkLink, WorkObjective, WorkProposalDismissal, WorkRevision
+from apps.masterplan.work_model import (
+    ResolutionAnswer,
+    ResolutionRun,
+    Work,
+    WorkDraft,
+    WorkLink,
+    WorkObjective,
+    WorkPresence,
+    WorkProposalDismissal,
+    WorkRevision,
+)
 from apps.masterplan.market_model import (
     MarketEntity,
     MarketEvidence,
@@ -27,11 +37,14 @@ __all__ = [
     "PlanObjective",
     "PlanPhase",
     "PlanStrategy",
+    "ResolutionAnswer",
+    "ResolutionRun",
     "SegmentWork",
     "Work",
     "WorkDraft",
     "WorkLink",
     "WorkObjective",
+    "WorkPresence",
     "WorkProposalDismissal",
     "WorkRevision",
 ]
