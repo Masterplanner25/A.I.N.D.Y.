@@ -15,6 +15,8 @@ import {
 } from "../../api/works.js";
 import { safeMap } from "../../utils/safe";
 import DraftsSection from "./DraftsSection";
+import PresenceEditor from "./PresenceEditor";
+import ResolutionSection from "./ResolutionSection";
 
 // Collaborator's Work mode (docs/specs/WORK_MODEL_SPEC.md §4, §6): what you have made, in your
 // words, how it fits together, and what the agent is told. Nothing is inferred into it: the system
@@ -152,6 +154,8 @@ export default function WorkPanel() {
           )}
         </section>
       )}
+
+      <ResolutionSection />
 
       <DraftsSection />
 
@@ -310,6 +314,8 @@ export default function WorkPanel() {
                   ))}
                 </div>
               )}
+
+              <PresenceEditor work={w} onChange={load} onError={setError} />
             </div>
           );
         })}

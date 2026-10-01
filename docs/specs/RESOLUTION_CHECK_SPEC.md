@@ -8,7 +8,7 @@ owner: "app-team"
 
 # The Resolution Check — does AI search resolve your entities, correctly and connected
 
-**Status:** draft, nothing built. Scoped 2026-09-30 from the owner's own definition of success.
+**Status:** phase A BUILT 2026-09-30 (owner took §7 decisions 1–4 as recommended, and added §2.2); B and C not started. Scoped 2026-09-30 from the owner's own definition of success.
 
 **The owner, which is the whole spec:**
 
@@ -71,6 +71,32 @@ The ground truth is what the owner has already **confirmed**. Nothing here is in
 
 Generated, not hand-written, so a new Work or link is checked from the next run without anyone
 editing a list.
+
+### 2.2 The owner's presence: a control, and connections (added by the owner, 2026-09-30)
+
+> *"We don't need it to pull all the content from across the web, but we can use the content/sites as
+> a control … LinkedIn has this as my header … Facebook has this … Medium … my point here is that these
+> things are also connections."*
+
+Each Work can carry its **presence**: the platforms it is on, the address, and its header or bio there in
+the owner's words (`work_presence`, declared, never crawled). It does two jobs:
+
+- **A control for accuracy.** A header is the owner's canonical statement about the entity. It becomes a
+  confirmed fact the judge checks answers against ("On LinkedIn it describes itself: AI Search Optimization
+  Specialist | Founder, Masterplan Infinite Weave …").
+- **Connections.** A profile *is* the entity, elsewhere. Citations are matched against the owner's presence
+  hosts (`own_sources_cited`), so a check shows which of the owner's own places an engine connects to the
+  entity and which it never surfaces.
+
+The check also shows the owner's self-descriptions **side by side**. For entity optimization, whether one's
+own profiles say the same thing is itself part of the picture (on 2026-09-30, LinkedIn led with *AI Search
+Optimization Specialist*, Facebook with *Helping you get found in AI Search*, Medium with *AI-powered
+execution, systems thinking, and digital strategy*). Shown, not judged.
+
+As built: Work kinds `person` and `brand`, and the relation `created`; a person is implicitly connected to
+every Work whose role is creator or author. Judge: `gpt-4o` at temperature 0. Engines: Perplexity `sonar`,
+OpenAI `gpt-4.1` + `web_search`, Claude + `web_search` (`AINDY_RESOLUTION_ENGINES` narrows them). A check
+is answered six answers a minute by `masterplan_resolution_tick`.
 
 ---
 
