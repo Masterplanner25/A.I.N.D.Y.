@@ -6,6 +6,7 @@ from apps.masterplan.masterplan import GenesisSessionDB, MasterPlan
 from apps.masterplan.strategy_layer import PlanObjective, PlanPhase, PlanStrategy
 from apps.masterplan.work_model import (
     ResolutionAnswer,
+    ResolutionClaim,
     ResolutionRun,
     Work,
     WorkDraft,
@@ -38,6 +39,7 @@ __all__ = [
     "PlanPhase",
     "PlanStrategy",
     "ResolutionAnswer",
+    "ResolutionClaim",
     "ResolutionRun",
     "SegmentWork",
     "Work",

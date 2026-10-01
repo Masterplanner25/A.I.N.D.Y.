@@ -68,9 +68,16 @@ def ground_truth(db: Session, uid) -> dict:
     for row in db.query(WorkPresence).filter(WorkPresence.user_id == uid).all():
         presence.setdefault(row.work_id, []).append(
             {"platform": row.platform, "url": row.url, "self_description": row.self_description})
+    # Phase B: claims the owner settled. True ones are confirmed facts; false ones are denied claims the
+    # judge marks incorrect when an engine repeats them.
+    from apps.masterplan.services.resolution_review import decided_claims
+
+    decided = decided_claims(db, uid)
     entities = {
         w.id: {"id": w.id, "name": w.name, "kind": w.kind, "role": w.role, "status": w.status,
-               "summary": w.summary, "url": w.url, "presence": presence.get(w.id, [])}
+               "summary": w.summary, "url": w.url, "presence": presence.get(w.id, []),
+               "confirmed_claims": decided.get(w.id, {}).get("true", []),
+               "denied_claims": decided.get(w.id, {}).get("false", [])}
         for w in works
     }
     names = {w.id: w.name for w in works}
@@ -169,6 +176,7 @@ def _facts_for(entity: dict) -> list[str]:
             facts.append(f"On {p['platform']} it describes itself: {p['self_description']}")
         elif p.get("url"):
             facts.append(f"It is on {p['platform']} at {p['url']}.")
+    facts += [f"Confirmed by the owner: {claim}" for claim in entity.get("confirmed_claims") or []]
     return facts
 
 
@@ -197,6 +205,8 @@ def judge_answer(question: dict, answer: dict, truth: dict) -> dict:
         f"QUESTION: {question['text']}\n\nSUBJECT: {subject['name']}\nCONFIRMED FACTS:\n"
         + "\n".join(f"F{i}: {f}" for i, f in enumerate(facts, start=1))
         + "\n\nCONFIRMED CONNECTIONS:\n" + ("\n".join(f"L{i}: {link['text']}" for i, link in enumerate(links, start=1)) or "(none)")
+        + "\n\nDENIED BY THE OWNER (an answer repeating one of these makes an incorrect claim):\n"
+        + ("\n".join(f"- {claim}" for claim in subject.get("denied_claims") or []) or "(none)")
         + f"\n\nANSWER:\n{answer.get('answer') or ''}\n\nCITED: {', '.join(answer.get('citations') or []) or '(none)'}"
     )
     model = _judge_model()
@@ -281,8 +291,13 @@ def start_run(db: Session, user_id: Any, scope: str = "core") -> dict:
     questions = build_questions(truth, scope)
     if not questions:
         raise _refuse(422, "nothing to check yet: add yourself (kind person) and your brand as Works")
+    engines = configured_engines()
+    # Phase B: the monthly ceiling (decision 3), checked before anything is spent.
+    from apps.masterplan.services.resolution_review import check_ceiling
+
+    check_ceiling(db, uid, questions, engines)
     run = ResolutionRun(user_id=uid, scope=scope, status="pending", questions=questions,
-                        engines=configured_engines(), calls={})
+                        engines=engines, calls={})
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -313,8 +328,14 @@ def resolution_overview(db: Session, user_id: Any) -> dict:
         for e in truth["entities"].values() if e["kind"] in ("person", "brand")
         for p in e["presence"] if p.get("self_description")
     ]
+    from apps.masterplan.services.resolution_review import ceiling_usd, month_spend, pending_claims, trend
+
     return {"latest": get_run(db, uid), "self_descriptions": self_descriptions,
-            "entities": {k: v["name"] for k, v in truth["entities"].items()}}
+            "entities": {k: v["name"] for k, v in truth["entities"].items()},
+            # Phase B: what to settle, what it has cost this month, and how it is moving.
+            "claims": pending_claims(db, uid),
+            "spend": {"month_usd": month_spend(db, uid), "ceiling_usd": ceiling_usd(), "estimated": True},
+            "trend": trend(db, uid)}
 
 
 def process_run(db: Session, run: ResolutionRun, *, limit: int = TICK_PAIRS,

@@ -89,3 +89,8 @@ export function getResolution() {
 export function startResolution(scope = "core") {
   return authRequest("/apps/resolution/runs", json("POST", { scope }));
 }
+
+// Settle a claim an engine made about one of your works: "true", "false" or "skip".
+export function decideClaim(body) {
+  return authRequest("/apps/resolution/claims", json("POST", body));
+}

@@ -143,6 +143,17 @@ def _register_scheduled_jobs() -> None:
     # 54 external calls) never holds the scheduler slot. Idle unless a check is open.
     from apps.masterplan.services.resolution_service import TICK_INTERVAL_MINUTES, resolution_tick
 
+    # Phase B: a core check each week for owners who have run one, within the monthly ceiling. 07:30, not
+    # 06:00, which already carries the ETA recalculation.
+    from apps.masterplan.services.resolution_review import weekly_resolution_checks
+
+    register_scheduled_job(
+        "masterplan_resolution_weekly",
+        weekly_resolution_checks,
+        name="Weekly resolution check",
+        trigger="cron",
+        trigger_kwargs={"day_of_week": "mon", "hour": 7, "minute": 30},
+    )
     register_scheduled_job(
         "masterplan_resolution_tick",
         resolution_tick,

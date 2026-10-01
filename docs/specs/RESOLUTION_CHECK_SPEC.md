@@ -8,7 +8,7 @@ owner: "app-team"
 
 # The Resolution Check — does AI search resolve your entities, correctly and connected
 
-**Status:** phase A BUILT 2026-09-30 (owner took §7 decisions 1–4 as recommended, and added §2.2); B and C not started. Scoped 2026-09-30 from the owner's own definition of success.
+**Status:** phase A BUILT 2026-09-30 (owner took §7 decisions 1–4 as recommended, and added §2.2); phase B BUILT 2026-10-01 (§6.1); C not started. Scoped 2026-09-30 from the owner's own definition of success.
 
 **The owner, which is the whole spec:**
 
@@ -165,6 +165,20 @@ and cheap enough to forget about.
 | **C** | the planner line per entity; optionally the score (decision 5) | AI Search plans aimed at what is weak |
 
 **A before B**, because the first real run is also the cost measurement §5 is waiting on.
+
+### 6.1 Phase B, as built (2026-10-01)
+
+- **Claims to settle.** Unverifiable claims from the last three checks, grouped across engines and wordings
+  (token overlap ≥ 0.6), most-repeated first, minus any already answered. `true` → *"Confirmed by the owner"*
+  in the next check's facts; `false` → listed to the judge as denied, so a repeat is scored incorrect;
+  `skip` → not asked again (`resolution_claims`, `rc2claims0001`).
+- **The ceiling.** Estimated per call (Perplexity $0.008, OpenAI $0.03, Claude $0.02, judge $0.008: published
+  prices, not the bill). A check that would take the month past `AINDY_RESOLUTION_MONTHLY_CEILING_USD`
+  ($10) is refused before anything is spent; an open check counts at its full estimate. A core check is
+  about $0.80.
+- **Weekly.** `masterplan_resolution_weekly`, Mondays 07:30: a core check for each owner who has run one
+  (having run one is the opt-in), unless one ran in the last six days or is open.
+- **Trend.** Per question and engine across the last eight checks, shown as ● resolved ◐ mixed ○ wrong.
 
 ---
 
