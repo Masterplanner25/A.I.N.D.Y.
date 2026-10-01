@@ -589,12 +589,32 @@ def _handle_market_propose(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_content_draft(payload: dict, ctx: SyscallContext) -> dict:
+    """sys.v1.content.draft — write a draft from a brief and its sources, and keep it as a document."""
+    from apps.masterplan.services.draft_service import write_draft
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return write_draft(db, ctx.user_id, brief=payload.get("brief") or "", sources=payload.get("sources"),
+                           title=payload.get("title"), work=payload.get("work"))
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_masterplan_syscall_handlers() -> None:
     """Register all masterplan domain syscall handlers.
 
     Called once at application startup from apps/bootstrap.py.
     Safe to call multiple times — idempotent.
     """
+    register_syscall(
+        name="sys.v1.content.draft",
+        handler=_handle_content_draft,
+        capability="content.draft",
+        description="Write a draft (plan, outline, article) from a brief and sources; saved as a document.",
+        stable=False,
+    )
     register_syscall(
         name="sys.v1.market.propose",
         handler=_handle_market_propose,

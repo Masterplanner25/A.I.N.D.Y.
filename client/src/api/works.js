@@ -54,3 +54,20 @@ export function getPublishedWriting() {
 export function storePublishedWriting() {
   return authRequest("/apps/rippletrace/content/archive", { method: "POST" });
 }
+
+// What the agent wrote for you (content.draft): plans, outlines, article drafts.
+export function listDrafts() {
+  return authRequest("/apps/works/drafts", { method: "GET" });
+}
+
+export function getDraft(draftId) {
+  return authRequest(`/apps/works/drafts/${encodeURIComponent(draftId)}`, { method: "GET" });
+}
+
+export function updateDraft(draftId, body) {
+  return authRequest(`/apps/works/drafts/${encodeURIComponent(draftId)}`, json("PATCH", body));
+}
+
+export function deleteDraft(draftId) {
+  return authRequest(`/apps/works/drafts/${encodeURIComponent(draftId)}`, { method: "DELETE" });
+}

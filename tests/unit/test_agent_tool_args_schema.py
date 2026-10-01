@@ -51,10 +51,10 @@ def _app_tools() -> dict[str, dict]:
 
 def test_every_app_tool_declares_an_args_schema():
     tools = _app_tools()
-    # 16, not the "17 live tools" figure: the seventeenth is the runtime's own `runtime.selftest`
+    # 17, not the "18 live tools" figure: the eighteenth is the runtime's own `runtime.selftest`
     # (`platform_layer/runtime_agent_defaults.py`), which is not ours to describe. 15 until
-    # 2026-09-28, when `market.propose` joined (MARKET_MODEL_SPEC §4.2).
-    assert len(tools) == 16, sorted(tools)
+    # 2026-09-28 (`market.propose`), 16 until 2026-09-30 (`content.draft`).
+    assert len(tools) == 17, sorted(tools)
 
     missing = sorted(name for name, entry in tools.items() if not isinstance(entry.get("args_schema"), dict))
     assert not missing, (

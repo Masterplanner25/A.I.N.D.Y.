@@ -48,7 +48,8 @@ def register() -> None:
         "arm.generate",
         risk="medium",
         description=(
-            "Generate or refactor code with the ARM code-generation engine. Returns "
+            "Generate or refactor CODE with the ARM code-generation engine. Code only: for a plan, "
+            "outline, article or any prose use content.draft. Returns "
             "{generated_code, explanation, generation_id}."
         ),
         args_schema={

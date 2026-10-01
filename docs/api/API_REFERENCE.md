@@ -2615,6 +2615,32 @@ Confirm a proposal — `{key, name?, summary?, kind?, role?, status?}`; the owne
 
 **Response 200:** the work (`provenance: "confirmed"`); 404 when the proposal is no longer open; 422 without a summary
 
+#### GET /apps/works/drafts
+Drafts — what the agent wrote for you (`content.draft`), newest first, without their text
+
+**Response 200:** drafts: [{id, title, brief, run_id, work_id, sources: [{title, url, platform, kind}], model, created_at, updated_at, words}]
+
+#### GET /apps/works/drafts/{draft_id}
+One draft, with its text (markdown; sources cited inline as [S1] and listed at the end)
+
+**Parameters:** draft_id (path): string
+
+**Response 200:** the draft with `body`; 404 when not yours
+
+#### PATCH /apps/works/drafts/{draft_id}
+Edit a draft's `title` or `body`
+
+**Parameters:** draft_id (path): string
+
+**Response 200:** the draft; 422 on an empty title or body; 404 when not yours
+
+#### DELETE /apps/works/drafts/{draft_id}
+Delete a draft
+
+**Parameters:** draft_id (path): string
+
+**Response 200:** deleted, id
+
 #### POST /apps/works/proposals/dismiss
 Dismiss a proposal — `{key}`; it is not asked again
 

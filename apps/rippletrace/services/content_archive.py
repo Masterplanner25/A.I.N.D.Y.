@@ -74,9 +74,18 @@ _BLOCK_END = re.compile(r"</(?:p|div|h[1-6]|li|blockquote|pre|tr|section|article
 _TAG = re.compile(r"<[^>]+>")
 
 
+#: DEV's `body_markdown` opens with the post's front matter (`---\ntitle: …\n---`) and carries image
+#: links; both were stored as text on 2026-09-30 and became the opening of every first chunk.
+_FRONT_MATTER = re.compile(r"\A\s*---\s*\n.*?\n---\s*\n", re.S)
+_MD_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_HTML_IMAGE = re.compile(r"<img\b[^>]*>", re.I)
+
+
 def to_text(raw: str | None) -> str:
-    """HTML or markdown to plain text, keeping paragraph breaks (chunking splits on them)."""
-    text = raw or ""
+    """HTML or markdown to plain text, keeping paragraph breaks (chunking splits on them). Front
+    matter and images are dropped: they are not what the piece says."""
+    text = _FRONT_MATTER.sub("", raw or "", count=1)
+    text = _HTML_IMAGE.sub(" ", _MD_IMAGE.sub(" ", text))
     if "<" in text and ">" in text:
         text = _BLOCK_END.sub("\n\n", text)
         text = re.sub(r"<(script|style)\b.*?</\1>", " ", text, flags=re.I | re.S)
@@ -355,11 +364,29 @@ def archive_status(db: Session, *, user_id) -> dict:
     return {**totals, "pending": totals["pieces"] - totals["stored"] - totals["no_text"], "platforms": platforms}
 
 
+def reclean_stored(db: Session, *, user_id) -> int:
+    """Re-clean text stored before `to_text` dropped front matter and images. The hash changes, so
+    step 3 rewrites those pieces' memory on its own. Idempotent: clean text comes back unchanged."""
+    user_id = _uid(user_id)
+    rows = (
+        db.query(DropPointDB)
+        .filter(DropPointDB.user_id == user_id, DropPointDB.content_text.isnot(None),
+                DropPointDB.content_text.like("---%") | DropPointDB.content_text.like("%![%")
+                | DropPointDB.content_text.ilike("%<img%"))
+        .all()
+    )
+    changed = sum(1 for row in rows if store_content(row, to_text(row.content_text), row.content_source or "api"))
+    if changed:
+        db.commit()
+    return changed
+
+
 def archive_step(db: Session, *, user_id, limit: int = BATCH, fetchers=None, pause: float = REQUEST_PAUSE_SECONDS) -> dict:
     """One batch of both steps for one owner, then where things stand."""
+    recleaned = reclean_stored(db, user_id=user_id)
     fetched = backfill_content(db, user_id=user_id, limit=limit, fetchers=fetchers, pause=pause)
     remembered = remember_content(db, user_id=user_id, limit=limit)
-    return {**fetched, **remembered, "status": archive_status(db, user_id=user_id)}
+    return {**fetched, **remembered, "recleaned": recleaned, "status": archive_status(db, user_id=user_id)}
 
 
 def archive_published_work() -> dict:
@@ -370,12 +397,13 @@ def archive_published_work() -> dict:
     from AINDY.db.database import SessionLocal
 
     db = SessionLocal()
-    summary: dict[str, Any] = {"owners": 0, "fetched": 0, "remembered": 0, "chunks": 0, "skipped": False}
+    summary: dict[str, Any] = {"owners": 0, "fetched": 0, "remembered": 0, "chunks": 0, "recleaned": 0, "skipped": False}
     try:
         owners = {
             row[0] for row in db.query(DropPointDB.user_id).filter(
                 DropPointDB.user_id.isnot(None),
                 (DropPointDB.content_source.is_(None))
+                | DropPointDB.content_text.like("---%") | DropPointDB.content_text.like("%![%")
                 | ((DropPointDB.content_hash.isnot(None))
                    & ((DropPointDB.content_memory_hash.is_(None)) | (DropPointDB.content_memory_hash != DropPointDB.content_hash))),
             ).distinct()
@@ -383,7 +411,7 @@ def archive_published_work() -> dict:
         for owner in owners:
             outcome = archive_step(db, user_id=owner)
             summary["owners"] += 1
-            for key in ("fetched", "remembered", "chunks"):
+            for key in ("fetched", "remembered", "chunks", "recleaned"):
                 summary[key] += int(outcome.get(key) or 0)
     except Exception as exc:
         logger.warning("[content_archive] run failed: %s", exc)

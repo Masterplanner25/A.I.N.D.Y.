@@ -14,6 +14,7 @@ import {
   updateWork,
 } from "../../api/works.js";
 import { safeMap } from "../../utils/safe";
+import DraftsSection from "./DraftsSection";
 
 // Collaborator's Work mode (docs/specs/WORK_MODEL_SPEC.md §4, §6): what you have made, in your
 // words, how it fits together, and what the agent is told. Nothing is inferred into it: the system
@@ -148,6 +149,8 @@ export default function WorkPanel() {
           )}
         </section>
       )}
+
+      <DraftsSection />
 
       {proposals.length > 0 && (
         <section className="space-y-3">
