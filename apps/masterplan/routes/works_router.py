@@ -30,6 +30,7 @@ class WorkBody(BaseModel):
     ended_on: Optional[str] = None
     url: Optional[str] = None
     declared_target: Optional[str] = None
+    success_criteria: Optional[str] = None
 
 
 class LinkBody(BaseModel):
@@ -139,6 +140,120 @@ async def dismiss_work_proposal_route(request: Request, body: ProposalBody, db: 
 
     return await _run(request, "masterplan.works.dismiss", handler, db=db, user_id=user_id,
                       payload={"key": body.key})
+
+
+class DraftBody(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+
+
+@router.get("/drafts")
+@limiter.limit("60/minute")
+async def list_drafts_route(request: Request, db: Session = Depends(get_db),
+                            current_user: dict = Depends(get_current_user)):
+    """What the agent has written for you, newest first."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.draft_service import list_drafts
+        return list_drafts(db, user_id)
+
+    return await _run(request, "masterplan.works.drafts", handler, db=db, user_id=user_id, payload={})
+
+
+@router.get("/drafts/{draft_id}")
+@limiter.limit("60/minute")
+async def get_draft_route(request: Request, draft_id: str, db: Session = Depends(get_db),
+                          current_user: dict = Depends(get_current_user)):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.draft_service import get_draft
+        return get_draft(db, user_id, draft_id)
+
+    return await _run(request, "masterplan.works.draft.get", handler, db=db, user_id=user_id,
+                      payload={"draft_id": draft_id})
+
+
+@router.patch("/drafts/{draft_id}")
+@limiter.limit("30/minute")
+async def update_draft_route(request: Request, draft_id: str, body: DraftBody, db: Session = Depends(get_db),
+                             current_user: dict = Depends(get_current_user)):
+    """Edit a draft's title or text."""
+    user_id = str(current_user["sub"])
+    fields = body.model_dump(exclude_unset=True)
+
+    def handler(ctx):
+        from apps.masterplan.services.draft_service import update_draft
+        return update_draft(db, user_id, draft_id, fields)
+
+    return await _run(request, "masterplan.works.draft.update", handler, db=db, user_id=user_id,
+                      payload={"draft_id": draft_id, "fields": sorted(fields)})
+
+
+@router.delete("/drafts/{draft_id}")
+@limiter.limit("30/minute")
+async def delete_draft_route(request: Request, draft_id: str, db: Session = Depends(get_db),
+                             current_user: dict = Depends(get_current_user)):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.draft_service import delete_draft
+        return delete_draft(db, user_id, draft_id)
+
+    return await _run(request, "masterplan.works.draft.delete", handler, db=db, user_id=user_id,
+                      payload={"draft_id": draft_id})
+
+
+class PresenceBody(BaseModel):
+    platform: Optional[str] = None
+    url: Optional[str] = None
+    self_description: Optional[str] = None
+
+
+@router.post("/{work_id}/presence")
+@limiter.limit("30/minute")
+async def add_presence_route(request: Request, work_id: str, body: PresenceBody, db: Session = Depends(get_db),
+                             current_user: dict = Depends(get_current_user)):
+    """Where this work is on the web, and its header or bio there, in your words."""
+    user_id = str(current_user["sub"])
+    fields = body.model_dump(exclude_unset=True)
+
+    def handler(ctx):
+        from apps.masterplan.services.work_service import add_presence
+        return add_presence(db, user_id, work_id, fields)
+
+    return await _run(request, "masterplan.works.presence.add", handler, db=db, user_id=user_id,
+                      payload={"work_id": work_id, **fields})
+
+
+@router.patch("/presence/{presence_id}")
+@limiter.limit("30/minute")
+async def update_presence_route(request: Request, presence_id: str, body: PresenceBody,
+                                db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    user_id = str(current_user["sub"])
+    fields = body.model_dump(exclude_unset=True)
+
+    def handler(ctx):
+        from apps.masterplan.services.work_service import update_presence
+        return update_presence(db, user_id, presence_id, fields)
+
+    return await _run(request, "masterplan.works.presence.edit", handler, db=db, user_id=user_id,
+                      payload={"presence_id": presence_id, **fields})
+
+
+@router.delete("/presence/{presence_id}")
+@limiter.limit("30/minute")
+async def remove_presence_route(request: Request, presence_id: str, db: Session = Depends(get_db),
+                                current_user: dict = Depends(get_current_user)):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.work_service import remove_presence
+        return remove_presence(db, user_id, presence_id)
+
+    return await _run(request, "masterplan.works.presence.del", handler, db=db, user_id=user_id,
+                      payload={"presence_id": presence_id})
 
 
 @router.patch("/{work_id}")

@@ -22,6 +22,14 @@ const api = vi.hoisted(() => ({
   setWorkObjectives: vi.fn(),
   getPublishedWriting: vi.fn(),
   storePublishedWriting: vi.fn(),
+  listDrafts: vi.fn(),
+  getDraft: vi.fn(),
+  updateDraft: vi.fn(),
+  deleteDraft: vi.fn(),
+  addPresence: vi.fn(),
+  removePresence: vi.fn(),
+  getResolution: vi.fn(),
+  startResolution: vi.fn(),
 }));
 
 vi.mock("../api/works.js", () => api);
@@ -36,6 +44,9 @@ const RUNTIME = { id: "w-rt", name: "aindy-runtime", kind: "project", role: "cre
   summary: "Self-hosted runtime for AI agents.", objectives: [{ id: "o-1", name: "Platform Enablement" }] };
 const NODUS = { id: "w-nd", name: "Nodus", kind: "project", role: "creator", status: "active",
   summary: "The orchestration language.", objectives: [] };
+const AISO = { id: "w-ai", name: "AI Search Optimization", kind: "practice", role: "creator", status: "active",
+  summary: "Knowledge, entity and semantic optimization.", objectives: [],
+  success_criteria: "Resolution, not rankings: does a direct search bring back the right entity?" };
 const PROPOSAL = { key: "container:c-1", source: "container", name: "2025 ChatGPT Case Study Series",
   summary: "", kind: "series", role: "author", status: "active", container_id: "c-1",
   question: "You confirmed '2025 ChatGPT Case Study Series' as a series of yours. What was it for?",
@@ -50,7 +61,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   api.listWorks.mockResolvedValue({
-    works: [RUNTIME, NODUS],
+    works: [RUNTIME, NODUS, AISO],
     links: [{ id: "l-1", from_work_id: "w-rt", to_work_id: "w-nd", relation: "executes", note: null }],
     objectives_available: [{ id: "o-1", name: "Platform Enablement" }, { id: "o-2", name: "Ethical AI Framework" }],
     vocabulary: VOCAB,
@@ -61,6 +72,9 @@ beforeEach(() => {
     pieces: 214, stored: 60, recallable: 40, no_text: 15, pending: 139,
     platforms: { DEV: { pieces: 143, recallable: 30, no_text: 0 }, YouTube: { pieces: 15, recallable: 0, no_text: 15 } },
   });
+  api.listDrafts.mockResolvedValue({ drafts: [] });
+  api.getResolution.mockResolvedValue({ latest: null, self_descriptions: [], entities: {} });
+  api.addPresence.mockResolvedValue({});
   api.storePublishedWriting.mockResolvedValue({ status: { pieces: 214, stored: 100, recallable: 80, no_text: 15, pending: 99, platforms: {} } });
   for (const fn of ["confirmWorkProposal", "dismissWorkProposal", "createWork", "addWorkLink", "setWorkObjectives"]) {
     api[fn].mockResolvedValue({});
@@ -128,6 +142,22 @@ describe("Collaborator's Work mode", () => {
     expect(screen.getByText(/DEV 30\/143 · YouTube 0\/15 \(15 with no text\)/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /store a batch now/i }));
     await waitFor(() => expect(api.storePublishedWriting).toHaveBeenCalled());
+  });
+
+  it("shows a work's success in the owner's words, and saves an edit to it", async () => {
+    api.updateWork.mockResolvedValue({});
+    renderPanel();
+    expect(await screen.findByText(/Resolution, not rankings/)).toBeInTheDocument();
+    const edits = screen.getAllByRole("button", { name: /^edit$/i });
+    await userEvent.click(edits[2]);
+    const boxes = screen.getAllByLabelText("How I judge success");
+    const box = boxes[boxes.length - 1]; // the work being edited; the proposal card has its own
+    await userEvent.clear(box);
+    await userEvent.type(box, "The right entity, said correctly.");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(api.updateWork).toHaveBeenCalledWith("w-ai", expect.objectContaining({
+      success_criteria: "The right entity, said correctly.",
+    })));
   });
 
   it("shows exactly what the agent is told", async () => {

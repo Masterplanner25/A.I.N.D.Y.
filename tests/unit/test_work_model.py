@@ -201,3 +201,17 @@ def test_the_overview_shows_the_exact_block_the_agent_is_sent(db_session, plan):
     assert overview["agent_block"] == ws.work_context(user_id=USER, db=db_session)["block"]
     assert "aindy-runtime (project, creator, active)" in overview["agent_block"]
     assert overview["objectives_available"] == [{"id": overview["objectives_available"][0]["id"], "name": "Platform Enablement"}]
+
+
+def test_success_is_the_owners_words_kept_with_history_and_told_to_the_planner(db_session):
+    """Owner, 2026-09-30: success for AI Search Optimization is resolution, not rankings."""
+    work = ws.create_work(db_session, USER, {"name": "AI Search Optimization", "summary": "Entity work.",
+                                             "kind": "practice"})
+    words = "Resolution, not rankings: a direct search brings back the right entity."
+    assert ws.update_work(db_session, USER, work["id"], {"success_criteria": words})["success_criteria"] == words
+    assert db_session.query(WorkRevision).filter_by(work_id=work["id"], field="success_criteria").count() == 1
+
+    block = ws.work_context(user_id=USER, db=db_session)["block"]
+    assert f"SUCCESS, in the user's words (measure against this, not generic metrics): {words}" in block
+    assert ws.success_definitions(user_id=USER, db=db_session, work="ai search optimization") == [
+        {"work": "AI Search Optimization", "success": words}]

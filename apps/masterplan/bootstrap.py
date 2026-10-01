@@ -58,6 +58,7 @@ def _register_routers() -> None:
     from apps.masterplan.routes.goals_router import router as goals_router
     from apps.masterplan.routes.works_router import router as works_router
     from apps.masterplan.routes.market_router import router as market_router
+    from apps.masterplan.routes.resolution_router import router as resolution_router
     from apps.masterplan.routes.masterplan_router import router as masterplan_router
     from apps.masterplan.routes.score_router import router as score_router
 
@@ -65,6 +66,7 @@ def _register_routers() -> None:
     register_router(goals_router)
     register_router(works_router)
     register_router(market_router)
+    register_router(resolution_router)
     register_router(masterplan_router)
     register_router(score_router)
 
@@ -122,6 +124,8 @@ def _register_jobs() -> None:
     register_job("masterplan.segment_brief", _segment_brief)
     # The owner's Works per RippleTrace series, so published writing is tagged with its Work (WORK_MODEL_SPEC §5).
     register_job("masterplan.works_by_container", _works_by_container)
+    # Drafts a run wrote get the run's id when it completes (tools are not handed their run).
+    register_job("masterplan.attach_drafts_to_run", _attach_drafts_to_run)
     register_job("masterplan.market_propose", _market_propose)
 
 
@@ -134,6 +138,17 @@ def _register_scheduled_jobs() -> None:
         name="Daily ETA projection recalculation",
         trigger="cron",
         trigger_kwargs={"hour": 6},
+    )
+    # RESOLUTION_CHECK_SPEC: advance open resolution checks a few answers at a time, so a check (about
+    # 54 external calls) never holds the scheduler slot. Idle unless a check is open.
+    from apps.masterplan.services.resolution_service import TICK_INTERVAL_MINUTES, resolution_tick
+
+    register_scheduled_job(
+        "masterplan_resolution_tick",
+        resolution_tick,
+        name="Advance open resolution checks",
+        trigger="interval",
+        trigger_kwargs={"minutes": TICK_INTERVAL_MINUTES},
     )
 
 
@@ -306,6 +321,11 @@ def _genesis_audit(*args, **kwargs):
 def _work_context(*args, **kwargs):
     from apps.masterplan.services.work_service import work_context
     return work_context(*args, **kwargs)
+
+
+def _attach_drafts_to_run(*args, **kwargs):
+    from apps.masterplan.services.draft_service import attach_run
+    return attach_run(*args, **kwargs)
 
 
 def _works_by_container(*args, **kwargs):

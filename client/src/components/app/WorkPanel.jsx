@@ -14,6 +14,9 @@ import {
   updateWork,
 } from "../../api/works.js";
 import { safeMap } from "../../utils/safe";
+import DraftsSection from "./DraftsSection";
+import PresenceEditor from "./PresenceEditor";
+import ResolutionSection from "./ResolutionSection";
 
 // Collaborator's Work mode (docs/specs/WORK_MODEL_SPEC.md §4, §6): what you have made, in your
 // words, how it fits together, and what the agent is told. Nothing is inferred into it: the system
@@ -44,6 +47,9 @@ function WorkFields({ draft, setDraft, vocabulary }) {
         onChange={(e) => set("name")(e.target.value)} />
       <textarea aria-label="Summary" className={`${FIELD} resize-none`} rows={3} value={draft.summary || ""}
         placeholder="What it is, in your words" onChange={(e) => set("summary")(e.target.value)} />
+      <textarea aria-label="How I judge success" className={`${FIELD} resize-none`} rows={2} value={draft.success_criteria || ""}
+        placeholder="How you judge whether it is working, in your words (optional)"
+        onChange={(e) => set("success_criteria")(e.target.value)} />
       <div className="grid grid-cols-3 gap-2">
         <Select label="Kind" value={draft.kind || "project"} options={vocabulary.kinds} onChange={set("kind")} />
         <Select label="Role" value={draft.role || "creator"} options={vocabulary.roles} onChange={set("role")} />
@@ -149,6 +155,10 @@ export default function WorkPanel() {
         </section>
       )}
 
+      <ResolutionSection />
+
+      <DraftsSection />
+
       {proposals.length > 0 && (
         <section className="space-y-3">
           <p className="text-[10px] uppercase tracking-wider text-zinc-600">The system noticed</p>
@@ -217,8 +227,8 @@ export default function WorkPanel() {
                   <div className="flex gap-2">
                     <button className={PRIMARY} disabled={busy}
                       onClick={async () => {
-                        const { id, name, summary, kind, role, status } = editing;
-                        if (await act(() => updateWork(id, { name, summary, kind, role, status }))) setEditing(null);
+                        const { id, name, summary, kind, role, status, success_criteria } = editing;
+                        if (await act(() => updateWork(id, { name, summary, kind, role, status, success_criteria: success_criteria || "" }))) setEditing(null);
                       }}>
                       Save
                     </button>
@@ -243,6 +253,11 @@ export default function WorkPanel() {
                     </div>
                   </div>
                   <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">{w.summary}</p>
+                  {w.success_criteria && (
+                    <p className="text-[11px] text-zinc-400 leading-relaxed whitespace-pre-wrap">
+                      <span className="text-zinc-600 uppercase tracking-wider text-[10px]">Success · </span>{w.success_criteria}
+                    </p>
+                  )}
                 </>
               )}
 
@@ -299,6 +314,8 @@ export default function WorkPanel() {
                   ))}
                 </div>
               )}
+
+              <PresenceEditor work={w} onChange={load} onError={setError} />
             </div>
           );
         })}

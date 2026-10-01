@@ -2556,6 +2556,27 @@ Record evidence — `{claim, segment_id | entity_id, source_url?, stance: suppor
 
 **Response 200:** the evidence (`source_kind: "owner"`); 422 unless exactly one of segment_id / entity_id
 
+### Resolution
+
+The resolution check (`RESOLUTION_CHECK_SPEC.md`): does AI search resolve the owner's entities, correctly and connected. Questions are generated from the owner's confirmed Works, links and presence; asked of Perplexity, ChatGPT (OpenAI, web search) and Claude (web search); each answer judged against the confirmed facts. A check is answered a few questions a minute by the scheduled `masterplan_resolution_tick`. Refusals are `{error: "resolution_refused", message}`.
+
+#### GET /apps/resolution
+The latest check, answer by answer, and the owner's own self-descriptions side by side
+
+**Response 200:** latest: {id, scope, status, engines, calls, questions: [{key, kind, text, subject, link?}], expected, answered, answers: [{question_key, engine, answer, citations, claims, scores: {resolution, other_entities, claims_correct, claims_incorrect, claims_unverifiable, facts_covered, facts_total, links_stated, links_total, own_sources_cited, citations}, error}], created_at, finished_at} | null, self_descriptions: [{work, kind, platform, url, self_description}], entities
+
+#### POST /apps/resolution/runs
+Start a check — `{scope: core | full}` (default core: the person and brand, three projects, three links)
+
+**Response 200:** the run (`status: "pending"`); 409 while another check is running; 422 when there is nothing to check
+
+#### GET /apps/resolution/runs/{run_id}
+One check, answer by answer
+
+**Parameters:** run_id (path): string
+
+**Response 200:** as `latest` above; 404 when not yours
+
 ### Works
 
 What the owner has made, how the works relate, and which plan objectives they serve (`WORK_MODEL_SPEC.md`). A Work holds intent (summary in the owner's words, role, lifecycle), never measurement. Nothing is inferred into it: proposals are derived on demand and written only when the owner confirms them. Refusals are `{error: "work_refused", message}`.
@@ -2563,10 +2584,10 @@ What the owner has made, how the works relate, and which plan objectives they se
 #### GET /apps/works
 List Works — every work, its links, its objectives, and the closed vocabularies (`kinds`, `roles`, `statuses`, `relations`)
 
-**Response 200:** works: [{id, name, kind, summary, role, status, started_on, ended_on, url, declared_target, container_id, provenance, created_at, objectives: [{id, name}]}], links: [{id, from_work_id, to_work_id, relation, note}], vocabulary
+**Response 200:** works: [{id, name, kind, summary, role, status, started_on, ended_on, url, declared_target, success_criteria, container_id, provenance, created_at, objectives: [{id, name}]}], links: [{id, from_work_id, to_work_id, relation, note}], vocabulary
 
 #### POST /apps/works
-Declare a Work — `name` and `summary` required; `kind` (project · product · series · practice · publication · other, default project), `role` (creator · author · maintainer · contributor, default creator), `status` (active · finished · paused · planned, default active), `started_on`/`ended_on` (YYYY-MM-DD), `url`, `declared_target`
+Declare a Work — `name` and `summary` required; `kind` (project · product · series · practice · publication · other, default project), `role` (creator · author · maintainer · contributor, default creator), `status` (active · finished · paused · planned, default active), `started_on`/`ended_on` (YYYY-MM-DD), `url`, `declared_target`, `success_criteria` (how you judge it, in your words; told to the planner and to `content.draft`)
 
 **Response 200:** the work (`provenance: "declared"`); 422 on a missing summary or an unknown vocabulary value; 409 when a work of that name exists
 
@@ -2581,6 +2602,27 @@ Edit a Work — any field of `POST /apps/works`; changed fields are recorded in 
 Delete a Work, with its links, objective ties and revisions
 
 **Parameters:** work_id (path): string
+
+**Response 200:** deleted, id
+
+#### POST /apps/works/{work_id}/presence
+Where a Work is on the web — `{platform, url?, self_description?}`: its header or bio there, in the owner's words. Declared, never crawled; a control and a connection for the resolution check
+
+**Parameters:** work_id (path): string
+
+**Response 200:** the presence entry; 422 without a platform; 404 when the work is not yours
+
+#### PATCH /apps/works/presence/{presence_id}
+Edit a presence entry
+
+**Parameters:** presence_id (path): string
+
+**Response 200:** the presence entry; 404 when not yours
+
+#### DELETE /apps/works/presence/{presence_id}
+Remove a presence entry
+
+**Parameters:** presence_id (path): string
 
 **Response 200:** deleted, id
 
@@ -2614,6 +2656,32 @@ Work proposals — what the system can already see and asks about: the active Ma
 Confirm a proposal — `{key, name?, summary?, kind?, role?, status?}`; the owner's fields replace the suggestion, and a proposal with no description needs a `summary`
 
 **Response 200:** the work (`provenance: "confirmed"`); 404 when the proposal is no longer open; 422 without a summary
+
+#### GET /apps/works/drafts
+Drafts — what the agent wrote for you (`content.draft`), newest first, without their text
+
+**Response 200:** drafts: [{id, title, brief, run_id, work_id, sources: [{title, url, platform, kind}], model, created_at, updated_at, words}]
+
+#### GET /apps/works/drafts/{draft_id}
+One draft, with its text (markdown; sources cited inline as [S1] and listed at the end)
+
+**Parameters:** draft_id (path): string
+
+**Response 200:** the draft with `body`; 404 when not yours
+
+#### PATCH /apps/works/drafts/{draft_id}
+Edit a draft's `title` or `body`
+
+**Parameters:** draft_id (path): string
+
+**Response 200:** the draft; 422 on an empty title or body; 404 when not yours
+
+#### DELETE /apps/works/drafts/{draft_id}
+Delete a draft
+
+**Parameters:** draft_id (path): string
+
+**Response 200:** deleted, id
 
 #### POST /apps/works/proposals/dismiss
 Dismiss a proposal — `{key}`; it is not asked again

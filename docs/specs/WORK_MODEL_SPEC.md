@@ -107,6 +107,7 @@ the owner says it belongs, and `key_assets` shows it always meant to hold this.
 | `started_on` / `ended_on` | dates the owner declares; may predate the system |
 | `url` | canonical home, optional |
 | `declared_target` | optional, the §4b "52 planned, 46 done": declared, never computed |
+| `success_criteria` | optional, **how the owner judges the work**, in their words; declared, never computed. Added 2026-09-30 (`wk2success0001`) when a plan drafted from the owner's own AI Search writing still closed on industry metrics. The planner's Work block carries it as *SUCCESS, in the user's words*, and `content.draft` receives it as *the person's own definition of success*. The owner's, for AI Search Optimization: resolution, not rankings — does a direct search bring back the right entity, how much of what it says is correct, and does it connect the entities |
 | `provenance` | `declared` (the owner said it) · `confirmed` (the system proposed it, the owner accepted) |
 | `created_at` / `updated_at` | history is kept (§3.4) |
 
@@ -265,6 +266,25 @@ Practice: AI Search Optimization.
 - **Collaborator shows the same block**, so the owner can see what the agent is told.
 
 ---
+
+### 6.1 Writing from the work, and where it goes (2026-09-30)
+
+The first run after the catalogue was stored (`0aa01e33`, *"using my published AI Search Optimization
+work, design an AI Search Optimized marketing plan for Nodus"*) recalled six of the owner's own pieces
+and used none of them. Three causes: `memory.recall`'s description still said its results were
+"mostly system telemetry"; the agent had no tool for prose, so the planner borrowed ARM's code
+generator; and nothing told the planner to hand the recalled text to the writing step. Then the owner
+asked *"where does the output go?"*: a step result, a memory node and a task, none a document.
+
+- `memory.recall` says it returns the owner's writing (`published_work`), takes `tags`, and says how
+  to pass its nodes on.
+- **`content.draft`** (`sys.v1.content.draft`, `gpt-4o`): a brief plus `sources` by step reference,
+  written from the owner's own pieces first (`OWN WORK` sources), cited inline as [S1] and listed at
+  the end; a cross-post counts once. `arm.generate` now says it is for code.
+- **`work_drafts`** (`wd1draft0001`): every draft is a document, stamped with the run that wrote it,
+  listed in Collaborator's Work mode to read, edit, copy, download or delete.
+- Stored text drops front matter and image links (DEV's `body_markdown` carried both into every first
+  chunk); text stored before that is re-cleaned and its memory rewritten by the same job.
 
 ## 7. Boundaries with the neighbouring specs
 
