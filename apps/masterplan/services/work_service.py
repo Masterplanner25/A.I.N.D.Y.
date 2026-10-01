@@ -29,7 +29,7 @@ from apps.masterplan.work_model import (
 #: What the planner block may carry at most (§6): the block must never crowd out the plan.
 PLANNER_WORK_LIMIT = 12
 
-_TRACKED_FIELDS = ("name", "kind", "summary", "role", "status", "url", "declared_target")
+_TRACKED_FIELDS = ("name", "kind", "summary", "role", "status", "url", "declared_target", "success_criteria")
 
 
 def _uid(user_id: Any):
@@ -91,6 +91,8 @@ def _clean_fields(data: dict, *, partial: bool) -> dict:
             raise _refuse(422, "url is too long")
     if "declared_target" in data:
         out["declared_target"] = (str(data.get("declared_target") or "").strip() or None)
+    if "success_criteria" in data:
+        out["success_criteria"] = (str(data.get("success_criteria") or "").strip() or None)
     return out
 
 
@@ -106,6 +108,7 @@ def serialize_work(work: Work) -> dict:
         "ended_on": work.ended_on.isoformat() if work.ended_on else None,
         "url": work.url,
         "declared_target": work.declared_target,
+        "success_criteria": work.success_criteria,
         "container_id": work.container_id,
         "provenance": work.provenance,
         "created_at": work.created_at.isoformat() if work.created_at else None,
@@ -412,6 +415,9 @@ def render_work_block(ctx: dict | None) -> str:
             line += f"; {'; '.join(work['relations'])}"
         if work.get("serves"):
             line += f"; serves {', '.join(work['serves'])}"
+        if work.get("success"):
+            # The owner's own measure. A plan for this work is judged by it, not by industry metrics.
+            line += f". SUCCESS, in the user's words (measure against this, not generic metrics): {work['success']}"
         lines.append(line)
     hidden = int(ctx.get("total") or 0) - len(ctx["works"])
     if hidden > 0:
@@ -444,6 +450,7 @@ def work_context(*, user_id: Any, db: Session) -> dict | None:
                 "name": w["name"], "kind": w["kind"], "role": w["role"], "status": w["status"],
                 "summary": w["summary"], "relations": relations.get(w["id"], []),
                 "serves": [o["name"] for o in w["objectives"]],
+                "success": w.get("success_criteria"),
             }
             for w in works
         ],
@@ -470,3 +477,15 @@ def works_by_container(*, user_id: Any, db: Session) -> dict[str, list[str]]:
     for work in db.query(Work).filter(Work.user_id == uid, Work.container_id.isnot(None)).all():
         out.setdefault(work.container_id, []).append(work.name)
     return out
+
+
+def success_definitions(*, user_id: Any, db: Session, work: str | None = None) -> list[dict]:
+    """The owner's own definitions of success: the named work's, or every work's that has one."""
+    uid = parse_user_id(user_id)
+    if uid is None:
+        return []
+    rows = db.query(Work).filter(Work.user_id == uid, Work.success_criteria.isnot(None)).all()
+    if work:
+        named = [w for w in rows if _normalize(w.name) == _normalize(work)]
+        rows = named or rows
+    return [{"work": w.name, "success": w.success_criteria} for w in rows]

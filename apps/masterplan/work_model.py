@@ -50,6 +50,11 @@ class Work(Base):
     url = Column(String(500), nullable=True)
     # Declared, never computed: "52 planned" beside a measured "46 done" (§3.1).
     declared_target = Column(Text, nullable=True)
+    # How the owner judges whether this work is succeeding, in their words. Declared, never computed.
+    # Added 2026-09-30: a plan for Nodus drafted from the owner's own AI Search writing still closed on
+    # the industry's metrics (indexing rate, citation counts), because nothing held the owner's.
+    # Theirs, for AI Search Optimization: resolution, not rankings.
+    success_criteria = Column(Text, nullable=True)
     # The RippleTrace container this work is the intent behind. A soft reference (no FK): the
     # container is RippleTrace's table, and this domain owns the link, not the other way round.
     container_id = Column(String, nullable=True, index=True)

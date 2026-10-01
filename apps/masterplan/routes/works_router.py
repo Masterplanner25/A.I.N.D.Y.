@@ -30,6 +30,7 @@ class WorkBody(BaseModel):
     ended_on: Optional[str] = None
     url: Optional[str] = None
     declared_target: Optional[str] = None
+    success_criteria: Optional[str] = None
 
 
 class LinkBody(BaseModel):

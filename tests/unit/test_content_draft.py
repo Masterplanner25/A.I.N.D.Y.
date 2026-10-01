@@ -124,3 +124,24 @@ def test_prose_goes_to_content_draft_and_recall_no_longer_calls_its_results_tele
     assert "telemetry" not in recall and "published_work" in recall and "content.draft" in recall
     assert "content.draft" in TOOL_REGISTRY["arm.generate"]["description"]
     assert "tags" in TOOL_REGISTRY["memory.recall"]["args_schema"]["properties"]
+
+
+def test_a_draft_is_told_the_owners_own_definition_of_success(db_session):
+    """The Nodus plan (2026-09-30) closed on industry metrics: nothing held the owner's own."""
+    work = ws.create_work(db_session, USER, {"name": "AI Search Optimization", "summary": "Entity work.",
+                                             "kind": "practice"})
+    ws.update_work(db_session, USER, work["id"], {"success_criteria": "Resolution, not rankings."})
+    seen = {}
+
+    def complete(brief, context):
+        seen["context"] = context
+        return "# Plan\n\nMeasured by resolution."
+
+    ds.write_draft(db_session, USER, brief="A plan", sources=RECALL, complete=complete)
+    assert context_has(seen["context"], "THE PERSON'S OWN DEFINITION OF SUCCESS",
+                       "- AI Search Optimization: Resolution, not rankings.")
+    assert "industry metrics" in ds._SYSTEM
+
+
+def context_has(text, *parts):
+    return all(part in text for part in parts)
