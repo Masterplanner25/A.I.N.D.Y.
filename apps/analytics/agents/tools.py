@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
 
+from apps._shared.tool_results import TOOL_RESULTS
+
 
 def reasoning_evaluate(args: dict, user_id: str, db) -> dict:
     """Return the current autonomous-reasoning recommendation for the user.
@@ -29,6 +31,7 @@ def reasoning_evaluate(args: dict, user_id: str, db) -> dict:
 def register() -> None:
     register_tool(
         "reasoning.evaluate",
+        result_schema=TOOL_RESULTS["reasoning.evaluate"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="low",
         description=(
             "Evaluate the user's current state and return the autonomous-reasoning "

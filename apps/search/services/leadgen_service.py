@@ -110,6 +110,7 @@ def run_ai_search(query: str, user_id: str = None, db=None):
 
             orchestrator = MemoryOrchestrator(MemoryNodeDAO)
             context = orchestrator.get_context(
+                site="app.search.leadgen",  # FR-49 (2.25.0): names this recall in aindy_memory_recall_failures_total
                 user_id=user_id,
                 query=query,
                 task_type="strategy",

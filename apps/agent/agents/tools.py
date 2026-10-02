@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 
 from AINDY.agents.tool_registry import TOOL_REGISTRY, register_tool, register_tool_suggestion_provider
+
+from apps._shared.tool_results import TOOL_RESULTS
 from AINDY.agents.tool_syscalls import invoke_tool_syscall
 from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
 
@@ -14,6 +16,7 @@ logger = logging.getLogger(__name__)
 def register() -> None:
     register_tool(
         "memory.recall",
+        result_schema=TOOL_RESULTS["memory.recall"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="low",
         description=(
             "Recall the user's memory for a query, including their own PUBLISHED WRITING (about 200 "
@@ -39,6 +42,7 @@ def register() -> None:
     )(memory_recall)
     register_tool(
         "memory.write",
+        result_schema=TOOL_RESULTS["memory.write"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="low",
         description="Write a memory node with content and tags. Returns {node_id}.",
         args_schema={

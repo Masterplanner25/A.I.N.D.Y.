@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
+
+from apps._shared.tool_results import TOOL_RESULTS
 from AINDY.agents.tool_syscalls import invoke_tool_syscall
 
 
@@ -43,6 +45,7 @@ def register() -> None:
     )(genesis_message)
     register_tool(
         "market.propose",
+        result_schema=TOOL_RESULTS["market.propose"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="low",
         description=(
             "Record a finding about the user's MARKET for them to confirm: a segment (a kind of "
@@ -82,6 +85,7 @@ def register() -> None:
     )(market_propose)
     register_tool(
         "content.draft",
+        result_schema=TOOL_RESULTS["content.draft"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="low",
         description=(
             "WRITE a document for the user: a plan, outline, article or post draft. Use this for any "

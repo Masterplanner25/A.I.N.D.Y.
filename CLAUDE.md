@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.24.0,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.25.0,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -168,6 +168,10 @@ def register() -> None:
     # `enforce` since 2026-09-26** (owner, after 38 steps / 11 runs with zero `invalid`; wired in
     # compose — `.env` alone never reaches the process). A new tool's schema must be right before
     # it ships: under enforce a mismatch refuses the step. It checks shape, not truth.
+    # RESULTS (2.25.0, FR-48): every tool a later step may reference declares `result_schema`, all
+    # in `apps/_shared/tool_results.py`, and with step references on the planner's paths are
+    # checked against it at PLAN time. A schema listing `properties` is CLOSED, so declare the
+    # tool's REAL keys, not its documented subset; `test_agent_tool_result_schema.py` guards it.
     # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
     # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
     # `register_syscalls` — which do not exist. Grepping for them returns nothing, which
@@ -252,10 +256,10 @@ merge rules): `docs/operations/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime>=2.24.0,<3.0    # pyproject.toml — the COMPATIBILITY range
+aindy-runtime>=2.25.0,<3.0    # pyproject.toml — the COMPATIBILITY range
 ```
 ```
-aindy-runtime==2.24.0         # constraints.txt — the BUILD pin
+aindy-runtime==2.25.0         # constraints.txt — the BUILD pin
 ```
 
 The upper bound is required. Never widen to an unbounded range.
@@ -284,7 +288,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.24.0,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.25.0,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.
@@ -556,8 +560,8 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed) |
-| Latest runtime adoption record | `docs/runtime/RUNTIME_2_24_0_UPGRADE.md` (+ ui-kit 2.1.1) — one per release (2.22.0's is the last with a schema step); the 2.20.0 doc's §6.2 is the exit-3 reconcile, proven once. **2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — it exits 0 and stamps; check the column, not the exit code** |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0** |
+| Latest runtime adoption record | `docs/runtime/RUNTIME_2_25_0_UPGRADE.md` — one per release (2.22.0's is the last with a schema step); the 2.20.0 doc's §6.2 is the exit-3 reconcile, proven once. **2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — it exits 0 and stamps; check the column, not the exit code** |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |
