@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
+
+from apps._shared.tool_results import TOOL_RESULTS
 from AINDY.agents.tool_syscalls import invoke_tool_syscall
 
 
@@ -18,6 +20,7 @@ def _dispatch_tool_syscall(syscall_name: str, args: dict, user_id: str, *, capab
 def register() -> None:
     register_tool(
         "search.query",
+        result_schema=TOOL_RESULTS["search.query"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="medium",
         description=(
             "Unified search over leadgen, research, SEO, and memory surfaces. "
@@ -43,6 +46,7 @@ def register() -> None:
     )(search_query)
     register_tool(
         "leadgen.search",
+        result_schema=TOOL_RESULTS["leadgen.search"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="medium",
         description=(
             "Find BUYERS inside one of the user's confirmed market segments (name it in `segment`; "
@@ -69,6 +73,7 @@ def register() -> None:
     )(leadgen_search)
     register_tool(
         "research.query",
+        result_schema=TOOL_RESULTS["research.query"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="low",
         description=(
             "Query external sources for research on a topic. Returns {raw_result}: the "
@@ -82,6 +87,7 @@ def register() -> None:
     )(research_query)
     register_tool(
         "leadgen.act",
+        result_schema=TOOL_RESULTS["leadgen.act"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="medium",
         description=(
             "Act on scored leads — draft outreach for qualified leads, behind a safety gate. "

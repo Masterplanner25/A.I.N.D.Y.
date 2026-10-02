@@ -108,6 +108,7 @@ def research_query_node(state, context):
         try:
             orchestrator = MemoryOrchestrator(MemoryNodeDAO)
             memory_context = orchestrator.get_context(
+                site="app.search.research_flow",  # FR-49 (2.25.0): names this recall in aindy_memory_recall_failures_total
                 user_id=user_id, query=query_str, task_type="analysis", db=db,
                 max_tokens=400, metadata={"tags": ["research", "insight"], "node_type": "insight", "limit": 3},
             )

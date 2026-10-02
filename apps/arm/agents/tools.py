@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
+
+from apps._shared.tool_results import TOOL_RESULTS
 from AINDY.agents.tool_syscalls import invoke_tool_syscall
 
 
@@ -18,6 +20,7 @@ def _dispatch_tool_syscall(syscall_name: str, args: dict, user_id: str, *, capab
 def register() -> None:
     register_tool(
         "arm.analyze",
+        result_schema=TOOL_RESULTS["arm.analyze"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="medium",
         description=(
             "Analyze ONE SOURCE FILE with the ARM code-reasoning engine (architecture and "
@@ -46,6 +49,7 @@ def register() -> None:
     )(arm_analyze)
     register_tool(
         "arm.generate",
+        result_schema=TOOL_RESULTS["arm.generate"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="medium",
         description=(
             "Generate or refactor CODE with the ARM code-generation engine. Code only: for a plan, "
@@ -69,6 +73,7 @@ def register() -> None:
     )(arm_generate)
     register_tool(
         "arm.autotune",
+        result_schema=TOOL_RESULTS["arm.autotune"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="low",
         description=(
             "Apply gated, reversible self-tuning config changes from ARM's own metrics. "

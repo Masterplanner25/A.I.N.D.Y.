@@ -10,6 +10,8 @@ the studio's internal default price (never an existing order or a customer charg
 from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
+
+from apps._shared.tool_results import TOOL_RESULTS
 from AINDY.agents.tool_syscalls import invoke_tool_syscall
 
 
@@ -20,6 +22,7 @@ def _dispatch_tool_syscall(syscall_name: str, args: dict, user_id: str, *, capab
 def register() -> None:
     register_tool(
         "freelance.optimize_pricing",
+        result_schema=TOOL_RESULTS["freelance.optimize_pricing"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="medium",
         description=(
             "Recommend (or apply) gated, revertible service-price adjustments from realized "
@@ -40,6 +43,7 @@ def register() -> None:
     )(freelance_optimize_pricing)
     register_tool(
         "freelance.performance",
+        result_schema=TOOL_RESULTS["freelance.performance"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="low",
         description=(
             "Read recent realized-revenue performance signals for the current user. "

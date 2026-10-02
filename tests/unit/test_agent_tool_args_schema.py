@@ -114,5 +114,8 @@ def test_the_catalog_line_carries_the_schema():
     _app_tools()
     line = planning._catalog_line({"name": "arm.analyze", "description": "x", "risk": "medium"})
     assert " args=" in line
-    rendered = json.loads(line.split(" args=", 1)[1])
+    # Since 2.25.0 (FR-48) the line also carries ` returns={…}` after the arguments.
+    args_part, _, returns_part = line.split(" args=", 1)[1].partition(" returns=")
+    rendered = json.loads(args_part)
     assert rendered["required"] == ["file_path"]
+    assert set(json.loads(returns_part)["properties"]) == {"summary", "architecture_score", "integrity_score", "analysis_id"}

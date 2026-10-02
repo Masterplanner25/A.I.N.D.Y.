@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
+
+from apps._shared.tool_results import TOOL_RESULTS
 from AINDY.agents.tool_syscalls import invoke_tool_syscall
 
 
@@ -18,6 +20,7 @@ def _dispatch_tool_syscall(syscall_name: str, args: dict, user_id: str, *, capab
 def register() -> None:
     register_tool(
         "task.create",
+        result_schema=TOOL_RESULTS["task.create"],  # FR-48 (2.25.0): apps/_shared/tool_results.py
         risk="low",
         description="Create a new task in the user's task list. Returns {task_id, name, status}.",
         # FR-33 (runtime 2.20.0): the argument contract — see apps/arm/agents/tools.py.

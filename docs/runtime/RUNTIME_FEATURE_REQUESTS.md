@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-09-30"
+last_verified: "2026-10-01"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -20,9 +20,7 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-09-30:** FR-50 (`POST /memory/recall` fails for a query-only recall) · FR-49
-> (pipeline recall failures uncounted; built upstream in #782, unreleased) · FR-48 (the planner never sees a tool's result shape, so a
-> `$from_step` path is a guess; filed from the FR-46 evidence run).
+> **Open as of 2026-10-01:** FR-14 recurrence half, FR-6 items 2–3. **FR-48, FR-49 and FR-50 shipped in 2.25.0** (`RUNTIME_2_25_0_UPGRADE.md`).
 >
 > **As of 2026-09-26, runtime 2.24.0 / ui-kit 2.1.1 answered FR-43 … FR-47** (`RUNTIME_2_24_0_UPGRADE.md`);
 > FR-46 ships default-off with its evidence run owed. Still open: FR-14 recurrence half, FR-6 items 2–3.
@@ -41,7 +39,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-50 — `POST /memory/recall` fails for a query-only recall: it passes `tags=None` and `node_type=None` into `sys.v1.memory.read`, whose input schema rejects both 🔴 open (filed 2026-09-30, runtime 2.24.0)
+## FR-50 — `POST /memory/recall` fails for a query-only recall: it passes `tags=None` and `node_type=None` into `sys.v1.memory.read`, whose input schema rejects both ✅ SHIPPED in 2.25.0 (#783) — and wider than filed: three calls answered 400 since 2026-08-16 (query-only recall, tags-only recall, a node without node_type)
 
 > **The route's own guard allows a query alone** (`if not body.query and not body.tags: 400`), then
 > dispatches `{"query", "tags": body.tags, "limit", "node_type": body.node_type}`
@@ -62,7 +60,7 @@ or []`, line ~302).
 **Ask:** drop `None` values before dispatch (or `tags or []`, and omit `node_type` when absent), and a
 route test for a query-only recall.
 
-## FR-49 — a failed memory recall on the request pipeline is dropped at DEBUG and never persisted, so the soak register's row 1 cannot see the recalls it is about 🟡 BUILT upstream (#782, recall failures counted by site and stage), unreleased — filed 2026-09-30 with soak row 1's evidence
+## FR-49 — a failed memory recall on the request pipeline is dropped at DEBUG and never persisted, so the soak register's row 1 cannot see the recalls it is about ✅ SHIPPED in 2.25.0 (#782, DEC-083) — `aindy_memory_recall_failures_total{site, stage}`; our six recall sites pass `site=`. Correction in our favour: a failure inside the pipeline's recall was always logged at WARNING
 
 > **Every successful authenticated pipeline request recalls memory**
 > (`execution_pipeline/pipeline.py` → `_safe_recall_memory_count`, `signals.py:221`), which makes it
@@ -108,7 +106,7 @@ run, and the 1,332 pipeline recalls have no failure witness (this FR). Our verdi
 seen in 7 days and 1,339 recalls, with no dependency on the changed behaviour.** Evidence for the
 flip, not proof. The flag stays on here.
 
-## FR-48 — the planner is told each tool's arguments but never its result, so a `$from_step` path is a guess; the first FR-46 evidence run guessed wrong 🔴 open (filed 2026-09-26, runtime 2.24.0)
+## FR-48 — the planner is told each tool's arguments but never its result, so a `$from_step` path is a guess; the first FR-46 evidence run guessed wrong ✅ SHIPPED in 2.25.0 (#769, DEC-077..079) — `result_schema` on every referenceable tool of ours (`apps/_shared/tool_results.py`); run `615b67ea`'s path is now refused at plan time
 
 > **The catalog line is `- name: description (risk=…) args={…}`, from `args_schema` (FR-33).
 > Nothing describes what a tool returns.** FR-46's reference form is
