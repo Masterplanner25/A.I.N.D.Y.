@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getResolution, startResolution } from "../../api/works.js";
+import { decideClaim, getResolution, startResolution } from "../../api/works.js";
 import { safeMap } from "../../utils/safe";
 
 // The resolution check (RESOLUTION_CHECK_SPEC): your definition of success, measured. Does AI search
@@ -65,6 +65,60 @@ function AnswerRow({ answer }) {
   );
 }
 
+const DOT = { resolved: "●", mixed: "◐", wrong: "○", unknown: "·" };
+
+// What the engines said that your confirmed facts could not settle. Your answer becomes the next
+// check's ground truth: true is a fact, false a denied claim, skip is not asked again.
+function ClaimsToSettle({ claims, onDecide, busy }) {
+  if (!claims?.claims?.length) return null;
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] uppercase tracking-wider text-zinc-600">
+        Claims to settle ({claims.pending}) · your answers become the next check's facts
+      </p>
+      {safeMap(claims.claims, (c) => (
+        <div key={`${c.work_id}-${c.claim}`} className="flex items-start justify-between gap-3 text-[11px]">
+          <div>
+            <span className="text-zinc-500">{c.work}: </span>
+            <span className="text-zinc-200">{c.claim}</span>
+            <span className="ml-2 text-zinc-600">{safeMap(c.engines, (e) => ENGINE_LABEL[e] || e).join(", ")}</span>
+          </div>
+          <div className="flex gap-1 shrink-0">
+            {safeMap([["true", "True"], ["false", "False"], ["skip", "Skip"]], ([value, label]) => (
+              <button key={value} disabled={busy} aria-label={`${label}: ${c.claim}`}
+                className="px-2 py-0.5 rounded border border-zinc-700 text-[10px] uppercase tracking-wider text-zinc-400 hover:bg-zinc-800 disabled:opacity-40"
+                onClick={() => onDecide(c, value)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Each question, per engine, across the last checks: ● resolved ◐ mixed ○ wrong.
+function Trend({ trend }) {
+  const questions = trend?.questions || [];
+  if ((trend?.runs || []).length < 2 || !questions.length) return null;
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] uppercase tracking-wider text-zinc-600">Across the last {trend.runs.length} checks (● resolved ◐ mixed ○ wrong)</p>
+      {safeMap(questions, (q) => (
+        <div key={q.question} className="text-[11px]">
+          <span className="text-zinc-300">{q.question}</span>
+          {safeMap(Object.entries(q.points || {}), ([engine, points]) => (
+            <span key={engine} className="ml-3 text-zinc-500">
+              {ENGINE_LABEL[engine] || engine} <span className="tracking-widest text-zinc-300">{safeMap(points, (p) => DOT[p.resolution] || "·").join("")}</span>
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ResolutionSection() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -104,6 +158,19 @@ export default function ResolutionSection() {
     }
   };
 
+  const decide = async (claim, decision) => {
+    setBusy(true);
+    setError("");
+    try {
+      await decideClaim({ work_id: claim.work_id, claim: claim.claim, decision });
+      await load();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!data && !error) return null;
   const answers = Array.isArray(latest?.answers) ? latest.answers : [];
   const questions = Array.isArray(latest?.questions) ? latest.questions : [];
@@ -123,6 +190,15 @@ export default function ResolutionSection() {
         </div>
       </div>
       {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
+      {data?.spend && (
+        <p className="text-[11px] text-zinc-500">
+          This month: about ${Number(data.spend.month_usd || 0).toFixed(2)} of ${Number(data.spend.ceiling_usd || 0).toFixed(2)} (estimated)
+          · a core check runs by itself every Monday once you have run one
+        </p>
+      )}
+
+      <ClaimsToSettle claims={data?.claims} onDecide={decide} busy={busy} />
+      <Trend trend={data?.trend} />
 
       {data?.self_descriptions?.length > 0 && (
         <div className="space-y-1">

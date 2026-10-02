@@ -198,3 +198,20 @@ class ResolutionAnswer(Base):
     scores = Column(JSON, nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ResolutionClaim(Base):
+    """The owner's answer to a claim an engine made that their confirmed facts could not settle
+    (RESOLUTION_CHECK_SPEC §3, phase B): *"Perplexity says Masterplan Infinite Weave is an LLC in
+    Arizona. True?"* `true` becomes a confirmed fact, `false` a denied one, `skip` is not asked again.
+    The ground truth grows from the owner's answers, never from the engines'."""
+
+    __tablename__ = "resolution_claims"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    work_id = Column(String, ForeignKey("works.id", ondelete="CASCADE"), nullable=False, index=True)
+    claim = Column(Text, nullable=False)
+    claim_key = Column(String(400), nullable=False, index=True)
+    decision = Column(String(8), nullable=False)
+    decided_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -23,6 +23,12 @@ class StartBody(BaseModel):
     scope: Optional[str] = "core"
 
 
+class ClaimBody(BaseModel):
+    work_id: str
+    claim: str
+    decision: str
+
+
 async def _run(request: Request, route_name: str, handler, *, db: Session, user_id: str, payload: dict):
     result = await execute_with_pipeline(
         request=request, route_name=route_name, handler=handler, user_id=user_id,
@@ -58,6 +64,21 @@ async def start_resolution_run_route(request: Request, body: StartBody, db: Sess
 
     return await _run(request, "masterplan.resolution.start", handler, db=db, user_id=user_id,
                       payload={"scope": body.scope})
+
+
+@router.post("/claims")
+@limiter.limit("60/minute")
+async def decide_claim_route(request: Request, body: ClaimBody, db: Session = Depends(get_db),
+                             current_user: dict = Depends(get_current_user)):
+    """Settle a claim an engine made: true (a confirmed fact), false (a denied one) or skip."""
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.masterplan.services.resolution_review import decide_claim
+        return decide_claim(db, user_id, work_id=body.work_id, claim=body.claim, decision=body.decision)
+
+    return await _run(request, "masterplan.resolution.claim", handler, db=db, user_id=user_id,
+                      payload={"work_id": body.work_id, "decision": body.decision})
 
 
 @router.get("/runs/{run_id}")

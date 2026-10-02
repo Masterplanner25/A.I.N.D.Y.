@@ -8,7 +8,7 @@ import userEvent from "@testing-library/user-event";
 
 import { AppProviders } from "./utils";
 
-const api = vi.hoisted(() => ({ getResolution: vi.fn(), startResolution: vi.fn() }));
+const api = vi.hoisted(() => ({ getResolution: vi.fn(), startResolution: vi.fn(), decideClaim: vi.fn() }));
 vi.mock("../api/works.js", () => api);
 
 const DONE = {
@@ -27,6 +27,11 @@ const DONE = {
     { work: "Shawn Knight", platform: "LinkedIn", self_description: "AI Search Optimization Specialist | Founder" },
     { work: "Shawn Knight", platform: "Facebook", self_description: "Helping you get found in AI Search" },
   ],
+  claims: { pending: 1, claims: [{ work_id: "w-b", work: "Masterplan Infinite Weave",
+    claim: "It is an LLC registered in Arizona", engines: ["claude", "perplexity"], count: 2 }] },
+  spend: { month_usd: 0.74, ceiling_usd: 10, estimated: true },
+  trend: { runs: [{ id: "r-0" }, { id: "r-1" }], questions: [{ question: "What is Nodus?",
+    points: { perplexity: [{ resolution: "wrong" }, { resolution: "mixed" }] } }] },
 };
 
 let ResolutionSection;
@@ -39,6 +44,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.getResolution.mockResolvedValue(DONE);
   api.startResolution.mockResolvedValue({});
+  api.decideClaim.mockResolvedValue({});
 });
 
 function renderSection() {
@@ -65,6 +71,21 @@ describe("The resolution check", () => {
     expect(screen.getByText(/failed: anthropic answered HTTP 529/)).toBeInTheDocument();
     await userEvent.click(screen.getByText("mixed"));
     expect(await screen.findByText(/incorrect: a camera mount/)).toBeInTheDocument();
+  });
+
+  it("asks the owner to settle what the engines said, once per claim", async () => {
+    renderSection();
+    expect(await screen.findByText("It is an LLC registered in Arizona")).toBeInTheDocument();
+    expect(screen.getByText("Claude, Perplexity")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "True: It is an LLC registered in Arizona" }));
+    await waitFor(() => expect(api.decideClaim).toHaveBeenCalledWith({
+      work_id: "w-b", claim: "It is an LLC registered in Arizona", decision: "true" }));
+  });
+
+  it("shows the month's estimated spend against the ceiling, and the trend", async () => {
+    renderSection();
+    expect(await screen.findByText(/This month: about \$0.74 of \$10.00 \(estimated\)/)).toBeInTheDocument();
+    expect(screen.getByText("○◐")).toBeInTheDocument();
   });
 
   it("starts a check on request", async () => {

@@ -2563,12 +2563,17 @@ The resolution check (`RESOLUTION_CHECK_SPEC.md`): does AI search resolve the ow
 #### GET /apps/resolution
 The latest check, answer by answer, and the owner's own self-descriptions side by side
 
-**Response 200:** latest: {id, scope, status, engines, calls, questions: [{key, kind, text, subject, link?}], expected, answered, answers: [{question_key, engine, answer, citations, claims, scores: {resolution, other_entities, claims_correct, claims_incorrect, claims_unverifiable, facts_covered, facts_total, links_stated, links_total, own_sources_cited, citations}, error}], created_at, finished_at} | null, self_descriptions: [{work, kind, platform, url, self_description}], entities
+**Response 200:** latest: {id, scope, status, engines, calls, questions: [{key, kind, text, subject, link?}], expected, answered, answers: [{question_key, engine, answer, citations, claims, scores: {resolution, other_entities, claims_correct, claims_incorrect, claims_unverifiable, facts_covered, facts_total, links_stated, links_total, own_sources_cited, citations}, error}], created_at, finished_at} | null, self_descriptions: [{work, kind, platform, url, self_description}], entities, claims: {claims: [{work_id, work, claim, engines, count}], pending}, spend: {month_usd, ceiling_usd, estimated}, trend: {runs: [{id, scope, date, cost_usd}], questions: [{question, points: {<engine>: [{run_id, resolution, value, coverage, connections}]}}]}
 
 #### POST /apps/resolution/runs
 Start a check — `{scope: core | full}` (default core: the person and brand, three projects, three links)
 
-**Response 200:** the run (`status: "pending"`); 409 while another check is running; 422 when there is nothing to check
+**Response 200:** the run (`status: "pending"`); 409 while another check is running; 422 when there is nothing to check, or when the check's estimated cost would take the month past its ceiling (`AINDY_RESOLUTION_MONTHLY_CEILING_USD`, default $10)
+
+#### POST /apps/resolution/claims
+Settle a claim an engine made that the confirmed facts could not — `{work_id, claim, decision: true | false | skip}`. `true` becomes a confirmed fact for the next check, `false` a denied claim the judge marks incorrect when repeated, `skip` is not asked again
+
+**Response 200:** work_id, claim, decision; 422 on an unknown decision; 404 when the work is not yours
 
 #### GET /apps/resolution/runs/{run_id}
 One check, answer by answer
