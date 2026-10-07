@@ -208,6 +208,12 @@ services:
       # limit". Widened + env-overridable. See docs/operations/DEPLOYMENT.md.
       AINDY_NODUS_MAX_EXECUTION_MS: "${AINDY_NODUS_MAX_EXECUTION_MS:-120000}"
       AINDY_NODUS_BOOT_ALLOWANCE_MS: "${AINDY_NODUS_BOOT_ALLOWANCE_MS:-60000}"
+      # Scheduled jobs registered as runtime callbacks run in a fresh subprocess that imports
+      # the app before doing any work (FR-11). That import is ~9s here at idle; on the hour,
+      # when several crons start together (00/06/07/12/18 UTC), it passed the runtime's 30s
+      # default and 12 job runs failed between 2026-10-02 and 10-06 (task recurrence 9 of ~18,
+      # Infinity recalculation 3, ETA 1). Same cold-start shape as the Nodus budget above.
+      AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS: "${AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS:-90}"
       # Runtime 2.19.0 (#697): per-execution memory ceiling for the Nodus guest, enforced by
       # nodus-lang's max_memory_mb. It bounds GROWTH over one run — the VM reads the worker's
       # RSS when the script starts and fails the run with a `sandbox` error once the process
