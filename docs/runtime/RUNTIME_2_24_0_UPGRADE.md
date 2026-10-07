@@ -236,3 +236,21 @@ row 2's presence signal, met: exactly once, the rest replayed. Probe rows were d
 lock), p95 of the same route unchanged, and the probe rerun with the flag as the api has it. The
 counters reset on every api recreate, so read `/metrics/` before each rebuild, as with row 1's log.
 Ends no earlier than 2026-10-07.
+
+### 9.3 The readout (2026-10-07): row 2 passes
+
+Flag confirmed in the container's environment (`AINDY_SYSCALL_IDEMPOTENCY_STRICT=1`). Read before the
+api was recreated for #446.
+
+| Signal | Reading |
+|---|---|
+| `aindy_effect_gate_outcomes_total` (since the 10-02 recreate) | `reserved` 48, **no `degraded`, no `degraded_lock_timeout`, no `degraded_gate_error`** |
+| `effect_records` since 2026-09-30T15:39Z (durable, the whole window) | **109, all `success`** (`flow.run` 104, `memory.write` 3, `nodus.execute` 2); 48 of them since 10-02, matching the counter; none left `pending` |
+| Probe rerun | B (strict off): 8 runs per burst ×5, `degraded` 35 · **C (strict on): 1 run per burst ×5, `replayed` 35, 0 errors**, identical to 09-30; probe rows deleted |
+| `GET /apps/scores/me` p95 | **failed as measured** (p50 4,402 / p95 5,643 vs 880 / 1,284), and **not this flag**: the gate's syscall completes inside the request's first second, and with the 2.25.0 compatibility check stubbed out the same route ran p50 820 ms with strict still on. Cause and evidence in `RUNTIME_2_25_0_UPGRADE.md` §7 (FR-52) |
+
+**Verdict: row 2 is complete.** At-most-once held under real contention, and nothing in seven days of
+live traffic degraded. The flag stays on here. Caveats, stated: one user's traffic never raced itself, so
+the counter's zero is an absence signal, and the probe is the presence; and the counters cover 10-02
+onward only (the 09-30 → 10-02 stretch is covered by the ledger rows, not the counter). Rows 3–6 can
+start, one at a time.

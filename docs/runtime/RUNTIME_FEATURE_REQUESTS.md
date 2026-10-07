@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-10-06"
+last_verified: "2026-10-07"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -19,6 +19,8 @@ owner: "app-team"
 > **Numbering is the runtime's.** Its `CLAUDE.md` `APP-FR-*` ledger says *next available*; it also
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
+>
+> **Open as of 2026-10-07:** **FR-52 (P1: the 2.25.0 compatibility check runs on every request, ~3 s each)**, FR-51 (pymongo / python-jose advisories under exact pins), FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-10-06:** FR-51 (pymongo / python-jose advisories under exact pins), FR-14 recurrence half, FR-6 items 2–3.
 >
@@ -41,6 +43,51 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-52 — DEBT-COMPAT-1's consumer check runs on every `load_plugins()` call, and the registry calls that on every request: ~3 s added to each one 🔴 OPEN (filed 2026-10-07, P1)
+
+**apps-monolith ref:** found 2026-10-07 at soak row 2's readout, whose latency check failed.
+`RUNTIME_2_25_0_UPGRADE.md` §7 has the full measurement.
+
+### Symptom
+
+Every request roughly 3 s slower since 2.25.0. `GET /apps/scores/me`: p50 866 ms on 09-30 (2.24.0),
+p50 4.1–4.9 s every day since the api went live on 2.25.0 (10-02), all routes alike.
+
+### Cause
+
+`load_plugins()` (`platform_layer/registry.py`) ends, unconditionally, in
+
+```python
+check_consumer_requirements(entry["module_name"] for entry in plugin_entries)
+```
+
+including when every plugin is already in `_loaded_plugins` and `loaded` is empty. The registry's
+getters call `load_plugins()` lazily (`get_memory_policy` at `registry.py:916`, hence
+`get_memory_significance_rule`; `get_response_adapter`), so a request runs it many times, and each
+time `check_consumer_requirements` calls `importlib.metadata.packages_distributions()`, which reads every
+installed distribution's file list from disk.
+
+One request, profiled with yappi (wall clock, all threads): `load_plugins` **16** calls,
+`check_consumer_requirements` **9.7 s** summed across the request thread and the memory-ingest
+workers, **208,026** `pathlib` parses, 832 `make_files`.
+
+| Same host, same data, warm | p50 |
+|---|---|
+| fresh process, 2.25.0 as shipped | 3,780 ms |
+| fresh process, `check_consumer_requirements` replaced by a no-op | **820 ms** |
+
+Still present on `main` at 2.26.0 (`153e383`).
+
+### Ask
+
+1. **Run the check once per process**: when `load_plugins()` actually loads something, or behind a
+   module-level "already checked" flag. Its result (`_consumer_checks`) does not change while the
+   process lives.
+2. Optionally, cache `packages_distributions()`; it is the expensive half.
+3. A regression test that counts `packages_distributions` calls across a warm request.
+
+The check itself is worth keeping: it found our stale `egg-info` shadow (2.25.0 adoption, §2).
+
 ## FR-51 — `pymongo==4.18.1` and `python-jose==3.5.0` are exact pins carrying four new advisories; pymongo's fix is 4.18.2, python-jose has none 🔴 OPEN (filed 2026-10-06)
 
 **apps-monolith ref:** found 2026-10-06 on #446 (a compose-only change): `Python Dependency Audit`
