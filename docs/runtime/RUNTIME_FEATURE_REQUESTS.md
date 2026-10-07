@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-10-01"
+last_verified: "2026-10-06"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -19,6 +19,8 @@ owner: "app-team"
 > **Numbering is the runtime's.** Its `CLAUDE.md` `APP-FR-*` ledger says *next available*; it also
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
+>
+> **Open as of 2026-10-06:** FR-51 (pymongo / python-jose advisories under exact pins), FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-10-01:** FR-14 recurrence half, FR-6 items 2–3. **FR-48, FR-49 and FR-50 shipped in 2.25.0** (`RUNTIME_2_25_0_UPGRADE.md`).
 >
@@ -39,6 +41,48 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-51 — `pymongo==4.18.1` and `python-jose==3.5.0` are exact pins carrying four new advisories; pymongo's fix is 4.18.2, python-jose has none 🔴 OPEN (filed 2026-10-06)
+
+**apps-monolith ref:** found 2026-10-06 on #446 (a compose-only change): `Python Dependency Audit`
+went red on the resolved tree with nothing of ours involved — the FR-24 shape again. Still true
+of **2.26.0** (`pyproject.toml` on runtime `main`, `153e383`): both pins unchanged.
+
+```
+pymongo     4.18.1  GHSA-qx36-8mw2-4r3x  4.18.2   (CVE-2026-96747, medium) forced Unix-socket connection via a .sock KMS endpoint in CSFLE
+pymongo     4.18.1  GHSA-v4x9-3549-crwv  4.18.2   (CVE-2026-96749, high)   heap OOB write via signed size overflow in BSON encoding
+pymongo     4.18.1  GHSA-vp6j-j7w5-5xjj  4.18.2   (CVE-2026-96748, high)   host injection in connection-string parsing via percent-encoded delimiters
+python-jose 3.5.0   GHSA-3qf3-8w2g-rqmx  (none)   (CVE-2026-85394, critical) algorithm-confusion guard bypassed by DER-encoded public keys
+```
+
+### Why we cannot fix this on our side
+
+Neither package is ours; both arrive through `aindy-runtime`'s exact pins (`pymongo==4.18.1`,
+`python-jose==3.5.0`), so a constraint to 4.18.2 makes pip refuse the install.
+
+### Our exposure, assessed — why we ignore them in the meantime
+
+- **python-jose (no fix exists).** The bypass needs a verifier that hands an *asymmetric public key*
+  to an HMAC algorithm. The runtime never does: every verifying `jwt.decode` in
+  `services/auth_service.py` passes `algorithms=["HS256"]` with a symmetric secret (the active
+  `SECRET_KEY`, or a key derived from it per domain). The two other decodes
+  (`exception_handlers.py`, `platform_layer/rate_limiter.py`) run with `verify_signature: False`
+  to read `sub` for rate-limit keying and error context, and authorise nothing. Stops being safe
+  if any verifier adopts RS*/ES*/EdDSA.
+- **pymongo (fix exists, out of our reach).** No client-side field-level encryption or KMS is
+  configured anywhere (runtime or apps), so the first does not apply. The connection string is
+  `MONGO_URL`, operator-set, never user input, which bounds the third. The second is in the BSON
+  encoder and is the one that actually wants the bump.
+
+### Ask
+
+1. **Bump `pymongo` to 4.18.2** in the next release (or relax to `>=4.18.2,<5`).
+2. **Decide python-jose's future.** 3.5.0 is the latest release and the fix is unreleased; the
+   runtime's JWT use is HS256-only, which `PyJWT` covers. Either a migration, or a recorded
+   exemption on your side with the same condition as ours.
+
+Our ignores live in `.github/workflows/security-audit.yml`, each with its removal condition; the
+pymongo three come off at the adoption that brings 4.18.2.
+
 ## FR-50 — `POST /memory/recall` fails for a query-only recall: it passes `tags=None` and `node_type=None` into `sys.v1.memory.read`, whose input schema rejects both ✅ SHIPPED in 2.25.0 (#783) — and wider than filed: three calls answered 400 since 2026-08-16 (query-only recall, tags-only recall, a node without node_type)
 
 > **The route's own guard allows a query alone** (`if not body.query and not body.tags: 400`), then
