@@ -93,8 +93,32 @@ jobs:
       # Revisit this if app code ever calls TransitionParser, or passes a non-literal
       # path to `nltk.data.find` / any nltk loader. That is the condition under which
       # it stops being safe.
+      #
+      # FR-51 (2026-10-06): four advisories under aindy-runtime's exact pins, which we cannot
+      # override — a constraint past an `==` pin makes pip refuse the install. Full assessment in
+      # docs/runtime/RUNTIME_FEATURE_REQUESTS.md FR-51.
+      #
+      #   GHSA-3qf3-8w2g-rqmx (python-jose 3.5.0, algorithm confusion via DER public keys) —
+      #   NO FIX RELEASED. Needs a verifier that hands a public key to an HMAC algorithm. Every
+      #   verifying decode in the runtime passes algorithms=["HS256"] with a symmetric secret;
+      #   the two unverified decodes read `sub` for rate-limit keying and error context and
+      #   authorise nothing. Revisit if any verifier adopts RS*/ES*/EdDSA — the same condition as
+      #   the ecdsa exemption above.
+      #
+      #   GHSA-qx36-8mw2-4r3x, GHSA-v4x9-3549-crwv, GHSA-vp6j-j7w5-5xjj (pymongo 4.18.1) — FIXED
+      #   IN 4.18.2, which the runtime has not taken (2.26.0 still pins 4.18.1). No CSFLE/KMS is
+      #   configured anywhere; MONGO_URL is operator-set, never user input. REMOVE ALL THREE at the
+      #   runtime adoption that brings pymongo >= 4.18.2 — this is a fixable advisory carried only
+      #   until it is ours to fix.
       - name: Audit installed Python dependencies
-        run: pip-audit --desc --ignore-vuln PYSEC-2026-1325 --ignore-vuln PYSEC-2026-3740
+        run: >-
+          pip-audit --desc
+          --ignore-vuln PYSEC-2026-1325
+          --ignore-vuln PYSEC-2026-3740
+          --ignore-vuln GHSA-3qf3-8w2g-rqmx
+          --ignore-vuln GHSA-qx36-8mw2-4r3x
+          --ignore-vuln GHSA-v4x9-3549-crwv
+          --ignore-vuln GHSA-vp6j-j7w5-5xjj
 
   client-audit:
     name: Client Dependency Audit
