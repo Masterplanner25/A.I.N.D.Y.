@@ -70,6 +70,10 @@ witness was a log line, lost with each container recreate. Now it is a counter.
 across every `stage` is the condition for flipping `AINDY_MEMORY_RECALL_OWN_SESSION` by default. Readout
 on or after 2026-10-09. The counter resets on api recreate, so read `/metrics/` before each rebuild.
 
+**Read before the 2026-10-07 recreate (#446 went live):** the counter was registered with **no
+samples**, i.e. zero failures at every site and stage, 2026-10-02T04:56Z → 10-07T16:19Z. The window
+continues on the new container; the 10-09 readout adds these five days to whatever it reads then.
+
 ## 5. FR-50: fixed (and wider than filed)
 
 `POST /apps/memory/recall` with only `query` now answers **200**: on 2026-10-02 it returned the owner's
@@ -80,3 +84,29 @@ on or after 2026-10-09. The counter resets on api recreate, so read `/metrics/` 
 
 OpenTelemetry moved to 1.45.0 / 0.66b0 inside the runtime. We pin no `opentelemetry-*` package
 ourselves, so nothing moves here.
+
+## 7. Found after adoption: every request got ~3 s slower (FR-52)
+
+Found 2026-10-07 at soak row 2's readout, whose latency check failed: `GET /apps/scores/me`, p50 880 /
+p95 1,284 ms on 09-30, measured **p50 4,402 / p95 5,643 ms** (30 calls, 30 OK). The ledger
+(`execution.started` → `execution.completed` by trace) dated it: this route ran p50 866 ms on 09-30 and
+p50 4.1–4.9 s on every day since 10-03; the api went live on 2.25.0 on 10-02. All routes moved the same way.
+
+**Isolated step by step, each on the same host and data:**
+
+| Run | Warm p50 |
+|---|---|
+| live api, 30 calls | 4,402 ms |
+| fresh process from the same image (not process age) | 3,780 ms |
+| same, `check_consumer_requirements` replaced by a no-op | **820 ms** (max 1,040) |
+
+**The cause is DEBT-COMPAT-1's check (#770, new in 2.25.0).** It runs at the end of **every**
+`load_plugins()` call, including the ones that load nothing, and the registry's getters call
+`load_plugins()` lazily on every request (`get_memory_policy`, `get_memory_significance_rule`,
+`get_response_adapter`). Each call does `importlib.metadata.packages_distributions()`, which reads every
+installed distribution's file list. A yappi profile of one request: `load_plugins` 16 calls,
+`check_consumer_requirements` 9.7 s wall across the request and memory-ingest threads, 208,026
+`pathlib` parses. Still present on runtime `main` (2.26.0). Filed as **FR-52**.
+
+Nothing to do app-side, and no flag turns it off. The host was short of memory at the reading (about
+330 MB available, paging), which makes it worse but does not cause it: the no-op run shared that host.
