@@ -22,3 +22,11 @@ COMPOSE = Path(__file__).resolve().parents[2] / "docker-compose.prod.yml"
 ])
 def test_the_flag_is_passed_to_the_api(flag):
     assert f'{flag}: "${{{flag}:-}}"' in COMPOSE.read_text(encoding="utf-8")
+
+
+# Scheduled-job callbacks cold-import the app in a subprocess; at the runtime's 30s default they
+# timed out whenever several crons started on the same hour (12 failed runs, 2026-10-02 → 10-06).
+def test_the_callback_budget_is_raised_for_the_api():
+    assert 'AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS: "${AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS:-90}"' in (
+        COMPOSE.read_text(encoding="utf-8")
+    )
