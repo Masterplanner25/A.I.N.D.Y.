@@ -74,6 +74,20 @@ on or after 2026-10-09. The counter resets on api recreate, so read `/metrics/` 
 samples**, i.e. zero failures at every site and stage, 2026-10-02T04:56Z → 10-07T16:19Z. The window
 continues on the new container; the 10-09 readout adds these five days to whatever it reads then.
 
+### 4.1 The readout (2026-10-09T13:10Z): row 1 passes
+
+| Signal | Reading |
+|---|---|
+| `aindy_memory_recall_failures_total{site, stage}` | **no samples on either container**: 10-02T04:56Z → 10-07T16:19Z (read before #446's recreate) and 10-07T16:33Z → 10-09T13:10Z. Zero at every site and stage for seven days, the runtime's flip condition (DEC-083) |
+| Volume | **405** authenticated requests completed, each a pipeline recall through the flagged path (383 + 22); the counter also covers every other site. Past the register's 200. No agent runs in the window |
+| Recall returns rows (presence) | yes: the pipeline recall in the 10-07 profiling run returned 2 items for the test account (§7's measurement) |
+| `aindy_db_pool_exhaustion_events_total` | 0 |
+| `idle in transaction` | 0 at rest; **2–5 during live requests, each clearing within seconds**, the longest about one FR-52-length request (a request now holds its transaction ~3 s through the metadata scans). Not held across a recall: no session outlived its request |
+
+**Verdict: row 1 is complete on the runtime's terms.** Caveats, stated: the counter's window is split
+across one recreate (both halves read zero); and `idle in transaction` was sampled during ordinary
+traffic, not a recall-heavy agent run, since no agent ran in the window. The flag stays on.
+
 ## 5. FR-50: fixed (and wider than filed)
 
 `POST /apps/memory/recall` with only `query` now answers **200**: on 2026-10-02 it returned the owner's
