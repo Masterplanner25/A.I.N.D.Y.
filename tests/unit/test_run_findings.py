@@ -143,8 +143,11 @@ def test_findings_are_saved_once(monkeypatch):
 def test_the_step_result_rule_follows_the_runtime_flag(monkeypatch):
     """Runtime 2.24.0 (FR-46): with AINDY_PLAN_STEP_REFERENCES on, the runtime's catalog teaches
     the `$from_step` form. Our flag-off rule ("a step cannot read an earlier step's result") would
-    then contradict it, so the rule is chosen by the same function the runtime uses."""
-    monkeypatch.delenv("AINDY_PLAN_STEP_REFERENCES", raising=False)
+    then contradict it, so the rule is chosen by the same function the runtime uses.
+
+    Runtime 2.26.0 (DEC-084) turned the flag ON by default: only 0/false/no/off disable it, so an
+    UNSET flag now selects the reference rule."""
+    monkeypatch.setenv("AINDY_PLAN_STEP_REFERENCES", "0")
     off = runtime_extensions.planner_system_prompt()
     assert off == runtime_extensions.PLANNER_SYSTEM_PROMPT
     assert "a step cannot read an earlier" in off
@@ -154,6 +157,9 @@ def test_the_step_result_rule_follows_the_runtime_flag(monkeypatch):
     assert "a step cannot read an earlier" not in on
     assert "step-reference form described with the" in on
     assert "Never write your own summary of results" in on
+
+    monkeypatch.delenv("AINDY_PLAN_STEP_REFERENCES", raising=False)
+    assert runtime_extensions.planner_system_prompt() == on
 
 
 def test_a_step_already_saved_by_reference_is_not_saved_again():
