@@ -87,7 +87,7 @@ def test_the_boundary_shape_yields_the_base_prompt_without_touching_jobs_or_db(m
             {"run_type": "default", "user_id": {"_redacted_type": "UUID"}}
         )
 
-    assert out == {"system_prompt": runtime_extensions.PLANNER_SYSTEM_PROMPT, "context_block": ""}
+    assert out == {"system_prompt": runtime_extensions.planner_system_prompt(), "context_block": ""}
     assert seen == {}
     assert opened == []
     assert any("FR-39" in rec.getMessage() for rec in caplog.records)
@@ -108,7 +108,7 @@ def test_a_string_tenant_builds_the_blocks_against_a_session_the_provider_opens_
     assert seen["reasoning"] == (USER, opened[0])
     assert "## User Performance Context (Infinity Score)" in out["context_block"]
     assert "Overall score: 61.0/100" in out["context_block"]
-    assert out["system_prompt"].startswith(runtime_extensions.PLANNER_SYSTEM_PROMPT)
+    assert out["system_prompt"].startswith(runtime_extensions.planner_system_prompt())
     assert out["context_block"] in out["system_prompt"]
 
 

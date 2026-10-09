@@ -48,7 +48,7 @@ Rules:
 
 
 #: The step-result rule when runtime step references are ON (FR-46, runtime 2.24.0,
-#: `AINDY_PLAN_STEP_REFERENCES`). The runtime's tool catalog then carries the reference syntax
+#: `AINDY_PLAN_STEP_REFERENCES`, default ON since 2.26.0). The runtime's tool catalog then carries the reference syntax
 #: (`PLANNER_REFERENCE_LINE`), and the flag-off rule above ("a step cannot read an earlier step's
 #: result") would contradict it. This one points at the syntax without restating it.
 _STEP_RESULT_RULE_OFF = """- Every step's args are written now, before any step runs: a step cannot read an earlier
