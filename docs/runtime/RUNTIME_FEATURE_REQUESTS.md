@@ -43,7 +43,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-52 — DEBT-COMPAT-1's consumer check runs on every `load_plugins()` call, and the registry calls that on every request: ~3 s added to each one 🔴 OPEN (filed 2026-10-07, P1)
+## FR-52 — DEBT-COMPAT-1's consumer check runs on every `load_plugins()` call, and the registry calls that on every request: ~3 s added to each one ✅ SHIPPED in 2.27.0 (#814) — the check runs once per plugin module set; measured live 2026-10-10: `GET /apps/scores/me` p50 715 ms (5,081 on 2.26.0, 820 with the check stubbed)
 
 **apps-monolith ref:** found 2026-10-07 at soak row 2's readout, whose latency check failed.
 `RUNTIME_2_25_0_UPGRADE.md` §7 has the full measurement.
@@ -88,7 +88,7 @@ Still present on `main` at 2.26.0 (`153e383`).
 
 The check itself is worth keeping: it found our stale `egg-info` shadow (2.25.0 adoption, §2).
 
-## FR-51 — `pymongo==4.18.1` and `python-jose==3.5.0` are exact pins carrying four new advisories; pymongo's fix is 4.18.2, python-jose has none 🔴 OPEN (filed 2026-10-06)
+## FR-51 — `pymongo==4.18.1` and `python-jose==3.5.0` are exact pins carrying four new advisories; pymongo's fix is 4.18.2, python-jose has none ✅ SHIPPED in 2.27.0 (#810, #814) — python-jose replaced by PyJWT 2.15.1 (ecdsa, rsa, pyasn1 leave with it), pymongo 4.18.2; our four ignores and the ecdsa one removed
 
 **apps-monolith ref:** found 2026-10-06 on #446 (a compose-only change): `Python Dependency Audit`
 went red on the resolved tree with nothing of ours involved — the FR-24 shape again. Still true
