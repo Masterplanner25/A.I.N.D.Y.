@@ -55,6 +55,9 @@ five syscalls per tool step that is ~35 per run, a third of the cap.
 RESOURCE_LIMIT_EXCEEDED`, and report any hit with the run's step count (the handoff's ask 2). A refused
 step is retried 3 times (`transient`), so one refusal logs three lines.
 
+**Closed 2026-10-11 on 2.27.0:** three real runs (2, 3 and 5 steps), zero hits
+(`RUNTIME_2_27_0_UPGRADE.md` §5).
+
 ## 4. Concurrent fan-out, held effects, filesystem scope (§3–§5): nothing of ours
 
 Checked against our source, not taken from the handoff: no `FanOutEdgeGroup`, no `outbound_request`,
