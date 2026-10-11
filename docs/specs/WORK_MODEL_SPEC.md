@@ -208,6 +208,14 @@ Pieces run 5–11k characters (~1.8 MB in all); embedding them is about $0.05, o
   `drop:<id>`, `series:<name>` and `work:<name>` (through `masterplan.works_by_container`). Written
   again only when the text's hash changes. Embeddings follow in the background (nodes are saved
   `embedding_pending`).
+- **Cross-posts, remembered once** (added 2026-10-10): 30 of 199 stored pieces ran on two platforms
+  (DEV with Substack 22, with Medium 8), and recall returned both copies. The copies' text differs per
+  platform, so they are matched by title (RippleTrace's `_normalize`). Only the earliest copy is
+  remembered, and its header names the others (`… (DEV, 2025-03-07; also on Substack; part 1 of 4)`,
+  plus `also_published` in the node's `extra`). `collapse_cross_posts` deletes a later copy's chunks
+  and marks it remembered. When a copy is collapsed, the earliest copy's memory is rewritten so its
+  header names the copy. It runs every tick, after the fetch (which can make an older copy the
+  earliest) and before memory is written. The Work panel's status carries `cross_posted`.
 - **When:** a scheduled job (`rippletrace_archive_published_work`, every 10 minutes) runs both until the
   catalogue is done; `POST /apps/rippletrace/content/archive` runs a batch now. The Work panel shows
   *N of M pieces recallable by the agent*, per platform.
