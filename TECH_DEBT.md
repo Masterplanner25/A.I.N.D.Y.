@@ -1136,10 +1136,37 @@ the levers are all about what else is running.
 `exit code 2` (the `SIGQUIT` handler) rather than `signal 9`. The original puzzle stands. But
 the trigger condition is now measured well enough to act on without resolving it.
 
+### Observation 2026-10-10 — the same floor, and a tray app nobody opened
+
+During the 2.27.0 adoption (`docs/runtime/RUNTIME_2_27_0_UPGRADE.md` §3), with the stack up and
+nothing open but one Claude Code terminal and Docker, **`Available MBytes` read ~440–530**: at the
+floor above. The containers were ~650 MB in total; again the pressure was host-side.
+
+| | memory | note |
+|---|---|---|
+| Docker's WSL VM | 0.7 GB resident, 3.1 GB committed | `.wslconfig`'s 3 GB cap, still working |
+| Chrome ×15 | ~1.7 GB | a minimized window, tabs and helpers |
+| `msedgewebview2` ×17 | 0.45 GB | web views embedded in desktop apps |
+| Docker Desktop UI + backend | 0.44 GB | |
+| **ChatGPT desktop ×6** | 0.17 GB resident, **0.63 GB committed** | **never opened**; see below |
+
+**ChatGPT's desktop app launches itself at sign-in.** It is a Store (MSIX) app with its own startup
+task (`OpenAI.ChatGPT-Desktop_…!ChatGPT`, `State=2` = enabled), so it starts under the Windows shell
+(`sihost.exe`) a few minutes after boot (boot 10-09 22:28, ChatGPT 22:32) and sits in the tray with
+no window. **It is not in the `HKCU\...\Run` key or the Startup folder**, which is where the
+Docker Desktop rule below looks; it shows only under *Settings → Apps → Startup*. Closing its window
+does not stop it: all six processes survived the window being closed and had to be ended in Task
+Manager. Using ChatGPT in a browser does not involve this app.
+
+After closing Chrome's windows and ending ChatGPT, availability went from ~530 MB to **1,348 MB**
+and `Pages/sec` to ~1, with the stack still up. Nothing about the stack changed.
+
 ### Operating rules, since there is no fix
 
 - **Stop Vite when done.** Two forgotten dev servers were 2 GB of commit doing nothing.
 - **Quit Docker Desktop when the stack is down.** 3.8 GB idle, and it autostarts (`HKCU\...\Run`).
+- **Turn off Store apps' startup tasks** (*Settings → Apps → Startup*), ChatGPT desktop first.
+  They are invisible to the `Run` key, start at sign-in, and survive closing their window.
 - **Reboot on a cadence.** 15.8 days produced a 1.1 GB Explorer process; the reboot alone took
   hard faults from 1,738/s to 4.6/s.
 - **Know the budget.** Chrome + VS Code + Docker + one Claude session is roughly this machine's
