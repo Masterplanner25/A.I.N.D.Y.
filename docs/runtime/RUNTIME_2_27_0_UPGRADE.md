@@ -66,10 +66,43 @@ Faster than the stubbed run and the pre-regression baseline, on a host with ~440
 Checked against our source: no `BaseHTTPMiddleware` (so starlette 1.7.0's background-task timing
 change does not reach `task_router.py`'s `BackgroundTasks`), no `import regex`, no `pyphen`.
 
-## 5. Still owed
+## 5. The run-scoped syscall cap, after real runs (ask 4, owed from 2.26.0)
 
-- **From 2.26.0:** after the first real agent runs, `docker logs <api> 2>&1 | grep
-  RESOURCE_LIMIT_EXCEEDED`, and report any hit with the run's step count (ask 4). No agent runs since
-  10-01, so still unmeasured.
+**No hits.** The owner made three agent runs on 2026-10-10/11, all on `nodus_vm`, and `docker logs <api>
+2>&1 | grep RESOURCE_LIMIT_EXCEEDED` counts **0** across the api's whole life on 2.27.0 (up since
+10-10 13:46 UTC).
+
+| Run | Steps | Status | Wall |
+|---|---|---|---|
+| `35119f58` research onboarding, save a note | 2/2 | completed | 17 s |
+| `8cc8009b` turn that research into a guide | 3/3 | completed | 10 s |
+| `eb8bc52c` research technical SEO, save it | 5/5 | completed | 11 s |
+
+All 10 tool steps passed args validation under `enforce`. The largest run is 5 steps against a cap of
+100 syscalls per run. This closes the 2.26.0 doc's §3 owed check.
+
+### Observation for the runtime: six usage snapshots no owner reaped
+
+One WARNING in the same window, at 23:59:11 UTC:
+
+```
+[ResourceManager] evicted 6 usage snapshot(s) older than 3600s that no owner reaped
+(QUOTA-ACCRUAL-ORPHAN-1) — a caller is dispatching without an execution unit
+```
+
+It is not the agent runs. `aindy_syscall_unowned_unit_total` names the callers: Infinity's inputs
+(`*.get_performance_signals` across social, search, freelance and rippletrace, plus `watcher.query`,
+`observability.support_metrics`, `masterplan.get_objective_attainment`) and the automation learning
+loop (`automation.list_loop_adjustments` 19, `list_feedback` 5, `create_`/`update_loop_adjustment` 3
+each), with `rippletrace.log_ripple_event`, `analytics.save_calculation` and `memory.write`. These are
+background dispatches outside a request or run, the same shape the 2.13.0 doc first read (§ flags
+table), and the run-scoped cap does not cover them by design.
+
+What is worth the runtime's eye is the eviction itself. QUOTA-ACCRUAL-ORPHAN-1's rule is that a
+minted root unit dies with its dispatch, so the sweep should find nothing. It found six, once in ~13 h
+of uptime. Low volume, no user effect; reported here as an observation, not filed as an FR.
+
+## 6. Still open
+
 - `AINDY_MEMORY_RECALL_OWN_SESSION` will default ON in a later release (DEC-083, from our row 1
   readout). We already run it on; that release changes nothing here.
