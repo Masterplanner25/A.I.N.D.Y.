@@ -20,6 +20,11 @@ Three steps, each resumable:
 2. **Backfill** — pieces with no text are fetched from their platform, a batch at a time.
 3. **Remember** — stored text is chunked into memory nodes, source `published_work`, tagged with
    the piece, its series and the owner's Works for that series. Rewritten only when the text changes.
+   A piece cross-posted under the same title is remembered once, from its earliest copy, whose
+   header names the others (`collapse_cross_posts`). On 2026-10-10 30 of the owner's pieces were
+   on two platforms (DEV with Substack or Medium) and recall returned both copies of each, spending
+   two of its slots on one argument. The copies' text differs slightly per platform, so matching
+   on content would not catch them; the title does.
 
 A scheduled job runs 2 and 3 until the catalogue is done, then only for what is new.
 """
@@ -290,8 +295,65 @@ def _tags_for(row: DropPointDB, series: dict[str, str], works: dict[str, list[st
     return list(dict.fromkeys(tags))
 
 
-def remember_piece(db: Session, row: DropPointDB, tags: list[str]) -> int:
-    """Replace a piece's memory chunks with ones written from its current text. Does not commit."""
+def _cross_post_groups(rows: list[DropPointDB]) -> list[list[DropPointDB]]:
+    """Pieces sharing a title, earliest first: the first is remembered, the rest are its copies."""
+    from apps.rippletrace.services.container_service import _normalize
+
+    by_title: dict[str, list[DropPointDB]] = {}
+    for row in rows:
+        key = _normalize(row.title or "")
+        if key:
+            by_title.setdefault(key, []).append(row)
+    return [sorted(members, key=lambda r: (r.date_dropped or datetime.max, r.id))
+            for members in by_title.values() if len(members) > 1]
+
+
+def _stored_pieces(db: Session, user_id) -> list[DropPointDB]:
+    """Every piece with text, without the text: grouping needs titles and hashes, and this runs on
+    every job tick."""
+    from sqlalchemy.orm import load_only
+
+    return (
+        db.query(DropPointDB)
+        .options(load_only(DropPointDB.id, DropPointDB.title, DropPointDB.platform, DropPointDB.url,
+                           DropPointDB.date_dropped, DropPointDB.content_hash, DropPointDB.content_memory_hash))
+        .filter(DropPointDB.user_id == user_id, DropPointDB.content_hash.isnot(None))
+        .all()
+    )
+
+
+def collapse_cross_posts(db: Session, *, user_id) -> int:
+    """Keep one copy of a cross-posted piece in memory: delete the later copies' chunks and mark them
+    remembered, since the earliest copy carries the argument. When a copy is collapsed, the earliest
+    copy's memory becomes due, so its header is rewritten to name the copy. Returns how many copies
+    were collapsed this call; 0 once the catalogue is settled. Commits when it changes anything."""
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+
+    user_id = _uid(user_id)
+    copies = {row.id: (row, members[0]) for members in _cross_post_groups(_stored_pieces(db, user_id))
+              for row in members[1:]}
+    if not copies:
+        return 0
+    dao = MemoryNodeDAO(db)
+    owner = str(user_id)
+    had_chunks: set[str] = set()
+    for node in dao.get_by_tags([f"drop:{drop_id}" for drop_id in copies], limit=10_000, mode="OR", user_id=owner):
+        if dao.delete_by_id(str(node["id"]), user_id=owner):
+            had_chunks.update(t[len("drop:"):] for t in node.get("tags") or [] if t.startswith("drop:"))
+    collapsed = 0
+    for drop_id, (row, earliest) in copies.items():
+        if drop_id in had_chunks or row.content_memory_hash != row.content_hash:
+            row.content_memory_hash = row.content_hash
+            earliest.content_memory_hash = None
+            collapsed += 1
+    if collapsed:
+        db.commit()
+    return collapsed
+
+
+def remember_piece(db: Session, row: DropPointDB, tags: list[str], also: list[DropPointDB] = ()) -> int:
+    """Replace a piece's memory chunks with ones written from its current text. `also` are its
+    cross-posted copies, named in the header so recall still says where else it ran. Does not commit."""
     from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     dao = MemoryNodeDAO(db)
@@ -300,8 +362,9 @@ def remember_piece(db: Session, row: DropPointDB, tags: list[str]) -> int:
         dao.delete_by_id(str(node["id"]), user_id=user_id)
     chunks = chunk_text(row.content_text or "")
     published = row.date_dropped.date().isoformat() if row.date_dropped else "undated"
+    also_on = f"; also on {', '.join(c.platform or 'web' for c in also)}" if also else ""
     for index, chunk in enumerate(chunks, start=1):
-        header = f"{row.title} ({row.platform}, {published}; part {index} of {len(chunks)})"
+        header = f"{row.title} ({row.platform}, {published}{also_on}; part {index} of {len(chunks)})"
         dao.save(
             content=f"{header}\n\n{chunk}",
             source=MEMORY_SOURCE,
@@ -309,7 +372,8 @@ def remember_piece(db: Session, row: DropPointDB, tags: list[str]) -> int:
             user_id=user_id,
             node_type="insight",
             extra={"drop_point_id": row.id, "url": row.url, "title": row.title, "platform": row.platform,
-                   "published": published, "chunk": index, "chunks": len(chunks), "content_hash": row.content_hash},
+                   "published": published, "chunk": index, "chunks": len(chunks), "content_hash": row.content_hash,
+                   "also_published": [{"platform": c.platform, "url": c.url} for c in also]},
             commit=False,
         )
     row.content_memory_hash = row.content_hash
@@ -333,10 +397,15 @@ def remember_content(db: Session, *, user_id, limit: int = BATCH) -> dict:
         return {"remembered": 0, "chunks": 0}
     series, works = _series_and_works(db, user_id)
     names = {c.id: c.name for c in db.query(ContainerDB).filter(ContainerDB.user_id == user_id).all()}
+    groups = _cross_post_groups(_stored_pieces(db, user_id))
+    also = {members[0].id: members[1:] for members in groups}
+    copies = {row.id for members in groups for row in members[1:]}
     remembered = chunks = 0
     for row in rows:
+        if row.id in copies:
+            continue  # remembered through its earliest copy; collapse_cross_posts marks it
         try:
-            chunks += remember_piece(db, row, _tags_for(row, series, works, names))
+            chunks += remember_piece(db, row, _tags_for(row, series, works, names), also.get(row.id, []))
             db.commit()
             remembered += 1
         except Exception as exc:
@@ -361,7 +430,10 @@ def archive_status(db: Session, *, user_id) -> dict:
         entry["recallable"] += int(digest is not None and memory == digest)
         entry["no_text"] += int(source == "none")
     totals = {key: sum(p[key] for p in platforms.values()) for key in ("pieces", "stored", "recallable", "no_text")}
-    return {**totals, "pending": totals["pieces"] - totals["stored"] - totals["no_text"], "platforms": platforms}
+    # A cross-posted copy counts as recallable: its argument is, through the earliest copy.
+    cross_posted = sum(len(members) - 1 for members in _cross_post_groups(_stored_pieces(db, user_id)))
+    return {**totals, "pending": totals["pieces"] - totals["stored"] - totals["no_text"],
+            "cross_posted": cross_posted, "platforms": platforms}
 
 
 def reclean_stored(db: Session, *, user_id) -> int:
@@ -382,11 +454,14 @@ def reclean_stored(db: Session, *, user_id) -> int:
 
 
 def archive_step(db: Session, *, user_id, limit: int = BATCH, fetchers=None, pause: float = REQUEST_PAUSE_SECONDS) -> dict:
-    """One batch of both steps for one owner, then where things stand."""
+    """One batch of both steps for one owner, then where things stand. Cross-posts are collapsed
+    after the fetch, which can make an older copy the earliest, and before memory is written."""
     recleaned = reclean_stored(db, user_id=user_id)
     fetched = backfill_content(db, user_id=user_id, limit=limit, fetchers=fetchers, pause=pause)
+    collapsed = collapse_cross_posts(db, user_id=user_id)
     remembered = remember_content(db, user_id=user_id, limit=limit)
-    return {**fetched, **remembered, "recleaned": recleaned, "status": archive_status(db, user_id=user_id)}
+    return {**fetched, **remembered, "recleaned": recleaned, "collapsed": collapsed,
+            "status": archive_status(db, user_id=user_id)}
 
 
 def archive_published_work() -> dict:
@@ -397,21 +472,22 @@ def archive_published_work() -> dict:
     from AINDY.db.database import SessionLocal
 
     db = SessionLocal()
-    summary: dict[str, Any] = {"owners": 0, "fetched": 0, "remembered": 0, "chunks": 0, "recleaned": 0, "skipped": False}
+    summary: dict[str, Any] = {"owners": 0, "fetched": 0, "remembered": 0, "chunks": 0, "recleaned": 0,
+                               "collapsed": 0, "skipped": False}
     try:
+        # Every owner with a piece to fetch or any stored text. Stored text alone qualifies because a
+        # cross-post is found by title, which SQL cannot group the way `_normalize` does; a settled
+        # owner costs a few small queries a tick (collapse_cross_posts returns 0).
         owners = {
             row[0] for row in db.query(DropPointDB.user_id).filter(
                 DropPointDB.user_id.isnot(None),
-                (DropPointDB.content_source.is_(None))
-                | DropPointDB.content_text.like("---%") | DropPointDB.content_text.like("%![%")
-                | ((DropPointDB.content_hash.isnot(None))
-                   & ((DropPointDB.content_memory_hash.is_(None)) | (DropPointDB.content_memory_hash != DropPointDB.content_hash))),
+                DropPointDB.content_source.is_(None) | DropPointDB.content_hash.isnot(None),
             ).distinct()
         }
         for owner in owners:
             outcome = archive_step(db, user_id=owner)
             summary["owners"] += 1
-            for key in ("fetched", "remembered", "chunks", "recleaned"):
+            for key in ("fetched", "remembered", "chunks", "recleaned", "collapsed"):
                 summary[key] += int(outcome.get(key) or 0)
     except Exception as exc:
         logger.warning("[content_archive] run failed: %s", exc)

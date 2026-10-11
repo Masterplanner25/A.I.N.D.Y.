@@ -198,3 +198,86 @@ def test_text_stored_before_the_clean_up_is_recleaned_and_its_memory_becomes_due
     assert reclean_stored(db, user_id=str(owner)) == 1
     assert row.content_text == "The argument." and row.content_memory_hash != row.content_hash
     assert reclean_stored(db, user_id=str(owner)) == 0  # idempotent
+
+
+# ── cross-posts: one argument, one place in recall ────────────────────────────────────────
+
+
+def _stored(db, owner, platform, slug, title, day):
+    from apps.rippletrace.services.content_archive import store_content
+
+    row = _drop(db, owner, platform, slug, title=title)
+    row.date_dropped = datetime(2025, 3, day)
+    store_content(row, "\n\n".join([f"The {platform} copy of the argument. " * 40] * 2), "api")
+    db.commit()
+    return row
+
+
+def _chunks(db, owner, row):
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+
+    return MemoryNodeDAO(db).get_by_tags([f"drop:{row.id}"], limit=50, user_id=str(owner))
+
+
+def test_a_cross_posted_piece_already_in_memory_is_collapsed_to_its_earliest_copy(db, owner):
+    """The live state on 2026-10-10: both copies remembered, so recall spent two slots on one piece."""
+    from apps.rippletrace.services.content_archive import (
+        archive_status, collapse_cross_posts, remember_content, remember_piece,
+    )
+
+    original = _stored(db, owner, "DEV", "ai-bias", "2025 ChatGPT Case Study: AI Bias Is It Real", 7)
+    copy = _stored(db, owner, "Substack", "ai-bias-is-it-real", "2025 ChatGPT Case Study: AI Bias, Is It Real?", 13)
+    for row in (original, copy):  # written before cross-posts were recognised
+        remember_piece(db, row, ["published_work", f"drop:{row.id}"])
+        row.content_memory_hash = row.content_hash
+    db.commit()
+    assert _chunks(db, owner, copy)
+
+    assert collapse_cross_posts(db, user_id=str(owner)) == 1
+    assert _chunks(db, owner, copy) == []
+    assert copy.content_memory_hash == copy.content_hash  # settled, not due
+    assert original.content_memory_hash is None  # due: its header now names the copy
+
+    assert remember_content(db, user_id=str(owner))["remembered"] == 1
+    nodes = _chunks(db, owner, original)
+    assert nodes[0]["content"].startswith(
+        "2025 ChatGPT Case Study: AI Bias Is It Real (DEV, 2025-03-07; also on Substack; part 1 of ")
+    assert nodes[0]["extra"]["also_published"] == [{"platform": "Substack", "url": copy.url}]
+
+    assert collapse_cross_posts(db, user_id=str(owner)) == 0  # settled
+    assert remember_content(db, user_id=str(owner)) == {"remembered": 0, "chunks": 0}
+    status = archive_status(db, user_id=str(owner))
+    assert (status["stored"], status["recallable"], status["cross_posted"]) == (2, 2, 1)
+
+
+def test_an_earlier_copy_that_arrives_later_takes_over_and_the_later_one_leaves_memory(db, owner):
+    """Backfill runs newest first, so the cross-post can be remembered before its original has text."""
+    from apps.rippletrace.services.content_archive import archive_step
+
+    later = _stored(db, owner, "Medium", "chain-of-thought", "Chain of Thought Mastery", 30)
+    assert archive_step(db, user_id=str(owner), fetchers={}, pause=0)["remembered"] == 1
+    assert _chunks(db, owner, later)
+
+    earlier = _stored(db, owner, "DEV", "chain-of-thought-dev", "Chain of Thought Mastery", 2)
+    outcome = archive_step(db, user_id=str(owner), fetchers={}, pause=0)
+    assert (outcome["collapsed"], outcome["remembered"]) == (1, 1)
+    assert _chunks(db, owner, later) == []
+    assert "also on Medium" in _chunks(db, owner, earlier)[0]["content"]
+
+
+def test_a_copy_is_never_written_to_memory_even_without_the_collapse_step(db, owner):
+    from apps.rippletrace.services.content_archive import remember_content
+
+    original = _stored(db, owner, "DEV", "formula", "The Formula to Success", 4)
+    copy = _stored(db, owner, "Substack", "formula-sub", "The Formula to Success", 16)
+    assert remember_content(db, user_id=str(owner))["remembered"] == 1
+    assert _chunks(db, owner, original) and _chunks(db, owner, copy) == []
+
+
+def test_pieces_that_only_share_words_are_not_cross_posts(db, owner):
+    from apps.rippletrace.services.content_archive import collapse_cross_posts, remember_content
+
+    _stored(db, owner, "DEV", "prompting", "2025 ChatGPT Case Study: Prompt Engineering", 5)
+    _stored(db, owner, "DEV", "prompting-loop", "2025 ChatGPT Case Study: Prompt Engineering is a Loop", 6)
+    assert collapse_cross_posts(db, user_id=str(owner)) == 0
+    assert remember_content(db, user_id=str(owner))["remembered"] == 2
