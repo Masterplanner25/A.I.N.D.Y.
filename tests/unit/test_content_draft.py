@@ -187,3 +187,43 @@ def test_the_planner_is_told_to_pass_research_too_and_to_name_the_work():
     masterplan_tools.register()
     description = TOOL_REGISTRY["content.draft"]["description"]
     assert "BOTH as a list" in description and "`work`" in description
+
+
+def test_a_draft_about_a_work_is_told_what_the_engines_brought_up_under_its_name(db_session):
+    """Run 191bc9b8 (2026-10-14) described "Nodus Software" as general software solutions; the check had
+    the engine saying it is a package manager for AI-agent tooling. The owner: disambiguate from what
+    is specific to the language and from what actually comes up when searching Nodus."""
+    from apps.masterplan.work_model import ResolutionAnswer, ResolutionRun
+
+    nodus = ws.create_work(db_session, USER, {"name": "Nodus", "summary": "An orchestration DSL."})
+    key = f"direct:{nodus['id']}"
+    run = ResolutionRun(user_id=USER, scope="core", status="done", engines=["perplexity", "openai"],
+                        questions=[{"key": key, "kind": "direct", "subject": nodus["id"], "text": "What is Nodus?"},
+                                   {"key": "direct:other", "kind": "direct", "subject": "other", "text": "What is X?"}],
+                        calls={})
+    db_session.add(run)
+    db_session.flush()
+    db_session.add_all([
+        ResolutionAnswer(run_id=run.id, user_id=USER, question_key=key, engine="perplexity",
+                         answer="Nodus software: a package manager for AI-agent tooling. " + "x" * 3000,
+                         scores={"resolution": "wrong", "other_entities": ["Nodus software", "Nodus Payments"]}),
+        ResolutionAnswer(run_id=run.id, user_id=USER, question_key=key, engine="openai", answer="",
+                         error="timeout"),
+        ResolutionAnswer(run_id=run.id, user_id=USER, question_key="direct:other", engine="openai",
+                         answer="About X.", scores={"resolution": "resolved", "other_entities": []}),
+    ])
+    db_session.commit()
+    seen = {}
+
+    def complete(brief, context):
+        seen["context"] = context
+        return "# Nodus\n\nText."
+
+    ds.write_draft(db_session, USER, brief="Disambiguate Nodus", work="Nodus", complete=complete)
+    context = seen["context"]
+    assert context_has(context, "WHAT AI SEARCH ENGINES SAID WHEN ASKED ABOUT IT",
+                       '- perplexity, asked "What is Nodus?": wrong; brought up Nodus software; Nodus Payments',
+                       "a package manager for AI-agent tooling")
+    assert "About X." not in context and "timeout" not in context  # another Work's answer; a failed call
+    assert len(context) < 4_000  # each answer is cut, not sent whole
+    assert "never\nfrom general knowledge" in ds._SYSTEM and "other names it goes by" in ds._SYSTEM
