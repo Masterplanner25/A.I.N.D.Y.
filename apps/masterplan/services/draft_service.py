@@ -23,9 +23,17 @@ from apps.masterplan.work_model import Work, WorkDraft
 
 logger = logging.getLogger(__name__)
 
-#: The drafting model and its budget. `AINDY_DRAFT_MODEL` overrides.
-DRAFT_MODEL = "gpt-4o"
+#: The drafting model and its budget. `AINDY_DRAFT_MODEL` overrides. gpt-4o until 2026-10-14: given
+#: the engines' answers and told to set the Work apart from them, it named the other entities and
+#: skipped the contrast (run cce1278e).
+DRAFT_MODEL = "gpt-5.5"
 DRAFT_MAX_TOKENS = 3_000
+#: A reasoning model spends completion tokens thinking before it writes, refuses `max_tokens` and any
+#: temperature but 1 (probed 2026-10-14), so it gets `max_completion_tokens` with room to think.
+#: `AINDY_DRAFT_REASONING_EFFORT` overrides the effort.
+REASONING_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+DRAFT_REASONING_MAX_TOKENS = 16_000
+DRAFT_REASONING_EFFORT = "low"
 #: Source text sent with a brief, at most, and per source.
 SOURCES_MAX_CHARS = 24_000
 SOURCE_MAX_CHARS = 4_000
@@ -54,11 +62,17 @@ person has denied: do not state it, or anything equivalent. These facts are not 
 them as [S…].
 
 When you are given WHAT AI SEARCH ENGINES SAID about the work, that is what comes up when someone
-searches for it. To set the work apart from the other things that share its name, use what is specific
-to it from the person's facts (what it is, how it works, its parts, its links and names) against what
-the engines brought up. Describe another entity only as those answers or the sources describe it, never
-from general knowledge; when they do not say what it is, name it and say only that it is a different
-thing. Do not cite the engines' answers as [S…].
+searches for it, and the document must set the work apart from it. A shared name is not a failure:
+the name alone will and should still bring up other things, so the aim is for the work to be one of
+the meanings an engine lists for the name, described correctly, and to be the answer when the name
+comes with its context. So:
+- Pair the name with what is specific to it, from the person's facts (what it is, how it works, its
+  parts and constructs, its links, its other names), and keep those pairings consistent.
+- Include a section titled "Not to be confused with": one line for every other entity the engines
+  brought up, saying what it is as the engines' answers describe it, then how the work differs, using
+  the work's own specifics.
+- Describe another entity only as those answers or the sources describe it, never from general
+  knowledge. Do not cite the engines' answers as [S…].
 
 
 Output markdown: the first line is the title as '# Title', then the document. Do not add a sources
@@ -158,6 +172,16 @@ def _draft_model() -> str:
     return (os.getenv("AINDY_DRAFT_MODEL") or "").strip() or DRAFT_MODEL
 
 
+def _sampling(model: str) -> dict:
+    """The length and sampling arguments the model accepts."""
+    import os
+
+    if model.startswith(REASONING_PREFIXES):
+        effort = (os.getenv("AINDY_DRAFT_REASONING_EFFORT") or "").strip() or DRAFT_REASONING_EFFORT
+        return {"max_completion_tokens": DRAFT_REASONING_MAX_TOKENS, "reasoning_effort": effort}
+    return {"temperature": 0.4, "max_tokens": DRAFT_MAX_TOKENS}
+
+
 def _complete(brief: str, sources_text: str) -> str:
     from AINDY.config import settings
     from AINDY.platform_layer.external_call_service import perform_external_call
@@ -176,8 +200,7 @@ def _complete(brief: str, sources_text: str) -> str:
             messages=[{"role": "system", "content": _SYSTEM},
                       {"role": "user", "content": f"BRIEF\n{brief}\n\nSOURCES\n{sources_text}"}],
             timeout=max(float(settings.OPENAI_CHAT_TIMEOUT_SECONDS or 0), 120.0),
-            temperature=0.4,
-            max_tokens=DRAFT_MAX_TOKENS,
+            **_sampling(model),
         ),
     )
     return (completion.choices[0].message.content or "").strip()

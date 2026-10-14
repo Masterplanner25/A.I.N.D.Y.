@@ -244,6 +244,13 @@ The owner took the planner line only; the score stays unwired (decision 5: two c
 3. **Cadence and ceiling.** Recommended: **core weekly, a $10 monthly ceiling**, full on demand.
 4. **Bare-name questions.** *"Who is Shawn Knight?"* alone will often find someone else; that is the honest
    test of criterion 1 for a common name. Recommended: **ask both** bare and with context, report both.
+   **Owner, 2026-10-14:** *"a bare Nodus or bare my name shouldn't directly resolve. I'm not the only
+   Shawn Knight in the world, nor is Nodus the only thing named Nodus."* So a shared name is not a
+   failure. For the name alone, the aim is to be **one of the meanings an engine lists, described
+   correctly**; the with-context question is where the owner's entity should be *the* answer. Drafts are
+   told this (#463). The judge still scores a bare-name answer about something else as `wrong`, which
+   is accurate while the owner's entity is absent from the list; whether a bare answer that *lists* it
+   should get its own verdict (rather than `mixed`) is open, to be decided before decision 5.
 5. **Does resolution become a KPI?** It is literally the owner's success measure for AI Search
    Optimization. Recommended: **not yet**. Run B for a month first and see if the numbers are stable
    enough to steer by.
