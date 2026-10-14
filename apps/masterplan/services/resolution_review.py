@@ -327,6 +327,8 @@ def planner_lines(db: Session, uid, *, now: datetime | None = None) -> dict[str,
     when = run.created_at
     if when is not None and when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
+    # "Rechecked weekly": run 34f5871d (2026-10-14) planned a task to re-run the check, a day after the
+    # Monday check that runs on its own.
     dated = f"check of {when.date().isoformat()}" if when else "latest check"
     if when and (now or datetime.now(timezone.utc)) - when > timedelta(days=PLANNER_STALE_DAYS):
         dated += f", over {PLANNER_STALE_DAYS // 7} weeks old"
@@ -340,5 +342,5 @@ def planner_lines(db: Session, uid, *, now: datetime | None = None) -> dict[str,
                 phrase = _resolved_phrase(scores)
                 parts.append(f"{label}: {phrase}" if label else phrase)
         if parts:
-            lines[subject] = f"AI search ({dated}): {'; '.join(parts)}"
+            lines[subject] = f"AI search ({dated}; rechecked automatically every Monday): {'; '.join(parts)}"
     return lines
