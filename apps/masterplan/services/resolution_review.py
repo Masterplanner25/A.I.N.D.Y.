@@ -11,6 +11,9 @@ Three things the first live check (2026-09-30) asked for:
    refuses to start when the month's estimated spend plus the run's estimate would pass the ceiling
    ($10 by default, decision 3). Costs are estimates per call, not the provider's bill.
 3. **A trend.** Per entity and engine, across runs: is it resolving, how much does it cover, does it connect.
+
+Phase C (§4, §6): the planner line. Each Work's line in the planner's block carries how the latest check
+resolved it, so an AI Search plan aims at what is weak rather than at generic work.
 """
 from __future__ import annotations
 
@@ -270,3 +273,72 @@ def trend(db: Session, user_id: Any, *, limit: int = TREND_RUNS) -> dict:
                   "cost_usd": run_cost(r.calls)} for r in runs],
         "questions": list(rows.values()),
     }
+
+
+# ── Phase C: what the planner is told (§4) ────────────────────────────────────────────────
+
+#: A check older than this is still shown, marked as old: the engines may have moved since.
+PLANNER_STALE_DAYS = 21
+#: Other entities named in the line, most-named first; enough to say what it is confused with.
+PLANNER_CONFUSED_WITH = 3
+#: The question kinds that say whether the entity itself resolves, and how the line names them.
+_PLANNER_KINDS = (("direct", None), ("person-bare", "by name alone"), ("person-context", "with context"))
+
+
+def _resolved_phrase(scores: list[dict]) -> str:
+    count = {label: sum(1 for s in scores if s.get("resolution") == label) for label in ("resolved", "mixed", "wrong")}
+    resolved, total = count["resolved"], len(scores)
+    of = f"of {total} engine{'s' if total != 1 else ''}"
+    if count["wrong"] == total:
+        phrase = f"wrong on {total} {of}"
+    else:
+        phrase = f"resolved on {resolved} {of}"
+        if count["mixed"]:
+            phrase += f", mixed on {count['mixed']}"
+        if count["wrong"]:
+            phrase += f", wrong on {count['wrong']}"
+        unknown = total - resolved - count["mixed"] - count["wrong"]
+        if unknown:
+            # The judge's "none": the answer was about no entity at all. Not found, not mistaken.
+            phrase += f", not found by {unknown}"
+    if resolved < len(scores):
+        named: dict[str, int] = {}
+        for s in scores:
+            if s.get("resolution") != "resolved":
+                for name in s.get("other_entities") or []:
+                    named[name] = named.get(name, 0) + 1
+        if named:
+            top = sorted(named, key=lambda n: -named[n])[:PLANNER_CONFUSED_WITH]
+            phrase += f", confused with {'; '.join(top)}"
+    return phrase
+
+
+def planner_lines(db: Session, uid, *, now: datetime | None = None) -> dict[str, str]:
+    """Per Work id, one clause on how the latest finished check resolved it. A Work the check did not
+    ask about gets none. Only answers that were judged count: an engine that failed is not a miss."""
+    run = (db.query(ResolutionRun).filter(ResolutionRun.user_id == uid, ResolutionRun.status == "done")
+           .order_by(ResolutionRun.created_at.desc()).first())
+    if run is None:
+        return {}
+    by_key: dict[str, list[dict]] = {}
+    for answer in db.query(ResolutionAnswer).filter(ResolutionAnswer.run_id == run.id).all():
+        if answer.scores and not answer.error:
+            by_key.setdefault(answer.question_key, []).append(answer.scores)
+    when = run.created_at
+    if when is not None and when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    dated = f"check of {when.date().isoformat()}" if when else "latest check"
+    if when and (now or datetime.now(timezone.utc)) - when > timedelta(days=PLANNER_STALE_DAYS):
+        dated += f", over {PLANNER_STALE_DAYS // 7} weeks old"
+    subjects = {q["subject"] for q in run.questions or [] if q.get("kind") in dict(_PLANNER_KINDS)}
+    lines: dict[str, str] = {}
+    for subject in subjects:
+        parts = []
+        for kind, label in _PLANNER_KINDS:
+            scores = by_key.get(f"{kind}:{subject}")
+            if scores:
+                phrase = _resolved_phrase(scores)
+                parts.append(f"{label}: {phrase}" if label else phrase)
+        if parts:
+            lines[subject] = f"AI search ({dated}): {'; '.join(parts)}"
+    return lines

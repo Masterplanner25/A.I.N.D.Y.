@@ -269,3 +269,86 @@ def test_claims_are_filed_under_the_entity_they_name_and_admissions_of_ignorance
     assert not any("widely recognized" in c["claim"] for c in claims)
     llc = [c for c in claims if "LLC" in c["claim"]]
     assert len(llc) == 1 and llc[0]["engines"] == ["claude", "openai"]  # a rewording is the same claim
+
+
+# ── phase C: the planner line (§4) ────────────────────────────────────────────────────────
+
+
+def _checked(db_session, answers, *, days_ago=0):
+    """A finished check with these answers: {question_key: {engine: scores, or an error string}}."""
+    keys = list(answers)
+    run = ResolutionRun(user_id=USER, scope="core", status="done", engines=["perplexity", "openai", "claude"],
+                        questions=[{"key": k, "kind": k.split(":")[0], "subject": k.split(":")[1], "text": k}
+                                   for k in keys], calls={})
+    run.created_at = datetime(2026, 10, 12, 7, 30, tzinfo=timezone.utc) - timedelta(days=days_ago)
+    db_session.add(run)
+    db_session.flush()
+    for key, by_engine in answers.items():
+        for engine, value in by_engine.items():
+            failed = isinstance(value, str)
+            db_session.add(ResolutionAnswer(run_id=run.id, user_id=USER, question_key=key, engine=engine,
+                                            answer="…", scores=None if failed else value,
+                                            error=value if failed else None))
+    db_session.commit()
+    return run
+
+
+def _res(resolution, *others):
+    return {"resolution": resolution, "other_entities": list(others)}
+
+
+def _line(db_session, name):
+    block = ws.work_context(user_id=USER, db=db_session)["block"]
+    return next(line for line in block.splitlines() if line.startswith(f"- {name} "))
+
+
+NOW = datetime(2026, 10, 13, tzinfo=timezone.utc)
+
+
+def test_the_planner_is_told_what_resolves_and_what_it_is_confused_with(db_session, model):
+    """The 10-12 check: Nodus wrong on all three engines, the brand resolved on all three."""
+    nodus, brand = model["nodus"]["id"], model["brand"]["id"]
+    _checked(db_session, {
+        f"direct:{nodus}": {"perplexity": _res("wrong", "Nodus Payments", "Nodus Research"),
+                            "openai": _res("wrong", "Nodus Oncology", "Nodus Research"),
+                            "claude": _res("wrong", "Minecraft Client (Nodus)", "Nodus Research")},
+        f"direct:{brand}": {e: _res("resolved") for e in ("perplexity", "openai", "claude")},
+    })
+    lines = rr.planner_lines(db_session, USER, now=NOW)
+    assert lines[brand] == "AI search (check of 2026-10-12): resolved on 3 of 3 engines"
+    assert lines[nodus].startswith("AI search (check of 2026-10-12): wrong on 3 of 3 engines, confused with "
+                                   "Nodus Research; ")  # named by all three, so first
+    assert _line(db_session, "Nodus").endswith(f". {lines[nodus]}")
+    assert "AI search" not in _line(db_session, "aindy-runtime")  # not asked about: nothing said
+
+
+def test_a_person_is_reported_by_name_alone_and_with_context(db_session, model):
+    person = model["person"]["id"]
+    _checked(db_session, {
+        f"person-bare:{person}": {"perplexity": _res("wrong", "Shawn Knight (CFL Quarterback)"),
+                                  "openai": _res("mixed"), "claude": _res("unknown")},
+        f"person-context:{person}": {"perplexity": _res("resolved"), "openai": _res("resolved")},
+    })
+    assert rr.planner_lines(db_session, USER, now=NOW)[person] == (
+        "AI search (check of 2026-10-12): by name alone: resolved on 0 of 3 engines, mixed on 1, wrong on 1, "
+        "not found by 1, confused with Shawn Knight (CFL Quarterback); with context: resolved on 2 of 2 engines")
+
+
+def test_an_engine_that_failed_is_not_counted_as_a_miss(db_session, model):
+    brand = model["brand"]["id"]
+    _checked(db_session, {f"direct:{brand}": {"perplexity": _res("resolved"), "openai": "timed out"}})
+    assert rr.planner_lines(db_session, USER, now=NOW)[brand].endswith("resolved on 1 of 1 engine")
+
+
+def test_only_the_latest_check_counts_and_an_old_one_says_so(db_session, model):
+    brand = model["brand"]["id"]
+    _checked(db_session, {f"direct:{brand}": {"perplexity": _res("wrong")}}, days_ago=30)
+    assert rr.planner_lines(db_session, USER, now=NOW)[brand] == (
+        "AI search (check of 2026-09-12, over 3 weeks old): wrong on 1 of 1 engine")
+    _checked(db_session, {f"direct:{brand}": {"perplexity": _res("resolved")}})
+    assert rr.planner_lines(db_session, USER, now=NOW)[brand].endswith("resolved on 1 of 1 engine")
+
+
+def test_no_check_yet_leaves_the_block_as_it_was(db_session, model):
+    assert rr.planner_lines(db_session, USER) == {}
+    assert "AI search" not in ws.work_context(user_id=USER, db=db_session)["block"]
