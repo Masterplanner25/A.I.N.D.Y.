@@ -205,7 +205,7 @@ def test_a_draft_about_a_work_is_told_what_the_engines_brought_up_under_its_name
     db_session.flush()
     db_session.add_all([
         ResolutionAnswer(run_id=run.id, user_id=USER, question_key=key, engine="perplexity",
-                         answer="Nodus software: a package manager for AI-agent tooling. " + "x" * 3000,
+                         answer="Nodus software: a package manager for AI-agent tooling. " + "x" * 8000,
                          scores={"resolution": "wrong", "other_entities": ["Nodus software", "Nodus Payments"]}),
         ResolutionAnswer(run_id=run.id, user_id=USER, question_key=key, engine="openai", answer="",
                          error="timeout"),
@@ -225,5 +225,26 @@ def test_a_draft_about_a_work_is_told_what_the_engines_brought_up_under_its_name
                        '- perplexity, asked "What is Nodus?": wrong; brought up Nodus software; Nodus Payments',
                        "a package manager for AI-agent tooling")
     assert "About X." not in context and "timeout" not in context  # another Work's answer; a failed call
-    assert len(context) < 4_000  # each answer is cut, not sent whole
-    assert "never\nfrom general knowledge" in ds._SYSTEM and "other names it goes by" in ds._SYSTEM
+    assert len(context) < 7_500  # each answer is cut, not sent whole
+    system = " ".join(ds._SYSTEM.split())
+    assert "Not to be confused with" in system and "never from general knowledge" in system
+    assert "other names it goes by" in system
+
+
+def test_a_shared_name_is_not_a_failure_the_draft_aims_to_be_listed_and_resolve_in_context():
+    """Owner, 2026-10-14: "a bare Nodus or bare my name shouldn't directly resolve. I'm not the only
+    Shawn Knight in the world, nor is Nodus the only thing named Nodus." """
+    system = " ".join(ds._SYSTEM.split())
+    assert "A shared name is not a failure" in system
+    assert "one of the meanings an engine lists for the name" in system
+
+
+def test_a_reasoning_model_is_sent_what_it_accepts(monkeypatch):
+    """gpt-5.5 refuses `max_tokens` and any temperature but 1 (probed 2026-10-14)."""
+    monkeypatch.delenv("AINDY_DRAFT_REASONING_EFFORT", raising=False)
+    assert ds.DRAFT_MODEL == "gpt-5.5"
+    assert ds._sampling("gpt-5.5") == {"max_completion_tokens": ds.DRAFT_REASONING_MAX_TOKENS,
+                                       "reasoning_effort": "low"}
+    assert ds._sampling("gpt-4o") == {"temperature": 0.4, "max_tokens": ds.DRAFT_MAX_TOKENS}
+    monkeypatch.setenv("AINDY_DRAFT_REASONING_EFFORT", "medium")
+    assert ds._sampling("o3")["reasoning_effort"] == "medium"

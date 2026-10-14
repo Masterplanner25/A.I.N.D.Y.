@@ -348,8 +348,10 @@ def planner_lines(db: Session, uid, *, now: datetime | None = None) -> dict[str,
 
 # ── What the drafter is told: what comes up when the Work is searched ─────────────────────
 
-#: Characters of each engine answer the drafter sees: enough for the list of other entities it names.
-DRAFT_ANSWER_CHARS = 1_500
+#: Characters of each engine answer the drafter sees. The longest bare-name answers on 2026-10-12 ran
+#: about 5,600; at 1,500 the end of OpenAI's list of other Nodus entities was cut, and the draft must
+#: describe each one from the answers.
+DRAFT_ANSWER_CHARS = 6_000
 
 
 def engine_answers(db: Session, uid, work_id: str) -> str:
