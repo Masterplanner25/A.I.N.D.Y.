@@ -145,3 +145,45 @@ def test_a_draft_is_told_the_owners_own_definition_of_success(db_session):
 
 def context_has(text, *parts):
     return all(part in text for part in parts)
+
+
+def test_a_draft_about_a_work_is_given_what_the_owner_confirmed_and_denied(db_session):
+    """Run 34f5871d (2026-10-14): a Nodus piece said Nodus "functions within" aindy-runtime, which the
+    owner had denied. The drafter was given the Work's name and none of what it says."""
+    from apps.masterplan.services import resolution_review as rr
+
+    nodus = ws.create_work(db_session, USER, {"name": "Nodus", "summary": "An orchestration DSL\nand embedded runtime."})
+    runtime = ws.create_work(db_session, USER, {"name": "aindy-runtime", "summary": "An execution substrate."})
+    ws.add_link(db_session, USER, runtime["id"], to_work_id=nodus["id"], relation="built_on")
+    ws.add_presence(db_session, USER, nodus["id"], {"platform": "GitHub", "url": "https://github.com/x/Nodus"})
+    rr.decide_claim(db_session, USER, work_id=nodus["id"], claim="Nodus is the layer underneath aindy-runtime.",
+                    decision="true")
+    rr.decide_claim(db_session, USER, work_id=nodus["id"], claim="The runtime is the engine and Nodus is what it executes.",
+                    decision="false")
+    seen = {}
+
+    def complete(brief, context):
+        seen["context"] = context
+        return "# Nodus\n\nText."
+
+    ds.write_draft(db_session, USER, brief="Disambiguate Nodus", sources=RECALL, work="nodus", complete=complete)
+    assert context_has(seen["context"],
+                       "THE PERSON'S OWN FACTS ABOUT Nodus",
+                       "- What it is (project): An orchestration DSL and embedded runtime.",
+                       "- Connection: aindy-runtime built on Nodus",
+                       "- On GitHub: https://github.com/x/Nodus",
+                       "- Confirmed: Nodus is the layer underneath aindy-runtime.",
+                       "NEVER SAY (denied by the person)\n- The runtime is the engine and Nodus is what it executes.")
+    assert "never contradict" in ds._SYSTEM and "NEVER SAY" in ds._SYSTEM
+
+    ds.write_draft(db_session, USER, brief="Something else", sources=RECALL, complete=complete)
+    assert "OWN FACTS" not in seen["context"]  # no Work named: nothing added
+
+
+def test_the_planner_is_told_to_pass_research_too_and_to_name_the_work():
+    from AINDY.agents.tool_registry import TOOL_REGISTRY
+    import apps.masterplan.agents.tools as masterplan_tools
+
+    masterplan_tools.register()
+    description = TOOL_REGISTRY["content.draft"]["description"]
+    assert "BOTH as a list" in description and "`work`" in description

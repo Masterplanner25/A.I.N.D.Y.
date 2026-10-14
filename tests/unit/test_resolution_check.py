@@ -315,8 +315,8 @@ def test_the_planner_is_told_what_resolves_and_what_it_is_confused_with(db_sessi
         f"direct:{brand}": {e: _res("resolved") for e in ("perplexity", "openai", "claude")},
     })
     lines = rr.planner_lines(db_session, USER, now=NOW)
-    assert lines[brand] == "AI search (check of 2026-10-12): resolved on 3 of 3 engines"
-    assert lines[nodus].startswith("AI search (check of 2026-10-12): wrong on 3 of 3 engines, confused with "
+    assert lines[brand] == "AI search (check of 2026-10-12; rechecked automatically every Monday): resolved on 3 of 3 engines"
+    assert lines[nodus].startswith("AI search (check of 2026-10-12; rechecked automatically every Monday): wrong on 3 of 3 engines, confused with "
                                    "Nodus Research; ")  # named by all three, so first
     assert _line(db_session, "Nodus").endswith(f". {lines[nodus]}")
     assert "AI search" not in _line(db_session, "aindy-runtime")  # not asked about: nothing said
@@ -330,7 +330,7 @@ def test_a_person_is_reported_by_name_alone_and_with_context(db_session, model):
         f"person-context:{person}": {"perplexity": _res("resolved"), "openai": _res("resolved")},
     })
     assert rr.planner_lines(db_session, USER, now=NOW)[person] == (
-        "AI search (check of 2026-10-12): by name alone: resolved on 0 of 3 engines, mixed on 1, wrong on 1, "
+        "AI search (check of 2026-10-12; rechecked automatically every Monday): by name alone: resolved on 0 of 3 engines, mixed on 1, wrong on 1, "
         "not found by 1, confused with Shawn Knight (CFL Quarterback); with context: resolved on 2 of 2 engines")
 
 
@@ -344,7 +344,7 @@ def test_only_the_latest_check_counts_and_an_old_one_says_so(db_session, model):
     brand = model["brand"]["id"]
     _checked(db_session, {f"direct:{brand}": {"perplexity": _res("wrong")}}, days_ago=30)
     assert rr.planner_lines(db_session, USER, now=NOW)[brand] == (
-        "AI search (check of 2026-09-12, over 3 weeks old): wrong on 1 of 1 engine")
+        "AI search (check of 2026-09-12, over 3 weeks old; rechecked automatically every Monday): wrong on 1 of 1 engine")
     _checked(db_session, {f"direct:{brand}": {"perplexity": _res("resolved")}})
     assert rr.planner_lines(db_session, USER, now=NOW)[brand].endswith("resolved on 1 of 1 engine")
 

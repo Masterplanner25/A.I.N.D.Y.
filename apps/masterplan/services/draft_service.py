@@ -46,6 +46,11 @@ When you are given THE PERSON'S OWN DEFINITION OF SUCCESS, any goals, metrics or
 in the document come from it. Do not substitute industry metrics (rankings, indexing rates, citation
 counts, engagement) unless their definition calls for them.
 
+When you are given THE PERSON'S OWN FACTS about the work the document is for, they are true: build the
+document's description of that work on them, use its links as the canonical ones, and never contradict
+them. Anything listed under NEVER SAY the person has denied: do not state it, or anything equivalent.
+These facts are not sources; do not cite them as [S…].
+
 Output markdown: the first line is the title as '# Title', then the document. Do not add a sources
 list at the end; it is appended for you."""
 
@@ -168,6 +173,40 @@ def _complete(brief: str, sources_text: str) -> str:
     return (completion.choices[0].message.content or "").strip()
 
 
+def _one_line(text: str | None) -> str:
+    return " ".join((text or "").split())
+
+
+def work_facts(db: Session, uid, work_id: str) -> str:
+    """What the owner has stated or confirmed about one Work, for the drafter: its summary, its
+    connections, where it lives, and the Resolution Check claims they settled, the denied ones as
+    things never to say.
+
+    Run 34f5871d (2026-10-14) drafted a Nodus disambiguation piece that said Nodus "functions within"
+    aindy-runtime. The owner had confirmed it is the layer *underneath* and denied "runs on top of, or
+    is executed by"; none of it, nor the GitHub repo, reached the drafter, which was given the Work's
+    name and nothing it says."""
+    from apps.masterplan.services.resolution_service import ground_truth
+
+    truth = ground_truth(db, uid)
+    entity = truth["entities"].get(work_id)
+    if entity is None:
+        return ""
+    lines = [f"THE PERSON'S OWN FACTS ABOUT {entity['name']} (stated or confirmed by them)",
+             f"- What it is ({entity['kind']}): {_one_line(entity['summary'])}"]
+    lines += [f"- Connection: {link['text']}" for link in truth["links"] if work_id in (link["a"], link["b"])]
+    if entity.get("url"):
+        lines.append(f"- Link: {entity['url']}")
+    for place in entity["presence"]:
+        said = f" ({_one_line(place['self_description'])})" if place.get("self_description") else ""
+        lines.append(f"- On {place['platform']}: {place.get('url') or '(no link)'}{said}")
+    lines += [f"- Confirmed: {_one_line(claim)}" for claim in entity["confirmed_claims"]]
+    if entity["denied_claims"]:
+        lines.append("NEVER SAY (denied by the person)")
+        lines += [f"- {_one_line(claim)}" for claim in entity["denied_claims"]]
+    return "\n".join(lines)
+
+
 def write_draft(db: Session, user_id: Any, *, brief: str, sources: Any = None, title: str | None = None,
                 work: str | None = None, complete=None) -> dict:
     """Write a draft from the brief and its sources, save it, and return it with what it cited."""
@@ -186,6 +225,15 @@ def write_draft(db: Session, user_id: Any, *, brief: str, sources: Any = None, t
         context += "\n\nTHE PERSON'S OWN DEFINITION OF SUCCESS\n" + "\n".join(
             f"- {d['work']}: {d['success']}" for d in definitions
         )
+    work_id = None
+    if work:
+        target = _norm(work)
+        match = next((w for w in db.query(Work).filter(Work.user_id == uid).all() if _norm(w.name) == target), None)
+        work_id = match.id if match else None
+    if work_id:
+        facts = work_facts(db, uid, work_id)
+        if facts:
+            context += "\n\n" + facts
     text = (complete or _complete)(brief, context)
     if not text:
         raise RuntimeError("the drafting model returned nothing")
@@ -199,12 +247,6 @@ def write_draft(db: Session, user_id: Any, *, brief: str, sources: Any = None, t
             f"- [S{n}] {blocks[n - 1]['title']}" + (f" — {blocks[n - 1]['url']}" if blocks[n - 1].get("url") else "")
             for n in cited
         )
-
-    work_id = None
-    if work:
-        target = _norm(work)
-        match = next((w for w in db.query(Work).filter(Work.user_id == uid).all() if _norm(w.name) == target), None)
-        work_id = match.id if match else None
 
     draft = WorkDraft(
         user_id=uid, title=final_title, brief=brief, body=text[:BODY_MAX_CHARS], work_id=work_id,
