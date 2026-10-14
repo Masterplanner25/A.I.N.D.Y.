@@ -6,6 +6,7 @@ data*. Refusals are `HTTPException`s raised inside the handler, which the pipeli
 """
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date
 from typing import Any
@@ -26,6 +27,8 @@ from apps.masterplan.work_model import (
     WorkProposalDismissal,
     WorkRevision,
 )
+
+logger = logging.getLogger(__name__)
 
 #: What the planner block may carry at most (§6): the block must never crowd out the plan.
 PLANNER_WORK_LIMIT = 12
@@ -425,11 +428,25 @@ def render_work_block(ctx: dict | None) -> str:
         if work.get("success"):
             # The owner's own measure. A plan for this work is judged by it, not by industry metrics.
             line += f". SUCCESS, in the user's words (measure against this, not generic metrics): {work['success']}"
+        if work.get("search"):
+            # Measured by the Resolution Check (RESOLUTION_CHECK_SPEC §4): where AI search work is needed.
+            line += f". {work['search']}"
         lines.append(line)
     hidden = int(ctx.get("total") or 0) - len(ctx["works"])
     if hidden > 0:
         lines.append(f"({hidden} more not shown)")
     return "\n".join(lines) + "\n"
+
+
+def _search_lines(db: Session, uid) -> dict[str, str]:
+    """The Resolution Check's line per Work (phase C). Best-effort: the block stands without it."""
+    try:
+        from apps.masterplan.services.resolution_review import planner_lines
+
+        return planner_lines(db, uid)
+    except Exception as exc:
+        logger.warning("[work_context] resolution lines skipped: %s", exc)
+        return {}
 
 
 def work_context(*, user_id: Any, db: Session) -> dict | None:
@@ -451,6 +468,7 @@ def work_context(*, user_id: Any, db: Session) -> dict | None:
             relations.setdefault(link["from_work_id"], []).append(
                 f"{link['relation'].replace('_', ' ')} {names[link['to_work_id']]}"
             )
+    search = _search_lines(db, uid)
     ctx = {
         "works": [
             {
@@ -458,6 +476,7 @@ def work_context(*, user_id: Any, db: Session) -> dict | None:
                 "summary": w["summary"], "relations": relations.get(w["id"], []),
                 "serves": [o["name"] for o in w["objectives"]],
                 "success": w.get("success_criteria"),
+                "search": search.get(w["id"]),
             }
             for w in works
         ],

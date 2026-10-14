@@ -8,7 +8,7 @@ owner: "app-team"
 
 # The Resolution Check — does AI search resolve your entities, correctly and connected
 
-**Status:** phase A BUILT 2026-09-30 (owner took §7 decisions 1–4 as recommended, and added §2.2); phase B BUILT 2026-10-01 (§6.1); C not started. Scoped 2026-09-30 from the owner's own definition of success.
+**Status:** phase A BUILT 2026-09-30 (owner took §7 decisions 1–4 as recommended, and added §2.2); phase B BUILT 2026-10-01 (§6.1); phase C's planner line BUILT 2026-10-13 (§6.2), the score left unwired (decision 5). Scoped 2026-09-30 from the owner's own definition of success.
 
 **The owner, which is the whole spec:**
 
@@ -179,6 +179,26 @@ and cheap enough to forget about.
 - **Weekly.** `masterplan_resolution_weekly`, Mondays 07:30: a core check for each owner who has run one
   (having run one is the opt-in), unless one ran in the last six days or is open.
 - **Trend.** Per question and engine across the last eight checks, shown as ● resolved ◐ mixed ○ wrong.
+
+### 6.2 Phase C, the planner line, as built (2026-10-13)
+
+The owner took the planner line only; the score stays unwired (decision 5: two checks are not a month).
+
+- **One clause per Work** in the planner's block (`render_work_block`, so Collaborator shows it too), from
+  `resolution_review.planner_lines`: the latest **finished** check only, no extra calls. From the 10-12 check:
+  > *AI search (check of 2026-10-12): wrong on 3 of 3 engines, confused with Nodus Research; Nodus software;
+  > Nodus Payments*
+  >
+  > *AI search (check of 2026-10-12): by name alone: wrong on 3 of 3 engines, confused with …; with context:
+  > resolved on 3 of 3 engines*
+- **What counts.** A Work's direct question; for a person, the bare-name and with-context questions, both
+  named. Relation questions are not in the line. An engine that errored is left out of the count, not
+  counted as a miss. The judge's `none` reads *not found by*, not *wrong*: an engine that knew nothing did
+  not mistake you for someone else. *Confused with* is the other entities the non-resolving answers named,
+  most-named first, at most three.
+- **Age.** A check older than three weeks is still shown, marked *over 3 weeks old*. A Work never asked about
+  gets no clause, and with no finished check the block is unchanged.
+- **Best-effort.** If the lines fail to build, the block is sent without them (logged at WARNING).
 
 ---
 
