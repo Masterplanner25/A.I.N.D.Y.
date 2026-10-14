@@ -48,8 +48,18 @@ counts, engagement) unless their definition calls for them.
 
 When you are given THE PERSON'S OWN FACTS about the work the document is for, they are true: build the
 document's description of that work on them, use its links as the canonical ones, and never contradict
-them. Anything listed under NEVER SAY the person has denied: do not state it, or anything equivalent.
-These facts are not sources; do not cite them as [S…].
+them. Give the work's links and any other names it goes by (a package name, a repository) wherever a
+reader or a search engine would need them to find the right thing. Anything listed under NEVER SAY the
+person has denied: do not state it, or anything equivalent. These facts are not sources; do not cite
+them as [S…].
+
+When you are given WHAT AI SEARCH ENGINES SAID about the work, that is what comes up when someone
+searches for it. To set the work apart from the other things that share its name, use what is specific
+to it from the person's facts (what it is, how it works, its parts, its links and names) against what
+the engines brought up. Describe another entity only as those answers or the sources describe it, never
+from general knowledge; when they do not say what it is, name it and say only that it is a different
+thing. Do not cite the engines' answers as [S…].
+
 
 Output markdown: the first line is the title as '# Title', then the document. Do not add a sources
 list at the end; it is appended for you."""
@@ -207,6 +217,18 @@ def work_facts(db: Session, uid, work_id: str) -> str:
     return "\n".join(lines)
 
 
+def _engine_answers(db: Session, uid, work_id: str) -> str:
+    """What the latest Resolution Check's engines said when asked about the Work. Best-effort: a draft
+    stands without it."""
+    try:
+        from apps.masterplan.services.resolution_review import engine_answers
+
+        return engine_answers(db, uid, work_id)
+    except Exception as exc:
+        logger.warning("[content.draft] engine answers skipped: %s", exc)
+        return ""
+
+
 def write_draft(db: Session, user_id: Any, *, brief: str, sources: Any = None, title: str | None = None,
                 work: str | None = None, complete=None) -> dict:
     """Write a draft from the brief and its sources, save it, and return it with what it cited."""
@@ -234,6 +256,9 @@ def write_draft(db: Session, user_id: Any, *, brief: str, sources: Any = None, t
         facts = work_facts(db, uid, work_id)
         if facts:
             context += "\n\n" + facts
+        searched = _engine_answers(db, uid, work_id)
+        if searched:
+            context += "\n\n" + searched
     text = (complete or _complete)(brief, context)
     if not text:
         raise RuntimeError("the drafting model returned nothing")

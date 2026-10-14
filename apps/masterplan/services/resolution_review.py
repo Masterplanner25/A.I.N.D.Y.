@@ -344,3 +344,47 @@ def planner_lines(db: Session, uid, *, now: datetime | None = None) -> dict[str,
         if parts:
             lines[subject] = f"AI search ({dated}; rechecked automatically every Monday): {'; '.join(parts)}"
     return lines
+
+
+# ── What the drafter is told: what comes up when the Work is searched ─────────────────────
+
+#: Characters of each engine answer the drafter sees: enough for the list of other entities it names.
+DRAFT_ANSWER_CHARS = 1_500
+
+
+def engine_answers(db: Session, uid, work_id: str) -> str:
+    """The latest finished check's answers to the questions asked by the Work's name, for a draft about it.
+
+    Run 191bc9b8 (2026-10-14) drafted a Nodus disambiguation brief that described "Nodus Research",
+    "Nodus Software" and "Nodus Payments" from general knowledge: the check had the engines' own words
+    for each (one is a package manager for AI-agent tooling, the closest confusion there is), and the
+    drafter had only the names. The owner: use what it knows about the actual language, and what comes
+    up when searching Nodus, to disambiguate."""
+    run = (db.query(ResolutionRun).filter(ResolutionRun.user_id == uid, ResolutionRun.status == "done")
+           .order_by(ResolutionRun.created_at.desc()).first())
+    if run is None:
+        return ""
+    asked = {q["key"]: q["text"] for q in run.questions or []
+             if q.get("subject") == work_id and q.get("kind") in dict(_PLANNER_KINDS)}
+    if not asked:
+        return ""
+    answers = (db.query(ResolutionAnswer)
+               .filter(ResolutionAnswer.run_id == run.id, ResolutionAnswer.question_key.in_(list(asked)))
+               .order_by(ResolutionAnswer.question_key, ResolutionAnswer.engine).all())
+    when = run.created_at.date().isoformat() if run.created_at else "latest check"
+    parts = []
+    for answer in answers:
+        if answer.error or not answer.answer:
+            continue
+        scores = answer.scores or {}
+        text = answer.answer.strip()
+        if len(text) > DRAFT_ANSWER_CHARS:
+            text = text[:DRAFT_ANSWER_CHARS].rstrip() + " …"
+        others = scores.get("other_entities") or []
+        head = f'- {answer.engine}, asked "{asked[answer.question_key]}": {scores.get("resolution") or "not judged"}'
+        if others:
+            head += f"; brought up {'; '.join(others)}"
+        parts.append(f"{head}\n{text}")
+    if not parts:
+        return ""
+    return f"WHAT AI SEARCH ENGINES SAID WHEN ASKED ABOUT IT (check of {when})\n" + "\n\n".join(parts)
