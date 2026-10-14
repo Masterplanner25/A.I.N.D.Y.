@@ -413,6 +413,12 @@ def dismiss_proposal(db: Session, user_id: Any, key: str) -> dict:
 BLOCK_HEADING = "## The user's work (stated or confirmed by them; use it, do not invent more)"
 
 
+def _one_line(text: str | None) -> str:
+    """The owner's words, on one line: a summary written with line breaks would otherwise split its
+    work across several lines of the block (Aindy-runtime's did, 2026-10-13)."""
+    return " ".join((text or "").split())
+
+
 def render_work_block(ctx: dict | None) -> str:
     """The planner's "your work" block, as text. One renderer: the planner sends it and
     Collaborator shows it, so the owner sees exactly what the agent is told (§6)."""
@@ -420,14 +426,14 @@ def render_work_block(ctx: dict | None) -> str:
         return ""
     lines = ["", BLOCK_HEADING]
     for work in ctx["works"]:
-        line = f"- {work['name']} ({work['kind']}, {work['role']}, {work['status']}): {work['summary']}"
+        line = f"- {work['name']} ({work['kind']}, {work['role']}, {work['status']}): {_one_line(work['summary'])}"
         if work.get("relations"):
             line += f"; {'; '.join(work['relations'])}"
         if work.get("serves"):
             line += f"; serves {', '.join(work['serves'])}"
         if work.get("success"):
             # The owner's own measure. A plan for this work is judged by it, not by industry metrics.
-            line += f". SUCCESS, in the user's words (measure against this, not generic metrics): {work['success']}"
+            line += f". SUCCESS, in the user's words (measure against this, not generic metrics): {_one_line(work['success'])}"
         if work.get("search"):
             # Measured by the Resolution Check (RESOLUTION_CHECK_SPEC §4): where AI search work is needed.
             line += f". {work['search']}"

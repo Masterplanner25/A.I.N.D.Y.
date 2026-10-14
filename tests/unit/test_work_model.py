@@ -215,3 +215,13 @@ def test_success_is_the_owners_words_kept_with_history_and_told_to_the_planner(d
     assert f"SUCCESS, in the user's words (measure against this, not generic metrics): {words}" in block
     assert ws.success_definitions(user_id=USER, db=db_session, work="ai search optimization") == [
         {"work": "AI Search Optimization", "success": words}]
+
+
+def test_a_summary_written_with_line_breaks_stays_one_line_of_the_block(db_session):
+    """Aindy-runtime's summary spanned several lines of the planner block (2026-10-13)."""
+    _work(db_session, "Aindy-runtime", summary="A self-hosted execution substrate.\n\nDurable runs,\n  memory.",
+          success_criteria="Adopted\nby others.")
+    block = ws.work_context(user_id=USER, db=db_session)["block"]
+    [line] = [line for line in block.splitlines() if "Aindy-runtime" in line]
+    assert "A self-hosted execution substrate. Durable runs, memory." in line
+    assert line.endswith("Adopted by others.")

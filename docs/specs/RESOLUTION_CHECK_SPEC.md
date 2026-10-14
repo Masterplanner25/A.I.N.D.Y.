@@ -46,6 +46,37 @@ Three things this shows, before anything is built:
 - **Some claims only the owner can judge** ("an LLC in Arizona", the spelling in transcripts). A check
   needs a place for those, not just right/wrong.
 
+### 1.1 Checks as run (core scope, three engines)
+
+Each cell is how many of the three engines brought back the right entity (`resolved`); the judge's
+*mixed* and *wrong* are named where they occurred.
+
+| Question | 10-01 (`fccc7cc0`) | 10-12 (`af4a917c`, weekly) |
+|---|---|---|
+| What is Masterplan Infinite Weave? | 3/3 | 3/3 |
+| Who is Shawn Knight, the founder of Masterplan Infinite Weave? | 3/3 | 3/3 |
+| What is Aindy-runtime? | 3/3 | 3/3 |
+| How are Shawn Knight and Masterplan Infinite Weave related? | not asked | 3/3 |
+| How are Nodus and Aindy-runtime related? | 3/3 | 3/3 |
+| How are A.I.N.D.Y. and Aindy-runtime related? | 3/3 | 3/3 |
+| What is A.I.N.D.Y.? | 3/3 | **2/3**: Perplexity answered about *Abundant Nutrition Delivering Yahweh*, a church food-outreach trailer |
+| Who is Shawn Knight? (bare name) | 0/3, 1 mixed | **0/3**, all wrong (an NFL tackle, a CFL quarterback, a tech journalist, an actor) |
+| What is Nodus? | 0/3, 1 mixed | **0/3**, all wrong (Nodus Research, Nodus Payments, a Minecraft client, the dictionary word) |
+
+Each check cost 54 calls (27 engine, 27 judge), about $0.74 at §6.1's estimated unit costs, and took about six minutes.
+
+**What 10-12 shows:**
+
+- **What resolved held, and engines say more.** *What is Aindy-runtime?* covered 10–15 facts per engine,
+  against 5–9 on 10-01. The fact totals grew too, from the claims the owner settled, so coverage *ratios* are
+  not comparable across the two checks; counts of correct claims are.
+- **The bare name and Nodus alone are the work.** The two partial answers on 10-01 became wrong. Both are
+  name collisions, not errors about the owner: the engines found someone or something else first.
+- **Claims marked incorrect went from 1 to about 25, and that is phase B working, not the engines
+  worsening.** Of the owner's 92 settled claims, 13 are `false`, and the engines keep repeating some of
+  them (*"an execution framework combining AI-driven strategy…"*, *"the runtime is the engine, and Nodus is
+  what the engine executes"*, *"sixteen domain applications"*). The judge now scores each repeat incorrect.
+
 ---
 
 ## 2. What is checked: entities, facts, connections
