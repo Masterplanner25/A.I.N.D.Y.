@@ -184,6 +184,11 @@ services:
       # container crash-loops at `aindy-runtime bootstrap-schema` before it ever serves.
       # It needs a parseable boolean default, never "".
       AINDY_NEXT_ACTION_ACTING: "${AINDY_NEXT_ACTION_ACTING:-false}"
+      # Soak register row 4 (owner, 2026-10-14): a run cut off by a restart is re-driven at the next
+      # boot instead of staying `executing`. Typed bool like the line above, so never "". Agent
+      # runs continue only because apps/agent/bootstrap.py declares them safe, and only while
+      # AINDY_SEARCH_OUTREACH_SEND is off. RUNTIME_2_27_0_UPGRADE.md §6.
+      AINDY_DURABLE_CONTINUATION: "${AINDY_DURABLE_CONTINUATION:-false}"
       AINDY_SEARCH_EMBEDDING_RANKING: "${AINDY_SEARCH_EMBEDDING_RANKING:-}"
       AINDY_SEARCH_OUTCOME_WEIGHTING: "${AINDY_SEARCH_OUTCOME_WEIGHTING:-}"
       # WARNING: AINDY_SEARCH_OUTREACH_SEND sends REAL outreach — since 2026-09-16 the email
