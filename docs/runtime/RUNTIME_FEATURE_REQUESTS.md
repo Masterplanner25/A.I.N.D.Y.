@@ -20,6 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
+> **Open as of 2026-10-14:** **FR-53 (P2: `mcp-server` loads no app plugins; a payload `user_id` is never checked against the caller)**, FR-14 recurrence half, FR-6 items 2–3.
+>
 > **Open as of 2026-10-07:** **FR-52 (P1: the 2.25.0 compatibility check runs on every request, ~3 s each)**, FR-51 (pymongo / python-jose advisories under exact pins), FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-10-06:** FR-51 (pymongo / python-jose advisories under exact pins), FR-14 recurrence half, FR-6 items 2–3.
@@ -43,6 +45,40 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-53 — `aindy-runtime mcp-server` never loads the app's plugins, and an exposed syscall that reads `user_id` from its payload serves whoever the outside AI names 🔴 OPEN (P2)
+
+**apps-monolith ref:** found 2026-10-14 connecting Claude Code to A.I.N.D.Y. over MCP (owner: other
+AIs are access to the Infinity Algorithm's state). Worked around app-side in `scripts/mcp_server.py`.
+
+### (a) The app's syscalls are never registered in the MCP server's process
+
+`_run_mcp_server` (`runtime_only.py`) builds the registry from `SYSCALL_REGISTRY` without calling
+`load_plugins()`, so the process holds the runtime's 23 syscalls and none of the app's 79. An app
+syscall named in `AINDY_MCP_SERVER_TOOLS` is logged `allowlisted syscall … is not registered;
+skipping`. Nothing an app owns can be served. **Ask:** load the selected plugin manifest before
+`build_registry` (the worker's `main()` already does), with stdout redirected while plugins load,
+since stdio is the MCP channel.
+
+### (b) The dispatcher never checks a payload `user_id` against the caller
+
+`dispatch_syscall` requires the caller to have an identity (Step 2b) but does not compare it with a
+`user_id` key in the payload. Handlers written for in-process callers read the payload's (ours:
+`sys.v1.masterplan.get_objective_attainment`, `get_active`, others). Over MCP the payload is written by
+the outside AI, so allowlisting such a syscall lets it read any user it names. With multi-tenant SSE
+that is cross-tenant. **Ask:** in the MCP handler (`_make_handler`), or in the dispatcher for calls
+with no trusted caller, overwrite or refuse a payload `user_id` that differs from the resolved
+identity. Until then we expose only syscalls that read `ctx.user_id`
+(`test_mcp_read_access.py` checks the source).
+
+### (c) Smaller, for the record
+
+- The MCP server grants a syscall exactly the capability its name names (`sys.v1.work.context` →
+  `work.context`). A syscall registered under a broader capability (`masterplan.read`) is refused:
+  `requires capability 'masterplan.read'; caller has ['work.context']`. That may be intended. If so,
+  `register_syscall`'s docstring should say so.
+- Tools are exposed as `nodus_<domain>_<action>`, which reads as Nodus's surface rather than A.I.N.D.Y.'s.
+  Naming this would help an outside AI choose between servers.
+
 ## FR-52 — DEBT-COMPAT-1's consumer check runs on every `load_plugins()` call, and the registry calls that on every request: ~3 s added to each one ✅ SHIPPED in 2.27.0 (#814) — the check runs once per plugin module set; measured live 2026-10-10: `GET /apps/scores/me` p50 715 ms (5,081 on 2.26.0, 820 with the check stubbed)
 
 **apps-monolith ref:** found 2026-10-07 at soak row 2's readout, whose latency check failed.

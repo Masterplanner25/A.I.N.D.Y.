@@ -602,12 +602,96 @@ def _handle_content_draft(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_work_context(payload: dict, ctx: SyscallContext) -> dict:
+    """sys.v1.work.context — the owner's Works as the planner is told them (relations, what each
+    serves, success in their words, how AI search resolves it).
+
+    For an outside AI over MCP (owner, 2026-10-14: other AIs are access to the algorithm's state).
+    Acts as the CALLER's identity only: the dispatcher never compares a payload `user_id` with the
+    caller, so this reads none."""
+    from apps.masterplan.services.work_service import work_context
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        ctx_out = work_context(user_id=ctx.user_id, db=db)
+        if not ctx_out:
+            return {"block": "", "works": []}
+        return {"block": ctx_out["block"], "works": [w["name"] for w in ctx_out["works"]]}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_work_facts(payload: dict, ctx: SyscallContext) -> dict:
+    """sys.v1.work.facts — everything the owner stated or confirmed about one Work, the claims they
+    denied, and what AI search engines last said when asked about it: what a draft about the Work
+    is given (#461, #462). Caller's identity only, like sys.v1.work.context."""
+    from apps.masterplan.services.draft_service import _engine_answers, _norm, work_facts
+    from apps.masterplan.work_model import Work
+
+    name = str(payload.get("work") or "").strip()
+    if not name:
+        raise ValueError("sys.v1.work.facts requires 'work' (the Work's name)")
+    db, owns_session = _session_from_context(ctx)
+    try:
+        uid = _as_uuid(ctx.user_id)
+        works = db.query(Work).filter(Work.user_id == uid).all()
+        match = next((w for w in works if _norm(w.name) == _norm(name)), None)
+        if match is None:
+            return {"found": False, "work": name, "facts": "", "search": "",
+                    "works": sorted(w.name for w in works)}
+        return {"found": True, "work": match.name, "facts": work_facts(db, uid, match.id),
+                "search": _engine_answers(db, uid, match.id), "works": sorted(w.name for w in works)}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_masterplan_syscall_handlers() -> None:
     """Register all masterplan domain syscall handlers.
 
     Called once at application startup from apps/bootstrap.py.
     Safe to call multiple times — idempotent.
     """
+    register_syscall(
+        name="sys.v1.work.context",
+        handler=_handle_work_context,
+        # The MCP server grants a syscall exactly the capability its name names (as
+        # sys.v1.memory.read → memory.read), so this must match the name, not masterplan.read.
+        capability="work.context",
+        description=(
+            "The user's Works (projects, series, practices) as they stated or confirmed them: how "
+            "they relate, which objectives each serves, success in the user's words, and how AI "
+            "search currently resolves each. Read-only."
+        ),
+        input_schema={"required": [], "properties": {}},
+        output_schema={
+            "required": ["block", "works"],
+            "properties": {"block": {"type": "string"}, "works": {"type": "array"}},
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.work.facts",
+        handler=_handle_work_facts,
+        # The MCP server grants a syscall exactly the capability its name names (as
+        # sys.v1.memory.read → memory.read), so this must match the name, not masterplan.read.
+        capability="work.facts",
+        description=(
+            "Everything the user stated or confirmed about one Work (summary, connections, links, "
+            "confirmed claims), the claims they DENIED (never repeat these), and what AI search "
+            "engines last said when asked about it. Read-only."
+        ),
+        input_schema={"required": ["work"], "properties": {"work": {"type": "string"}}},
+        output_schema={
+            "required": ["found", "work", "facts", "search", "works"],
+            "properties": {
+                "found": {"type": "bool"}, "work": {"type": "string"}, "facts": {"type": "string"},
+                "search": {"type": "string"}, "works": {"type": "array"},
+            },
+        },
+        stable=False,
+    )
     register_syscall(
         name="sys.v1.content.draft",
         handler=_handle_content_draft,

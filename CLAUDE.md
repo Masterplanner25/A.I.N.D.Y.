@@ -142,7 +142,8 @@ def register() -> None:
     # 23 of them the runtime's own (import `AINDY.kernel.syscall_registry` alone to see that
     # number), so 74 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
     # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`; +1 on
-    # 09-28: `sys.v1.market.propose`; +2 on 09-30: `sys.v1.leadgen.search_segment`, `sys.v1.content.draft`, so 77 of 100). The previous
+    # 09-28: `sys.v1.market.propose`; +2 on 09-30: `sys.v1.leadgen.search_segment`, `sys.v1.content.draft`, so 77 of 100;
+    # +2 on 10-14: `sys.v1.work.context`, `sys.v1.work.facts`, the MCP read access, so 79 of 102 — re-derived). The previous
     # figure of 90 was stale, which is the same failure the runtime-floor lines above had —
     # a number nobody re-derives is a number that drifts. To re-derive: boot the app profile,
     # then `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())`.

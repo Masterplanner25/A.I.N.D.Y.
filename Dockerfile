@@ -66,7 +66,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 # (script_location = alembic/alembic).
 COPY aindy_plugins.json alembic.ini ./
 COPY alembic ./alembic
-COPY scripts/ensure_pgvector.py scripts/deploy_bootstrap.py ./scripts/
+COPY scripts/ensure_pgvector.py scripts/deploy_bootstrap.py scripts/mcp_server.py ./scripts/
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
