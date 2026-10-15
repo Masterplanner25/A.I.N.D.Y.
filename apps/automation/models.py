@@ -9,6 +9,7 @@ from AINDY.db.database import Base
 from apps.automation.automation_log import AutomationLog
 from apps.automation.bridge_user_event import BridgeUserEvent
 from apps.automation.infinity_loop import LoopAdjustment, UserFeedback
+from apps.automation.release_handoff import ReleaseHandoff
 
 
 class LearningRecordDB(Base):
@@ -72,6 +73,7 @@ __all__ = [
     "LearningRecordDB",
     "LearningThresholdDB",
     "LoopAdjustment",
+    "ReleaseHandoff",
     "UserFeedback",
     "WatcherSignal",
 ]

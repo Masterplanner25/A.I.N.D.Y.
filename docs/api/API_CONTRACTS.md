@@ -101,6 +101,7 @@ Mutable domain features. All paths below are prefixed with `/apps`.
 - `apps/masterplan/routes/resolution_router.py` (router prefix `/resolution`) **[JWT auth required]** → `/apps/resolution`, `/apps/resolution/runs`, etc. The resolution check (`RESOLUTION_CHECK_SPEC.md`); registered by `apps.masterplan.bootstrap`.
 - `apps/masterplan/routes/genesis_router.py` (router prefix `/genesis`) **[JWT auth required]** ? `/apps/genesis/session`, `/apps/genesis/message`, etc.
 - `apps/automation/routes/automation_router.py` (router prefix `/automation`) **[JWT auth required]** ? `/apps/automation/logs`, etc.
+- `apps/automation/routes/release_router.py` (router prefix `/releases`) **[JWT auth required]** → `/apps/releases`. The release handoff (`RELEASE_HANDOFF_SPEC.md`); registered by `apps.automation.bootstrap`.
 - `AINDY/routes/memory_router.py` (router prefix `/memory`) **[JWT auth required]** ? `/apps/memory/nodes`, `/apps/memory/recall`, etc.
 - `apps/memory/routes/memory_metrics_router.py` (router prefix `/memory`) **[JWT auth required]** → `/apps/memory/metrics`, etc. Registered by `apps.memory.bootstrap`.
 - `apps/memory/routes/memory_trace_router.py` (router prefix `/memory`) **[JWT auth required]** → `/apps/memory/traces`, etc. Registered by `apps.memory.bootstrap`.
