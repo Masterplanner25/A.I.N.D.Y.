@@ -207,7 +207,11 @@ Pieces run 5–11k characters (~1.8 MB in all); embedding them is about $0.05, o
   chunk: source `published_work`, `node_type` insight, tags `published_work`, the platform,
   `drop:<id>`, `series:<name>` and `work:<name>` (through `masterplan.works_by_container`). Written
   again only when the text's hash changes. Embeddings follow in the background (nodes are saved
-  `embedding_pending`).
+  `embedding_pending`). **Recall skips a pending node**, so a piece just written or rewritten
+  (its edit, a cross-post collapse renaming its header) cannot be found by recall until its chunks are
+  embedded again. Each write queues an embedding job, usually done in seconds; anything missed is
+  picked up by the runtime's sweep, every minute, 25 nodes at a time. A piece missing from a run's
+  recall right after an edit is this, not a lost piece: `embedding_pending` on its `drop:<id>` nodes says so.
 - **Cross-posts, remembered once** (added 2026-10-10): 30 of 199 stored pieces ran on two platforms
   (DEV with Substack 22, with Medium 8), and recall returned both copies. The copies' text differs per
   platform, so they are matched by title (RippleTrace's `_normalize`). Only the earliest copy is
