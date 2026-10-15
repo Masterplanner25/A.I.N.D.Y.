@@ -1,8 +1,8 @@
 ---
 title: "Release handoff — A.I.N.D.Y. carries a release to the end after you start it"
-last_verified: "2026-10-14"
+last_verified: "2026-10-15"
 api_version: "1.0"
-status: phase-1-built
+status: current
 owner: "app-team"
 ---
 
