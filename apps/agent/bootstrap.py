@@ -8,6 +8,7 @@ APP_DEPENDS_ON: list[str] = []
 
 def register() -> None:
     _select_execution_backend()
+    _declare_continuation_safety()
     _register_models()
     _register_routers()
     _register_route_prefixes()
@@ -17,6 +18,37 @@ def register() -> None:
     _register_agent_runtime_extensions()
     _register_trigger_evaluators()
     _register_health_check()
+
+
+#: The agent type every run of ours has (49 of 49 on 2026-10-14).
+CONTINUATION_AGENT_TYPE = "default"
+#: Read the way `apps/search/services/lead_execution_service.py` reads it (not imported: no
+#: cross-domain dependency for one flag).
+_SEND_ENABLED_VALUES = {"1", "true", "yes", "on"}
+
+
+def _declare_continuation_safety() -> None:
+    """Soak register row 4 (`AINDY_DURABLE_CONTINUATION`, owner 2026-10-14).
+
+    The flag alone continues nothing: the runtime re-drives a crashed agent run only for an agent
+    type the app declares continuation-safe. A continued run replays the steps it recorded and
+    re-runs the one in flight at the crash, so "safe" means repeating that one step does no outside
+    harm. For our tools the worst repeat is a second internal row (a task, a draft, a memory
+    note): visible and deletable. The exception is `leadgen.act` with `AINDY_SEARCH_OUTREACH_SEND`
+    on, which really emails; its tool path has no exactly-once gate in the worker (DUR-2b). So the
+    declaration is made only while sending is off. A no-op unless the flag is on."""
+    import logging
+    import os
+
+    if os.getenv("AINDY_SEARCH_OUTREACH_SEND", "").strip().lower() in _SEND_ENABLED_VALUES:
+        logging.getLogger(__name__).warning(
+            "[agent] crash continuation NOT declared safe: AINDY_SEARCH_OUTREACH_SEND is on, and a "
+            "continued run could send an email twice"
+        )
+        return
+    from AINDY.core.agent_continuation import mark_agent_type_continuation_safe
+
+    mark_agent_type_continuation_safe(CONTINUATION_AGENT_TYPE)
 
 
 def _select_execution_backend() -> None:

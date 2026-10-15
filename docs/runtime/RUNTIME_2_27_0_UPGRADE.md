@@ -106,3 +106,61 @@ of uptime. Low volume, no user effect; reported here as an observation, not file
 
 - `AINDY_MEMORY_RECALL_OWN_SESSION` will default ON in a later release (DEC-083, from our row 1
   readout). We already run it on; that release changes nothing here.
+
+## 7. Soak register: rows 3 and 4 (owner, 2026-10-14)
+
+Rows 1 and 2 passed (§6; the 2.25.0 and 2.26.0 docs). The owner closed row 3 and started row 4.
+
+### Row 3, `AINDY_DELEGATION_PRIVATE_MEMORY`: closed as unexercised
+
+The presence signal is a delegated (child) run's memory: `memory_nodes.owner_run_id` going from 0 to
+more. Our workload never delegates, so the flag would have nothing to act on:
+
+| Read 2026-10-15T01:15Z | Value |
+|---|---|
+| `agent_runs` in all (since 2026-08-05) | 49 |
+| with `parent_run_id` set | **0** |
+| with `spawned_by_agent_id` or `coordination_role` set | **0** |
+
+Turning it on would make a soak that proves nothing (register rule: presence, not absence). It is not
+turned on. It reopens if a tool or agent of ours ever delegates.
+
+### Row 4, `AINDY_DURABLE_CONTINUATION`: started 2026-10-15T01:20Z
+
+**The flag alone continues nothing for agent runs.** `continue_crashed_agent_runs` re-drives only agent
+types the app declares continuation-safe (or every type, under `_ALL`, which stays off). The register
+row does not say so. `apps/agent/bootstrap.py::_declare_continuation_safety` now declares ours
+(`default`, 49 of 49 runs).
+
+**Why it is safe to declare.** A continued run replays the steps it recorded and re-runs the one in
+flight at the crash (RECOVERY-GRANULARITY-1). For our tools the worst repeat is a second internal row
+(a task, a draft, a memory note), which is visible and deletable. The exception is `leadgen.act` with
+`AINDY_SEARCH_OUTREACH_SEND` on, which really emails, and the worker's tool path has no exactly-once gate
+(DUR-2b; none of our tools declares `execution_guarantee="EXACTLY_ONCE"`). **So the declaration is made
+only while sending is off**, and with it on, boot logs a WARNING and declares nothing. Sending is off
+on this stack.
+
+**Wiring.** `docker-compose.prod.yml` passes `${AINDY_DURABLE_CONTINUATION:-false}`. It is a typed bool,
+so it is never empty, the same trap as `AINDY_NEXT_ACTION_ACTING`. `.env` sets `true`. Verified in the
+container: the env var is `true`, `settings.AINDY_DURABLE_CONTINUATION` is True, `_ALL` is False, and
+`is_agent_type_continuation_safe("default")` is True.
+
+**Baseline, read just before the flip (2026-10-15T01:15Z):**
+
+| Signal | Value |
+|---|---|
+| Absence: `agent_runs` `executing` with `started_at` over 1 h ago | **0** (and 0 ever: 36 completed, 11 failed, 2 rejected) |
+| `[AgentContinuation]` lines in the api log | 0 |
+| api container restarts (`RestartCount`) | 0 |
+| postgres `terminating any other active server processes` | 0 |
+
+**What ends it.** The presence signal is one real crash mid-run, taken when it happens and never
+manufactured. A rebuild or restart while a run is executing counts. The api log then shows
+`[AgentContinuation] re-driving crashed agent run=… from segment N`, the run's `agent_steps` continue
+after the cut, and the run reaches `completed`. After every restart in the window, re-read the
+absence query (it must stay 0). **Failure** is a continued run that repeated an effect. Here that
+means a duplicate task, draft or memory note from the run's in-flight step. Report the run either
+way.
+
+Our runs take 20 to 45 seconds, so a restart that lands mid-run is rare. The window is open until one
+happens, not 7 days.
