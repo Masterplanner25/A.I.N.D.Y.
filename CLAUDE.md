@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime>=2.27.0,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime[mcp]>=2.27.0,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -135,7 +135,7 @@ def register() -> None:
     #   from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
     # `platform_layer.registry` exports a `register_syscall` too, and it is the wrong one —
     # it writes into a dict the SyscallDispatcher never reads. Every one of this repo's
-    # 77 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
+    # 79 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
     # this block used to say otherwise.
     #
     # Measured 2026-09-16 rather than carried forward: 97 registered at app-profile boot,
@@ -257,13 +257,17 @@ merge rules): `docs/operations/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime>=2.27.0,<3.0    # pyproject.toml — the COMPATIBILITY range
+aindy-runtime[mcp]>=2.27.0,<3.0    # pyproject.toml — the COMPATIBILITY range
 ```
 ```
 aindy-runtime==2.27.0         # constraints.txt — the BUILD pin
 ```
 
 The upper bound is required. Never widen to an unbounded range.
+
+**`[mcp]` (since #468)** brings `nodus-mcp` and the MCP SDK for `scripts/mcp_server.py`. The runtime
+owns their bounds; the extra inherits them, so there is nothing of ours to pin. The contract test
+reads the specifier, not the extras, so the extra does not change the pin rule below.
 
 **Two files, two jobs, and they must move together.** The range says what this app is
 compatible with; the pin says what it is actually built and tested against. Builds install
@@ -289,7 +293,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime>=2.27.0,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime[mcp]>=2.27.0,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.
@@ -443,7 +447,7 @@ Use `disabled` (set in `pytest.integration.ini`), **not** `stub`. The `stub` bac
 every real boot (the runtime's own default is `agent_flow`). A plan is compiled to a native Nodus
 workflow and its tool steps run as the worker's `call_tool` host function → `execute_tool`,
 **in the warm-pool worker process** (`nodus_worker.py --serve`, a separate PID with its own
-import of the 16-app graph). Three consequences, each measured 2026-09-16 and filed:
+import of the 16-app graph). Four consequences, the first three measured 2026-09-16 and filed:
 
 - **A tool step's LLM usage is metered in the worker** and, since runtime 2.20.0 (**FR-35**,
   #712), rides the worker's reply back and is recorded in the api process — `/metrics`, the
@@ -461,6 +465,14 @@ import of the 16-app graph). Three consequences, each measured 2026-09-16 and fi
   section below. A guest execution's memory is bounded by `AINDY_NODUS_MAX_MEMORY_MB` (256,
   compose) inside the container's `mem_limit` (1536m); `test_compose_memory_bounds.py` keeps the
   three together — do not lower the cap without re-measuring `cgroup memory.peak` across a boot.
+- **A run cut off by a restart is resumed at the next boot** (`AINDY_DURABLE_CONTINUATION`, ON since
+  2026-10-15 as soak register row 4; `RUNTIME_2_27_0_UPGRADE.md` §7). **The flag alone resumes no agent
+  run**: the runtime continues only agent types the app declares safe, and
+  `apps/agent/bootstrap.py::_declare_continuation_safety` declares ours (`default`) **only while
+  `AINDY_SEARCH_OUTREACH_SEND` is off.** A resumed run re-runs the step in flight at the cut, and
+  `leadgen.act` with sending on really emails, with no exactly-once gate in the worker. **After every
+  api restart:** `docker logs <api> | grep AgentContinuation`, and stranded `executing` runs must be 0.
+  A duplicate task or draft from a resumed run is the soak's failure signal; report the run.
 
 ### ARM config — per-user scoping
 
@@ -491,6 +503,51 @@ models: with ARM's request shape they spend the whole `max_tokens` budget thinki
   `/src`) or you audit the previous build.
 - The stack must be up with `--profile full`; if `/health` is 500 and `/api/version` is 200,
   that is redis missing, not the code (Commands, above).
+
+### Another AI reading A.I.N.D.Y. — MCP (since #468)
+
+Owner, 2026-10-14 (#467): **the Infinity Algorithm is the product, and other AIs, repos and outside
+systems are *access* to its state, never a second product.** Judge that work by the same rule:
+does it feed the algorithm? Persist outcomes and references, not transcripts.
+
+- **Claude Code is connected** as MCP server `aindy` (`claude mcp add --scope local`, so it lives in
+  the user's `~/.claude.json`, not the repo). It reads `work_context`, `work_facts {work}` and the five
+  memory reads **as the owner, read-only**, through
+  `docker exec -i -e AINDY_MCP_SERVER_USER_ID=<uid> <api> python /app/scripts/mcp_server.py`.
+  **Use these for the owner's Work facts instead of asking for a paste.** The api container must be up.
+- **Why a launcher and not `aindy-runtime mcp-server`:** the runtime's command never loads app plugins,
+  so none of our syscalls exist in its process (FR-53a). The launcher loads them with stdout redirected,
+  because stdout is the MCP channel, then calls the runtime's `serve_stdio()`. It refuses
+  `AINDY_MCP_SERVER_ALLOW_WRITES`.
+- **Expose only syscalls that read `ctx.user_id`.** The dispatcher never compares a payload `user_id`
+  with the caller (FR-53b), and several older syscalls of ours read one (`get_objective_attainment`,
+  `masterplan.get_active` among them). Over MCP the outside AI writes the payload.
+  `test_mcp_read_access.py` reads every exposed handler's source.
+- **Over MCP a syscall is granted exactly the capability its name names**: `sys.v1.work.context` gets
+  `work.context`. One registered under `masterplan.read` is refused (`caller has ['work.context']`).
+- **To probe it**, spawn the launcher from an `mcp` SDK client inside the container
+  (`stdio_client(StdioServerParameters(command="python", args=["/app/scripts/mcp_server.py"]))`). In
+  mcp 2.x the result field is `is_error`, not `isError`. A new MCP server reaches a Claude Code session
+  only at session start.
+- **Next:** the release handoff (`docs/specs/RELEASE_HANDOFF_SPEC.md`). Its MCP handoff tool is the
+  first write tool here, and it only *records* a handoff: the api's watcher does the work, so no wait is
+  ever registered outside the api (FR-44).
+
+### `content.draft` — what the drafter is given, and the model
+
+A draft about a Work (`work=` set) gets four things from `draft_service.write_draft`: the owner's
+facts (`work_facts`: summary, connections, presence, confirmed claims), a **NEVER SAY** list (claims the
+owner denied), and **what AI search engines said when asked by name**
+(`resolution_review.engine_answers`). It must also write a *Not to be confused with* section that
+describes each look-alike **only as the engines did** (#461 → #463). If a draft gets the Work wrong, check
+the owner's Work data before the code: "part of Aindy-runtime" in a draft came from the owner's own link,
+and that link is true (owner, 2026-10-14).
+
+**The model is `gpt-5.5`** (`AINDY_DRAFT_MODEL`; `gpt-4o` rolls back). gpt-4o skipped the instructions
+it was given. **gpt-5.x refuses `max_tokens` and any temperature but 1**, so `_sampling(model)` gives a
+reasoning model `max_completion_tokens` (16,000) and `reasoning_effort` (`low`,
+`AINDY_DRAFT_REASONING_EFFORT`). A draft takes about 25–50 s, inside the 120 s step budget. Probe a model
+with a two-token call before switching to it; `models.list()` says what the key can use.
 
 ---
 
@@ -561,8 +618,12 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0** |
-| Latest runtime adoption record | `docs/runtime/RUNTIME_2_27_0_UPGRADE.md` — one per release; **2.25.0 §7 / FR-52 (every request ~3 s slower, 2.25.0–2.26.0) is fixed in 2.27.0: scores p50 715 ms** (2.22.0's is the last with a schema step); the 2.20.0 doc's §6.2 is the exit-3 reconcile, proven once. **2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — it exits 0 and stamps; check the column, not the exit code** |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0**; FR-51 and FR-52 shipped in 2.27.0; **FR-53 (MCP: `mcp-server` loads no app plugins; a payload `user_id` is never checked against the caller) open since 2026-10-14** |
+| Latest runtime adoption record | `docs/runtime/RUNTIME_2_27_0_UPGRADE.md` — one per release; **2.25.0 §7 / FR-52 (every request ~3 s slower, 2.25.0–2.26.0) is fixed in 2.27.0: scores p50 715 ms** (2.22.0's is the last with a schema step); the 2.20.0 doc's §6.2 is the exit-3 reconcile, proven once. **2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — it exits 0 and stamps; check the column, not the exit code**. **2.27.0's §7: soak rows 3 (closed, unexercised) and 4 (durable continuation, ON)** |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
+| Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
+| Resolution Check (does AI search resolve the owner's entities) | `docs/specs/RESOLUTION_CHECK_SPEC.md`: phases A–C built; `listed` is a verdict (§7.4); the score stays unwired (decision 5) |
+| Release handoff (A.I.N.D.Y. carries a runtime release past the approval gate) | `docs/specs/RELEASE_HANDOFF_SPEC.md`: scoped 2026-10-14, not built; phase 1 waits on §8 decisions 1–2 |
+| MCP launcher (another AI reads A.I.N.D.Y.) | `scripts/mcp_server.py`; guarded by `tests/unit/test_mcp_read_access.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |
