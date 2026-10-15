@@ -2,13 +2,17 @@
 title: "Release handoff — A.I.N.D.Y. carries a release to the end after you start it"
 last_verified: "2026-10-14"
 api_version: "1.0"
-status: draft
+status: phase-1-built
 owner: "app-team"
 ---
 
 # Release handoff — A.I.N.D.Y. carries a release to the end after you start it
 
-**Status:** SCOPED 2026-10-14. Nothing is built. §8 lists the owner's decisions, and phase 1 waits on 1 and 2.
+**Status:** SCOPED 2026-10-14. **Phase 1 BUILT 2026-10-14** (§7.1): decisions 1 and 2 taken that day (§8).
+Proven against the recorded 2.27.0 responses, then **live on 2026-10-15** on the test account: the api's
+scheduler walked the finished 2.27.0 run to `done` in one tick (approver Masterplanner25, gate wait 634 s),
+completed the release task, wrote the note, created the adoption task and delivered the email through Gmail.
+The first real use (2.28.0, with a live gate) is still owed.
 
 **Where it comes from.** The owner's product review on 2026-10-14 named this as the first real test of
 *persistent execution*. The use case was the owner's own: *"hand a release off to A.I.N.D.Y.,
@@ -128,7 +132,7 @@ an agent run for ten minutes.
 | Record | Feeds |
 |---|---|
 | A task, *Release aindy-runtime X*, created at handoff, completed at `done` (`time_spent` = handoff to done, in seconds) | `execution_speed` (tasks), the plan's progress if it sits on a strategy |
-| On failure the task stays open, with the failing job in its notes | the support loop sees work that did not finish |
+| On failure the task stays open. **Tasks have no notes field**, so the failing job, its conclusion and its link live on the handoff record (`failure`, shown on the card) and in the failure email | the support loop sees work that did not finish |
 | A memory note at `done`: version, the stage times, who approved, the gate wait, the release URL. **A note of the outcome, not a log.** | recall: the next plan or adoption can find it |
 | `release.<stage>` system events | the runtime's ledger, the Infinity loop's event counts |
 | A new task, *Adopt aindy-runtime X in A.I.N.D.Y.*, linking `docs/upgrades/APP_HANDOFF_vX.md` | the next piece of work, where the owner will look |
@@ -155,6 +159,39 @@ approves on GitHub**, and A.I.N.D.Y. sees it within a minute.
 | **3. Approve from A.I.N.D.Y.** | an Approve or Reject button, and an MCP tool, that answer GitHub's pending deployment (`POST /actions/runs/{id}/pending_deployments`) as the owner | decision 3, a token that can approve |
 | **4. Other repositories** | Nodus packages, aindy-sdk, ui-kit, once one has a gate | decision 4 |
 
+### 7.1 Phase 1 as built (2026-10-14)
+
+| Piece | Where |
+|---|---|
+| Table | `release_handoffs`, migration `rh1handoff0001` (adds `notified`, `run_url`, `task_name`, `adoption_task_id`, `memory_node_id`, `finished_at` to §4's list) |
+| GitHub client | `apps/automation/services/github_actions.py`: `find_run` (the tag is the run's `head_branch`), `get_run`, `jobs`, `pending_deployments`, `approvals` |
+| Watcher | `release_handoff_service.release_handoff_watch`, scheduled job `release_handoff_watch`, every minute; `observe()` turns the four responses into stages and is pure |
+| Routes | `GET /apps/releases`, `POST /apps/releases` (`docs/api/API_REFERENCE.md`, Releases) |
+| Card | `client/src/components/app/ReleasePanel.jsx`, on Collaborator's empty screen above Recent runs; the handoff form is folded behind "Hand off a release" |
+| Settings | `AINDY_GITHUB_TOKEN`, `AINDY_RELEASE_NOTIFY_TO` (default: the account's email), `AINDY_RELEASE_REPOS`, `AINDY_RELEASE_NO_RUN_MINUTES` (30), `AINDY_RELEASE_STALL_MINUTES` (180) |
+| Tests | `tests/unit/test_release_handoff.py` (17), `client/src/test/release-panel.test.jsx` (4) |
+
+Where the build settled what the design left open:
+
+- **The gate is read from two facts.** `pending_deployments` naming `production` while the run waits, or
+  `Publish to PyPI` having started once it has passed. Its time is TestPyPI's `completed_at`, so the gate
+  wait is computed from the run's own job times (634 s on 2.27.0), not from when a tick happened to look.
+- **The gate notification goes out only while the run is still waiting there.** A tag handed off after
+  its gate, or a run that passes the gate between two ticks, has nothing to ask of the owner, so it gets
+  only the `done` (or `failed`) email.
+- **A notification is recorded whether or not it was delivered** (`notified[stage]`, with the error), and
+  is not retried every minute.
+- **A tag handed off again after a failure reuses its open release task**, so a retried release does not
+  leave duplicate tasks.
+- **A released tag cannot be handed off again** (409). Found live: a second handoff of the done 2.27.0
+  wrote a second adoption task.
+- **No token, no handoff.** `POST` answers 503 without `AINDY_GITHUB_TOKEN`; a handoff that no tick could
+  read would sit at `requested` forever.
+- **The stall limit applies at the gate too.** A run left unapproved for 3 hours stops being followed, and
+  the owner is told; hand the tag off again to resume.
+- **The release task is completed through `sys.v1.task.complete_full`**, the same path as the agent's
+  `task.complete`, so the Infinity re-score runs.
+
 **Proof before a real release.** Point the watcher at the finished 2.27.0 run (38025672838). It must
 walk `running → at_gate → approved → published → done` from the run's own job times, name the
 approver, compute the 10 min 34 s gate wait, and write the task and the note. That is a test against
@@ -172,10 +209,11 @@ recorded GitHub responses, and once against the live API, read-only. **Then the 
 
 ## 8. Open decisions — the owner's
 
-1. **Where notifications reach you.** Recommended: **real email**, SMTP settings in `.env` (for example a
+1. **Where notifications reach you.** **DECIDED 2026-10-14: real email**, with the card as well. Recommended: **real email**, SMTP settings in `.env` (for example a
    Gmail app password), with the Collaborator card as well. Alternative: Mailpit and the card only,
    which works only at the desk.
-2. **A GitHub token for A.I.N.D.Y.** Recommended: **fine-grained, aindy-runtime only, Actions: read**, in
+2. **A GitHub token for A.I.N.D.Y.** **DECIDED 2026-10-14: fine-grained, aindy-runtime only, Actions: read**, as
+   `AINDY_GITHUB_TOKEN` (compose lists it). Recommended: **fine-grained, aindy-runtime only, Actions: read**, in
    `.env` as `AINDY_GITHUB_TOKEN`, never in the repository. That is enough for phases 1 and 2 (runs,
    jobs, pending deployments, approvals).
 3. **Who approves.** Recommended: **GitHub only, to start** (phases 1 and 2). Phase 3 gives A.I.N.D.Y. the

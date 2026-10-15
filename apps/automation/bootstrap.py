@@ -47,6 +47,7 @@ def register() -> None:
     _register_response_adapters()
     _register_events()
     _register_jobs()
+    _register_scheduled_jobs()
     _register_async_jobs()
     _register_syscalls()
     _register_connectors()
@@ -78,7 +79,9 @@ def _register_models() -> None:
 def _register_router() -> None:
     from AINDY.platform_layer.registry import register_router
     from apps.automation.routes.automation_router import router as automation_router
+    from apps.automation.routes.release_router import router as release_router
     register_router(automation_router)
+    register_router(release_router)
 
 
 def _register_route_prefixes() -> None:
@@ -123,6 +126,24 @@ def _handle_job_log_written(context: dict) -> None:
 def _register_jobs() -> None:
     from AINDY.platform_layer.registry import register_job
     register_job("automation.execute", _automation_execute)
+
+
+def _register_scheduled_jobs() -> None:
+    from AINDY.platform_layer.registry import register_scheduled_job
+    from apps.automation.services.release_handoff_service import (
+        TICK_INTERVAL_MINUTES,
+        release_handoff_watch,
+    )
+
+    # RELEASE_HANDOFF_SPEC §4: follow each handed-off release run. Idle (no GitHub call) unless a
+    # handoff is open; four reads per open handoff per tick.
+    register_scheduled_job(
+        "release_handoff_watch",
+        release_handoff_watch,
+        name="Follow handed-off releases",
+        trigger="interval",
+        trigger_kwargs={"minutes": TICK_INTERVAL_MINUTES},
+    )
 
 
 def _register_async_jobs() -> None:

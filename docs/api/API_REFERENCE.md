@@ -2582,6 +2582,20 @@ One check, answer by answer
 
 **Response 200:** as `latest` above; 404 when not yours
 
+### Releases
+
+The release handoff (`RELEASE_HANDOFF_SPEC.md`, phase 1): the owner hands off a tagged release and A.I.N.D.Y. follows the tag's `publish.yml` run to the end. The scheduled `release_handoff_watch` reads GitHub once a minute (`AINDY_GITHUB_TOKEN`, Actions: read) and moves `stage` forward: `requested → running → at_gate → approved → published → done`, or `failed`. It emails the owner at `at_gate`, `done` and `failed`, once each. At `done` it completes the release task, writes an `outcome` memory note and creates the adoption task. Refusals are `{error: "release_refused", message}`.
+
+#### GET /apps/releases
+Your handoffs, newest first — `?active=true` for the ones still being followed, `?limit=` (default 10, max 50)
+
+**Response 200:** handoffs: [{id, repo, tag, version, run_id, run_url, stage, stage_at, history: [{stage, at, detail}], approved_by, approved_at, gate_wait_seconds, failure: {reason, job, conclusion, url} | null, notified: {<stage>: {success, route, error, at, subject}}, task_id, task_name, adoption_task_id, memory_node_id, created_at, finished_at}], repos
+
+#### POST /apps/releases
+Hand off a release — `{repo, tag}` (`repo` defaults to `Masterplanner25/aindy-runtime`; `AINDY_RELEASE_REPOS` lists the allowed ones)
+
+**Response 200:** the handoff (`stage: "requested"`), its release task created and started; 409 while the same tag is already handed off, or once it is released; 422 for a repository not allowed or a tag not like `v2.28.0`; 503 when `AINDY_GITHUB_TOKEN` is not set
+
 ### Works
 
 What the owner has made, how the works relate, and which plan objectives they serve (`WORK_MODEL_SPEC.md`). A Work holds intent (summary in the owner's words, role, lifecycle), never measurement. Nothing is inferred into it: proposals are derived on demand and written only when the owner confirms them. Refusals are `{error: "work_refused", message}`.

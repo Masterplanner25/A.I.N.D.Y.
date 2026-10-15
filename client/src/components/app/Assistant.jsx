@@ -15,6 +15,7 @@ import Genesis from "./Genesis";
 import WorkPanel from "./WorkPanel";
 import MarketPanel from "./MarketPanel";
 import StepResult from "./StepResult";
+import ReleasePanel from "./ReleasePanel";
 import { buildFindingsDigest, composeFollowUpGoal, splitGoal } from "../../utils/runFindings";
 
 // The user-facing face for the agent: goal -> plan -> approve -> execute -> result.
@@ -365,6 +366,7 @@ export default function Assistant() {
             {runParam && (
               <p className="mt-6 text-xs text-zinc-500 font-mono animate-pulse">Opening run…</p>
             )}
+            <ReleasePanel />
             {orderedRecent.length > 0 && (
               <div className="mt-8 space-y-2">
                 <p className="text-[10px] uppercase tracking-wider text-zinc-600">Recent runs</p>

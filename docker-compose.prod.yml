@@ -118,6 +118,16 @@ services:
       AINDY_SMTP_PASSWORD: "${AINDY_SMTP_PASSWORD:-}"
       AINDY_SMTP_FROM: "${AINDY_SMTP_FROM:-}"
       AINDY_SMTP_STARTTLS: "${AINDY_SMTP_STARTTLS:-true}"
+      # Release handoff (docs/specs/RELEASE_HANDOFF_SPEC.md). A fine-grained token, aindy-runtime
+      # only, Actions: read — the watcher reads runs, jobs, pending deployments and approvals and
+      # never writes. Unset, POST /apps/releases answers 503 and nothing is followed. The gate,
+      # done and failed notifications go out through the SMTP settings above, to the owner's
+      # account address unless AINDY_RELEASE_NOTIFY_TO names another.
+      AINDY_GITHUB_TOKEN: "${AINDY_GITHUB_TOKEN:-}"
+      AINDY_RELEASE_NOTIFY_TO: "${AINDY_RELEASE_NOTIFY_TO:-}"
+      AINDY_RELEASE_REPOS: "${AINDY_RELEASE_REPOS:-Masterplanner25/aindy-runtime}"
+      AINDY_RELEASE_NO_RUN_MINUTES: "${AINDY_RELEASE_NO_RUN_MINUTES:-30}"
+      AINDY_RELEASE_STALL_MINUTES: "${AINDY_RELEASE_STALL_MINUTES:-180}"
       # Perplexity Search API — powers search/research and rippletrace mention detection.
       # Without it both degrade to "unavailable" rather than failing; nothing else needs it.
       PERPLEXITY_API_KEY: "${PERPLEXITY_API_KEY:-}"
