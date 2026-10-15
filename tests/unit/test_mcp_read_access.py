@@ -2,8 +2,8 @@
 
 Owner, 2026-10-14: the Infinity Algorithm is the product, and other AIs are access to its state. The
 properties: an outside AI can read the Works and everything known about one; what it reads is the
-CALLER's (the dispatcher never compares a payload `user_id` with the caller, so an exposed syscall
-must not read one); and the launcher exposes reads only.
+CALLER's (since 2.28.0 the MCP transport refuses a payload `user_id` naming someone else, but in-process
+dispatch does not, so an exposed syscall still reads `ctx.user_id`); and the launcher exposes reads only.
 """
 from __future__ import annotations
 
