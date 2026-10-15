@@ -238,6 +238,13 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       globals: true,
       setupFiles: ["./src/test/setup.js"],
+      // The intermittent client failure (seen 2026-09-28 and 10-01, caught 10-14): vitest's 5 s
+      // default, not a bug. Some tests do module work inside their own time: BootGate's
+      // `await import("../App.jsx")` takes 4.5-5.0 s on an idle machine, and the first test in a file
+      // pays for transforming the components it renders (assistant-run-shapes: 4.1 s, then 2 s).
+      // With the Python suite running alongside, 2 of 4 runs timed out at 5 s. 20 s still fails a hang.
+      testTimeout: 20_000,
+      hookTimeout: 20_000,
       css: false,
       exclude: ["e2e/**", "node_modules/**", "dist/**"],
     },

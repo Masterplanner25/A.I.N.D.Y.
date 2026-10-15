@@ -352,3 +352,48 @@ def test_only_the_latest_check_counts_and_an_old_one_says_so(db_session, model):
 def test_no_check_yet_leaves_the_block_as_it_was(db_session, model):
     assert rr.planner_lines(db_session, USER) == {}
     assert "AI search" not in ws.work_context(user_id=USER, db=db_session)["block"]
+
+
+# ── A shared name: listed among its meanings (owner, 2026-10-14) ──────────────────────────
+
+
+def test_a_shared_name_listed_among_its_meanings_is_its_own_verdict():
+    """"I'm not the only Shawn Knight in the world, nor is Nodus the only thing named Nodus." An answer
+    that lists the owner's Nodus beside the others is not mixed (blended) and not wrong (absent)."""
+    assert rs.RESOLUTION_LABELS["listed"] == "listed"
+    assert rs.score({"about": "listed", "other_entities": ["Nodus Research"]}, [], {})["resolution"] == "listed"
+    prompt = " ".join(rs._JUDGE_PROMPT.split())
+    assert '"listed" if it lists several different entities that share the name and the SUBJECT is one of them' in prompt
+    assert "the SUBJECT is not among them" in prompt  # "other" now says so, or a list would read as wrong
+
+
+def test_listed_counts_fully_for_the_name_alone_and_half_with_context():
+    assert rr.resolution_value("listed", "direct") == 1.0
+    assert rr.resolution_value("listed", "person-bare") == 1.0
+    assert rr.resolution_value("listed", "person-context") == 0.5
+    assert rr.resolution_value("resolved", "direct") == 1.0
+    assert rr.resolution_value("wrong", "direct") == 0.0
+
+
+def test_the_planner_is_told_when_a_work_is_listed_and_beside_what(db_session, model):
+    nodus, person = model["nodus"]["id"], model["person"]["id"]
+    _checked(db_session, {
+        f"direct:{nodus}": {"perplexity": _res("listed", "Nodus Research", "Nodus Payments"),
+                            "openai": _res("listed", "Nodus Research"), "claude": _res("resolved")},
+        f"person-bare:{person}": {"perplexity": _res("listed", "Shawn Knight (CFL Quarterback)"),
+                                  "openai": _res("wrong", "Shawn Knight (actor)")},
+    })
+    lines = rr.planner_lines(db_session, USER, now=NOW)
+    assert lines[nodus].endswith("resolved on 1 of 3 engines, listed among the name's meanings on 2, "
+                                 "listed alongside Nodus Research; Nodus Payments")
+    # A wrong answer is still confusion, and is what the line names.
+    assert lines[person].endswith("by name alone: resolved on 0 of 2 engines, listed among the name's meanings on 1, "
+                                  "wrong on 1, confused with Shawn Knight (actor)")
+
+
+def test_the_trend_values_a_listed_bare_name_as_the_aim(db_session, model):
+    nodus = model["nodus"]["id"]
+    _checked(db_session, {f"direct:{nodus}": {"perplexity": _res("listed")}}, days_ago=7)
+    _checked(db_session, {f"direct:{nodus}": {"perplexity": _res("listed")}})
+    [row] = rr.trend(db_session, USER)["questions"]
+    assert [p["value"] for p in row["points"]["perplexity"]] == [1.0, 1.0]
