@@ -155,9 +155,11 @@ def build_questions(truth: dict, scope: str) -> list[dict]:
 _JUDGE_PROMPT = """You check one AI search engine's answer about one entity against facts its owner confirmed.
 Report facts; do not score.
 
-about: "subject" if the answer is about the SUBJECT described by the confirmed facts; "other" if it is about
-  a different entity with the same or a similar name; "mixed" if it blends the subject with other entities;
-  "none" if it does not identify any entity.
+about: "subject" if the answer is about the SUBJECT described by the confirmed facts; "listed" if it lists
+  several different entities that share the name and the SUBJECT is one of them, kept separate from the
+  others; "other" if it is about a different entity with the same or a similar name and the SUBJECT is not
+  among them; "mixed" if it blends the subject with other entities into one description; "none" if it does
+  not identify any entity.
 other_entities: names of any other, different entities the answer brings in under the same name.
 claims: every factual claim the answer makes about the subject, each as {"text", "status"} where status is
   "correct" (consistent with the confirmed facts), "incorrect" (contradicts them) or "unverifiable"
@@ -222,7 +224,10 @@ def judge_answer(question: dict, answer: dict, truth: dict) -> dict:
     return {**json.loads(match.group(0) if match else text), "_facts": facts, "_links": [link["text"] for link in links]}
 
 
-RESOLUTION_LABELS = {"subject": "resolved", "mixed": "mixed", "other": "wrong", "none": "unknown"}
+#: "listed" (owner, 2026-10-14): a name shared with others should not resolve to one thing on its own —
+#: "I'm not the only Shawn Knight in the world, nor is Nodus the only thing named Nodus" — so for the name
+#: alone, being one of the meanings an engine lists, kept apart from the rest, is the aim. RESOLUTION_CHECK_SPEC §7.4.
+RESOLUTION_LABELS = {"subject": "resolved", "listed": "listed", "mixed": "mixed", "other": "wrong", "none": "unknown"}
 
 
 def score(judgement: dict, citations: list[str], truth: dict) -> dict:

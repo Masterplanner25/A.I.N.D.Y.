@@ -245,7 +245,16 @@ def weekly_resolution_checks() -> dict:
 
 # ── Trend ─────────────────────────────────────────────────────────────────────────────────
 
-_RESOLUTION_VALUE = {"resolved": 1.0, "mixed": 0.5, "wrong": 0.0, "unknown": 0.0}
+_RESOLUTION_VALUE = {"resolved": 1.0, "listed": 0.5, "mixed": 0.5, "wrong": 0.0, "unknown": 0.0}
+#: Questions that ask by the name alone. For these, being listed among the name's meanings is the aim
+#: (owner, 2026-10-14), so it counts as fully as resolving; with context, a list is only half an answer.
+BARE_NAME_KINDS = ("direct", "person-bare")
+
+
+def resolution_value(resolution: str | None, kind: str | None) -> float:
+    if resolution == "listed" and kind in BARE_NAME_KINDS:
+        return 1.0
+    return _RESOLUTION_VALUE.get(resolution, 0.0)
 
 
 def trend(db: Session, user_id: Any, *, limit: int = TREND_RUNS) -> dict:
@@ -256,6 +265,7 @@ def trend(db: Session, user_id: Any, *, limit: int = TREND_RUNS) -> dict:
     rows: dict[str, dict] = {}
     for run in runs:
         texts = {q["key"]: q["text"] for q in run.questions or []}
+        kinds = {q["key"]: q.get("kind") for q in run.questions or []}
         for answer in db.query(ResolutionAnswer).filter(ResolutionAnswer.run_id == run.id).all():
             s = answer.scores
             if not s or answer.question_key not in texts:
@@ -264,7 +274,7 @@ def trend(db: Session, user_id: Any, *, limit: int = TREND_RUNS) -> dict:
             row["points"].setdefault(answer.engine, []).append({
                 "run_id": run.id,
                 "resolution": s.get("resolution"),
-                "value": _RESOLUTION_VALUE.get(s.get("resolution"), 0.0),
+                "value": resolution_value(s.get("resolution"), kinds.get(answer.question_key)),
                 "coverage": round(s["facts_covered"] / s["facts_total"], 2) if s.get("facts_total") else None,
                 "connections": round(s["links_stated"] / s["links_total"], 2) if s.get("links_total") else None,
             })
@@ -286,30 +296,35 @@ _PLANNER_KINDS = (("direct", None), ("person-bare", "by name alone"), ("person-c
 
 
 def _resolved_phrase(scores: list[dict]) -> str:
-    count = {label: sum(1 for s in scores if s.get("resolution") == label) for label in ("resolved", "mixed", "wrong")}
+    labels = ("resolved", "listed", "mixed", "wrong")
+    count = {label: sum(1 for s in scores if s.get("resolution") == label) for label in labels}
     resolved, total = count["resolved"], len(scores)
     of = f"of {total} engine{'s' if total != 1 else ''}"
     if count["wrong"] == total:
         phrase = f"wrong on {total} {of}"
     else:
         phrase = f"resolved on {resolved} {of}"
+        if count["listed"]:
+            # A shared name: one of the meanings the engine listed, kept apart from the rest.
+            phrase += f", listed among the name's meanings on {count['listed']}"
         if count["mixed"]:
             phrase += f", mixed on {count['mixed']}"
         if count["wrong"]:
             phrase += f", wrong on {count['wrong']}"
-        unknown = total - resolved - count["mixed"] - count["wrong"]
+        unknown = total - sum(count.values())
         if unknown:
             # The judge's "none": the answer was about no entity at all. Not found, not mistaken.
             phrase += f", not found by {unknown}"
-    if resolved < len(scores):
+    for labels_named, wording in ((("mixed", "wrong", "unknown"), "confused with"), (("listed",), "listed alongside")):
         named: dict[str, int] = {}
         for s in scores:
-            if s.get("resolution") != "resolved":
+            if (s.get("resolution") or "unknown") in labels_named:
                 for name in s.get("other_entities") or []:
                     named[name] = named.get(name, 0) + 1
         if named:
             top = sorted(named, key=lambda n: -named[n])[:PLANNER_CONFUSED_WITH]
-            phrase += f", confused with {'; '.join(top)}"
+            phrase += f", {wording} {'; '.join(top)}"
+            break
     return phrase
 
 

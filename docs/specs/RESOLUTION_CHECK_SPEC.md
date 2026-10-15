@@ -248,9 +248,14 @@ The owner took the planner line only; the score stays unwired (decision 5: two c
    Shawn Knight in the world, nor is Nodus the only thing named Nodus."* So a shared name is not a
    failure. For the name alone, the aim is to be **one of the meanings an engine lists, described
    correctly**; the with-context question is where the owner's entity should be *the* answer. Drafts are
-   told this (#463). The judge still scores a bare-name answer about something else as `wrong`, which
-   is accurate while the owner's entity is absent from the list; whether a bare answer that *lists* it
-   should get its own verdict (rather than `mixed`) is open, to be decided before decision 5.
+   told this (#463). **Decided the same day: an answer that lists it gets its own verdict, `listed`.**
+   The judge reports `about: "listed"` when the answer lists several entities sharing the name and the
+   owner's is one of them, kept apart from the others. `mixed` stays for a blend and `wrong` for an answer
+   where the owner's entity is absent. In the trend, `listed` counts **fully (1.0) for a question by name
+   alone** (`direct`, `person-bare`) and half (0.5, like `mixed`) with context, where a list is only half
+   an answer. The planner line says *listed among the name's meanings on N, listed alongside …*, and
+   names only the wrong or mixed answers' entities as *confused with*. Checks before 2026-10-14 have no
+   `listed` answers: the judge could not give one, and those answers are not re-judged.
 5. **Does resolution become a KPI?** It is literally the owner's success measure for AI Search
    Optimization. Recommended: **not yet**. Run B for a month first and see if the numbers are stable
    enough to steer by.

@@ -13,6 +13,8 @@ const POLL_MS = 15000;
 
 const TONE = {
   resolved: "text-[#00ffaa] border-[#00ffaa]/40",
+  // A shared name, listed among its meanings: the aim for the name alone (owner, 2026-10-14).
+  listed: "text-sky-300 border-sky-400/40",
   mixed: "text-amber-300 border-amber-400/40",
   wrong: "text-red-400 border-red-400/40",
   unknown: "text-zinc-500 border-zinc-700",
@@ -65,7 +67,7 @@ function AnswerRow({ answer }) {
   );
 }
 
-const DOT = { resolved: "●", mixed: "◐", wrong: "○", unknown: "·" };
+const DOT = { resolved: "●", listed: "◉", mixed: "◐", wrong: "○", unknown: "·" };
 
 // What the engines said that your confirmed facts could not settle. Your answer becomes the next
 // check's ground truth: true is a fact, false a denied claim, skip is not asked again.
@@ -98,13 +100,13 @@ function ClaimsToSettle({ claims, onDecide, busy }) {
   );
 }
 
-// Each question, per engine, across the last checks: ● resolved ◐ mixed ○ wrong.
+// Each question, per engine, across the last checks: ● resolved ◉ listed ◐ mixed ○ wrong.
 function Trend({ trend }) {
   const questions = trend?.questions || [];
   if ((trend?.runs || []).length < 2 || !questions.length) return null;
   return (
     <div className="space-y-1">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-600">Across the last {trend.runs.length} checks (● resolved ◐ mixed ○ wrong)</p>
+      <p className="text-[10px] uppercase tracking-wider text-zinc-600">Across the last {trend.runs.length} checks (● resolved ◉ listed ◐ mixed ○ wrong)</p>
       {safeMap(questions, (q) => (
         <div key={q.question} className="text-[11px]">
           <span className="text-zinc-300">{q.question}</span>
