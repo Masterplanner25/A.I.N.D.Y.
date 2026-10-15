@@ -43,6 +43,13 @@ The point is the Infinity Algorithm. The owner's framing: *"the main thing I wan
 to use the Infinity algorithm — that's the product. The question is how is everything else feeding
 it."* That is the sorting rule for work in this repo — **does it feed the algorithm?**
 
+**Other AIs, repositories and outside systems are access, not a second product** (owner,
+2026-10-14). The algorithm's state already holds memory and external signals, and its inputs
+are external as well as internal ([canonical §2](docs/infinity/INFINITY_ALGORITHM_CANONICAL.md)).
+State is part of the algorithm. Letting Claude, ChatGPT or a coding agent read and update that state,
+or hand A.I.N.D.Y. work to carry on (a release, a workflow waiting on approval), widens where the
+algorithm can see and act. It is judged by the same rule: does it feed the algorithm?
+
 The partner loop, and where each step actually lives:
 
 | The claim | What performs it |
