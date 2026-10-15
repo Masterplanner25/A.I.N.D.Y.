@@ -66,6 +66,16 @@ I_t = I_t^{ext} \cup I_t^{int}
 
 where \(I_t^{ext}\) are external signals/events and \(I_t^{int}\) are internally generated triggers/summaries.
 
+**Access widens \(I_t^{ext}\) and who can read \(S_t\); it does not add a second system** (owner,
+2026-10-14). Another AI (Claude, ChatGPT, a coding agent), a repository, or an outside system such as
+GitHub or PyPI is a source of \(I_t^{ext}\): a decision, a commit, a release, a finished operation.
+Given read access to the persistent components (\(\mathrm{Tasks}_t, \mathrm{Memory}_t,
+\mathrm{MasterplanState}_t\)), it is also a participant that acts on \(S_t\) without holding it.
+What enters is a meaningful outcome or a reference to the system that holds the record, not a
+transcript. An authoritative record stays where it is (code in its repository, a package on its
+index), and \(S_t\) holds the relation to it. The state is the algorithm's. The intelligence that
+reads or updates it is interchangeable.
+
 ## 3. Transformation Layer
 
 \[
