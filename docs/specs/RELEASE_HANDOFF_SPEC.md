@@ -14,6 +14,7 @@ scheduler walked the finished 2.27.0 run to `done` in one tick (approver Masterp
 completed the release task, wrote the note, created the adoption task and delivered the email through Gmail.
 **First real use: 2.28.0 on 2026-10-15** (§7.2): handed off from Collaborator, the gate email reached the
 owner, approved on GitHub, followed to `done`. Gate wait 1 min 21 s, against 6–10½ minutes before.
+**Phase 3 scoped 2026-10-15, held** (§7.3): approve from the Collaborator card or by replying to the gate email.
 
 **Where it comes from.** The owner's product review on 2026-10-14 named this as the first real test of
 *persistent execution*. The use case was the owner's own: *"hand a release off to A.I.N.D.Y.,
@@ -158,7 +159,7 @@ approves on GitHub**, and A.I.N.D.Y. sees it within a minute.
 |---|---|---|
 | **1. Follow and notify** | the table and migration, the watcher, the GitHub client, events, the tasks and memory note, email and the Collaborator card, `POST /apps/releases` (handoff) and `GET /apps/releases` | decisions 1, 2 |
 | **2. Hand off from Claude Code** | `sys.v1.release.handoff {repo, tag}` and `sys.v1.release.status` on the MCP launcher. **The first write tool there.** It only *records* the handoff (caller-scoped, `ctx.user_id`), and the api's watcher does the rest, so no wait is ever registered outside the api (FR-44). The launcher stays read-only for everything else. | phase 1 |
-| **3. Approve from A.I.N.D.Y.** | an Approve or Reject button, and an MCP tool, that answer GitHub's pending deployment (`POST /actions/runs/{id}/pending_deployments`) as the owner | decision 3, a token that can approve |
+| **3. Approve from A.I.N.D.Y.** | Approve and Reject on the Collaborator card, and a reply to the gate email, both answering GitHub's pending deployment (`POST /actions/runs/{id}/pending_deployments`) as the owner. **No MCP approve tool** (§7.3) | decision 3, `AINDY_GITHUB_APPROVE_TOKEN` (Deployments: write) |
 | **4. Other repositories** | Nodus packages, aindy-sdk, ui-kit, once one has a gate | decision 4 |
 
 ### 7.1 Phase 1 as built (2026-10-14)
@@ -214,6 +215,73 @@ The owner handed `v2.28.0` off from Collaborator 11 minutes before the tag was p
 - The runtime side confirmed before the tag that `publish.yml` matched every assumption in §7.1 (job
   names, `production` gate, handoff doc path); a release PR that changes them messages the app first.
 
+### 7.3 Phase 3 scoped — approve from A.I.N.D.Y. (2026-10-15)
+
+**Held 2026-10-15 by the owner: scoped, not built.** Decision 3's three questions below are still
+open. The runtime does not release again before this is taken up.
+
+The owner asked for it after 2.28.0: the gate email should be *the place the decision is made*, not a
+pointer to GitHub. Scoped against these facts, all checked on 2026-10-15:
+
+| Fact | Checked how |
+|---|---|
+| `POST /repos/{o}/{r}/actions/runs/{id}/pending_deployments` takes `environment_ids`, `state` (`approved` \| `rejected`) and `comment`, all required. A fine-grained token needs **Deployments: write**, and the `GET` the watcher already makes needs Actions: read. | GitHub's REST docs and its fine-grained permissions table |
+| `production` (environment id `15804342446`) has one required reviewer, Masterplanner25, with `prevent_self_review: false`. A token of the owner's approves exactly as the owner's click does, and GitHub records `Masterplanner25 approved`. | `GET /repos/Masterplanner25/aindy-runtime/environments/production` |
+| The api is published on `localhost:8000` only, with no tunnel. **A link in the email cannot reach A.I.N.D.Y. away from the desk.** | `docker-compose.prod.yml` ports |
+| The Gmail app password in `.env` logs in to IMAP (`imap.gmail.com:993`), and `[Gmail]/Sent Mail` is readable. The 2.28.0 gate email is there. Self-sent mail carries no `Authentication-Results`, so DKIM cannot vouch for a reply. | a read-only IMAP session, nothing printed but counts |
+
+**Two ways to decide, both human:**
+
+1. **Approve / Reject on the Collaborator card**, shown only at `at_gate` and only when the approve token
+   is set. One confirm step names what it does: *"Publish aindy-runtime 2.29.0 to PyPI, approving as
+   Masterplanner25."* It calls `POST /apps/releases/{id}/approve` or `/reject` (`{comment?}`, caller-scoped).
+2. **Reply to the gate email** with `APPROVE` or `REJECT` as the first word. This is the one that works
+   from a phone, given the third fact above. The gate email's subject carries a per-handoff code
+   (`[R7K2Q9XM]`), and the body says how to reply. Each minute the watcher reads **the owner's Sent Mail
+   over IMAP**, not the inbox. A message is in Sent only if the owner's own account sent it, so a forged
+   `From` cannot get in. That replaces the DKIM check the fourth fact rules out. A reply is acted on only
+   if its subject has the code, it was sent after the gate email, the handoff is still `at_gate`, and it
+   is the first such reply. A confirmation email follows, either *"approved, publishing"* or *"GitHub
+   says it was already decided"*.
+
+**Not an MCP tool.** Phase 2's MCP tool *records* a handoff. Approving publishes to PyPI as the owner, and
+the gate exists so that a person decides. An MCP approve tool would let an AI client decide instead, and
+Claude Code can run with permission prompts off. The owner approves; Claude can say a release is ready.
+
+**How the approval is made.**
+- `GitHubActions.review(repo, run_id, environment_ids, state, comment)` sends
+  `AINDY_GITHUB_APPROVE_TOKEN` through `perform_external_call`, makes one attempt and never retries. The
+  comment reads `Approved from A.I.N.D.Y. (collaborator|email)`, so GitHub's record says where.
+- Right before the POST it re-reads `pending_deployments`. If `production` is no longer pending (the
+  owner already clicked on GitHub, or two replies raced), it answers 409, *already decided*, and sends
+  nothing.
+- **§3 does not change.** `approved` and `failed` still come from GitHub's own facts on the next tick. A
+  rejection reaches the watcher's existing rejected-gate path. The decision itself is one history entry,
+  `{"stage": "decision", "state", "via", "at"}`. The outcome note adds *"approved from A.I.N.D.Y. by
+  email"*, so the gate wait can be compared by channel. **No migration**: history is JSON, and the reply
+  code goes in it.
+
+**A separate token, `AINDY_GITHUB_APPROVE_TOKEN`** (fine-grained, aindy-runtime only, Deployments: write
+and Actions: read). It is never sent on the watcher's four reads a minute, so the token used all the time
+cannot publish. Leaving it unset turns phase 3 off: no buttons, and no reply instructions in the email.
+Revoking it is the off switch.
+
+**Build order.** 3a, the token, the client call, the routes and the buttons (small, testable against
+recorded responses). Then 3b, the email reply: the code in the subject, the IMAP read in the watcher's
+tick, the confirmation email. Phase 3 does not need phase 2.
+
+**Tests.** Approve and reject send the right body. A request for a gate already decided gets 409 and
+sends nothing. Nothing happens without the token. A request for another user's handoff is refused. For
+the email reply:
+- a reply is acted on once;
+- a reply without the code, sent before the gate, or sent after the stage moved is ignored;
+- an inbox message with a forged `From` is never read, because only Sent is read;
+- the same tick twice changes nothing.
+
+**Proof.** A run with a gate is needed, and only aindy-runtime has one. Prove 3a against recorded
+responses, then decide one real release with the button. Prove 3b on the release after that by replying
+from the phone.
+
 **Proof before a real release.** Point the watcher at the finished 2.27.0 run (38025672838). It must
 walk `running → at_gate → approved → published → done` from the run's own job times, name the
 approver, compute the 10 min 34 s gate wait, and write the task and the note. That is a test against
@@ -241,7 +309,9 @@ recorded GitHub responses, and once against the live API, read-only. **Then the 
 3. **Who approves.** Recommended: **GitHub only, to start** (phases 1 and 2). Phase 3 gives A.I.N.D.Y. the
    authority to release as you. It needs a token that can approve deployments (to verify: the
    fine-grained permission GitHub requires for `pending_deployments` POST) and is worth taking only
-   after a few releases have run through phase 1.
+   after a few releases have run through phase 1. **Reopened 2026-10-15 by the owner after one release;
+   scoped in §7.3.** Recommended there: the card and an email reply, no MCP tool, and a separate approve
+   token (verified: Deployments: write).
 4. **Which repositories.** Recommended: **aindy-runtime only**, the one with a gate.
 5. **Where "done" ends.** Recommended: **published, the wheel verified, the adoption task created.**
    Adoption stays with you and Claude, because it needs judgment. An agent run that prepares the adoption
