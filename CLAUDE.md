@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime[mcp]>=2.27.0,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime[mcp]>=2.28.0,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -257,10 +257,10 @@ merge rules): `docs/operations/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime[mcp]>=2.27.0,<3.0    # pyproject.toml — the COMPATIBILITY range
+aindy-runtime[mcp]>=2.28.0,<3.0    # pyproject.toml — the COMPATIBILITY range
 ```
 ```
-aindy-runtime==2.27.0         # constraints.txt — the BUILD pin
+aindy-runtime==2.28.0         # constraints.txt — the BUILD pin
 ```
 
 The upper bound is required. Never widen to an unbounded range.
@@ -293,7 +293,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime[mcp]>=2.27.0,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime[mcp]>=2.28.0,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.
@@ -515,14 +515,15 @@ does it feed the algorithm? Persist outcomes and references, not transcripts.
   memory reads **as the owner, read-only**, through
   `docker exec -i -e AINDY_MCP_SERVER_USER_ID=<uid> <api> python /app/scripts/mcp_server.py`.
   **Use these for the owner's Work facts instead of asking for a paste.** The api container must be up.
-- **Why a launcher and not `aindy-runtime mcp-server`:** the runtime's command never loads app plugins,
-  so none of our syscalls exist in its process (FR-53a). The launcher loads them with stdout redirected,
-  because stdout is the MCP channel, then calls the runtime's `serve_stdio()`. It refuses
-  `AINDY_MCP_SERVER_ALLOW_WRITES`.
-- **Expose only syscalls that read `ctx.user_id`.** The dispatcher never compares a payload `user_id`
-  with the caller (FR-53b), and several older syscalls of ours read one (`get_objective_attainment`,
-  `masterplan.get_active` among them). Over MCP the outside AI writes the payload.
-  `test_mcp_read_access.py` reads every exposed handler's source.
+- **Why a launcher and not `aindy-runtime mcp-server`:** since 2.28.0 (FR-53a) the runtime's server
+  loads our plugins itself, so the launcher no longer does. It keeps the read-only allowlist and refuses
+  `AINDY_MCP_SERVER_ALLOW_WRITES`. A plugin that fails to load now stops the MCP server;
+  `AINDY_BOOT_PROFILE=platform-only` serves the runtime's tools alone (DEC-101).
+- **Expose only syscalls that read `ctx.user_id`.** Since 2.28.0 (FR-53b) the MCP transport refuses a
+  payload `user_id` naming another user, so this is now our choice rather than the only defence: in-process
+  dispatch is still unchecked (counted as `aindy_payload_identity_mismatch_total`, read it before each api
+  rebuild), and several older syscalls of ours read a payload id (`get_objective_attainment`,
+  `masterplan.get_active`). `test_mcp_read_access.py` reads every exposed handler's source.
 - **Over MCP a syscall is granted exactly the capability its name names**: `sys.v1.work.context` gets
   `work.context`. One registered under `masterplan.read` is refused (`caller has ['work.context']`).
 - **To probe it**, spawn the launcher from an `mcp` SDK client inside the container
@@ -618,8 +619,8 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0**; FR-51 and FR-52 shipped in 2.27.0; **FR-53 (MCP: `mcp-server` loads no app plugins; a payload `user_id` is never checked against the caller) open since 2026-10-14** |
-| Latest runtime adoption record | `docs/runtime/RUNTIME_2_27_0_UPGRADE.md` — one per release; **2.25.0 §7 / FR-52 (every request ~3 s slower, 2.25.0–2.26.0) is fixed in 2.27.0: scores p50 715 ms** (2.22.0's is the last with a schema step); the 2.20.0 doc's §6.2 is the exit-3 reconcile, proven once. **2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — it exits 0 and stamps; check the column, not the exit code**. **2.27.0's §7: soak rows 3 (closed, unexercised) and 4 (durable continuation, ON)** |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0**; FR-51 and FR-52 shipped in 2.27.0; FR-53 (MCP plugins, payload `user_id`) filed 2026-10-14 and **shipped in 2.28.0** the next day |
+| Latest runtime adoption record | `docs/runtime/RUNTIME_2_28_0_UPGRADE.md` — one per release; **2.28.0 closes FR-53** (mcp-server loads plugins; a foreign payload `user_id` is refused on MCP/`sys()`/`/platform/syscall`); **`aindy_payload_identity_mismatch_total` readout owed ~10-22, and it resets on every api recreate — read it before each rebuild**. 2.27.0's doc: FR-52 fixed (scores p50 715 ms), soak rows 3–4 (§7). 2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — check the column, not the exit code |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
 | Resolution Check (does AI search resolve the owner's entities) | `docs/specs/RESOLUTION_CHECK_SPEC.md`: phases A–C built; `listed` is a verdict (§7.4); the score stays unwired (decision 5) |

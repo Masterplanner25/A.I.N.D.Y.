@@ -3,13 +3,15 @@
 Owner, 2026-10-14: the Infinity Algorithm is the product, and other AIs are access to its state.
 This is that access, for one person on one machine: stdio, acting as AINDY_MCP_SERVER_USER_ID.
 
-Why a script and not `aindy-runtime mcp-server`: the runtime's command never loads the app's
-plugins, so none of our syscalls exist in its process and an allowlisted one is skipped as "not
-registered" (FR-53). This loads them, then hands over to the runtime's own server.
+Why a script and not `aindy-runtime mcp-server`: since runtime 2.28.0 (FR-53 a) the runtime's server
+loads our plugins itself, so this no longer does. What it still adds is the allowlist below, read-only,
+and the refusal of `AINDY_MCP_SERVER_ALLOW_WRITES`. Phase 2 of the release handoff adds the first write
+tool here, deliberately, one at a time.
 
-The allowlist is READ-ONLY and every entry acts as the caller's identity. Several of our older
-syscalls take `user_id` from the PAYLOAD and the dispatcher never checks it against the caller
-(FR-53), so over MCP they would read whoever's id the outside AI sends. They are not exposed.
+Every entry acts as the caller's identity and reads `ctx.user_id`. Since 2.28.0 (FR-53 b) the runtime
+also refuses an MCP call whose payload `user_id` names someone else, so exposing a syscall that reads a
+payload id is now safe at the transport. We still expose only `ctx.user_id` readers: in-process
+dispatch is not yet checked (`PAYLOAD-IDENTITY-DISPATCH-1`), and the rule costs nothing.
 
 Claude Code, from the repo root:
 
@@ -45,15 +47,9 @@ def main() -> None:
     if os.environ.get("AINDY_MCP_SERVER_ALLOW_WRITES", "").strip().lower() in {"1", "true", "yes"}:
         sys.exit("refusing: this launcher is read-only; AINDY_MCP_SERVER_ALLOW_WRITES must be unset")
 
-    real_stdout = sys.stdout
-    sys.stdout = sys.stderr  # anything printed while the app loads must not corrupt the MCP channel
-    try:
-        from AINDY.platform_layer.registry import load_plugins
-
-        load_plugins()
-    finally:
-        sys.stdout = real_stdout
-
+    # The runtime loads our plugins with stdout held on stderr at the fd level (2.28.0, FR-53 a). A
+    # plugin that fails to load stops the server, as it stops the api; `AINDY_BOOT_PROFILE=platform-only`
+    # serves the runtime's tools alone while one is broken (DEC-101).
     from AINDY.platform_layer import mcp_server
 
     mcp_server.serve_stdio()

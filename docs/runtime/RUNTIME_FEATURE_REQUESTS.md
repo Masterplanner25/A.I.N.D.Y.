@@ -20,6 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
+> **Open as of 2026-10-15:** FR-14 recurrence half, FR-6 items 2–3. (FR-53 shipped in 2.28.0.)
+>
 > **Open as of 2026-10-14:** **FR-53 (P2: `mcp-server` loads no app plugins; a payload `user_id` is never checked against the caller)**, FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-10-07:** **FR-52 (P1: the 2.25.0 compatibility check runs on every request, ~3 s each)**, FR-51 (pymongo / python-jose advisories under exact pins), FR-14 recurrence half, FR-6 items 2–3.
@@ -45,7 +47,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-53 — `aindy-runtime mcp-server` never loads the app's plugins, and an exposed syscall that reads `user_id` from its payload serves whoever the outside AI names 🔴 OPEN (P2)
+## FR-53 — `aindy-runtime mcp-server` never loads the app's plugins, and an exposed syscall that reads `user_id` from its payload serves whoever the outside AI names ✅ SHIPPED in 2.28.0 (#831, #832; DEC-099/100/101) — `mcp-server` loads plugins; a payload `user_id` naming another user is refused on MCP, Nodus `sys()` and `/platform/syscall`; in-process mismatches are counted (`aindy_payload_identity_mismatch_total`), not refused. Adopted 2026-10-15 (`RUNTIME_2_28_0_UPGRADE.md`)
 
 **apps-monolith ref:** found 2026-10-14 connecting Claude Code to A.I.N.D.Y. over MCP (owner: other
 AIs are access to the Infinity Algorithm's state). Worked around app-side in `scripts/mcp_server.py`.
