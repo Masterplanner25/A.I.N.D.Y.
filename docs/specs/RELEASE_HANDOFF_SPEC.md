@@ -12,7 +12,8 @@ owner: "app-team"
 Proven against the recorded 2.27.0 responses, then **live on 2026-10-15** on the test account: the api's
 scheduler walked the finished 2.27.0 run to `done` in one tick (approver Masterplanner25, gate wait 634 s),
 completed the release task, wrote the note, created the adoption task and delivered the email through Gmail.
-The first real use (2.28.0, with a live gate) is still owed.
+**First real use: 2.28.0 on 2026-10-15** (§7.2): handed off from Collaborator, the gate email reached the
+owner, approved on GitHub, followed to `done`. Gate wait 1 min 21 s, against 6–10½ minutes before.
 
 **Where it comes from.** The owner's product review on 2026-10-14 named this as the first real test of
 *persistent execution*. The use case was the owner's own: *"hand a release off to A.I.N.D.Y.,
@@ -51,6 +52,7 @@ of `publish-pypi`:
 | 2.25.0 | 36961041217 | 10 min 12 s | 6 min 12 s |
 | 2.26.0 | 37231275081 | 10 min 36 s | 6 min 25 s |
 | 2.27.0 | 38025672838 | 14 min 18 s | **10 min 34 s** |
+| **2.28.0, handed off** | 38685995717 | **5 min 32 s** | **1 min 21 s** |
 
 GitHub records who approved (`GET /actions/runs/{id}/approvals`: `Masterplanner25 approved
 production` on 2.27.0). The owner already approves on GitHub. What is missing is being *told* when to
@@ -191,6 +193,26 @@ Where the build settled what the design left open:
   the owner is told; hand the tag off again to resume.
 - **The release task is completed through `sys.v1.task.complete_full`**, the same path as the agent's
   `task.complete`, so the Infinity re-score runs.
+
+### 7.2 First real use — 2.28.0, 2026-10-15
+
+The owner handed `v2.28.0` off from Collaborator 11 minutes before the tag was pushed (the 30-minute
+`no_run` window covered it). The api's watcher:
+
+| Stage | At (UTC) | |
+|---|---|---|
+| requested | 05:06:42 | handoff; task 61 created and started |
+| running | 05:17:32 | the run found on the next tick |
+| at_gate | 05:19:38 | email sent at ~05:20:36 and received |
+| approved | 05:20:59 | Masterplanner25 |
+| published | 05:21:22 | |
+| done | 05:23:04 | task 61 completed (`time_spent` 1,002 s), outcome note, adoption task 62, email |
+
+- **The gate email arrives about a minute after GitHub's own notification.** That is the tick interval,
+  and the owner judged it no problem: *"the eventual thing we'll be doing with A.I.N.D.Y. is approving
+  it"*, i.e. phase 3 (decision 3), where the email becomes the place the decision is made.
+- The runtime side confirmed before the tag that `publish.yml` matched every assumption in §7.1 (job
+  names, `production` gate, handoff doc path); a release PR that changes them messages the app first.
 
 **Proof before a real release.** Point the watcher at the finished 2.27.0 run (38025672838). It must
 walk `running → at_gate → approved → published → done` from the run's own job times, name the
