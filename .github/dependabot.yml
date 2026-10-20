@@ -32,6 +32,11 @@ updates:
       # nodus-lang is pinned exactly BY aindy-runtime; we have no direct dependency and
       # cannot move it independently (FR-16).
       - dependency-name: "nodus-lang"
+      # pytest-env 1.8.0 requires python-dotenv>=1.2.4, but aindy-runtime 2.28.0 pins
+      # python-dotenv==1.2.3 exactly, so the bump is ResolutionImpossible (#475). Drop
+      # this ignore when a runtime adoption moves that pin.
+      - dependency-name: "pytest-env"
+        versions: [">=1.8.0"]
     labels: ["dependencies", "python"]
     commit-message:
       prefix: "chore(deps)"
