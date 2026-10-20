@@ -13,7 +13,7 @@ describe("VersionMismatchBanner", () => {
       />,
     );
 
-    expect(screen.getByRole("alert")).toHaveStyle({ background: "#b91c1c" });
+    expect(screen.getByRole("alert")).toHaveStyle({ backgroundColor: "rgb(185, 28, 28)" });
   });
 
   it("renders dismiss button for patch_mismatch", () => {
