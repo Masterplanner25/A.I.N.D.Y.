@@ -253,9 +253,29 @@ The owner took the planner line only; the score stays unwired (decision 5: two c
    owner's is one of them, kept apart from the others. `mixed` stays for a blend and `wrong` for an answer
    where the owner's entity is absent. In the trend, `listed` counts **fully (1.0) for a question by name
    alone** (`direct`, `person-bare`) and half (0.5, like `mixed`) with context, where a list is only half
-   an answer. The planner line says *listed among the name's meanings on N, listed alongside …*, and
-   names only the wrong or mixed answers' entities as *confused with*. Checks before 2026-10-14 have no
-   `listed` answers: the judge could not give one, and those answers are not re-judged.
+   an answer. The planner line says *listed among the name's meanings on N*, and names only the wrong or
+   mixed answers' entities as *confused with*. Checks before 2026-10-14 have no `listed` answers: the
+   judge could not give one, and those answers are not re-judged.
+
+   **Owner, 2026-10-22: which names are shared, and what missing from the list means.** The 10-19 check
+   showed the gap: all three engines answered *"Who is Shawn Knight?"* with a list of other Shawn Knights
+   (NFL, CFL, a tech journalist) and not the owner. The judge had no verdict for a list without the
+   subject, called it `none`, and it read as `unknown`; on 10-12 the same answers were `wrong`. Neither is
+   true. The engines were right to list the name's better-known meanings: *"if the bare names actually
+   resolve … the AI search is doing me a favor."* Decided:
+   - **A Work declares `shared_name`** (`works.shared_name`, the owner's, never computed). Shared:
+     **Shawn Knight, Nodus, A.I.N.D.Y.** The owner expects A.I.N.D.Y. to resolve anyway, since the others
+     of that name have little on the web; the values below treat that the same.
+   - **`absent`**: the judge reports `about: "absent"` for a list of the name's meanings without the
+     subject. Asked by the name alone, for a shared name, `absent` and `other` both score **`absent`**: a
+     presence gap, worth 0, said to the planner as *not yet among the name's meanings*, and the others
+     named only as *the name's other meanings include …*, never *confused with*. With context, or for a
+     name nobody else has, they stay `wrong`.
+   - **A favour counts the same as being listed**: `resolved` on a shared bare name is 1.0, like `listed`.
+   - **A blend is the one real error for a shared name**: `mixed` on a shared bare name is 0, not 0.5.
+
+   The scores record `shared_name` with each answer, so a check is valued by what the name was when it
+   ran. Answers judged before 2026-10-22 are not re-judged.
 5. **Does resolution become a KPI?** It is literally the owner's success measure for AI Search
    Optimization. Recommended: **not yet**. Run B for a month first and see if the numbers are stable
    enough to steer by.

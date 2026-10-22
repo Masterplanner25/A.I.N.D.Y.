@@ -108,6 +108,7 @@ the owner says it belongs, and `key_assets` shows it always meant to hold this.
 | `url` | canonical home, optional |
 | `declared_target` | optional, the §4b "52 planned, 46 done": declared, never computed |
 | `success_criteria` | optional, **how the owner judges the work**, in their words; declared, never computed. Added 2026-09-30 (`wk2success0001`) when a plan drafted from the owner's own AI Search writing still closed on industry metrics. The planner's Work block carries it as *SUCCESS, in the user's words*, and `content.draft` receives it as *the person's own definition of success*. The owner's, for AI Search Optimization: resolution, not rankings — does a direct search bring back the right entity, how much of what it says is correct, and does it connect the entities |
+| `shared_name` | boolean, default false: **other people or things share this name**; declared, never computed. Added 2026-10-22 (`wk3shared0001`). Asked by the name alone, AI search should list several meanings for such a name: resolving to the owner's is a favour, missing from the list is a presence gap, not a confusion (`RESOLUTION_CHECK_SPEC.md` §7.4). The owner's: Shawn Knight, Nodus, A.I.N.D.Y. |
 | `provenance` | `declared` (the owner said it) · `confirmed` (the system proposed it, the owner accepted) |
 | `created_at` / `updated_at` | history is kept (§3.4) |
 

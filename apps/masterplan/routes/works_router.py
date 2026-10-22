@@ -31,6 +31,7 @@ class WorkBody(BaseModel):
     url: Optional[str] = None
     declared_target: Optional[str] = None
     success_criteria: Optional[str] = None
+    shared_name: Optional[bool] = None
 
 
 class LinkBody(BaseModel):

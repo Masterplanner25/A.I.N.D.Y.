@@ -27,6 +27,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from AINDY.platform_layer.user_ids import parse_user_id
+from apps.masterplan.services.resolution_service import BARE_NAME_KINDS
 from apps.masterplan.work_model import ResolutionAnswer, ResolutionClaim, ResolutionRun, Work
 
 logger = logging.getLogger(__name__)
@@ -245,15 +246,19 @@ def weekly_resolution_checks() -> dict:
 
 # ── Trend ─────────────────────────────────────────────────────────────────────────────────
 
-_RESOLUTION_VALUE = {"resolved": 1.0, "listed": 0.5, "mixed": 0.5, "wrong": 0.0, "unknown": 0.0}
-#: Questions that ask by the name alone. For these, being listed among the name's meanings is the aim
-#: (owner, 2026-10-14), so it counts as fully as resolving; with context, a list is only half an answer.
-BARE_NAME_KINDS = ("direct", "person-bare")
+_RESOLUTION_VALUE = {"resolved": 1.0, "listed": 0.5, "mixed": 0.5, "wrong": 0.0, "absent": 0.0, "unknown": 0.0}
 
 
-def resolution_value(resolution: str | None, kind: str | None) -> float:
-    if resolution == "listed" and kind in BARE_NAME_KINDS:
-        return 1.0
+def resolution_value(resolution: str | None, kind: str | None, shared_name: bool = False) -> float:
+    """Asked by the name alone, being listed among the name's meanings is the aim (owner, 2026-10-14), so
+    it counts as fully as resolving; with context, a list is only half an answer. For a shared name
+    (owner, 2026-10-22) resolving is a favour worth the same as being listed, and a blend is the one real
+    error there: the owner's entity merged with someone else's, so it earns nothing."""
+    if kind in BARE_NAME_KINDS:
+        if resolution == "listed":
+            return 1.0
+        if resolution == "mixed" and shared_name:
+            return 0.0
     return _RESOLUTION_VALUE.get(resolution, 0.0)
 
 
@@ -274,7 +279,7 @@ def trend(db: Session, user_id: Any, *, limit: int = TREND_RUNS) -> dict:
             row["points"].setdefault(answer.engine, []).append({
                 "run_id": run.id,
                 "resolution": s.get("resolution"),
-                "value": resolution_value(s.get("resolution"), kinds.get(answer.question_key)),
+                "value": resolution_value(s.get("resolution"), kinds.get(answer.question_key), bool(s.get("shared_name"))),
                 "coverage": round(s["facts_covered"] / s["facts_total"], 2) if s.get("facts_total") else None,
                 "connections": round(s["links_stated"] / s["links_total"], 2) if s.get("links_total") else None,
             })
@@ -295,18 +300,26 @@ PLANNER_CONFUSED_WITH = 3
 _PLANNER_KINDS = (("direct", None), ("person-bare", "by name alone"), ("person-context", "with context"))
 
 
+#: Said of a shared name an engine left out of its list (owner, 2026-10-22): a presence gap, not a confusion.
+NOT_YET_LISTED = "not yet among the name's meanings"
+
+
 def _resolved_phrase(scores: list[dict]) -> str:
-    labels = ("resolved", "listed", "mixed", "wrong")
+    labels = ("resolved", "listed", "absent", "mixed", "wrong")
     count = {label: sum(1 for s in scores if s.get("resolution") == label) for label in labels}
     resolved, total = count["resolved"], len(scores)
     of = f"of {total} engine{'s' if total != 1 else ''}"
     if count["wrong"] == total:
         phrase = f"wrong on {total} {of}"
+    elif count["absent"] == total:
+        phrase = f"{NOT_YET_LISTED} on {total} {of}"
     else:
         phrase = f"resolved on {resolved} {of}"
         if count["listed"]:
             # A shared name: one of the meanings the engine listed, kept apart from the rest.
             phrase += f", listed among the name's meanings on {count['listed']}"
+        if count["absent"]:
+            phrase += f", {NOT_YET_LISTED} on {count['absent']}"
         if count["mixed"]:
             phrase += f", mixed on {count['mixed']}"
         if count["wrong"]:
@@ -315,7 +328,10 @@ def _resolved_phrase(scores: list[dict]) -> str:
         if unknown:
             # The judge's "none": the answer was about no entity at all. Not found, not mistaken.
             phrase += f", not found by {unknown}"
-    for labels_named, wording in ((("mixed", "wrong", "unknown"), "confused with"), (("listed",), "listed alongside")):
+    # The others an engine named are a confusion only where it got the owner's entity wrong. Beside a shared
+    # name they are just its other meanings, and the planner should not be sent to disambiguate from them.
+    for labels_named, wording in ((("mixed", "wrong", "unknown"), "confused with"),
+                                  (("listed", "absent"), "the name's other meanings include")):
         named: dict[str, int] = {}
         for s in scores:
             if (s.get("resolution") or "unknown") in labels_named:

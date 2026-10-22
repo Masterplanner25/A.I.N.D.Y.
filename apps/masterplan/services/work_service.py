@@ -33,7 +33,8 @@ logger = logging.getLogger(__name__)
 #: What the planner block may carry at most (§6): the block must never crowd out the plan.
 PLANNER_WORK_LIMIT = 12
 
-_TRACKED_FIELDS = ("name", "kind", "summary", "role", "status", "url", "declared_target", "success_criteria")
+_TRACKED_FIELDS = ("name", "kind", "summary", "role", "status", "url", "declared_target", "success_criteria",
+                   "shared_name")
 
 
 def _uid(user_id: Any):
@@ -97,6 +98,10 @@ def _clean_fields(data: dict, *, partial: bool) -> dict:
         out["declared_target"] = (str(data.get("declared_target") or "").strip() or None)
     if "success_criteria" in data:
         out["success_criteria"] = (str(data.get("success_criteria") or "").strip() or None)
+    if "shared_name" in data and data.get("shared_name") is not None:
+        if not isinstance(data["shared_name"], bool):
+            raise _refuse(422, "shared_name must be true or false")
+        out["shared_name"] = data["shared_name"]
     return out
 
 
@@ -113,6 +118,7 @@ def serialize_work(work: Work) -> dict:
         "url": work.url,
         "declared_target": work.declared_target,
         "success_criteria": work.success_criteria,
+        "shared_name": bool(work.shared_name),
         "container_id": work.container_id,
         "provenance": work.provenance,
         "created_at": work.created_at.isoformat() if work.created_at else None,

@@ -55,6 +55,12 @@ function WorkFields({ draft, setDraft, vocabulary }) {
         <Select label="Role" value={draft.role || "creator"} options={vocabulary.roles} onChange={set("role")} />
         <Select label="Status" value={draft.status || "active"} options={vocabulary.statuses} onChange={set("status")} />
       </div>
+      {/* Others share this name: AI search asked by the name alone should list it among several meanings. */}
+      <label className="flex items-center gap-2 text-[11px] text-zinc-400">
+        <input type="checkbox" aria-label="Shared name" checked={!!draft.shared_name}
+          onChange={(e) => set("shared_name")(e.target.checked)} />
+        Others share this name
+      </label>
     </div>
   );
 }
@@ -227,8 +233,9 @@ export default function WorkPanel() {
                   <div className="flex gap-2">
                     <button className={PRIMARY} disabled={busy}
                       onClick={async () => {
-                        const { id, name, summary, kind, role, status, success_criteria } = editing;
-                        if (await act(() => updateWork(id, { name, summary, kind, role, status, success_criteria: success_criteria || "" }))) setEditing(null);
+                        const { id, name, summary, kind, role, status, success_criteria, shared_name } = editing;
+                        if (await act(() => updateWork(id, { name, summary, kind, role, status, success_criteria: success_criteria || "",
+                          shared_name: !!shared_name }))) setEditing(null);
                       }}>
                       Save
                     </button>
@@ -241,7 +248,7 @@ export default function WorkPanel() {
                     <div>
                       <p className="text-sm font-bold text-white">{w.name}</p>
                       <p className="text-[10px] uppercase tracking-wider text-zinc-500 mt-0.5">
-                        {w.kind} · {w.role} · {w.status}
+                        {w.kind} · {w.role} · {w.status}{w.shared_name ? " · shared name" : ""}
                       </p>
                     </div>
                     <div className="flex gap-2 shrink-0">
