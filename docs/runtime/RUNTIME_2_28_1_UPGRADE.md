@@ -45,9 +45,18 @@ stays.
 
 ## 3. Verified
 
+Image rebuilt 2026-10-22 from `main` at #483 (`03b94b6930b4`). It took 53 minutes, not the usual few:
+the `python:3.11-slim` tag had moved to a new digest, so every layer rebuilt, apt included, from a
+Debian mirror serving ~50–80 KB/s. A rebuild that runs long with `apt-get` in the log is that, not
+`DOCKER-PIP-LAYER-INVALIDATION-1`.
+
 | Where | Result |
 |---|---|
-| api container: `AINDY._version`, `AINDY.__path__`, `certifi.__version__` | pending the rebuild |
-| `/health` | pending the rebuild |
-| schema | runtime `0020`; app head `wk3shared0001` (#481, applied by the same rebuild) |
-| agent runs `executing` after the restart; `AgentContinuation` log | pending the rebuild |
+| api container | `2.28.1 ['/usr/local/lib/python3.11/site-packages/AINDY'] 2026.10.19` |
+| `/health` | 200; `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16` |
+| schema | runtime `0020`; app `wk3shared0001` (#481), `works.shared_name` `false NOT NULL` |
+| agent runs `executing` after the restart; `AgentContinuation` log | 0; empty (soak row 4) |
+
+The same rebuild brought #481 live. The owner's three shared names (Shawn Knight, Nodus, A.I.N.D.Y.)
+were set through `PATCH /apps/works/{id}` and recorded in `work_revisions`; the next Monday check
+(2026-10-26) is the first judged with them.
