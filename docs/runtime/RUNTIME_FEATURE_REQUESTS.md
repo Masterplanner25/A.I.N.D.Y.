@@ -20,6 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
+> **Open as of 2026-10-22:** **FR-54 (`certifi==2026.7.22` trusts a root whose intermediates' keys are compromised; fix 2026.10.19)**, FR-14 recurrence half, FR-6 items 2–3.
+>
 > **Open as of 2026-10-15:** FR-14 recurrence half, FR-6 items 2–3. (FR-53 shipped in 2.28.0.)
 >
 > **Open as of 2026-10-14:** **FR-53 (P2: `mcp-server` loads no app plugins; a payload `user_id` is never checked against the caller)**, FR-14 recurrence half, FR-6 items 2–3.
@@ -47,6 +49,41 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-54 — `certifi==2026.7.22` is an exact pin, and that bundle trusts `emSign ECC Root CA - G3`, whose intermediates' private keys are compromised; the fix is 2026.10.19 🔴 OPEN (filed 2026-10-22, P1: security)
+
+**apps-monolith ref:** found 2026-10-22 on #481 (a resolution-check change): `Python Dependency Audit`
+went red on the resolved tree with nothing of ours involved, the FR-51 shape again. Pinned in runtime
+2.28.0's `pyproject.toml` and still on runtime `main` (`c2647ed`, 2026-10-19).
+
+```
+certifi 2026.7.22  PYSEC-2026-4320  2026.10.19  eight eMudhra intermediates chaining to emSign ECC Root CA - G3
+                                                 have compromised keys and are revoked; anyone holding one can issue
+                                                 valid-looking certificates for any hostname
+```
+
+### Why we cannot fix this on our side
+
+`certifi` is not ours; it arrives through `aindy-runtime`'s exact pin, so a constraint to 2026.10.19
+makes pip refuse the install.
+
+### Our exposure, assessed: why we ignore it in the meantime
+
+This one is real, not theoretical: every outbound HTTPS call made through `requests` or `httpx` trusts
+that bundle, which includes OpenAI, DeepSeek, Anthropic, Perplexity and GitHub (the release handoff
+watcher). Exploiting it needs **both** a compromised eMudhra intermediate key **and** an on-path
+position between the api and those hosts. The api runs on the owner's desk, localhost-only, so the
+path is the owner's own network. That bounds it; it does not remove it, which is why the ask is
+urgent rather than routine.
+
+### Ask
+
+**Bump `certifi` to `>=2026.10.19`** in the next release (or relax the pin to a range: a CA bundle is
+the one dependency whose newest release is, by construction, the safest). The advisory also says to
+rebuild images that vendor certifi, so the adoption comes with a rebuild.
+
+Our ignore lives in `.github/workflows/security-audit.yml`, with its removal condition: it comes off at
+the adoption that brings certifi 2026.10.19 or later.
+
 ## FR-53 — `aindy-runtime mcp-server` never loads the app's plugins, and an exposed syscall that reads `user_id` from its payload serves whoever the outside AI names ✅ SHIPPED in 2.28.0 (#831, #832; DEC-099/100/101) — `mcp-server` loads plugins; a payload `user_id` naming another user is refused on MCP, Nodus `sys()` and `/platform/syscall`; in-process mismatches are counted (`aindy_payload_identity_mismatch_total`), not refused. Adopted 2026-10-15 (`RUNTIME_2_28_0_UPGRADE.md`)
 
 **apps-monolith ref:** found 2026-10-14 connecting Claude Code to A.I.N.D.Y. over MCP (owner: other
