@@ -20,6 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
+> **Open as of 2026-10-22 (evening):** FR-14 recurrence half, FR-6 items 2–3. (FR-54 shipped in 2.28.1, the day it was filed.)
+>
 > **Open as of 2026-10-22:** **FR-54 (`certifi==2026.7.22` trusts a root whose intermediates' keys are compromised; fix 2026.10.19)**, FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-10-15:** FR-14 recurrence half, FR-6 items 2–3. (FR-53 shipped in 2.28.0.)
@@ -49,7 +51,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-54 — `certifi==2026.7.22` is an exact pin, and that bundle trusts `emSign ECC Root CA - G3`, whose intermediates' private keys are compromised; the fix is 2026.10.19 🔴 OPEN (filed 2026-10-22, P1: security)
+## FR-54 — `certifi==2026.7.22` is an exact pin, and that bundle trusts `emSign ECC Root CA - G3`, whose intermediates' private keys are compromised; the fix is 2026.10.19 ✅ SHIPPED in 2.28.1 (#846, DEC-102) — `certifi>=2026.10.19`, a range, so the next bundle needs no runtime release; filed and shipped 2026-10-22, our ignore removed at the adoption (`RUNTIME_2_28_1_UPGRADE.md`)
 
 **apps-monolith ref:** found 2026-10-22 on #481 (a resolution-check change): `Python Dependency Audit`
 went red on the resolved tree with nothing of ours involved, the FR-51 shape again. Pinned in runtime

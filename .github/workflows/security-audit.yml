@@ -90,15 +90,12 @@ jobs:
       # GHSA-v4x9-3549-crwv, GHSA-vp6j-j7w5-5xjj) came off at the 2.27.0 adoption, their stated
       # removal condition: python-jose is gone and pymongo is 4.18.2.
       #
-      # PYSEC-2026-4320 (certifi 2026.7.22: the bundle trusts emSign ECC Root CA - G3, whose
-      # intermediates' keys are compromised) is ignored because aindy-runtime pins certifi
-      # exactly and a constraint makes pip refuse the install. Filed as FR-54, exposure in the
-      # register. REMOVAL CONDITION: the runtime adoption that brings certifi >= 2026.10.19.
+      # PYSEC-2026-4320 (certifi 2026.7.22) was ignored here on 2026-10-22 for one day: aindy-runtime
+      # pinned certifi exactly. FR-54; 2.28.1 brought certifi>=2026.10.19, its removal condition.
       - name: Audit installed Python dependencies
         run: >-
           pip-audit --desc
           --ignore-vuln PYSEC-2026-3740
-          --ignore-vuln PYSEC-2026-4320
 
   client-audit:
     name: Client Dependency Audit
