@@ -76,6 +76,7 @@ def ground_truth(db: Session, uid) -> dict:
     entities = {
         w.id: {"id": w.id, "name": w.name, "kind": w.kind, "role": w.role, "status": w.status,
                "summary": w.summary, "url": w.url, "presence": presence.get(w.id, []),
+               "shared_name": bool(w.shared_name),
                "confirmed_claims": decided.get(w.id, {}).get("true", []),
                "denied_claims": decided.get(w.id, {}).get("false", [])}
         for w in works
@@ -157,7 +158,8 @@ Report facts; do not score.
 
 about: "subject" if the answer is about the SUBJECT described by the confirmed facts; "listed" if it lists
   several different entities that share the name and the SUBJECT is one of them, kept separate from the
-  others; "other" if it is about a different entity with the same or a similar name and the SUBJECT is not
+  others; "absent" if it lists several different entities that share the name and the SUBJECT is not among
+  them; "other" if it is about a different entity with the same or a similar name and the SUBJECT is not
   among them; "mixed" if it blends the subject with other entities into one description; "none" if it does
   not identify any entity.
 other_entities: names of any other, different entities the answer brings in under the same name.
@@ -227,10 +229,24 @@ def judge_answer(question: dict, answer: dict, truth: dict) -> dict:
 #: "listed" (owner, 2026-10-14): a name shared with others should not resolve to one thing on its own —
 #: "I'm not the only Shawn Knight in the world, nor is Nodus the only thing named Nodus" — so for the name
 #: alone, being one of the meanings an engine lists, kept apart from the rest, is the aim. RESOLUTION_CHECK_SPEC §7.4.
-RESOLUTION_LABELS = {"subject": "resolved", "listed": "listed", "mixed": "mixed", "other": "wrong", "none": "unknown"}
+RESOLUTION_LABELS = {"subject": "resolved", "listed": "listed", "mixed": "mixed", "other": "wrong", "absent": "wrong",
+                     "none": "unknown"}
+#: The questions that ask by the name alone.
+BARE_NAME_KINDS = ("direct", "person-bare")
 
 
-def score(judgement: dict, citations: list[str], truth: dict) -> dict:
+def _resolution(about: str, entity: dict, kind: str | None) -> str:
+    """A shared name asked alone (owner, 2026-10-22): an answer that names others and not the owner's is
+    `absent`, a presence gap, not `wrong`. The engines were right to give the name's better-known
+    meanings; on 10-19 the judge, with nowhere to put such a list, called it "none" and it read as
+    unknown. With context, or for a name nobody else has, the owner's entity should be THE answer, so
+    missing it stays wrong."""
+    if about in ("other", "absent") and entity.get("shared_name") and kind in BARE_NAME_KINDS:
+        return "absent"
+    return RESOLUTION_LABELS.get(about, "unknown")
+
+
+def score(judgement: dict, citations: list[str], truth: dict, question: dict | None = None) -> dict:
     """The owner's three criteria, as numbers, from the judge's facts (§3)."""
     facts = judgement.get("_facts") or []
     links = judgement.get("_links") or []
@@ -249,8 +265,12 @@ def score(judgement: dict, citations: list[str], truth: dict) -> dict:
     links_stated = ids("links_stated", "L", len(links))
     own = set(truth.get("own_hosts") or [])
     own_cited = sorted({_host(c) for c in citations or [] if _host(c) in own})
+    question = question or {}
+    entity = (truth.get("entities") or {}).get(question.get("subject")) or {}
     return {
-        "resolution": RESOLUTION_LABELS.get(str(judgement.get("about") or "none"), "unknown"),
+        "resolution": _resolution(str(judgement.get("about") or "none"), entity, question.get("kind")),
+        # Recorded with the verdict: the trend values an answer by what the name was when it was asked.
+        "shared_name": bool(entity.get("shared_name")),
         "other_entities": [str(n) for n in judgement.get("other_entities") or []][:5],
         "claims_correct": count["correct"], "claims_incorrect": count["incorrect"],
         "claims_unverifiable": count["unverifiable"],
@@ -367,7 +387,7 @@ def process_run(db: Session, run: ResolutionRun, *, limit: int = TICK_PAIRS,
                 judgement = judge(question, answer, truth)
                 calls["judge"] = calls.get("judge", 0) + 1
                 row.judgement = judgement
-                row.scores = score(judgement, row.citations, truth)
+                row.scores = score(judgement, row.citations, truth, question)
         except Exception as exc:  # one engine or judgement failing must not stop the check
             row.error = str(exc)[:500]
             logger.warning("[resolution] %s / %s failed: %s", engine, question["key"], exc)

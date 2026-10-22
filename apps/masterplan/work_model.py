@@ -11,7 +11,7 @@ conclusions.
 """
 import uuid
 
-from sqlalchemy import JSON, Column, Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, ForeignKey, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 
 from AINDY.db.database import Base
@@ -63,6 +63,10 @@ class Work(Base):
     # container is RippleTrace's table, and this domain owns the link, not the other way round.
     container_id = Column(String, nullable=True, index=True)
     provenance = Column(String(16), nullable=False)
+    # Other people or things share this name (owner, 2026-10-22: Shawn Knight, Nodus, A.I.N.D.Y.). Asked
+    # by the name alone, AI search SHOULD list several meanings: resolving to the owner's is a favour,
+    # and missing from the list is a presence gap, not a confusion (RESOLUTION_CHECK_SPEC §7.4).
+    shared_name = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

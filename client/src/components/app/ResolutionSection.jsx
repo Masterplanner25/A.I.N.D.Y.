@@ -15,6 +15,8 @@ const TONE = {
   resolved: "text-[#00ffaa] border-[#00ffaa]/40",
   // A shared name, listed among its meanings: the aim for the name alone (owner, 2026-10-14).
   listed: "text-sky-300 border-sky-400/40",
+  // A shared name the engine's list left out: a presence gap, not a confusion (owner, 2026-10-22).
+  absent: "text-zinc-300 border-zinc-500/60",
   mixed: "text-amber-300 border-amber-400/40",
   wrong: "text-red-400 border-red-400/40",
   unknown: "text-zinc-500 border-zinc-700",
@@ -67,7 +69,7 @@ function AnswerRow({ answer }) {
   );
 }
 
-const DOT = { resolved: "●", listed: "◉", mixed: "◐", wrong: "○", unknown: "·" };
+const DOT = { resolved: "●", listed: "◉", absent: "◌", mixed: "◐", wrong: "○", unknown: "·" };
 
 // What the engines said that your confirmed facts could not settle. Your answer becomes the next
 // check's ground truth: true is a fact, false a denied claim, skip is not asked again.

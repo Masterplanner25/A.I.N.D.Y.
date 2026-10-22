@@ -160,6 +160,17 @@ describe("Collaborator's Work mode", () => {
     })));
   });
 
+  it("declares that others share a work's name", async () => {
+    api.updateWork.mockResolvedValue({});
+    renderPanel();
+    await screen.findByText(/Resolution, not rankings/);
+    await userEvent.click(screen.getAllByRole("button", { name: /^edit$/i })[2]);
+    const boxes = screen.getAllByLabelText("Shared name");
+    await userEvent.click(boxes[boxes.length - 1]);
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(api.updateWork).toHaveBeenCalledWith("w-ai", expect.objectContaining({ shared_name: true })));
+  });
+
   it("shows exactly what the agent is told", async () => {
     renderPanel();
     await screen.findByText("aindy-runtime", { selector: "p" });

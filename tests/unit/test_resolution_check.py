@@ -15,7 +15,7 @@ from fastapi import HTTPException
 
 from apps.masterplan.services import resolution_service as rs
 from apps.masterplan.services import work_service as ws
-from apps.masterplan.work_model import ResolutionAnswer, ResolutionRun
+from apps.masterplan.work_model import ResolutionAnswer, ResolutionRun, Work
 
 pytestmark = pytest.mark.app_profile
 
@@ -385,7 +385,7 @@ def test_the_planner_is_told_when_a_work_is_listed_and_beside_what(db_session, m
     })
     lines = rr.planner_lines(db_session, USER, now=NOW)
     assert lines[nodus].endswith("resolved on 1 of 3 engines, listed among the name's meanings on 2, "
-                                 "listed alongside Nodus Research; Nodus Payments")
+                                 "the name's other meanings include Nodus Research; Nodus Payments")
     # A wrong answer is still confusion, and is what the line names.
     assert lines[person].endswith("by name alone: resolved on 0 of 2 engines, listed among the name's meanings on 1, "
                                   "wrong on 1, confused with Shawn Knight (actor)")
@@ -397,3 +397,58 @@ def test_the_trend_values_a_listed_bare_name_as_the_aim(db_session, model):
     _checked(db_session, {f"direct:{nodus}": {"perplexity": _res("listed")}})
     [row] = rr.trend(db_session, USER)["questions"]
     assert [p["value"] for p in row["points"]["perplexity"]] == [1.0, 1.0]
+
+
+# ── A shared name the engines' list leaves out: absent (owner, 2026-10-22) ─────────────────
+
+
+def test_the_owner_declares_a_shared_name_and_it_reaches_the_ground_truth(db_session, model):
+    person = model["person"]["id"]
+    assert ws.serialize_work(db_session.get(Work, person))["shared_name"] is False
+    assert ws.update_work(db_session, USER, person, {"shared_name": True})["shared_name"] is True
+    assert rs.ground_truth(db_session, USER)["entities"][person]["shared_name"] is True
+    with pytest.raises(HTTPException):
+        ws.update_work(db_session, USER, person, {"shared_name": "yes"})
+
+
+def _truth(shared):
+    return {"entities": {"p": {"shared_name": shared}}, "own_hosts": []}
+
+
+def test_a_shared_name_left_out_of_the_list_is_absent_not_wrong():
+    """The 10-19 check: all three engines listed other Shawn Knights (NFL, CFL, a tech journalist) and not
+    the owner. The engines were right to; the owner is not yet notable enough to make the list."""
+    bare, context = {"subject": "p", "kind": "person-bare"}, {"subject": "p", "kind": "person-context"}
+    for about in ("absent", "other"):
+        assert rs.score({"about": about}, [], _truth(True), bare)["resolution"] == "absent"
+        # A name nobody else has, or a question with context: the owner's entity should be THE answer.
+        assert rs.score({"about": about}, [], _truth(False), bare)["resolution"] == "wrong"
+        assert rs.score({"about": about}, [], _truth(True), context)["resolution"] == "wrong"
+    assert rs.score({"about": "listed"}, [], _truth(True), bare)["shared_name"] is True
+    prompt = " ".join(rs._JUDGE_PROMPT.split())
+    assert '"absent" if it lists several different entities that share the name and the SUBJECT is not among them' in prompt
+
+
+def test_a_shared_name_values_a_favour_as_listed_and_a_blend_as_the_error():
+    assert rr.resolution_value("resolved", "person-bare", True) == 1.0
+    assert rr.resolution_value("listed", "person-bare", True) == 1.0
+    assert rr.resolution_value("absent", "direct", True) == 0.0
+    assert rr.resolution_value("mixed", "direct", True) == 0.0
+    # Unchanged for a unique name, and with context.
+    assert rr.resolution_value("mixed", "direct", False) == 0.5
+    assert rr.resolution_value("mixed", "person-context", True) == 0.5
+
+
+def test_the_planner_is_told_absent_as_a_gap_never_as_a_confusion(db_session, model):
+    person, nodus = model["person"]["id"], model["nodus"]["id"]
+    _checked(db_session, {
+        f"person-bare:{person}": {e: _res("absent", "Shawn Knight (NFL)") for e in ("perplexity", "openai", "claude")},
+        f"direct:{nodus}": {"perplexity": _res("listed", "Nodus Research"), "openai": _res("absent", "Nodus Labs")},
+    })
+    lines = rr.planner_lines(db_session, USER, now=NOW)
+    assert lines[person].endswith("by name alone: not yet among the name's meanings on 3 of 3 engines, "
+                                  "the name's other meanings include Shawn Knight (NFL)")
+    assert lines[nodus].endswith("resolved on 0 of 2 engines, listed among the name's meanings on 1, "
+                                 "not yet among the name's meanings on 1, "
+                                 "the name's other meanings include Nodus Research; Nodus Labs")
+    assert "confused with" not in lines[person] + lines[nodus]
