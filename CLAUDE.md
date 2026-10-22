@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime[mcp]>=2.28.0,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime[mcp]>=2.28.1,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -257,10 +257,10 @@ merge rules): `docs/operations/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime[mcp]>=2.28.0,<3.0    # pyproject.toml — the COMPATIBILITY range
+aindy-runtime[mcp]>=2.28.1,<3.0    # pyproject.toml — the COMPATIBILITY range
 ```
 ```
-aindy-runtime==2.28.0         # constraints.txt — the BUILD pin
+aindy-runtime==2.28.1         # constraints.txt — the BUILD pin
 ```
 
 The upper bound is required. Never widen to an unbounded range.
@@ -293,7 +293,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime[mcp]>=2.28.0,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime[mcp]>=2.28.1,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.
@@ -619,8 +619,8 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0**; FR-51 and FR-52 shipped in 2.27.0; FR-53 (MCP plugins, payload `user_id`) filed 2026-10-14 and **shipped in 2.28.0** the next day |
-| Latest runtime adoption record | `docs/runtime/RUNTIME_2_28_0_UPGRADE.md` — one per release; **2.28.0 closes FR-53** (mcp-server loads plugins; a foreign payload `user_id` is refused on MCP/`sys()`/`/platform/syscall`); **`aindy_payload_identity_mismatch_total` readout owed ~10-22, and it resets on every api recreate — read it before each rebuild**. 2.27.0's doc: FR-52 fixed (scores p50 715 ms), soak rows 3–4 (§7). 2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — check the column, not the exit code |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0**; FR-51 and FR-52 shipped in 2.27.0; FR-53 (MCP plugins, payload `user_id`) filed 2026-10-14 and **shipped in 2.28.0** the next day; FR-54 (certifi, security) filed 2026-10-22 and **shipped in 2.28.1** the same day |
+| Latest runtime adoption record | `docs/runtime/RUNTIME_2_28_1_UPGRADE.md` — one per release; **2.28.1 closes FR-54** (certifi ≥ 2026.10.19, a range on purpose; no schema step). 2.28.0's doc: **FR-53 closed** (mcp-server loads plugins; a foreign payload `user_id` is refused on MCP/`sys()`/`/platform/syscall`); `aindy_payload_identity_mismatch_total` read 0 for 10-15 → 10-22 (1,496 syscalls); it resets on every api recreate, so read it before each rebuild. 2.27.0's doc: FR-52 fixed (scores p50 715 ms), soak rows 3–4 (§7). 2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — check the column, not the exit code |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
 | Resolution Check (does AI search resolve the owner's entities) | `docs/specs/RESOLUTION_CHECK_SPEC.md`: phases A–C built; `listed` is a verdict (§7.4); the score stays unwired (decision 5) |
