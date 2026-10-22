@@ -150,8 +150,8 @@ describe("frontend smoke tests", () => {
     expect(payload.error_type).toBe("boundary");
 
     spy.mockRestore();
-    vi.resetModules();
     vi.doUnmock("../api/operator.js");
+    vi.resetModules();
   });
 
   it("ErrorBoundary includes layer and domain in backend error report", async () => {
@@ -179,8 +179,8 @@ describe("frontend smoke tests", () => {
     expect(payload.error_type).toBe("boundary");
 
     spy.mockRestore();
-    vi.resetModules();
     vi.doUnmock("../api/operator.js");
+    vi.resetModules();
   });
 
   it("ErrorBoundary defaults layer to 'unknown' when not provided", async () => {
@@ -206,8 +206,8 @@ describe("frontend smoke tests", () => {
     expect(payload.domain).toBeNull();
 
     spy.mockRestore();
-    vi.resetModules();
     vi.doUnmock("../api/operator.js");
+    vi.resetModules();
   });
 
   describe("InlineErrorBoundary", () => {
@@ -272,6 +272,11 @@ describe("frontend smoke tests", () => {
   it("reportClientError does not throw when fetch fails", async () => {
     const fetchSpy = vi.fn().mockRejectedValue(new Error("Network error"));
     vi.stubGlobal("fetch", fetchSpy);
+    // The ErrorBoundary tests above mock this module. Drop the mock and the module cache before importing,
+    // or a cached mock (whose reportClientError returns undefined) can be what this test gets: it did on
+    // CI on 2026-10-22, and passed locally and on main.
+    vi.doUnmock("../api/operator.js");
+    vi.resetModules();
 
     const { reportClientError } = await import("../api/operator.js");
 
