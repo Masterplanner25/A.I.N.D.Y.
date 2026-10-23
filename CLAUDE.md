@@ -209,17 +209,36 @@ only underneath us, in the agent backend (`nodus_vm`), and the one `.nd` we had 
 **A new workflow goes in `apps/<domain>/nodus/<name>.nd`, not in a new Python flow graph.** Existing
 Python flows stay as they are until one is deliberately ported.
 
+- **Ours so far, both in `apps/analytics/nodus/`:** `reasoning_apply_v1.nd` (the reasoning flow) and
+  `infinity_recalc_v1.nd`, the daily Infinity recalculation for one user (#487). Each has a flag,
+  `AINDY_REASONING_NODUS_NATIVE` and `AINDY_INFINITY_RECALC_NODUS`. The flags are off in code and
+  on in compose, and any VM failure falls back to Python.
 - **The pattern is `apps/analytics`.** It has the source (`nodus/reasoning_apply_v1.nd`), the boot
   registration (`bootstrap.py::_register_nodus_workflows`, which calls `register_nodus_workflow` on
   every `*.nd` in the folder), the call through `run_nodus_workflow`, and a Python fallback.
   Another domain copies the registration into its own `bootstrap.py`.
 - **The script reaches app logic only through `sys("sys.v1.…", args)`.** It cannot import Python, so
-  everything the workflow needs must be a registered syscall. Name a read syscall `get_…`: the
-  runtime infers the capability from the verb (`TECH_DEBT.md`, the Nodus-native reasoning row).
+  everything the workflow needs must be a registered syscall. **`sys()` is granted only the
+  capability the runtime infers from the syscall's name** (`_infer_dispatch_capability`): `get_…`,
+  `list_…` and the like map to `<domain>.read`, `create_…` and the like to `<domain>.write`, and any
+  other name maps to itself. If that is not the capability the syscall requires, every VM run is
+  denied and quietly falls back to Python. `sys.v1.analytics.execute_infinity` (requires
+  `score.recalculate`) fails this; `sys.v1.score.recalculate` passes. Assert it in a test, as
+  `test_infinity_recalc_nodus.py` does.
+- **A workflow acts as one user.** The runtime refuses a payload `user_id` naming another user over
+  MCP since 2.28.0, may refuse it in-process (DEC-103), and counts each one
+  (`aindy_payload_identity_mismatch_total`). So a job over all users stays a Python loop that starts
+  one run per user (`run_nodus_workflow(..., user_id=…)`), and the script's syscalls read
+  `ctx.user_id`.
 - **Run `nodus check <file>.nd` before pushing**, and add a test like
   `test_analytics_nodus_workflow.py` that compiles it.
-- **A cold worker takes about 20 s per execution** (measured 2026-10-22). Keep `.nd` off
-  request paths that must answer quickly.
+- **A cold worker takes 17–21 s; a warm one about 2 s** (measured 2026-10-22: Python did the same
+  recalculation in 2.0 s). The warm pool is the runtime's default, but a scheduled job's callback
+  is a fresh process (the 90 s `AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS`), so its first run is
+  always cold. Keep `.nd` off request paths that must answer quickly.
+- **Trigger with `register_scheduled_job`, not the runtime's Nodus scheduler.**
+  `POST /platform/nodus/schedule` stores a copy of the script in a per-user row
+  (`nodus_scheduled_jobs`), so a change to the `.nd` file would never reach it.
 - **Results land in `data.nodus_output_state`** (what `set_state` wrote), with `data.nodus_status`
   saying whether it succeeded. Each run also leaves a record on the `nodus_state` volume, and
   nothing prunes it.
