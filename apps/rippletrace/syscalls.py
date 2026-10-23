@@ -164,11 +164,16 @@ ARCHIVE_STEP_SYSCALLS = {
 }
 
 
+#: Built once, at import: the registry refuses a second registration whose handler is a different
+#: object, and every boot calls `register_rippletrace_syscall_handlers` again.
+_ARCHIVE_STEP_HANDLERS = {name: _archive_step(step) for name, (step, _) in ARCHIVE_STEP_SYSCALLS.items()}
+
+
 def register_rippletrace_syscall_handlers() -> None:
-    for name, (step, description) in ARCHIVE_STEP_SYSCALLS.items():
+    for name, (_, description) in ARCHIVE_STEP_SYSCALLS.items():
         register_syscall(
             name=name,
-            handler=_archive_step(step),
+            handler=_ARCHIVE_STEP_HANDLERS[name],
             capability="rippletrace.write",
             description=description,
             stable=False,

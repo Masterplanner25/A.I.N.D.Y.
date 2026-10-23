@@ -151,3 +151,11 @@ class TestWorkflow:
             syscalls._archive_step(step)({"user_id": "someone-else", "limit": 999}, ctx)
         assert set(seen) == set(syscalls.ARCHIVE_STEP_SYSCALLS)
         assert all(uid == "run-user" and limit == content_archive.BATCH for uid, limit in seen.values())
+
+
+def test_registering_twice_is_not_a_conflict():
+    # Every boot registers again, and the registry refuses a second handler object for one name.
+    from apps.rippletrace.syscalls import register_rippletrace_syscall_handlers
+
+    register_rippletrace_syscall_handlers()
+    register_rippletrace_syscall_handlers()
