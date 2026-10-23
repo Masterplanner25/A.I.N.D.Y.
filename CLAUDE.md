@@ -201,6 +201,29 @@ def register() -> None:
 
 Full pattern documentation: `docs/architecture/PLUGIN_REGISTRY_PATTERN.md`
 
+### New workflows are written in Nodus (`.nd`)
+
+**Owner, 2026-10-22: A.I.N.D.Y.'s own workflows are written in Nodus.** Before that date, all of our
+orchestration was Python: `register_flow_definitions` node graphs and APScheduler jobs. Nodus ran
+only underneath us, in the agent backend (`nodus_vm`), and the one `.nd` we had was switched off.
+**A new workflow goes in `apps/<domain>/nodus/<name>.nd`, not in a new Python flow graph.** Existing
+Python flows stay as they are until one is deliberately ported.
+
+- **The pattern is `apps/analytics`.** It has the source (`nodus/reasoning_apply_v1.nd`), the boot
+  registration (`bootstrap.py::_register_nodus_workflows`, which calls `register_nodus_workflow` on
+  every `*.nd` in the folder), the call through `run_nodus_workflow`, and a Python fallback.
+  Another domain copies the registration into its own `bootstrap.py`.
+- **The script reaches app logic only through `sys("sys.v1.…", args)`.** It cannot import Python, so
+  everything the workflow needs must be a registered syscall. Name a read syscall `get_…`: the
+  runtime infers the capability from the verb (`TECH_DEBT.md`, the Nodus-native reasoning row).
+- **Run `nodus check <file>.nd` before pushing**, and add a test like
+  `test_analytics_nodus_workflow.py` that compiles it.
+- **A cold worker takes about 20 s per execution** (measured 2026-10-22). Keep `.nd` off
+  request paths that must answer quickly.
+- **Results land in `data.nodus_output_state`** (what `set_state` wrote), with `data.nodus_status`
+  saying whether it succeeded. Each run also leaves a record on the `nodus_state` volume, and
+  nothing prunes it.
+
 ### Adding a new domain app
 
 1. Create `apps/<newdomain>/` with a `bootstrap.py` declaring `BOOTSTRAP_DEPENDS_ON`,

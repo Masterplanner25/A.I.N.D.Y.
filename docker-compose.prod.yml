@@ -181,9 +181,10 @@ services:
       AINDY_INFINITY_LEARNED_ADVISORY: "${AINDY_INFINITY_LEARNED_ADVISORY:-}"
       AINDY_INFINITY_WORTH_WEIGHT: "${AINDY_INFINITY_WORTH_WEIGHT:-}"
       AINDY_INFINITY_TRAJECTORY_WEIGHT: "${AINDY_INFINITY_TRAJECTORY_WEIGHT:-}"
-      # Behaviour-changing paths — deliberately listed so they are visible and
-      # overridable, but default off.
-      AINDY_REASONING_NODUS_NATIVE: "${AINDY_REASONING_NODUS_NATIVE:-}"
+      # Reasoning apply runs reasoning_apply_v1.nd on the Nodus VM. ON since 2026-10-22 (owner):
+      # A.I.N.D.Y.'s own workflows are written in Nodus. Behaviour-neutral, and any VM failure
+      # falls back to the Python path. Set it to "" to go back to Python only.
+      AINDY_REASONING_NODUS_NATIVE: "${AINDY_REASONING_NODUS_NATIVE:-1}"
       # Attainment (MASTERPLAN_GOAL_ATTAINMENT_SPEC §6). The shadow records and moves nothing;
       # it defaults ON in code, so leaving this unset keeps recording. The live flag is the
       # Phase 3 flip, default off; set it only after the shadow ledger has said something.
@@ -244,8 +245,8 @@ services:
       # land in the worker's cwd (/home/aindy, no volume) and vanish on every recreate.
       # Pointing them at a volume makes them durable. Use this variable, not the legacy
       # NODUS_WORKFLOW_STORE_ROOT (which relocates only half). Local storage only: the store
-      # is SQLite in WAL mode. It grows and nothing prunes it — with
-      # AINDY_REASONING_NODUS_NATIVE off (the soak gate) nothing writes here yet.
+      # is SQLite in WAL mode. It grows and nothing prunes it. Our .nd workflows write here
+      # (AINDY_REASONING_NODUS_NATIVE on since 2026-10-22).
       # See docs/runtime/RUNTIME_2_11_0_UPGRADE.md §2.
       NODUS_RUN_STATE_ROOT: /var/lib/aindy/nodus-state
     volumes:

@@ -282,7 +282,7 @@ stayed parked. The two shadow flags have since been turned on (#156).
 | `AINDY_INFINITY_WORTH_WEIGHT` / `_TRAJECTORY_WEIGHT` | Blend weights | unset |
 | `AINDY_INFINITY_LEARNED_SHADOW` | Learned REFLECT calibrator, shadow | unset |
 | `AINDY_INFINITY_LEARNED_ADVISORY` | Learned calibrator, advisory | unset |
-| `AINDY_REASONING_NODUS_NATIVE` | nodus_vm as the reasoning path | unset |
+| `AINDY_REASONING_NODUS_NATIVE` | nodus_vm as the reasoning path | **`1`** (compose default since 2026-10-22) |
 | `AINDY_NEXT_ACTION_ACTING` | Next-action pre-dispatch | unset |
 | `AINDY_SEARCH_EMBEDDING_RANKING` / `_OUTCOME_WEIGHTING` / `_OUTREACH_SEND` | Search ranking + real outreach | unset |
 | `AINDY_DURABLE_CONTINUATION` / `_ALL` / `_FOLD_REPAIR` / `_STEP_GRANULARITY` | Durable execution | all `False` |
