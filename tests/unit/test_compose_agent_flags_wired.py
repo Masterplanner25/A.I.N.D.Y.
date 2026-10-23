@@ -24,6 +24,13 @@ def test_the_flag_is_passed_to_the_api(flag):
     assert f'{flag}: "${{{flag}:-}}"' in COMPOSE.read_text(encoding="utf-8")
 
 
+# Owner, 2026-10-22: our own workflows are written in Nodus, so reasoning runs its .nd by default.
+def test_reasoning_runs_on_nodus_by_default():
+    assert 'AINDY_REASONING_NODUS_NATIVE: "${AINDY_REASONING_NODUS_NATIVE:-1}"' in (
+        COMPOSE.read_text(encoding="utf-8")
+    )
+
+
 # Scheduled-job callbacks cold-import the app in a subprocess; at the runtime's 30s default they
 # timed out whenever several crons started on the same hour (12 failed runs, 2026-10-02 → 10-06).
 def test_the_callback_budget_is_raised_for_the_api():
