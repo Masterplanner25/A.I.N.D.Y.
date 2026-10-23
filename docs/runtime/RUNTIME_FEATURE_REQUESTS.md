@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-10-07"
+last_verified: "2026-10-22"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -19,6 +19,8 @@ owner: "app-team"
 > **Numbering is the runtime's.** Its `CLAUDE.md` `APP-FR-*` ledger says *next available*; it also
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
+>
+> **Open as of 2026-10-22 (night):** **FR-55 (P3: a guest Nodus wait cannot resume on a deadline, a resume loses `set_state`, the 30-minute wait deadline is fixed)**, FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-10-22 (evening):** FR-14 recurrence half, FR-6 items 2–3. (FR-54 shipped in 2.28.1, the day it was filed.)
 >
@@ -51,6 +53,54 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-55 — a guest Nodus wait can only end on an event or in failure: no timed resume, a resume restarts the script without its state, and the 30-minute deadline cannot be set per workflow 🔴 OPEN — filed 2026-10-22, P3 (no defect: it blocks porting our tick-driven jobs to `.nd`, nothing that runs today)
+
+**apps-monolith ref:** found 2026-10-22 while scoping the next `.nd` port. Owner, the same day:
+**A.I.N.D.Y.'s own workflows are written in Nodus** (#486, our `CLAUDE.md`). Two ports have shipped,
+`reasoning_apply_v1.nd` and `infinity_recalc_v1.nd` (#487). Both are one-shot. The next candidate,
+the Resolution Check, cannot be ported usefully, for the three reasons below. Read on runtime 2.28.1
+and on `main` at `1060085`.
+
+The Resolution Check asks the AI search engines about 54 questions, 6 a minute, from a 1-minute
+APScheduler tick (`masterplan_resolution_tick`), with its progress in `resolution_answers` rows. As a
+workflow it would be "ask 6, sleep a minute, repeat", which a guest script cannot express:
+
+### (a) A wait cannot resume on a deadline
+
+`await_event(event_type, schema)` (`nodus_worker.py`, DEC-017) parks the run on an event, which is
+durable and survives a restart (FR-31). But the only way out besides the event is the deadline, and
+the deadline **fails** the run: `recovery_jobs.py` sets `status=failed`, `error_message="WAIT_TIMEOUT"`.
+nodus-lang's own runner already has the semantics we want, `on_timeout: "resume"` ("the deadline
+becomes a schedule", `workflow_state.WAIT_TIMEOUT_POLICIES`), but nothing passes it through to the
+guest. **Ask:** a guest wait that resumes at its deadline, e.g. `await_event(type, schema, {"deadline_ms": …,
+"on_timeout": "resume"})` or a `sleep_until(ts)` built on it. The run would then resume with a
+timeout marker in `nodus_received_events`.
+
+### (b) A resume re-runs the script from the top, without what it saved
+
+`nodus_adapter.py` (WAIT path) seeds only `nodus_received_events` back into the re-run. `set_state`
+from before the park rides along on the run as `nodus_output_state`, but it is "NOT seeded back into
+the re-run's namespace", and the comment leaves that to WAIT-TYPED-CONTRACT-1. So a looping
+workflow must rebuild its progress from the app's own tables on every wake, which is exactly the
+state machine a workflow port is meant to remove. **Ask:** let a resumed guest read its prior
+`set_state` (`get_state(key)` returning the parked value is enough), or take the decision
+WAIT-TYPED-CONTRACT-1 leaves open in that direction.
+
+### (c) The 30-minute deadline is fixed for every guest script
+
+Every guest wait gets `FLOW_WAIT_TIMEOUT_MINUTES` (30) because `run_nodus_workflow` runs under the
+runtime-owned `nodus_execute` flow, and `NODUS_SCRIPT_FLOW` declares no `wait_timeout_minutes`
+(`_get_flow_wait_timeout`). An app cannot give one workflow a longer wait without raising it for all.
+**Ask:** a per-workflow wait timeout, e.g. on `register_nodus_workflow(..., wait_timeout_minutes=…)`,
+or a per-wait deadline as in (a), which would make this one moot.
+
+### What we do meanwhile
+
+The Resolution Check stays in Python. New `.nd` workflows are one-shot, triggered by
+`register_scheduled_job` (our `CLAUDE.md`, *New workflows are written in Nodus*). With (a) and (b),
+a check becomes one workflow that sleeps between batches, and its tick job and state machine go
+away. The release-handoff watcher has the same shape.
+
 ## FR-54 — `certifi==2026.7.22` is an exact pin, and that bundle trusts `emSign ECC Root CA - G3`, whose intermediates' private keys are compromised; the fix is 2026.10.19 ✅ SHIPPED in 2.28.1 (#846, DEC-102) — `certifi>=2026.10.19`, a range, so the next bundle needs no runtime release; filed and shipped 2026-10-22, our ignore removed at the adoption (`RUNTIME_2_28_1_UPGRADE.md`)
 
 **apps-monolith ref:** found 2026-10-22 on #481 (a resolution-check change): `Python Dependency Audit`

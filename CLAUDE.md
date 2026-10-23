@@ -236,6 +236,20 @@ Python flows stay as they are until one is deliberately ported.
   recalculation in 2.0 s). The warm pool is the runtime's default, but a scheduled job's callback
   is a fresh process (the 90 s `AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS`), so its first run is
   always cold. Keep `.nd` off request paths that must answer quickly.
+- **A workflow can pause only until an event arrives. It cannot sleep until a time** (checked
+  2026-10-22 on 2.28.1 and runtime `main`, filed as **FR-55**). `await_event(type, schema)` parks the
+  run durably: `waiting_flow_runs` survives a restart, and an event or `POST …/runs/{id}/resume`
+  wakes it. But:
+  - **the deadline fails the run** (`WAIT_TIMEOUT`); it never resumes it;
+  - **the deadline is 30 minutes for every guest script** (`FLOW_WAIT_TIMEOUT_MINUTES`), because they
+    all run under the runtime's `nodus_execute` flow;
+  - **a resume re-runs the script from the top.** Only `nodus_received_events` comes back, not
+    what the script saved with `set_state`, so every step must be safe to run twice.
+
+  nodus-lang has `on_timeout: "resume"`, but the A.I.N.D.Y. embedding does not pass it through.
+  **So write one-shot workflows, and leave tick-driven jobs in Python until FR-55 ships.** The Resolution
+  Check (6 questions a minute) and the release-handoff watcher are two such jobs: ported today, each
+  would still need its tick and would rebuild its progress from its own tables on every wake.
 - **Trigger with `register_scheduled_job`, not the runtime's Nodus scheduler.**
   `POST /platform/nodus/schedule` stores a copy of the script in a per-user row
   (`nodus_scheduled_jobs`), so a change to the `.nd` file would never reach it.
@@ -661,7 +675,7 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0**; FR-51 and FR-52 shipped in 2.27.0; FR-53 (MCP plugins, payload `user_id`) filed 2026-10-14 and **shipped in 2.28.0** the next day; FR-54 (certifi, security) filed 2026-10-22 and **shipped in 2.28.1** the same day |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0**; FR-51 and FR-52 shipped in 2.27.0; FR-53 (MCP plugins, payload `user_id`) filed 2026-10-14 and **shipped in 2.28.0** the next day; FR-54 (certifi, security) filed 2026-10-22 and **shipped in 2.28.1** the same day; **FR-55** (guest Nodus waits: no timed resume, resume loses `set_state`, fixed 30-min deadline) filed 2026-10-22, open |
 | Latest runtime adoption record | `docs/runtime/RUNTIME_2_28_1_UPGRADE.md` — one per release; **2.28.1 closes FR-54** (certifi ≥ 2026.10.19, a range on purpose; no schema step). 2.28.0's doc: **FR-53 closed** (mcp-server loads plugins; a foreign payload `user_id` is refused on MCP/`sys()`/`/platform/syscall`); `aindy_payload_identity_mismatch_total`: window 1 (10-15 → 10-22) read 0 over 1,496 syscalls; window 2 (10-22 ~17:25Z → 19:51Z) LOST unread; window 3 from 10-22 19:51Z, readout owed **~10-29** (2.28.0 doc §4). It resets on every api recreate: read it before each rebuild. 2.27.0's doc: FR-52 fixed (scores p50 715 ms), soak rows 3–4 (§7). 2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — check the column, not the exit code |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
