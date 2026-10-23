@@ -188,6 +188,9 @@ services:
       # The daily Infinity recalculation runs each user through infinity_recalc_v1.nd. ON since
       # 2026-10-22, same reasoning and fallback as above. "" goes back to Python only.
       AINDY_INFINITY_RECALC_NODUS: "${AINDY_INFINITY_RECALC_NODUS:-1}"
+      # Archiving published work runs each owner with something due through
+      # archive_published_work_v1.nd. ON since 2026-10-22; a settled catalogue stays in Python.
+      AINDY_ARCHIVE_NODUS: "${AINDY_ARCHIVE_NODUS:-1}"
       # Attainment (MASTERPLAN_GOAL_ATTAINMENT_SPEC §6). The shadow records and moves nothing;
       # it defaults ON in code, so leaving this unset keeps recording. The live flag is the
       # Phase 3 flip, default off; set it only after the shadow ledger has said something.

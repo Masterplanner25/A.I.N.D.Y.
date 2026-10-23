@@ -1,0 +1,37 @@
+workflow archive_published_work_v1 {
+  step reclean with { retries: 2 } {
+    let result = sys("sys.v1.rippletrace.update_stored_text", input_payload["args"])
+    set_state("reclean_result", result)
+    if (result["status"] != "success") {
+      throw "reclean step failed"
+    }
+    return result["data"]
+  }
+
+  step fetch after reclean with { retries: 2 } {
+    let result = sys("sys.v1.rippletrace.store_published_text", input_payload["args"])
+    set_state("fetch_result", result)
+    if (result["status"] != "success") {
+      throw "fetch step failed"
+    }
+    return result["data"]
+  }
+
+  step collapse after fetch with { retries: 2 } {
+    let result = sys("sys.v1.rippletrace.update_cross_posts", input_payload["args"])
+    set_state("collapse_result", result)
+    if (result["status"] != "success") {
+      throw "collapse step failed"
+    }
+    return result["data"]
+  }
+
+  step remember after collapse with { retries: 2 } {
+    let result = sys("sys.v1.rippletrace.write_published_memory", input_payload["args"])
+    set_state("remember_result", result)
+    if (result["status"] != "success") {
+      throw "remember step failed"
+    }
+    return result["data"]
+  }
+}
