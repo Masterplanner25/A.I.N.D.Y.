@@ -237,6 +237,10 @@ Python flows stay as they are until one is deliberately ported.
   denied and quietly falls back to Python. `sys.v1.analytics.execute_infinity` (requires
   `score.recalculate`) fails this; `sys.v1.score.recalculate` passes. Assert it in a test, as
   `test_infinity_recalc_nodus.py` does.
+- **Build a syscall's handler once, at import, never inside the `register_…` function.** The registry
+  compares handlers by identity, and every app-profile boot registers again. A closure built at
+  registration time is a new object on the second boot, so bootstrap fails with `already registered
+  with a different handler`. That happened on #489, and only CI's second boot showed it.
 - **A workflow acts as one user.** The runtime refuses a payload `user_id` naming another user over
   MCP since 2.28.0, may refuse it in-process (DEC-103), and counts each one
   (`aindy_payload_identity_mismatch_total`). So a job over all users stays a Python loop that starts
