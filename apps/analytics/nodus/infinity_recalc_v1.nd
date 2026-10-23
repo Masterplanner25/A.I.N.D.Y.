@@ -1,0 +1,14 @@
+workflow infinity_recalc_v1 {
+  step recalculate {
+    let attempt = 1
+    let result = sys("sys.v1.score.recalculate", input_payload["args"])
+    while ((result["status"] != "success") && (attempt < 3) && is_retryable_error(result["error"])) {
+      attempt = attempt + 1
+      result = sys("sys.v1.score.recalculate", input_payload["args"])
+    }
+    set_state("infinity_recalc_result", result)
+    if (result["status"] != "success") {
+      throw "infinity recalculation step failed"
+    }
+  }
+}

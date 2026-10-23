@@ -326,7 +326,7 @@ def _scheduler_recalculate_all_scores() -> None:
     from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
     from AINDY.db.database import SessionLocal
     from AINDY.db.models.user import User
-    from apps.analytics.services.orchestration.infinity_orchestrator import execute as execute_infinity_orchestrator
+    from apps.analytics.services.orchestration.nodus_recalc import recalculate_user
 
     try:
         db = SessionLocal()
@@ -343,11 +343,18 @@ def _scheduler_recalculate_all_scores() -> None:
             return
         users = db.query(User).all()
         updated = 0
+        via_nodus = 0
         for user in users:
-            result = execute_infinity_orchestrator(user_id=str(user.id), db=db, trigger_event="scheduled")
-            if result:
+            ok, via = recalculate_user(db, user.id)
+            if ok:
                 updated += 1
-        logger.info("[Infinity Scheduler] Recalculated scores for %d/%d users", updated, len(users))
+                via_nodus += via == "nodus"
+        logger.info(
+            "[Infinity Scheduler] Recalculated scores for %d/%d users (%d via nodus)",
+            updated,
+            len(users),
+            via_nodus,
+        )
 
         # Shadow expectation model (Phase 0): retrain + log the soak comparison.
         # Guarded by AINDY_INFINITY_LEARNED_SHADOW; drives nothing.

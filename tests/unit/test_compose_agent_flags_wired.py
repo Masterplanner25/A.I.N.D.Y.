@@ -25,10 +25,9 @@ def test_the_flag_is_passed_to_the_api(flag):
 
 
 # Owner, 2026-10-22: our own workflows are written in Nodus, so reasoning runs its .nd by default.
-def test_reasoning_runs_on_nodus_by_default():
-    assert 'AINDY_REASONING_NODUS_NATIVE: "${AINDY_REASONING_NODUS_NATIVE:-1}"' in (
-        COMPOSE.read_text(encoding="utf-8")
-    )
+@pytest.mark.parametrize("flag", ["AINDY_REASONING_NODUS_NATIVE", "AINDY_INFINITY_RECALC_NODUS"])
+def test_our_nodus_workflows_run_by_default(flag):
+    assert f'{flag}: "${{{flag}:-1}}"' in COMPOSE.read_text(encoding="utf-8")
 
 
 # Scheduled-job callbacks cold-import the app in a subprocess; at the runtime's 30s default they
