@@ -484,9 +484,13 @@ def archive_published_work() -> dict:
                 DropPointDB.content_source.is_(None) | DropPointDB.content_hash.isnot(None),
             ).distinct()
         }
+        from apps.rippletrace.services.archive_nodus import archive_owner
+
+        summary["via_nodus"] = 0
         for owner in owners:
-            outcome = archive_step(db, user_id=owner)
+            outcome, via = archive_owner(db, owner)
             summary["owners"] += 1
+            summary["via_nodus"] += via == "nodus"
             for key in ("fetched", "remembered", "chunks", "recleaned", "collapsed"):
                 summary[key] += int(outcome.get(key) or 0)
     except Exception as exc:

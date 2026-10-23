@@ -16,6 +16,14 @@ def register() -> None:
     _register_required_flow_nodes()
     _register_health_check()
     _register_scheduled_jobs()
+    _register_nodus_workflows()
+
+
+def _register_nodus_workflows() -> None:
+    """Register ``apps/rippletrace/nodus/*.nd``: archiving published work."""
+    from apps._shared.nodus import register_domain_nodus_workflows
+
+    register_domain_nodus_workflows(__file__, "rippletrace")
 
 
 def _register_models() -> None:

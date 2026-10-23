@@ -209,14 +209,26 @@ only underneath us, in the agent backend (`nodus_vm`), and the one `.nd` we had 
 **A new workflow goes in `apps/<domain>/nodus/<name>.nd`, not in a new Python flow graph.** Existing
 Python flows stay as they are until one is deliberately ported.
 
-- **Ours so far, both in `apps/analytics/nodus/`:** `reasoning_apply_v1.nd` (the reasoning flow) and
-  `infinity_recalc_v1.nd`, the daily Infinity recalculation for one user (#487). Each has a flag,
-  `AINDY_REASONING_NODUS_NATIVE` and `AINDY_INFINITY_RECALC_NODUS`. The flags are off in code and
-  on in compose, and any VM failure falls back to Python.
-- **The pattern is `apps/analytics`.** It has the source (`nodus/reasoning_apply_v1.nd`), the boot
-  registration (`bootstrap.py::_register_nodus_workflows`, which calls `register_nodus_workflow` on
-  every `*.nd` in the folder), the call through `run_nodus_workflow`, and a Python fallback.
-  Another domain copies the registration into its own `bootstrap.py`.
+- **Ours so far, three:**
+  - `apps/analytics/nodus/reasoning_apply_v1.nd`: the reasoning flow.
+  - `apps/analytics/nodus/infinity_recalc_v1.nd`: the daily Infinity recalculation for one user (#487).
+  - `apps/rippletrace/nodus/archive_published_work_v1.nd`: four steps chained with `after`, each
+    `with { retries: 2 }`, for one owner (#489).
+
+  Each has a flag: `AINDY_REASONING_NODUS_NATIVE`, `AINDY_INFINITY_RECALC_NODUS` and
+  `AINDY_ARCHIVE_NODUS`. The flags are off in code and on in compose, and any VM failure falls back
+  to Python.
+- **The pattern:**
+  - **Source:** `apps/<domain>/nodus/*.nd`.
+  - **Registration:** one line in the domain's `bootstrap.py`, which calls
+    `apps/_shared/nodus.py::register_domain_nodus_workflows(__file__, "<domain>")`.
+  - **Call:** a small `services/…_nodus.py` that runs it through `run_nodus_workflow`, reads the
+    result and falls back to Python.
+
+  `apps/rippletrace/services/archive_nodus.py` is the fullest example.
+- **A job that fires often must not start a cold worker for nothing.** Start a VM run only when
+  there is work. The archive job runs every 10 minutes, so it checks `archive_due` first, and a
+  settled catalogue stays on the Python path.
 - **The script reaches app logic only through `sys("sys.v1.…", args)`.** It cannot import Python, so
   everything the workflow needs must be a registered syscall. **`sys()` is granted only the
   capability the runtime infers from the syscall's name** (`_infer_dispatch_capability`): `get_…`,
