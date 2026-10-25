@@ -14,3 +14,11 @@ export function handOffRelease(tag, repo) {
     body: JSON.stringify(repo ? { tag, repo } : { tag }),
   });
 }
+
+// Phase 3 (§7.3): answer the gate on GitHub as the owner. Shown only when the handoff says can_decide.
+export function decideRelease(id, decision, comment) {
+  return authRequest(`/apps/releases/${encodeURIComponent(id)}/${decision === "approve" ? "approve" : "reject"}`, {
+    method: "POST",
+    body: JSON.stringify(comment ? { comment } : {}),
+  });
+}
