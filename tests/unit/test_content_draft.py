@@ -248,3 +248,16 @@ def test_a_reasoning_model_is_sent_what_it_accepts(monkeypatch):
     assert ds._sampling("gpt-4o") == {"temperature": 0.4, "max_tokens": ds.DRAFT_MAX_TOKENS}
     monkeypatch.setenv("AINDY_DRAFT_REASONING_EFFORT", "medium")
     assert ds._sampling("o3")["reasoning_effort"] == "medium"
+
+
+def test_the_list_names_each_drafts_work_and_marks_its_newest(db_session):
+    # Owner, 2026-10-25: four drafts about Nodus on the Work page and no way to tell which one to use.
+    nodus = ws.create_work(db_session, USER, {"name": "Nodus", "summary": "The orchestration language."})
+    for title, day, work in (("first", 1, nodus["id"]), ("second", 2, nodus["id"]), ("loose", 3, None)):
+        db_session.add(WorkDraft(id=str(uuid.uuid4()), user_id=USER, work_id=work, title=title, brief="b",
+                                 body="Text.", created_at=datetime(2026, 10, day, tzinfo=timezone.utc)))
+    db_session.commit()
+    drafts = {d["title"]: d for d in ds.list_drafts(db_session, USER)["drafts"]}
+    assert drafts["second"]["work_name"] == "Nodus" and drafts["second"]["newest_for_work"] is True
+    assert drafts["first"]["work_name"] == "Nodus" and drafts["first"]["newest_for_work"] is False
+    assert drafts["loose"]["work_name"] is None and drafts["loose"]["newest_for_work"] is False

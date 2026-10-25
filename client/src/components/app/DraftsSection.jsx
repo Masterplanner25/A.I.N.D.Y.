@@ -88,11 +88,35 @@ export default function DraftsSection() {
               {d.sources?.length ? ` · ${d.sources.length} source${d.sources.length === 1 ? "" : "s"}` : " · no sources"}
             </p>
           </button>
-          {d.run_id && (
-            <Link to={`/collaborator?run=${encodeURIComponent(d.run_id)}`} className="text-[11px] text-zinc-500 underline">
-              the run that wrote it
-            </Link>
+          {d.work_name && (
+            <p className="text-[11px] text-zinc-400">
+              About {d.work_name} ·{" "}
+              {d.newest_for_work ? (
+                <span className="text-[#00ffaa]">newest for {d.work_name}</span>
+              ) : (
+                <span className="text-zinc-500">older: a newer draft about {d.work_name} exists</span>
+              )}
+            </p>
           )}
+          <div className="flex items-center gap-4">
+            {d.run_id && (
+              <Link to={`/collaborator?run=${encodeURIComponent(d.run_id)}`} className="text-[11px] text-zinc-500 underline">
+                the run that wrote it
+              </Link>
+            )}
+            {/* On the card, not only inside the opened draft: owner, 2026-10-25, could not find it there. */}
+            <button className="text-[11px] text-zinc-500 underline hover:text-red-400 disabled:opacity-40" disabled={busy}
+              aria-label={`Delete ${d.title}`}
+              onClick={async () => {
+                if (!window.confirm(`Delete "${d.title}"? This cannot be undone.`)) return;
+                if (await act(() => deleteDraft(d.id))) {
+                  if (open?.id === d.id) setOpen(null);
+                  load();
+                }
+              }}>
+              delete
+            </button>
+          </div>
           {open?.id === d.id && (
             <div className="space-y-3">
               {editing ? (
@@ -133,16 +157,6 @@ export default function DraftsSection() {
                     </button>
                     <button className={QUIET} onClick={() => downloadMarkdown(open.title, open.body)}>Download .md</button>
                     <button className={QUIET} onClick={() => setEditing({ body: open.body })}>Edit</button>
-                    <button className={QUIET} disabled={busy}
-                      onClick={async () => {
-                        if (!window.confirm(`Delete "${d.title}"?`)) return;
-                        if (await act(() => deleteDraft(d.id))) {
-                          setOpen(null);
-                          load();
-                        }
-                      }}>
-                      Delete
-                    </button>
                   </>
                 )}
               </div>

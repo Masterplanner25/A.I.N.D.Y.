@@ -1,7 +1,8 @@
 /**
  * Drafts the agent wrote (content.draft). Owner, 2026-09-30: "where does the output go once it does
  * generate/do something?" The properties: each draft is listed with its run and sources, opens to its
- * full text, can be edited and saved, and is downloadable.
+ * full text, can be edited and saved, and is downloadable. Each card names its Work, marks the newest
+ * draft for that Work, and can be deleted without opening it.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -60,6 +61,30 @@ describe("Drafts the agent wrote", () => {
     await userEvent.type(box, "Edited.");
     await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() => expect(api.updateDraft).toHaveBeenCalledWith("d-1", { body: "Edited." }));
+  });
+
+  it("says which Work each draft is about and which is the newest for it", async () => {
+    // Owner, 2026-10-25: four drafts about Nodus and no way to tell which one to use.
+    api.listDrafts.mockResolvedValue({ drafts: [
+      { ...DRAFT, id: "d-2", title: "Nodus — Canonical Entity Reference", work_name: "Nodus", newest_for_work: true },
+      { ...DRAFT, id: "d-1", work_name: "Nodus", newest_for_work: false },
+    ] });
+    renderSection();
+    expect(await screen.findByText("newest for Nodus")).toBeInTheDocument();
+    expect(screen.getByText("older: a newer draft about Nodus exists")).toBeInTheDocument();
+  });
+
+  it("deletes from the card without opening the draft, only after confirming", async () => {
+    api.deleteDraft.mockResolvedValue({});
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    renderSection();
+    const remove = await screen.findByRole("button", { name: `Delete ${DRAFT.title}` });
+    await userEvent.click(remove);
+    expect(api.deleteDraft).not.toHaveBeenCalled();
+    await userEvent.click(remove);
+    await waitFor(() => expect(api.deleteDraft).toHaveBeenCalledWith("d-1"));
+    expect(api.getDraft).not.toHaveBeenCalled();
+    confirm.mockRestore();
   });
 
   it("shows nothing when there are no drafts", async () => {
