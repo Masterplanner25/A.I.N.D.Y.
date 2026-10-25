@@ -2689,7 +2689,7 @@ Confirm a proposal — `{key, name?, summary?, kind?, role?, status?}`; the owne
 #### GET /apps/works/drafts
 Drafts — what the agent wrote for you (`content.draft`), newest first, without their text
 
-**Response 200:** drafts: [{id, title, brief, run_id, work_id, sources: [{title, url, platform, kind}], model, created_at, updated_at, words}]
+**Response 200:** drafts: [{id, title, brief, run_id, work_id, work_name, newest_for_work, sources: [{title, url, platform, kind}], model, created_at, updated_at, words}] — `newest_for_work` is true on the newest draft about each Work
 
 #### GET /apps/works/drafts/{draft_id}
 One draft, with its text (markdown; sources cited inline as [S1] and listed at the end)

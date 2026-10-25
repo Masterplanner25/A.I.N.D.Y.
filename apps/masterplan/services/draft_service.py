@@ -337,7 +337,18 @@ def _owned(db: Session, uid, draft_id: str) -> WorkDraft:
 def list_drafts(db: Session, user_id: Any) -> dict:
     uid = _uid(user_id)
     drafts = db.query(WorkDraft).filter(WorkDraft.user_id == uid).order_by(WorkDraft.created_at.desc()).all()
-    return {"drafts": [serialize_draft(d, body=False) for d in drafts]}
+    work_ids = {d.work_id for d in drafts if d.work_id}
+    names = dict(db.query(Work.id, Work.name).filter(Work.id.in_(work_ids)).all()) if work_ids else {}
+    out, seen = [], set()
+    for d in drafts:
+        item = serialize_draft(d, body=False)
+        # Owner, 2026-10-25: four drafts about Nodus and no way to tell which one to use. Newest first, so
+        # the first draft seen for a Work is its newest; the others are marked older.
+        item["work_name"] = names.get(d.work_id)
+        item["newest_for_work"] = bool(d.work_id) and d.work_id not in seen
+        seen.add(d.work_id)
+        out.append(item)
+    return {"drafts": out}
 
 
 def get_draft(db: Session, user_id: Any, draft_id: str) -> dict:
