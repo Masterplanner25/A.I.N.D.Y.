@@ -2,14 +2,15 @@
  * The release handoff on Collaborator (RELEASE_HANDOFF_SPEC §6). The properties that matter: a run
  * waiting at the gate says so and links straight to GitHub to approve, a stopped one says why, a
  * finished one names the approver and the wait, a tag is handed off from the form, and a refusal is
- * shown in the server's words.
+ * shown in the server's words. Phase 3 (§7.3): with can_decide the card offers Approve and Reject, and
+ * neither is sent before a confirm step that says what it does.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AppProviders } from "./utils";
 
-const api = vi.hoisted(() => ({ listReleases: vi.fn(), handOffRelease: vi.fn() }));
+const api = vi.hoisted(() => ({ listReleases: vi.fn(), handOffRelease: vi.fn(), decideRelease: vi.fn() }));
 vi.mock("../api/releases.js", () => api);
 
 const RUN_URL = "https://github.com/Masterplanner25/aindy-runtime/actions/runs/38025672838";
@@ -33,6 +34,7 @@ beforeAll(async () => {
 beforeEach(() => {
   api.listReleases.mockReset();
   api.handOffRelease.mockReset();
+  api.decideRelease.mockReset();
 });
 
 const renderPanel = () => render(<AppProviders><ReleasePanel /></AppProviders>);
@@ -75,4 +77,40 @@ it("shows only the handoff button when the endpoint cannot be reached, and no se
   expect(await screen.findByRole("button", { name: "Hand off a release" })).toBeInTheDocument();
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   expect(screen.queryByText("Releases")).not.toBeInTheDocument();
+});
+
+it("offers no Approve button without can_decide", async () => {
+  api.listReleases.mockResolvedValue({ handoffs: [AT_GATE] });
+  renderPanel();
+  await screen.findByText(/is waiting for your approval/);
+  expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+});
+
+it("approves only after the confirm step, then says it is waiting for GitHub", async () => {
+  const decided = { ...AT_GATE, can_decide: false, decision: { stage: "decision", state: "approved", via: "collaborator", at: now } };
+  api.listReleases.mockResolvedValueOnce({ handoffs: [{ ...AT_GATE, can_decide: true }] }).mockResolvedValue({ handoffs: [decided] });
+  api.decideRelease.mockResolvedValue(decided);
+  const user = userEvent.setup();
+  renderPanel();
+  await user.click(await screen.findByRole("button", { name: "Approve" }));
+  expect(api.decideRelease).not.toHaveBeenCalled();
+  expect(screen.getByText("Publish aindy-runtime 2.28.0 to PyPI, approving as you on GitHub?")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Yes, publish" }));
+  await waitFor(() => expect(api.decideRelease).toHaveBeenCalledWith("h1", "approve"));
+  expect(await screen.findByText(/Approved from A\.I\.N\.D\.Y\. at .*waiting for GitHub to move/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+});
+
+it("cancels a rejection without sending it, and shows GitHub's refusal in its words", async () => {
+  api.listReleases.mockResolvedValue({ handoffs: [{ ...AT_GATE, can_decide: true }] });
+  api.decideRelease.mockRejectedValue(new Error("GitHub says the gate was already decided"));
+  const user = userEvent.setup();
+  renderPanel();
+  await user.click(await screen.findByRole("button", { name: "Reject" }));
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(api.decideRelease).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Reject" }));
+  await user.click(screen.getByRole("button", { name: "Yes, reject" }));
+  expect(await screen.findByText("GitHub says the gate was already decided")).toBeInTheDocument();
+  expect(api.decideRelease).toHaveBeenCalledWith("h1", "reject");
 });

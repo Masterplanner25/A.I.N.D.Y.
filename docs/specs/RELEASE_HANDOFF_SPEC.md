@@ -14,7 +14,8 @@ scheduler walked the finished 2.27.0 run to `done` in one tick (approver Masterp
 completed the release task, wrote the note, created the adoption task and delivered the email through Gmail.
 **First real use: 2.28.0 on 2026-10-15** (§7.2): handed off from Collaborator, the gate email reached the
 owner, approved on GitHub, followed to `done`. Gate wait 1 min 21 s, against 6–10½ minutes before.
-**Phase 3 scoped 2026-10-15, held** (§7.3): approve from the Collaborator card or by replying to the gate email.
+**Phase 3 scoped 2026-10-15, decided 2026-10-24** (§7.3): approve from the Collaborator card or by replying to
+the gate email. **3a (the card) built 2026-10-24**; 3b (the email reply) next.
 
 **Where it comes from.** The owner's product review on 2026-10-14 named this as the first real test of
 *persistent execution*. The use case was the owner's own: *"hand a release off to A.I.N.D.Y.,
@@ -217,8 +218,10 @@ The owner handed `v2.28.0` off from Collaborator 11 minutes before the tag was p
 
 ### 7.3 Phase 3 scoped — approve from A.I.N.D.Y. (2026-10-15)
 
-**Held 2026-10-15 by the owner: scoped, not built.** Decision 3's three questions below are still
-open. The runtime does not release again before this is taken up.
+**Held 2026-10-15 by the owner: scoped, not built. Decided 2026-10-24: both ways (the card and the
+email reply), no MCP approve tool, and the owner makes the approve token.** **3a is built** (the token,
+`GitHubActions.review`, `POST /apps/releases/{id}/approve|reject`, the card's buttons), proven against the
+recorded 2.27.0 responses; its live proof is the next release. 3b (the email reply) is next.
 
 The owner asked for it after 2.28.0: the gate email should be *the place the decision is made*, not a
 pointer to GitHub. Scoped against these facts, all checked on 2026-10-15:
@@ -311,7 +314,7 @@ recorded GitHub responses, and once against the live API, read-only. **Then the 
    fine-grained permission GitHub requires for `pending_deployments` POST) and is worth taking only
    after a few releases have run through phase 1. **Reopened 2026-10-15 by the owner after one release;
    scoped in §7.3.** Recommended there: the card and an email reply, no MCP tool, and a separate approve
-   token (verified: Deployments: write).
+   token (verified: Deployments: write). **DECIDED 2026-10-24: as recommended**, the owner makes the token.
 4. **Which repositories.** Recommended: **aindy-runtime only**, the one with a gate.
 5. **Where "done" ends.** Recommended: **published, the wheel verified, the adoption task created.**
    Adoption stays with you and Claude, because it needs judgment. An agent run that prepares the adoption

@@ -1,7 +1,8 @@
-"""The release handoff's HTTP surface — `RELEASE_HANDOFF_SPEC.md` phase 1. Served at `/apps/releases`.
+"""The release handoff's HTTP surface — `RELEASE_HANDOFF_SPEC.md` phases 1 and 3. Served at `/apps/releases`.
 
 A handoff is recorded here; the scheduled watcher (`release_handoff_watch`) follows the run from there,
-once a minute. Refusals are `{error: "release_refused", message}`.
+once a minute. Approve and reject (phase 3) answer the gate on GitHub as the owner. Refusals are
+`{error: "release_refused", message}`.
 """
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
@@ -70,3 +71,37 @@ async def hand_off_release_route(request: Request, body: HandoffBody, db: Sessio
 
     return await _run(request, "automation.release.handoff", handler, db=db, user_id=user_id,
                       payload={"repo": body.repo, "tag": body.tag})
+
+
+class DecisionBody(BaseModel):
+    comment: str | None = None
+
+
+async def _decide(request: Request, route_name: str, handoff_id: str, state: str, body: DecisionBody,
+                  db: Session, current_user: dict):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.automation.services.release_handoff_service import decide
+        return decide(db, user_id, handoff_id, state, via="collaborator", comment=body.comment)
+
+    return await _run(request, route_name, handler, db=db, user_id=user_id,
+                      payload={"handoff_id": handoff_id, "state": state})
+
+
+@router.post("/{handoff_id}/approve")
+@limiter.limit("10/minute")
+async def approve_release_route(request: Request, handoff_id: str, body: DecisionBody | None = None,
+                                db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Approve the gate as the owner (§7.3): publishes to PyPI. Needs `AINDY_GITHUB_APPROVE_TOKEN`."""
+    return await _decide(request, "automation.release.approve", handoff_id, "approved", body or DecisionBody(),
+                         db, current_user)
+
+
+@router.post("/{handoff_id}/reject")
+@limiter.limit("10/minute")
+async def reject_release_route(request: Request, handoff_id: str, body: DecisionBody | None = None,
+                               db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Reject the gate as the owner (§7.3); the next tick reads the rejection and stops the handoff."""
+    return await _decide(request, "automation.release.reject", handoff_id, "rejected", body or DecisionBody(),
+                         db, current_user)

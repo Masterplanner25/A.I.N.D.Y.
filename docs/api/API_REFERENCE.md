@@ -2584,17 +2584,27 @@ One check, answer by answer
 
 ### Releases
 
-The release handoff (`RELEASE_HANDOFF_SPEC.md`, phase 1): the owner hands off a tagged release and A.I.N.D.Y. follows the tag's `publish.yml` run to the end. The scheduled `release_handoff_watch` reads GitHub once a minute (`AINDY_GITHUB_TOKEN`, Actions: read) and moves `stage` forward: `requested → running → at_gate → approved → published → done`, or `failed`. It emails the owner at `at_gate`, `done` and `failed`, once each. At `done` it completes the release task, writes an `outcome` memory note and creates the adoption task. Refusals are `{error: "release_refused", message}`.
+The release handoff (`RELEASE_HANDOFF_SPEC.md`, phases 1 and 3): the owner hands off a tagged release and A.I.N.D.Y. follows the tag's `publish.yml` run to the end. The scheduled `release_handoff_watch` reads GitHub once a minute (`AINDY_GITHUB_TOKEN`, Actions: read) and moves `stage` forward: `requested → running → at_gate → approved → published → done`, or `failed`. It emails the owner at `at_gate`, `done` and `failed`, once each. At `done` it completes the release task, writes an `outcome` memory note and creates the adoption task. With `AINDY_GITHUB_APPROVE_TOKEN` set (Deployments: write), the owner can also approve or reject the gate from here (phase 3); the stage still moves only when the watcher reads GitHub. Refusals are `{error: "release_refused", message}`.
 
 #### GET /apps/releases
 Your handoffs, newest first — `?active=true` for the ones still being followed, `?limit=` (default 10, max 50)
 
-**Response 200:** handoffs: [{id, repo, tag, version, run_id, run_url, stage, stage_at, history: [{stage, at, detail}], approved_by, approved_at, gate_wait_seconds, failure: {reason, job, conclusion, url} | null, notified: {<stage>: {success, route, error, at, subject}}, task_id, task_name, adoption_task_id, memory_node_id, created_at, finished_at}], repos
+**Response 200:** handoffs: [{id, repo, tag, version, run_id, run_url, stage, stage_at, history: [{stage, at, detail}], approved_by, approved_at, gate_wait_seconds, decision: {stage: "decision", state, via, at} | null, can_decide, failure: {reason, job, conclusion, url} | null, notified: {<stage>: {success, route, error, at, subject}}, task_id, task_name, adoption_task_id, memory_node_id, created_at, finished_at}], repos
 
 #### POST /apps/releases
 Hand off a release — `{repo, tag}` (`repo` defaults to `Masterplanner25/aindy-runtime`; `AINDY_RELEASE_REPOS` lists the allowed ones)
 
 **Response 200:** the handoff (`stage: "requested"`), its release task created and started; 409 while the same tag is already handed off, or once it is released; 422 for a repository not allowed or a tag not like `v2.28.0`; 503 when `AINDY_GITHUB_TOKEN` is not set
+
+#### POST /apps/releases/{handoff_id}/approve
+Approve the gate as the owner: GitHub publishes to PyPI — `{comment?}`. Re-reads GitHub's pending deployments first and sends one review for `production` (comment `Approved from A.I.N.D.Y. (collaborator)`), never retried
+
+**Response 200:** the handoff, with `decision` set and `stage` still `at_gate` until the next tick; 404 for a handoff that is not yours; 409 when it is not at the gate, was already decided from A.I.N.D.Y., or GitHub no longer has the gate pending; 502 when GitHub refuses or cannot be reached; 503 when `AINDY_GITHUB_APPROVE_TOKEN` is not set
+
+#### POST /apps/releases/{handoff_id}/reject
+Reject the gate as the owner — `{comment?}`. Same checks and refusals as approve; the next tick reads the rejection and the handoff ends `failed` (`reason: "rejected"`)
+
+**Response 200:** the handoff, with `decision` set
 
 ### Works
 

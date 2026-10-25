@@ -343,7 +343,9 @@ def test_a_released_tag_cannot_be_handed_off_again(db_session, records):
 
 
 def test_route_names_fit_the_event_source_column():
-    assert len("automation.release.handoff") <= 32 and len("automation.release.list") <= 32
+    for name in ("automation.release.handoff", "automation.release.list", "automation.release.approve",
+                 "automation.release.reject"):
+        assert len(name) <= 32
 
 
 def test_the_watcher_is_idle_without_open_handoffs(monkeypatch):
@@ -372,3 +374,149 @@ def test_gate_wait_is_read_from_history_not_wall_clock():
                                  {"stage": "approved", "at": "2026-10-10T05:07:00+00:00"}])
     assert rh.gate_wait_seconds(row) == 634
     assert rh._duration(634) == "10 min 34 s" and rh._duration(timedelta(hours=2).total_seconds()) == "2 h 0 min"
+
+
+# ── Phase 3a: approve or reject from A.I.N.D.Y. (§7.3) ────────────────────────────────────
+
+
+class ReviewingGitHub(FakeGitHub):
+    """The 2.27.0 run at its gate, recording the decisions sent instead of sending them."""
+
+    def __init__(self, moment, **kwargs):
+        super().__init__(moment, **kwargs)
+        self.reviews = []
+
+    def review(self, repo, run_id, environment_ids, state, comment):
+        self.reviews.append({"repo": repo, "run_id": run_id, "environment_ids": environment_ids,
+                             "state": state, "comment": comment})
+        return []
+
+
+@pytest.fixture
+def approve_token(monkeypatch):
+    monkeypatch.setenv("AINDY_GITHUB_APPROVE_TOKEN", "github_pat_approve_test")
+
+
+def _at_gate(db_session, records):
+    row = _handoff(db_session)
+    _tick(db_session, row, "04:57:00", records)
+    assert row.stage == "at_gate"
+    return row
+
+
+def test_approve_sends_one_review_for_production_as_the_owner(db_session, records, approve_token):
+    row = _at_gate(db_session, records)
+    github = ReviewingGitHub(at("05:00:00"))
+    data = rh.decide(db_session, USER, row.id, "approved", comment="ship it", github=github)
+    assert github.reviews == [{"repo": REPO, "run_id": str(RUN["id"]), "environment_ids": [15804342446],
+                               "state": "approved", "comment": "Approved from A.I.N.D.Y. (collaborator): ship it"}]
+    assert data["decision"]["state"] == "approved" and data["decision"]["via"] == "collaborator"
+    assert data["can_decide"] is False
+    # The stage is GitHub's to move: still at the gate until the next tick reads the approval.
+    assert data["stage"] == "at_gate"
+
+
+def test_reject_sends_rejected_and_the_next_tick_stops_the_handoff(db_session, records, approve_token):
+    row = _at_gate(db_session, records)
+    github = ReviewingGitHub(at("05:00:00"))
+    rh.decide(db_session, USER, row.id, "rejected", github=github)
+    assert github.reviews[0]["state"] == "rejected"
+    assert github.reviews[0]["comment"] == "Rejected from A.I.N.D.Y. (collaborator)"
+    run = {**RUN, "status": "completed", "conclusion": "failure"}
+    jobs = [{**j, "conclusion": "failure", "started_at": None} if j["name"] == "Publish to PyPI" else j
+            for j in JOBS[:7]]
+    _tick(db_session, row, "05:01:00", records, jobs=jobs, run=run, approvals=[{**APPROVALS[0], "state": "rejected"}])
+    assert row.stage == "failed" and row.failure["reason"] == "rejected"
+
+
+def test_a_gate_already_decided_on_github_is_409_and_sends_nothing(db_session, records, approve_token):
+    row = _at_gate(db_session, records)
+    github = ReviewingGitHub(at("05:08:00"))          # PyPI started 05:07: production no longer pending
+    with pytest.raises(HTTPException) as refused:
+        rh.decide(db_session, USER, row.id, "approved", github=github)
+    assert refused.value.status_code == 409 and "already decided" in refused.value.detail["message"]
+    assert github.reviews == []
+
+
+def test_a_second_decision_is_409_and_sends_nothing(db_session, records, approve_token):
+    row = _at_gate(db_session, records)
+    rh.decide(db_session, USER, row.id, "approved", github=ReviewingGitHub(at("05:00:00")))
+    again = ReviewingGitHub(at("05:00:05"))
+    with pytest.raises(HTTPException) as refused:
+        rh.decide(db_session, USER, row.id, "approved", github=again)
+    assert refused.value.status_code == 409 and again.reviews == []
+
+
+def test_nothing_is_decided_without_the_approve_token(db_session, records, monkeypatch):
+    monkeypatch.delenv("AINDY_GITHUB_APPROVE_TOKEN", raising=False)
+    row = _at_gate(db_session, records)
+    assert rh.serialize(row)["can_decide"] is False
+    github = ReviewingGitHub(at("05:00:00"))
+    with pytest.raises(HTTPException) as refused:
+        rh.decide(db_session, USER, row.id, "approved", github=github)
+    assert refused.value.status_code == 503 and github.reviews == []
+    assert "Collaborator card" not in records["mail"][-1]["body"]
+
+
+def test_the_gate_email_mentions_the_card_only_with_the_token(db_session, records, approve_token):
+    _at_gate(db_session, records)
+    assert "Collaborator card" in records["mail"][-1]["body"]
+
+
+def test_another_users_handoff_is_404(db_session, records, approve_token):
+    row = _at_gate(db_session, records)
+    github = ReviewingGitHub(at("05:00:00"))
+    with pytest.raises(HTTPException) as refused:
+        rh.decide(db_session, uuid.uuid4(), row.id, "approved", github=github)
+    assert refused.value.status_code == 404 and github.reviews == []
+
+
+def test_a_handoff_not_at_the_gate_is_409(db_session, records, approve_token):
+    row = _handoff(db_session)
+    _tick(db_session, row, "04:55:00", records)       # running
+    with pytest.raises(HTTPException) as refused:
+        rh.decide(db_session, USER, row.id, "approved", github=ReviewingGitHub(at("04:55:00")))
+    assert refused.value.status_code == 409
+    with pytest.raises(HTTPException) as bad:
+        rh.decide(db_session, USER, row.id, "maybe")
+    assert bad.value.status_code == 422
+
+
+def test_an_approval_from_the_card_is_in_the_outcome_note(db_session, records, approve_token):
+    row = _at_gate(db_session, records)
+    rh.decide(db_session, USER, row.id, "approved", github=ReviewingGitHub(at("05:00:00")))
+    _tick(db_session, row, "05:09:00", records)
+    assert row.stage == "done"
+    note = _syscalls(records, "sys.v1.memory.write")[0]["content"]
+    assert "Approved by Masterplanner25 after waiting 10 min 34 s at the gate, approved from A.I.N.D.Y. by the " \
+           "Collaborator card." in note
+
+
+def test_the_review_call_posts_once_with_the_approve_token_only(monkeypatch):
+    from apps.automation.services import github_actions as gh
+
+    monkeypatch.setenv("AINDY_GITHUB_TOKEN", "read-token")
+    monkeypatch.setenv("AINDY_GITHUB_APPROVE_TOKEN", "approve-token")
+    monkeypatch.setattr("AINDY.platform_layer.external_call_service.perform_external_call",
+                        lambda **kw: kw["operation"]())
+    sent = []
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return [{"id": 1}]
+
+    class Http:
+        def post(self, url, json, headers, timeout):
+            sent.append((url, json, headers["Authorization"]))
+            return Response()
+
+    gh.GitHubActions(session=Http()).review(REPO, "38025672838", [15804342446], "approved", "Approved from A.I.N.D.Y.")
+    assert sent == [(f"https://api.github.com/repos/{REPO}/actions/runs/38025672838/pending_deployments",
+                     {"environment_ids": [15804342446], "state": "approved", "comment": "Approved from A.I.N.D.Y."},
+                     "Bearer approve-token")]
+    monkeypatch.delenv("AINDY_GITHUB_APPROVE_TOKEN")
+    with pytest.raises(gh.GitHubUnavailable):
+        gh.GitHubActions(session=Http()).review(REPO, "1", [1], "approved", "x")
+    assert len(sent) == 1

@@ -124,6 +124,9 @@ services:
       # done and failed notifications go out through the SMTP settings above, to the owner's
       # account address unless AINDY_RELEASE_NOTIFY_TO names another.
       AINDY_GITHUB_TOKEN: "${AINDY_GITHUB_TOKEN:-}"
+      # Phase 3 (§7.3): a SECOND fine-grained token, aindy-runtime only, Deployments: write + Actions:
+      # read, sent only when the owner approves or rejects the gate from A.I.N.D.Y. Unset = no buttons.
+      AINDY_GITHUB_APPROVE_TOKEN: "${AINDY_GITHUB_APPROVE_TOKEN:-}"
       AINDY_RELEASE_NOTIFY_TO: "${AINDY_RELEASE_NOTIFY_TO:-}"
       AINDY_RELEASE_REPOS: "${AINDY_RELEASE_REPOS:-Masterplanner25/aindy-runtime}"
       AINDY_RELEASE_NO_RUN_MINUTES: "${AINDY_RELEASE_NO_RUN_MINUTES:-30}"

@@ -696,7 +696,7 @@ Only after those three should you look at application code. Full write-ups:
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
 | Resolution Check (does AI search resolve the owner's entities) | `docs/specs/RESOLUTION_CHECK_SPEC.md`: phases A–C built; `listed` is a verdict (§7.4); the score stays unwired (decision 5) |
-| Release handoff (A.I.N.D.Y. carries a runtime release past the approval gate) | `docs/specs/RELEASE_HANDOFF_SPEC.md`: **phase 1 built 2026-10-14** (§7.1; the watcher `release_handoff_watch`, `/apps/releases`, the Collaborator card); needs `AINDY_GITHUB_TOKEN` and real SMTP in `.env`; first real use 2.28.0 |
+| Release handoff (A.I.N.D.Y. carries a runtime release past the approval gate) | `docs/specs/RELEASE_HANDOFF_SPEC.md`: **phase 1 built 2026-10-14** (§7.1; the watcher `release_handoff_watch`, `/apps/releases`, the Collaborator card); needs `AINDY_GITHUB_TOKEN` and real SMTP in `.env`; first real use 2.28.0. **Phase 3a built 2026-10-24**: Approve/Reject on the card (`POST /apps/releases/{id}/approve|reject`), only with a second token `AINDY_GITHUB_APPROVE_TOKEN` (Deployments: write) that nothing else sends; **never an MCP approve tool** (owner). 3b (reply to the gate email) next |
 | MCP launcher (another AI reads A.I.N.D.Y.) | `scripts/mcp_server.py`; guarded by `tests/unit/test_mcp_read_access.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |

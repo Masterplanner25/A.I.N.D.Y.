@@ -7,7 +7,8 @@ task, a memory note, `release.<stage>` events, and the next task (the adoption).
 
 No model is involved. Every stage is a fact read from GitHub each minute (`release_handoff_watch`),
 so a missed tick or a restart loses nothing: the next tick reads the same truth. The owner approves on
-GitHub (decision 3); A.I.N.D.Y. sees the approval within a minute.
+GitHub or, with `AINDY_GITHUB_APPROVE_TOKEN` set, from the Collaborator card (§7.3, phase 3); either way
+the stage moves only when the next tick reads GitHub's own facts.
 """
 from __future__ import annotations
 
@@ -24,7 +25,13 @@ from sqlalchemy.orm import Session
 
 from AINDY.platform_layer.user_ids import parse_user_id
 from apps.automation.release_handoff import RELEASE_STAGES, RELEASE_TERMINAL, ReleaseHandoff
-from apps.automation.services.github_actions import TOKEN_ENV, GitHubActions, GitHubUnavailable
+from apps.automation.services.github_actions import (
+    APPROVE_TOKEN_ENV,
+    TOKEN_ENV,
+    GitHubActions,
+    GitHubUnavailable,
+    approve_token,
+)
 from apps.automation.services.github_actions import token as github_token
 
 logger = logging.getLogger(__name__)
@@ -43,6 +50,9 @@ JOBS = {
 }
 FAILED_CONCLUSIONS = ("failure", "timed_out", "cancelled", "startup_failure", "action_required")
 NOTIFY_STAGES = ("at_gate", "done", "failed")
+#: Where a decision made through A.I.N.D.Y. came from: the Collaborator card, or (phase 3b) an email reply.
+DECISION_CHANNELS = ("collaborator", "email")
+DECISION_STATES = ("approved", "rejected")
 
 _tick_lock = threading.Lock()
 
@@ -213,6 +223,11 @@ def _stage_time(handoff: ReleaseHandoff, stage: str) -> datetime | None:
     return None
 
 
+def decision(handoff: ReleaseHandoff) -> dict | None:
+    """The decision A.I.N.D.Y. sent to GitHub for this handoff, if it sent one (§7.3)."""
+    return next((e for e in handoff.history or [] if e.get("stage") == "decision"), None)
+
+
 def gate_wait_seconds(handoff: ReleaseHandoff) -> float | None:
     gate, approved = _stage_time(handoff, "at_gate"), _stage_time(handoff, "approved")
     return (approved - gate).total_seconds() if gate and approved else None
@@ -232,6 +247,9 @@ def serialize(handoff: ReleaseHandoff) -> dict:
         "approved_by": handoff.approved_by,
         "approved_at": _iso(handoff.approved_at),
         "gate_wait_seconds": gate_wait_seconds(handoff),
+        "decision": decision(handoff),
+        # The card shows Approve and Reject only when this is true.
+        "can_decide": handoff.stage == "at_gate" and bool(approve_token()) and decision(handoff) is None,
         "failure": handoff.failure,
         "notified": handoff.notified or {},
         "task_id": handoff.task_id,
@@ -296,7 +314,10 @@ def outcome_note(handoff: ReleaseHandoff) -> str:
                      "after it started.")
     wait = gate_wait_seconds(handoff)
     if handoff.approved_by or wait is not None:
-        lines.append(f"Approved by {handoff.approved_by or 'unknown'} after waiting {_duration(wait)} at the gate.")
+        made = decision(handoff)
+        via = (f", approved from A.I.N.D.Y. by {'email' if made.get('via') == 'email' else 'the Collaborator card'}"
+               if made and made.get("state") == "approved" else "")
+        lines.append(f"Approved by {handoff.approved_by or 'unknown'} after waiting {_duration(wait)} at the gate{via}.")
     if times["published"]:
         lines.append(f"Published to PyPI at {_iso(times['published'])}.")
     if times["done"]:
@@ -374,7 +395,8 @@ def message(handoff: ReleaseHandoff, stage: str) -> tuple[str, str]:
         reached = f" ({_duration((gate - started).total_seconds())} after the run started)" if started and gate else ""
         return (f"{project} is waiting for your approval",
                 f"{project} reached the approval gate at {_iso(gate) or 'just now'}{reached}.\n\n"
-                f"Approve or reject it on GitHub: {link}\n\n"
+                f"Approve or reject it on GitHub: {link}\n"
+                + ("Or decide it on A.I.N.D.Y.'s Collaborator card.\n" if approve_token() else "") + "\n"
                 "A.I.N.D.Y. sees the decision within a minute and follows the release to the end.")
     if stage == "done":
         return (f"{project} is published",
@@ -454,6 +476,54 @@ def start_handoff(db: Session, user_id: Any, repo: str, tag: str) -> dict:
         _emit(db, handoff, "requested")
     except Exception as exc:
         logger.warning("[release] release.requested event failed: %s", exc)
+    return serialize(handoff)
+
+
+def decide(db: Session, user_id: Any, handoff_id: str, state: str, *, via: str = "collaborator",
+           comment: str | None = None, github: GitHubActions | None = None) -> dict:
+    """Approve or reject the gate as the owner (§7.3). GitHub records the decision: this sends it once
+    and writes one history entry, and the stage moves only when the next tick reads it back.
+
+    Refused, with nothing sent: 404 for another user's handoff, 503 without the approve token, 409 when
+    the handoff is not at the gate, was already decided here, or GitHub no longer has `production`
+    pending (decided on GitHub, or two decisions raced).
+    """
+    uid = _uid(user_id)
+    if state not in DECISION_STATES:
+        raise _refuse(422, f"state must be one of: {', '.join(DECISION_STATES)}")
+    if via not in DECISION_CHANNELS:
+        raise _refuse(422, f"via must be one of: {', '.join(DECISION_CHANNELS)}")
+    handoff = (db.query(ReleaseHandoff)
+               .filter(ReleaseHandoff.id == str(handoff_id), ReleaseHandoff.user_id == uid).first())
+    if handoff is None:
+        raise _refuse(404, "no such handoff")
+    if not approve_token():
+        raise _refuse(503, f"{APPROVE_TOKEN_ENV} is not set, so A.I.N.D.Y. cannot decide the gate")
+    if handoff.stage != "at_gate" or not handoff.run_id:
+        raise _refuse(409, f"{handoff.tag} is not waiting at the gate (it is at {handoff.stage})")
+    if decision(handoff) is not None:
+        raise _refuse(409, f"{handoff.tag} was already decided from A.I.N.D.Y.")
+    github = github or GitHubActions(db=db, user_id=uid)
+    try:
+        # Re-read right before the POST: the owner may have clicked on GitHub since the last tick.
+        pending = github.pending_deployments(handoff.repo, handoff.run_id)
+    except GitHubUnavailable as exc:
+        raise _refuse(502, str(exc)) from exc
+    gate = [(d.get("environment") or {}).get("id") for d in pending
+            if (d.get("environment") or {}).get("name") == GATE_ENVIRONMENT]
+    if not gate or gate[0] is None:
+        raise _refuse(409, "GitHub says the gate was already decided")
+    note = f"{'Approved' if state == 'approved' else 'Rejected'} from A.I.N.D.Y. ({via})"
+    if comment and comment.strip():
+        note = f"{note}: {comment.strip()[:500]}"
+    try:
+        github.review(handoff.repo, handoff.run_id, gate[:1], state, note)
+    except GitHubUnavailable as exc:
+        raise _refuse(502, str(exc)) from exc
+    handoff.history = [*(handoff.history or []),
+                       {"stage": "decision", "state": state, "via": via, "at": _iso(_now())}]
+    db.commit()
+    db.refresh(handoff)
     return serialize(handoff)
 
 
