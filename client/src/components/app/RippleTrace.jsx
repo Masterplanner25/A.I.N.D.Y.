@@ -38,6 +38,8 @@ function formatWhen(value) {
 const STATUS_STYLES = {
   ok: "text-emerald-400",
   unchanged: "text-zinc-400",
+  // A feed that has worked before and is failing on and off (content_ingest FLAKY_STATUS): not the link.
+  unavailable: "text-amber-300",
   error: "text-red-400",
 };
 
@@ -449,7 +451,13 @@ export default function RippleTrace() {
                     </span>
                   </div>
                   {source.last_error && (
-                    <div className="text-[11px] text-red-400 mt-1">{source.last_error}</div>
+                    <div
+                      className={`text-[11px] mt-1 ${
+                        source.last_status === "unavailable" ? "text-amber-300" : "text-red-400"
+                      }`}
+                    >
+                      {source.last_error}
+                    </div>
                   )}
                 </div>
                 <div className="flex shrink-0 gap-3 text-xs">
