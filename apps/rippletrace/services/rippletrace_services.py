@@ -66,10 +66,12 @@ def get_ripples(db: Session, drop_point_id: str, user_id: str = None):
     return q.all()
 
 def get_all_drop_points(db: Session, user_id: str = None):
+    """Newest first. Without an order Postgres returns rows as they lie on disk, and every archive
+    update rewrites a row elsewhere: on 2026-10-25 the owner's newest pieces sat at 39, 43 and 45 of 218."""
     q = db.query(DropPointDB)
     if user_id:
         q = q.filter(DropPointDB.user_id == uuid.UUID(str(user_id)))
-    return q.all()
+    return q.order_by(DropPointDB.date_dropped.desc().nullslast(), DropPointDB.id).all()
 
 def get_all_pings(db: Session, user_id: str = None):
     q = db.query(PingDB)
