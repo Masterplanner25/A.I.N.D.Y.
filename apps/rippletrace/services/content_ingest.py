@@ -33,6 +33,7 @@ import hashlib
 import logging
 import re
 import threading
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -58,6 +59,12 @@ logger = logging.getLogger(__name__)
 # within MIN_POLL_INTERVAL, so a manual poll shortly before the job does not re-fetch.
 POLL_JOB_INTERVAL_MINUTES = 60
 MIN_POLL_INTERVAL = timedelta(minutes=30)
+# A feed that has worked before and now answers 404 or 5xx is retried within the poll. YouTube's
+# `feeds/videos.xml` answers 404 for a live channel most of the time (2026-10-25: 404 404 404 200 404
+# for the owner's channel, whose page loaded), so one request a poll showed a working source as a
+# broken link. Seconds to wait before each retry:
+FLAKY_RETRY_DELAYS = (2.0, 5.0)
+FLAKY_STATUS = "unavailable"
 # Bound one job run. Anything beyond this waits for the next tick — and is logged,
 # because a silent cap reads as "everything was polled".
 MAX_SOURCES_PER_RUN = 50
@@ -645,6 +652,34 @@ def delete_source(db: Session, *, source_id: str, user_id: str | None) -> bool:
     return True
 
 
+def _has_worked(source: ContentSourceDB) -> bool:
+    return bool(source.ingested_count or source.last_entry_count)
+
+
+def _is_flaky(exc: ContentFetchError) -> bool:
+    return exc.status_code is not None and (exc.status_code == 404 or exc.status_code >= 500)
+
+
+def _fetch_feed(db: Session, source: ContentSourceDB, owner: str | None, *, sleep=time.sleep):
+    """One fetch, retried after a 404 or 5xx only for a source that has worked before. A source that
+    never worked keeps the plain answer, because then "check the link" is the right advice."""
+    delays = FLAKY_RETRY_DELAYS if _has_worked(source) else ()
+    for attempt in range(len(delays) + 1):
+        try:
+            return fetch_url(
+                source.feed_url,
+                etag=source.etag,
+                last_modified=source.last_modified,
+                db=db,
+                user_id=owner,
+            )
+        except ContentFetchError as exc:
+            if attempt == len(delays) or not _is_flaky(exc):
+                raise
+            logger.info("[rippletrace] %s answered %s; retrying", source.feed_url, exc.status_code)
+            sleep(delays[attempt])
+
+
 def poll_source(db: Session, source: ContentSourceDB) -> dict[str, Any]:
     """Re-fetch one feed and ingest anything new. Never raises.
 
@@ -654,14 +689,17 @@ def poll_source(db: Session, source: ContentSourceDB) -> dict[str, Any]:
     """
     owner = str(source.user_id) if source.user_id else None
     try:
-        result = fetch_url(
-            source.feed_url,
-            etag=source.etag,
-            last_modified=source.last_modified,
-            db=db,
-            user_id=owner,
-        )
+        result = _fetch_feed(db, source, owner)
     except ContentFetchError as exc:
+        if _has_worked(source) and _is_flaky(exc):
+            error = (
+                f"The feed answered HTTP {exc.status_code} on {1 + len(FLAKY_RETRY_DELAYS)} tries this time, "
+                f"but it has worked before ({source.ingested_count or source.last_entry_count} items), so the "
+                "link is fine: the site's feed is failing on and off. It is tried again at the next poll."
+            )
+            _mark_polled(source, status=FLAKY_STATUS, error=error)
+            db.commit()
+            return {"status": FLAKY_STATUS, "error": error, "created": 0, "updated": 0}
         _mark_polled(source, status="error", error=str(exc))
         db.commit()
         return {"status": "error", "error": str(exc), "created": 0, "updated": 0}

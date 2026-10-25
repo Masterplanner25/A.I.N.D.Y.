@@ -89,7 +89,12 @@ _FEED_CONTENT_TYPES = ("xml", "rss", "atom")
 
 
 class ContentFetchError(Exception):
-    """A URL could not be fetched or is not permitted. Carries a user-safe message."""
+    """A URL could not be fetched or is not permitted. Carries a user-safe message, and the HTTP
+    status when the site answered with one, so a poller can tell a flaky feed from a dead link."""
+
+    def __init__(self, message: str, *, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 # ── URL handling ──────────────────────────────────────────────────────────────
@@ -356,7 +361,8 @@ def fetch_url(
                     continue
 
                 if response.status_code >= 400:
-                    raise ContentFetchError(_status_error_message(response.status_code))
+                    raise ContentFetchError(_status_error_message(response.status_code),
+                                            status_code=response.status_code)
 
                 return FetchResult(
                     url=current,
