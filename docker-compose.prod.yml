@@ -127,6 +127,11 @@ services:
       # Phase 3 (§7.3): a SECOND fine-grained token, aindy-runtime only, Deployments: write + Actions:
       # read, sent only when the owner approves or rejects the gate from A.I.N.D.Y. Unset = no buttons.
       AINDY_GITHUB_APPROVE_TOKEN: "${AINDY_GITHUB_APPROVE_TOKEN:-}"
+      # Phase 3b: with the approve token set, the gate email's subject carries a code and the watcher
+      # reads the SMTP account's Sent Mail over IMAP (same app password) for an APPROVE/REJECT reply.
+      # Empty host = derived from AINDY_SMTP_HOST (smtp.gmail.com -> imap.gmail.com).
+      AINDY_RELEASE_REPLY_IMAP_HOST: "${AINDY_RELEASE_REPLY_IMAP_HOST:-}"
+      AINDY_RELEASE_REPLY_MAILBOX: "${AINDY_RELEASE_REPLY_MAILBOX:-[Gmail]/Sent Mail}"
       AINDY_RELEASE_NOTIFY_TO: "${AINDY_RELEASE_NOTIFY_TO:-}"
       AINDY_RELEASE_REPOS: "${AINDY_RELEASE_REPOS:-Masterplanner25/aindy-runtime}"
       AINDY_RELEASE_NO_RUN_MINUTES: "${AINDY_RELEASE_NO_RUN_MINUTES:-30}"

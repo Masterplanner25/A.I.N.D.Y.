@@ -15,7 +15,7 @@ completed the release task, wrote the note, created the adoption task and delive
 **First real use: 2.28.0 on 2026-10-15** (§7.2): handed off from Collaborator, the gate email reached the
 owner, approved on GitHub, followed to `done`. Gate wait 1 min 21 s, against 6–10½ minutes before.
 **Phase 3 scoped 2026-10-15, decided 2026-10-24** (§7.3): approve from the Collaborator card or by replying to
-the gate email. **3a (the card) built 2026-10-24**; 3b (the email reply) next.
+the gate email. **Both built 2026-10-24**: 3a (the card, #490) and 3b (the email reply).
 
 **Where it comes from.** The owner's product review on 2026-10-14 named this as the first real test of
 *persistent execution*. The use case was the owner's own: *"hand a release off to A.I.N.D.Y.,
@@ -221,7 +221,12 @@ The owner handed `v2.28.0` off from Collaborator 11 minutes before the tag was p
 **Held 2026-10-15 by the owner: scoped, not built. Decided 2026-10-24: both ways (the card and the
 email reply), no MCP approve tool, and the owner makes the approve token.** **3a is built** (the token,
 `GitHubActions.review`, `POST /apps/releases/{id}/approve|reject`, the card's buttons), proven against the
-recorded 2.27.0 responses; its live proof is the next release. 3b (the email reply) is next.
+recorded 2.27.0 responses; its live proof is the next release. **3b is built too** (`release_reply.py`):
+the code is derived from the handoff id (`reply_code`, nothing stored); a reply is recorded in history as
+`{stage: "reply", word, message_id, sent, at, outcome}` before GitHub is called, so it is spent whatever
+GitHub answers. The IMAP read was proven live and read-only on 2026-10-24: login, `[Gmail]/Sent Mail`
+opened read-only, the 2.28.0 gate email found and parsed (its first word is not a decision). Its live
+proof is a release after the button's, decided by replying from the phone.
 
 The owner asked for it after 2.28.0: the gate email should be *the place the decision is made*, not a
 pointer to GitHub. Scoped against these facts, all checked on 2026-10-15:

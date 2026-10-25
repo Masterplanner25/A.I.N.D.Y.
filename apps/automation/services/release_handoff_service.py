@@ -33,6 +33,7 @@ from apps.automation.services.github_actions import (
     approve_token,
 )
 from apps.automation.services.github_actions import token as github_token
+from apps.automation.services.release_reply import SentMailbox, email_reply_enabled, reply_code
 
 logger = logging.getLogger(__name__)
 
@@ -393,9 +394,13 @@ def message(handoff: ReleaseHandoff, stage: str) -> tuple[str, str]:
     if stage == "at_gate":
         started, gate = _stage_time(handoff, "running"), _stage_time(handoff, "at_gate")
         reached = f" ({_duration((gate - started).total_seconds())} after the run started)" if started and gate else ""
-        return (f"{project} is waiting for your approval",
+        # Phase 3b: the code in the subject is what binds a reply to this handoff (`release_reply`).
+        replies = email_reply_enabled()
+        return ((f"[{reply_code(handoff.id)}] " if replies else "") + f"{project} is waiting for your approval",
                 f"{project} reached the approval gate at {_iso(gate) or 'just now'}{reached}.\n\n"
-                f"Approve or reject it on GitHub: {link}\n"
+                + ("To decide it from here, reply to this email with APPROVE or REJECT as the first word.\n"
+                   if replies else "")
+                + f"Approve or reject it on GitHub: {link}\n"
                 + ("Or decide it on A.I.N.D.Y.'s Collaborator card.\n" if approve_token() else "") + "\n"
                 "A.I.N.D.Y. sees the decision within a minute and follows the release to the end.")
     if stage == "done":
@@ -586,8 +591,9 @@ def advance(db: Session, handoff: ReleaseHandoff, github: GitHubActions, *, now:
 
 
 def process(db: Session, handoff: ReleaseHandoff, github: GitHubActions, *, now: datetime | None = None,
-            send: Callable[..., dict] | None = None) -> list[str]:
-    """One handoff, one tick: advance, commit, then the side effects of each stage entered."""
+            send: Callable[..., dict] | None = None, mailbox: SentMailbox | None = None) -> list[str]:
+    """One handoff, one tick: advance, commit, then the side effects of each stage entered, then (with a
+    mailbox) the owner's reply to the gate email, if there is one."""
     entered = advance(db, handoff, github, now=now)
     db.commit()
     for stage in entered:
@@ -603,6 +609,14 @@ def process(db: Session, handoff: ReleaseHandoff, github: GitHubActions, *, now:
     if last in NOTIFY_STAGES:
         notify(db, handoff, last, send=send)
     db.commit()
+    if mailbox is not None and handoff.stage == "at_gate":
+        from apps.automation.services.release_reply import check_replies
+
+        try:
+            check_replies(db, handoff, mailbox, github=github, send=send)
+        except Exception as exc:  # the mailbox is a second way to decide; GitHub and the card still work
+            db.rollback()
+            logger.warning("[release] %s: reading replies failed this tick: %s", handoff.tag, exc)
     return entered
 
 
@@ -614,13 +628,15 @@ def release_handoff_watch() -> dict:
 
     db = SessionLocal()
     summary: dict[str, Any] = {"handoffs": 0, "moved": 0, "skipped": False}
+    # Connects only if a handoff is at the gate awaiting a reply; one login per tick at most.
+    mailbox = SentMailbox() if email_reply_enabled() else None
     try:
         open_rows = (db.query(ReleaseHandoff).filter(ReleaseHandoff.stage.notin_(RELEASE_TERMINAL))
                      .order_by(ReleaseHandoff.created_at.asc()).all())
         for handoff in open_rows:
             summary["handoffs"] += 1
             try:
-                entered = process(db, handoff, GitHubActions(db=db, user_id=handoff.user_id))
+                entered = process(db, handoff, GitHubActions(db=db, user_id=handoff.user_id), mailbox=mailbox)
                 summary["moved"] += len(entered)
             except GitHubUnavailable as exc:
                 db.rollback()
@@ -629,6 +645,8 @@ def release_handoff_watch() -> dict:
                 db.rollback()
                 logger.warning("[release] %s: tick failed: %s", handoff.tag, exc)
     finally:
+        if mailbox is not None:
+            mailbox.close()
         db.close()
         _tick_lock.release()
     return summary
