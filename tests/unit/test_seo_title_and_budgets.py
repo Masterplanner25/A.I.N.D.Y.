@@ -212,28 +212,6 @@ def test_the_title_is_measured_against_the_bodys_own_keywords():
     assert "frameworks" in result["title_analysis"]["shared_keywords"]
 
 
-# ── the meta description now reports what it trimmed to ───────────────────────────────
-
-def test_the_meta_result_reports_its_character_count():
-    """★ The number the writer is handed is the point of the feature.
-
-    A meta description is produced by trimming to a budget the writer cannot see. Returning
-    the text alone is what let the word/character confusion survive as long as it did: in the
-    UI a 900-character result and a 155-character one look identical.
-    """
-    from apps.search.services.search_service import generate_meta
-
-    result = generate_meta("This is a sentence that will need trimming. " * 30, 160)
-
-    assert result["budget"] == 160
-    assert result["characters"] == count_characters(result["meta_description"])
-    assert result["characters"] <= 161  # the budget, plus the one-character truncation mark
-
-
-def test_a_short_meta_description_is_returned_whole_and_counted():
-    from apps.search.services.search_service import generate_meta
-
-    result = generate_meta("A short summary of the piece.", 160)
-
-    assert result["meta_description"] == "A short summary of the piece."
-    assert result["characters"] == 29
+# The meta description's character count moved to `test_seo_meta_generation.py` on 2026-10-25,
+# when the description stopped being the article's trimmed opening and became a model's
+# reading of the whole piece. The count is still reported, never assumed.

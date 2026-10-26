@@ -239,6 +239,58 @@ describe("SEO tool title and character budgets", () => {
     expect(screen.queryByTestId("meta-character-count")).toBeNull();
   });
 
+  // ── the description is written from the article's point (owner, 2026-10-25) ──────────
+
+  it("sends the title and shows the point the description was built on", async () => {
+    mockGenerateMeta.mockResolvedValue({
+      meta_description: "Why a release number is a commitment about behaviour.",
+      central_point: "A version number is a promise the release has to keep.",
+      characters: 53,
+      budget: 160,
+      over_by: 0,
+    });
+    render(<AiSeoTool />);
+    typeBody();
+    typeTitle("What a version promises");
+    fireEvent.click(screen.getByRole("button", { name: /Generate Meta Description/i }));
+
+    const point = await screen.findByTestId("meta-central-point");
+    expect(point.textContent).toMatch(/promise the release has to keep/);
+    expect(mockGenerateMeta).toHaveBeenCalledWith("some article body", "What a version promises");
+  });
+
+  it("says why there is no description instead of inventing one", async () => {
+    mockGenerateMeta.mockResolvedValue({ meta_description: "", reason: "the description service could not be reached" });
+    render(<AiSeoTool />);
+    typeBody();
+    fireEvent.click(screen.getByRole("button", { name: /Generate Meta Description/i }));
+
+    expect(await screen.findByText(/No description — the description service could not be reached/)).toBeTruthy();
+    expect(screen.queryByTestId("meta-character-count")).toBeNull();
+  });
+
+  it("lists measured suggestions, with the sentences a readability finding is about", async () => {
+    mockSuggest.mockResolvedValue({
+      suggestions: [{
+        metric: "readability",
+        issue: "Fairly difficult to read (Flesch 42.0).",
+        suggestion: "The longest sentences are listed. Where the length is deliberate, leave it.",
+        severity: "info",
+        passages: [{ opening: "This sentence keeps adding clause after clause…", words: 41 }],
+      }],
+    });
+    render(<AiSeoTool />);
+    typeBody();
+    typeTitle("What a version promises");
+    fireEvent.click(screen.getByRole("button", { name: /Get Suggestions/i }));
+
+    const panel = await screen.findByTestId("suggestions");
+    expect(panel.textContent).toMatch(/Flesch 42.0/);
+    expect(panel.textContent).toMatch(/“This sentence keeps adding clause after clause…” — 41 words/);
+    expect(panel.textContent).not.toMatch(/strongest terms/);
+    expect(mockSuggest.mock.calls[0][1]).toBe("What a version promises");
+  });
+
   // ── title generation: it proposes, it never replaces ─────────────────────────────────
 
   it("offers a title suggestion action", () => {

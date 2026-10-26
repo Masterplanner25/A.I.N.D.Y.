@@ -119,7 +119,7 @@ def analyze_seo(
     )
 
 @router.post("/meta")
-@limiter.limit("30/minute")
+@limiter.limit("15/minute")
 def generate_meta(
     request: Request,
     data: MetaInput,
@@ -130,7 +130,9 @@ def generate_meta(
 
     def handler(_ctx):
         def _build(memory: dict):
-            result = generate_meta_result(data.text, data.limit)
+            result = generate_meta_result(
+                data.text, data.limit, title=data.title, db=db, user_id=user_id
+            )
             result["memory"] = memory
             return result
 
@@ -190,7 +192,10 @@ def suggest_improvements(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        return suggest_seo_improvements(data.text, data.top_n, db=db, user_id=user_id)
+        return suggest_seo_improvements(
+            data.text, data.top_n or 10, db=db, user_id=user_id, title=data.title,
+            target_keywords=data.target_keywords,
+        )
 
     return _with_execution_envelope(
         _execute_seo(request, "seo.suggest", handler, db=db, user_id=user_id)
@@ -219,7 +224,7 @@ def analyze_seo_compat(
 
 
 @router.post("/generate_meta/")
-@limiter.limit("30/minute")
+@limiter.limit("15/minute")
 def generate_meta_compat(
     request: Request,
     data: LegacyContentInput,
@@ -230,7 +235,9 @@ def generate_meta_compat(
 
     def handler(_ctx):
         def _build(memory: dict):
-            result = generate_meta_result(data.content, 160)
+            result = generate_meta_result(
+                data.content, 160, title=data.title, db=db, user_id=user_id
+            )
             result["memory"] = memory
             return result
 
@@ -260,7 +267,10 @@ def suggest_improvements_compat(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        return suggest_seo_improvements(data.content, db=db, user_id=user_id)
+        return suggest_seo_improvements(
+            data.content, db=db, user_id=user_id, title=data.title,
+            target_keywords=data.target_keywords,
+        )
 
     return _with_execution_envelope(
         _execute_seo(request, "seo.suggest.compat", handler, db=db, user_id=user_id)

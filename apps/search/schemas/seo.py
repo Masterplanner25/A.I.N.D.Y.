@@ -17,6 +17,8 @@ class SEOInput(BaseModel):
 class MetaInput(BaseModel):
     text: str
     limit: Optional[int] = 160
+    # The writer's title: its framing is what the description keeps (`meta_generation`).
+    title: Optional[str] = None
 
 class TitleInput(BaseModel):
     text: str
