@@ -276,35 +276,34 @@ def analyze_seo_content(
     )
 
 
-def suggest_seo_improvements(text: str, top_n: int = 5, *, db=None, user_id: str | None = None) -> dict[str, Any]:
-    analysis = analyze_seo_content(text, top_n=top_n, db=db, user_id=user_id)
-    suggestions: list[str] = []
-    readability = float(analysis.get("readability", 0.0) or 0.0)
-    word_count = int(analysis.get("word_count", 0) or 0)
-    keyword_densities = analysis.get("keyword_densities") or {}
-    top_keywords = analysis.get("top_keywords") or []
+def suggest_seo_improvements(
+    text: str,
+    top_n: int = 10,
+    *,
+    db=None,
+    user_id: str | None = None,
+    title: str | None = None,
+    target_keywords: list[str] | None = None,
+) -> dict[str, Any]:
+    """The analysis's own measured suggestions, which the page never showed.
 
-    if readability < 50:
-        suggestions.append("Improve readability with shorter sentences and simpler phrasing.")
-    if word_count < 300:
-        suggestions.append("Increase content depth; the current article is likely too short for competitive ranking.")
-    elif word_count > 2500:
-        suggestions.append("Consider tightening the article to improve clarity and scannability.")
-
-    weak_keywords = [kw for kw, density in keyword_densities.items() if density < 0.5][:3]
-    high_keywords = [kw for kw, density in keyword_densities.items() if density > 3.0][:3]
-    if weak_keywords:
-        suggestions.append(f"Strengthen topical coverage around: {', '.join(weak_keywords)}.")
-    if high_keywords:
-        suggestions.append(f"Reduce overuse of: {', '.join(high_keywords)}.")
-    if top_keywords:
-        suggestions.append(f"Build headings and meta copy around the strongest terms: {', '.join(top_keywords[:3])}.")
-
-    if not suggestions:
-        suggestions.append("SEO baseline looks healthy; focus on stronger headings, internal linking, and clearer search intent matching.")
-
+    This used to build a second list from scratch: "Improve readability with shorter sentences",
+    "Build headings and meta copy around the strongest terms" (the three most frequent words).
+    Neither said which passage, or why a term mattered beyond its count (owner, 2026-10-25). The
+    analysis already computed `seo_improvement_suggestions`, each finding beside the measurement
+    that produced it, and the "Get Suggestions" button never reached them: the dead-twin shape.
+    """
+    analysis = analyze_seo_content(
+        text, top_n=top_n, db=db, user_id=user_id, title=title,
+        target_keywords=target_keywords,
+    )
+    items = analysis.get("suggestions") or []
     return {
-        "seo_suggestions": "\n".join(f"- {item}" for item in suggestions),
+        "suggestions": items,
+        # Plain text for any caller that still renders a string.
+        "seo_suggestions": "\n".join(
+            f"- {item.get('issue', '')} {item.get('suggestion', '')}".rstrip() for item in items
+        ),
         "learning_context": analysis.get("learning_context")
         or build_learning_context(analysis, default_search_type="seo_analysis"),
     }
@@ -520,15 +519,20 @@ def unified_query(
     )
 
 
-def generate_meta(text: str, limit: int = 160) -> dict[str, str]:
-    meta = generate_meta_description(text, limit)
-    return {
-        "meta_description": meta,
-        # ★ Characters, and reported rather than assumed. The writer is being handed something
-        # measured against a budget they cannot see, and the budget is the whole point of the
-        # feature — the previous version of this function trimmed to 160 WORDS while its
-        # caller believed it was trimming to 160 characters.
-        "characters": count_characters(meta),
-        "budget": limit,
-    }
+def generate_meta(
+    text: str,
+    limit: int = 160,
+    *,
+    title: str | None = None,
+    db=None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    """A description written from the article's central point (`meta_generation`).
+
+    It was the article's first 160 characters until 2026-10-25. Characters are still reported
+    rather than assumed: the budget is the point of the feature.
+    """
+    from apps.search.services.meta_generation import generate_meta_from_article
+
+    return generate_meta_from_article(text, title=title, budget=limit, db=db, user_id=user_id)
 

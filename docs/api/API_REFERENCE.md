@@ -2224,16 +2224,28 @@ Analyze Seo Compat
 #### POST /apps/seo/generate_meta/
 Generate Meta Compat
 
-**Body:** content: string (required)
+**Body:** content: string (required), title: string | null, target_keywords: array of string | null
 
-**Response 200:** unspecified
+
+A description written by a model from the **whole article's central point**, keeping the framing of
+`title` when one is sent (until 2026-10-25 it was the article's first 160 characters). Costs a model
+call, so 15/min. Over budget is kept and marked, never trimmed. `reason` is non-null exactly when
+`meta_description` is empty; there is no opening-lines fallback.
+
+**Response 200:** meta_description: string, central_point: string, characters: integer, budget: integer, over_by: integer, serp_preview: string, truncated: boolean, reason: string | null
 
 #### POST /apps/seo/meta
 Generate Meta
 
-**Body:** limit: integer | null, text: string (required)
+**Body:** limit: integer | null, text: string (required), title: string | null
 
-**Response 200:** unspecified
+
+A description written by a model from the **whole article's central point**, keeping the framing of
+`title` when one is sent (until 2026-10-25 it was the article's first 160 characters). Costs a model
+call, so 15/min. Over budget is kept and marked, never trimmed. `reason` is non-null exactly when
+`meta_description` is empty; there is no opening-lines fallback.
+
+**Response 200:** meta_description: string, central_point: string, characters: integer, budget: integer, over_by: integer, serp_preview: string, truncated: boolean, reason: string | null
 
 #### POST /apps/seo/drafts
 Create Seo Draft
@@ -2326,16 +2338,28 @@ same shape as a candidate above.
 #### POST /apps/seo/suggest
 Suggest Improvements
 
-**Body:** text: string (required), top_n: integer | null
+**Body:** text: string (required), top_n: integer | null, title: string | null, target_keywords: array of string | null
 
-**Response 200:** unspecified
+
+The analysis's own findings, each `{metric, issue, suggestion, severity}` beside the measurement that
+produced it; a `readability` finding also carries `passages` (the longest sentences, `{opening, words}`).
+`title` and `target_keywords` add the title and coverage findings. Until 2026-10-25 this was a separate
+list built from word counts.
+
+**Response 200:** suggestions: array of object, seo_suggestions: string (the same, as text), learning_context: object
 
 #### POST /apps/seo/suggest_improvements/
 Suggest Improvements Compat
 
-**Body:** content: string (required)
+**Body:** content: string (required), title: string | null, target_keywords: array of string | null
 
-**Response 200:** unspecified
+
+The analysis's own findings, each `{metric, issue, suggestion, severity}` beside the measurement that
+produced it; a `readability` finding also carries `passages` (the longest sentences, `{opening, words}`).
+`title` and `target_keywords` add the title and coverage findings. Until 2026-10-25 this was a separate
+list built from word counts.
+
+**Response 200:** suggestions: array of object, seo_suggestions: string (the same, as text), learning_context: object
 
 ### Search History
 
