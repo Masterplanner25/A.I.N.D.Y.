@@ -27,6 +27,7 @@ def test_the_flag_is_passed_to_the_api(flag):
 # Owner, 2026-10-22: our own workflows are written in Nodus, so reasoning runs its .nd by default.
 @pytest.mark.parametrize("flag", [
     "AINDY_REASONING_NODUS_NATIVE", "AINDY_INFINITY_RECALC_NODUS", "AINDY_ARCHIVE_NODUS",
+    "AINDY_SHARE_DRAFTS_NODUS",
 ])
 def test_our_nodus_workflows_run_by_default(flag):
     assert f'{flag}: "${{{flag}:-1}}"' in COMPOSE.read_text(encoding="utf-8")

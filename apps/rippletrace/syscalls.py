@@ -169,7 +169,35 @@ ARCHIVE_STEP_SYSCALLS = {
 _ARCHIVE_STEP_HANDLERS = {name: _archive_step(step) for name, (step, _) in ARCHIVE_STEP_SYSCALLS.items()}
 
 
+# ── Share drafts, for share_drafts_v1.nd ─────────────────────────────────────────────────
+# One piece, named by the job, for the run's own user. `create_` makes the capability the runtime
+# infers for a .nd's sys() `rippletrace.write`, the one this requires.
+
+
+def _handle_create_share_drafts(payload: dict, ctx: SyscallContext) -> dict:
+    if not ctx.user_id:
+        raise ValueError("share drafts need the run's user")
+    drop_point_id = str(payload.get("drop_point_id") or "").strip()
+    if not drop_point_id:
+        raise ValueError("sys.v1.rippletrace.create_share_drafts requires 'drop_point_id'")
+    from apps.rippletrace.services.share_drafts import make_share_drafts
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return make_share_drafts(db, ctx.user_id, drop_point_id)
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_rippletrace_syscall_handlers() -> None:
+    register_syscall(
+        name="sys.v1.rippletrace.create_share_drafts",
+        handler=_handle_create_share_drafts,
+        capability="rippletrace.write",
+        description="Write the share drafts (LinkedIn post, short post, meta description, series footer) for one of the caller's published pieces.",
+        stable=False,
+    )
     for name, (_, description) in ARCHIVE_STEP_SYSCALLS.items():
         register_syscall(
             name=name,

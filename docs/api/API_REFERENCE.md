@@ -995,27 +995,6 @@ Evaluate Drop Point
 
 **Response 200:** unspecified
 
-#### GET /apps/generate_content/{playbook_id}
-Generate Content View
-
-**Parameters:** playbook_id (path): string
-
-**Response 200:** unspecified
-
-#### POST /apps/generate_content_for_drop/{drop_point_id}
-Generate Content For Drop View
-
-**Parameters:** drop_point_id (path): string
-
-**Response 200:** unspecified
-
-#### GET /apps/generate_variations/{playbook_id}
-Generate Variations View
-
-**Parameters:** playbook_id (path): string
-
-**Response 200:** unspecified
-
 #### GET /apps/influence_chain/{drop_point_id}
 Influence Chain View
 
@@ -1880,6 +1859,18 @@ Detect Ripples For Drop Point
 
 **Response 200:** unspecified
 
+#### POST /apps/rippletrace/drop_points/{drop_point_id}/share_drafts
+Queue Share Drafts
+
+Ask for a piece's share drafts (an older piece, or one again). Queued, not written in the request: the
+`rippletrace_share_drafts` job writes them into the Drafts section within about ten minutes. A copy of a
+cross-posted piece queues its earliest copy. 404 when not yours; 409 `no_text` when the piece has no
+stored text. New pieces get them without asking.
+
+**Parameters:** drop_point_id (path): string
+
+**Response 200:** queued: boolean, drop_point_id: string
+
 #### POST /apps/rippletrace/drop_points/{drop_point_id}/citations
 Record Citation
 
@@ -2713,7 +2704,7 @@ Confirm a proposal — `{key, name?, summary?, kind?, role?, status?}`; the owne
 #### GET /apps/works/drafts
 Drafts — what the agent wrote for you (`content.draft`), newest first, without their text
 
-**Response 200:** drafts: [{id, title, brief, run_id, work_id, work_name, newest_for_work, sources: [{title, url, platform, kind}], model, created_at, updated_at, words}] — `newest_for_work` is true on the newest draft about each Work
+**Response 200:** drafts: [{id, title, brief, run_id, work_id, work_name, newest_for_work, kind, drop_point_id, sources: [{title, url, platform, kind}], model, created_at, updated_at, words}] — `newest_for_work` is true on the newest draft about each Work. `kind` is null for a document, or a share draft written from a published piece (`linkedin_post`, `short_post`, `meta_description`, `series_footer`), which `drop_point_id` names; its `brief` starts with the point the model read the piece as
 
 #### GET /apps/works/drafts/{draft_id}
 One draft, with its text (markdown; sources cited inline as [S1] and listed at the end)

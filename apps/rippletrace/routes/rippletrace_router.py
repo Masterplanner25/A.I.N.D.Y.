@@ -309,6 +309,38 @@ async def detect_ripples_for_drop_point(
     return result
 
 
+@router.post("/drop_points/{drop_point_id}/share_drafts")
+@limiter.limit("10/minute")
+async def queue_share_drafts(
+    request: Request,
+    drop_point_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Ask for a piece's share drafts: an older piece, or one again. Queued, not written here: the
+    `rippletrace_share_drafts` job writes them within about ten minutes (`services/share_drafts.py`).
+    A copy of a cross-posted piece queues its earliest copy."""
+    def handler(ctx):
+        from apps.rippletrace.services.share_drafts import queue_piece
+
+        result = queue_piece(db, str(current_user["sub"]), drop_point_id)
+        if result.get("reason") == "not_found":
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "drop_point_not_found", "message": "Drop point not found"},
+            )
+        if result.get("reason") == "no_text":
+            raise HTTPException(
+                status_code=409,
+                detail={"error": "no_text", "message": "This piece has no stored text to write from yet."},
+            )
+        return result
+
+    return await execute_with_pipeline(
+        request, "rippletrace_queue_share_drafts", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+
+
 @router.post("/drop_points/{drop_point_id}/citations")
 @limiter.limit("10/minute")
 async def record_citation(

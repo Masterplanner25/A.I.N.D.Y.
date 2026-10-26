@@ -383,9 +383,6 @@ Legacy compatibility routes are registered in `apps/rippletrace/routes/legacy_su
 - `/playbooks`
 - `/playbook/{playbook_id}`
 - `/playbook_match/{drop_point_id}`
-- `/generate_content/{playbook_id}`
-- `/generate_content_for_drop/{drop_point_id}`
-- `/generate_variations/{playbook_id}`
 - `/learning_stats`
 - `/evaluate/{drop_point_id}`
 
@@ -394,6 +391,10 @@ Legacy compatibility routes are registered in `apps/rippletrace/routes/legacy_su
 > **Deprecation status**: These routes are maintained for backward
 > compatibility. No new callers should be added. Migrate to the primary
 > `/apps/rippletrace/*` surface.
+>
+> **Retired 2026-10-25:** `/generate_content/{playbook_id}`, `/generate_content_for_drop/{drop_point_id}`
+> and `/generate_variations/{playbook_id}`. They wrote posts from playbooks (0 existed) and never read the
+> piece; share drafts (`services/share_drafts.py`) replace them.
 
 | Method | Path | Primary equivalent | Status |
 |---|---|---|---|
@@ -419,9 +420,6 @@ Legacy compatibility routes are registered in `apps/rippletrace/routes/legacy_su
 | GET | `/playbooks` | `GET /rippletrace/playbooks` | deprecated |
 | GET | `/playbook/{playbook_id}` | `GET /rippletrace/playbooks/{playbook_id}` | deprecated |
 | GET | `/playbook_match/{drop_point_id}` | `GET /rippletrace/playbooks/match/{drop_point_id}` | deprecated |
-| GET | `/generate_content/{playbook_id}` | None | unique — no equivalent, do not remove |
-| POST | `/generate_content_for_drop/{drop_point_id}` | None | unique — no equivalent, do not remove |
-| GET | `/generate_variations/{playbook_id}` | None | unique — no equivalent, do not remove |
 | GET | `/learning_stats` | `GET /rippletrace/learning/stats` | deprecated |
 | POST | `/evaluate/{drop_point_id}` | `POST /rippletrace/learning/evaluate/{drop_point_id}` | deprecated |
 
