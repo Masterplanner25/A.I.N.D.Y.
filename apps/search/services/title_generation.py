@@ -40,11 +40,13 @@ MODEL = "gpt-4o-mini"
 DEFAULT_CANDIDATE_COUNT = 5
 MAX_CANDIDATE_COUNT = 8
 
-# How much of the article the model is shown. A title is decided by what the piece is about,
-# which is established early; sending 40,000 characters to choose a 60-character line is paying
-# for tokens that change nothing. Bounded input is also the rule every other external call here
-# follows (`MAX_IMPORT_CHARS`, `MAX_TRANSCRIPT_CHARS_SENT`).
-MAX_ARTICLE_CHARS_SENT = 6000
+# How much of the article the model is shown: all of it, for any real article. This was 6,000
+# characters on the theory that a piece's subject is established early. It is not, for the
+# owner's case studies: "What a version promises" makes its point about versioning late, the
+# model never saw it, and proposed "Building Nodus: The Shift from Memory to Evidence", a theme
+# from the opening (owner, 2026-10-25). The bound stays, because every external call here is
+# bounded (`MAX_IMPORT_CHARS`, `MAX_TRANSCRIPT_CHARS_SENT`); ~10,000 words is past any of theirs.
+MAX_ARTICLE_CHARS_SENT = 60_000
 
 SYSTEM_PROMPT = """You are helping a writer title an article they have already written.
 
@@ -59,8 +61,12 @@ Rules:
 - Make the options genuinely different from each other — different angles, not the same title
   with words swapped. A list of near-duplicates is one option pretending to be five.
 - Plain language. No clickbait, no "Ultimate Guide", no manufactured urgency, no emoji.
-- If the writer supplied a current title, follow its conventions where they are deliberate —
-  a series name or recurring prefix is theirs to keep. Do not preserve its wording otherwise.
+- Read the whole article and find the point it makes: the argument or discovery it exists to
+  deliver, not its most frequent topic or a theme it passes through.
+- If the writer supplied a current title, it states what they think that point is. Keep its
+  framing: every option must make the same point, in different words or from a different
+  angle. Do not swap it for another theme the article also touches.
+- A series name or recurring prefix in the current title is theirs to keep.
 - If target keywords are given, work them in only where they fit naturally. A title that reads
   as keyword placement is worse than one that reads well.
 

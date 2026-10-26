@@ -247,17 +247,25 @@ def test_an_empty_article_never_reaches_the_model(model):
 
 # ── what is sent ───────────────────────────────────────────────────────────────────────
 
-def test_the_article_is_truncated_before_it_is_sent():
-    """A title is decided by what the piece is about, which is established early.
+def test_the_whole_article_is_sent_up_to_a_bound():
+    """A piece's point can arrive late, so the model sees all of it (owner, 2026-10-25).
 
-    Sending 40,000 characters to choose a 60-character line pays for tokens that change
-    nothing, and bounded input is the rule every other external call here follows.
+    At 6,000 characters "What a version promises" lost its point about versioning, which comes
+    late, and got titles about the opening's theme. The bound remains for pathological pastes.
     """
-    prompt = titlegen._user_prompt(
-        "z" * 50_000, count=5, existing_title=None, target_keywords=None
-    )
+    late = "z" * 50_000 + " the point about versioning"
+    prompt = titlegen._user_prompt(late, count=5, existing_title=None, target_keywords=None)
+    assert "the point about versioning" in prompt
 
-    assert prompt.count("z") == titlegen.MAX_ARTICLE_CHARS_SENT
+    huge = titlegen._user_prompt("z" * 100_000, count=5, existing_title=None, target_keywords=None)
+    assert huge.count("z") == titlegen.MAX_ARTICLE_CHARS_SENT
+
+
+def test_the_writers_title_is_the_framing_every_option_keeps():
+    """Options may say the title's point differently; they may not swap it for another theme."""
+    assert "Keep its" in titlegen.SYSTEM_PROMPT
+    assert "every option must make the same point" in titlegen.SYSTEM_PROMPT
+    assert "Do not swap it for another theme" in titlegen.SYSTEM_PROMPT
 
 
 def test_target_keywords_are_passed_as_a_constraint_not_a_requirement():

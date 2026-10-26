@@ -216,6 +216,29 @@ _KEYWORD_STUFFING_PCT = 4.0     # single-keyword density above this = stuffing r
 _WEAK_FOCUS_PCT = 0.5           # top keyword density below this = weak topical focus
 
 
+_LONG_SENTENCE_WORDS = 30      # a sentence this long is worth pointing at, not necessarily fixing
+_LONG_SENTENCES_SHOWN = 3
+
+
+def longest_sentences(text: str) -> list[dict]:
+    """The longest sentences, by their opening words, so a readability finding names passages.
+
+    "Shorten sentences" with no passage attached was the whole complaint (owner, 2026-10-25): it
+    did not say which sentences, or allow that the length might be deliberate. This only points.
+    """
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text or "") if s.strip()]
+    measured = [(len(s.split()), s) for s in sentences]
+    long_ones = sorted(
+        (item for item in measured if item[0] >= _LONG_SENTENCE_WORDS),
+        key=lambda item: -item[0],
+    )[:_LONG_SENTENCES_SHOWN]
+    out = []
+    for words, sentence in long_ones:
+        opening = sentence.split()[:12]
+        out.append({"opening": " ".join(opening) + ("…" if words > 12 else ""), "words": words})
+    return out
+
+
 def _title_suggestions(title_analysis: dict | None) -> list[dict]:
     """Title findings, stated with the measurement rather than in place of it.
 
@@ -379,21 +402,25 @@ def seo_improvement_suggestions(analysis: dict) -> list[dict]:
             "severity": "warn",
         })
 
-    if isinstance(readability, (int, float)):
-        if readability < _READABILITY_HARD:
-            suggestions.append({
-                "metric": "readability",
-                "issue": f"Very hard to read (Flesch {round(readability, 1)}).",
-                "suggestion": "Shorten sentences and simplify wording to lift readability.",
-                "severity": "warn",
-            })
-        elif readability < _READABILITY_DIFFICULT:
-            suggestions.append({
-                "metric": "readability",
-                "issue": f"Fairly difficult to read (Flesch {round(readability, 1)}).",
-                "suggestion": "Consider simpler phrasing for a broader audience.",
-                "severity": "info",
-            })
+    if isinstance(readability, (int, float)) and readability < _READABILITY_DIFFICULT:
+        hard = readability < _READABILITY_HARD
+        passages = analysis.get("long_sentences") or []
+        item = {
+            "metric": "readability",
+            "issue": (
+                f"{'Very hard' if hard else 'Fairly difficult'} to read "
+                f"(Flesch {round(readability, 1)})."
+            ),
+            "suggestion": (
+                "The longest sentences are listed. Where the length is deliberate, leave it."
+                if passages
+                else "No single sentence stands out; the score comes from word choice throughout."
+            ),
+            "severity": "warn" if hard else "info",
+        }
+        if passages:
+            item["passages"] = passages
+        suggestions.append(item)
 
     for keyword, density in densities.items():
         if isinstance(density, (int, float)) and density > _KEYWORD_STUFFING_PCT:
@@ -463,6 +490,7 @@ def seo_analysis(
         "readability": readability,
         "top_keywords": [kw[0] for kw in keywords],
         "keyword_densities": densities,
+        "long_sentences": longest_sentences(prepared_text),
     }
     if truncated:
         result["truncated"] = True

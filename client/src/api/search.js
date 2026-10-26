@@ -97,10 +97,13 @@ export function analyzeSeo(content, title, targetKeywords) {
   });
 }
 
-export function generateMeta(content) {
+export function generateMeta(content, title) {
+  // The title is sent so the description keeps its framing; omitted when empty.
+  const body = { content };
+  if (title) body.title = title;
   return authRequest(ROUTES.SEARCH.GENERATE_META, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -115,10 +118,13 @@ export function generateTitles(content, currentTitle, targetKeywords) {
   });
 }
 
-export function suggestSeoImprovements(content) {
+export function suggestSeoImprovements(content, title, targetKeywords) {
+  const body = { content };
+  if (title) body.title = title;
+  if (targetKeywords?.length) body.target_keywords = targetKeywords;
   return authRequest(ROUTES.SEARCH.SUGGEST_IMPROVEMENTS, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   });
 }
 

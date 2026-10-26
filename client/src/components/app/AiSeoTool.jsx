@@ -31,15 +31,14 @@ export default function AiSeoTool() {
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
   const [seoData, setSeoData] = useState(null);
-  const [metaDescription, setMetaDescription] = useState("");
-  const [metaCharacters, setMetaCharacters] = useState(null);
+  const [meta, setMeta] = useState(null);
   const [titleOptions, setTitleOptions] = useState(null);
   const [targets, setTargets] = useState("");
   const [drafts, setDrafts] = useState([]);
   const [draftId, setDraftId] = useState(null);
   const [draftDetail, setDraftDetail] = useState(null);
   const [savingDraft, setSavingDraft] = useState(false);
-  const [seoSuggestions, setSeoSuggestions] = useState("");
+  const [seoSuggestions, setSeoSuggestions] = useState(null);
   const [loading, setLoading] = useState(false);
   // Bumped after a successful analyze so the "Recent SEO Analyses" panel refetches — the
   // analysis is saved server-side, but the panel only loaded once on mount, so a freshly-run
@@ -51,10 +50,9 @@ export default function AiSeoTool() {
     setContent(stored.query || item.query || "");
     setTitle(stored.title_analysis?.title || "");
     setSeoData(stored);
-    setMetaDescription("");
-    setMetaCharacters(null);
+    setMeta(null);
     setTitleOptions(null);
-    setSeoSuggestions("");
+    setSeoSuggestions(null);
   };
 
   // Comma-separated in, list out. Phrases are allowed and are the interesting case: "runtime
@@ -173,11 +171,12 @@ export default function AiSeoTool() {
   const generateMeta = async () => {
     setLoading(true);
     try {
-      const data = await apiGenerateMeta(content);
-      setMetaDescription(data.meta_description);
-      setMetaCharacters(data.characters ?? null);
+      setMeta(await apiGenerateMeta(content, title));
     } catch (error) {
       console.error("Meta Description Error: ", error);
+      // Never a local fallback: the opening lines would look like a description written from
+      // the whole article, which is the confusion the server-side change ended.
+      setMeta({ meta_description: "", reason: "the description service could not be reached" });
     }
     setLoading(false);
   };
@@ -199,8 +198,8 @@ export default function AiSeoTool() {
   const getSeoSuggestions = async () => {
     setLoading(true);
     try {
-      const data = await apiSuggestSeoImprovements(content);
-      setSeoSuggestions(data.seo_suggestions);
+      const data = await apiSuggestSeoImprovements(content, title, targetList);
+      setSeoSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
     } catch (error) {
       console.error("SEO Suggestions Error: ", error);
     }
@@ -414,21 +413,37 @@ export default function AiSeoTool() {
         }
 
                 {/* META DESCRIPTION BOX */}
-                {metaDescription &&
-        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg">
+                {/* META DESCRIPTION — written from the article's central point, which is shown
+                    too: a description built on a wrong reading should look like a wrong
+                    reading, not like a plausible sentence. */}
+                {meta &&
+        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg" data-testid="meta-description">
                         <h2 className="text-xl font-bold mb-4 text-emerald-400 border-b border-zinc-800 pb-2">Meta Description</h2>
-                        <p className="italic text-gray-300 leading-relaxed">"{metaDescription}"</p>
-                        {metaCharacters != null &&
-                          <p className="mt-2 text-xs text-gray-500" data-testid="meta-character-count">
-                              {metaCharacters} characters — search results show about 160
+                        {meta.meta_description ?
+                          <>
+                              <p className="italic text-gray-300 leading-relaxed">"{meta.meta_description}"</p>
+                              {meta.characters != null &&
+                                <p className="mt-2 text-xs text-gray-500" data-testid="meta-character-count">
+                                    {meta.characters} characters — search results show about {meta.budget || 160}
+                                    {meta.over_by > 0 && <span className="text-amber-400"> — {meta.over_by} over</span>}
+                                </p>
+                              }
+                              {meta.central_point &&
+                                <p className="mt-3 text-xs text-gray-400" data-testid="meta-central-point">
+                                    Read as: <span className="text-gray-300">{meta.central_point}</span>
+                                </p>
+                              }
+                              <button
+                  className="mt-4 text-xs text-zinc-500 hover:text-white underline"
+                  onClick={() => navigator.clipboard.writeText(meta.meta_description)}>
+
+                                  Copy to clipboard
+                              </button>
+                          </> :
+                          <p className="text-sm text-gray-400">
+                              No description — {meta.reason || "nothing was returned"}.
                           </p>
                         }
-                        <button
-            className="mt-4 text-xs text-zinc-500 hover:text-white underline"
-            onClick={() => navigator.clipboard.writeText(metaDescription)}>
-            
-                            Copy to clipboard
-                        </button>
                     </div>
         }
 
@@ -606,11 +621,29 @@ export default function AiSeoTool() {
                     </div>
         }
 
-                {/* SUGGESTIONS BOX */}
+                {/* SUGGESTIONS — each finding beside the measurement that produced it, and a
+                    readability finding names its sentences. They used to be one generic list
+                    built from word counts (owner, 2026-10-25). */}
                 {seoSuggestions &&
-        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg md:col-span-2">
-                        <h2 className="text-xl font-bold mb-4 text-purple-400 border-b border-zinc-800 pb-2">Improvement Strategy</h2>
-                        <p className="text-gray-300 whitespace-pre-wrap">{seoSuggestions}</p>
+        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg md:col-span-2" data-testid="suggestions">
+                        <h2 className="text-xl font-bold mb-4 text-purple-400 border-b border-zinc-800 pb-2">Suggestions</h2>
+                        <ul className="space-y-3">
+                            {safeMap(seoSuggestions, (item, i) =>
+                              <li key={`${item.metric}-${i}`} className="text-sm">
+                                  <p className={item.severity === "warn" ? "text-amber-400" : "text-gray-200"}>{item.issue}</p>
+                                  <p className="text-gray-400">{item.suggestion}</p>
+                                  {item.passages?.length > 0 &&
+                                    <ul className="mt-1 space-y-0.5">
+                                        {safeMap(item.passages, (passage) =>
+                                          <li key={passage.opening} className="text-xs text-gray-500">
+                                              “{passage.opening}” — {passage.words} words
+                                          </li>)
+                                        }
+                                    </ul>
+                                  }
+                              </li>)
+                            }
+                        </ul>
                     </div>
         }
             </div>
