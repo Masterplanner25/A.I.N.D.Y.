@@ -87,6 +87,25 @@ describe("Drafts the agent wrote", () => {
     confirm.mockRestore();
   });
 
+  it("labels a share draft with its kind, the piece it came from, and how the piece was read", async () => {
+    api.listDrafts.mockResolvedValue({ drafts: [{
+      id: "s-1", title: "LinkedIn post: What a version promises", words: 140, kind: "linkedin_post",
+      drop_point_id: "dp-1", brief: "Read as: A version number is a promise the release has to keep.",
+      created_at: "2026-10-25T19:00:00Z",
+      sources: [{ title: "What a version promises", url: "https://dev.to/x", platform: "DEV", kind: "own" }],
+    }] });
+    renderSection();
+    const label = await screen.findByTestId("share-draft-label");
+    expect(label).toHaveTextContent("LinkedIn post · from What a version promises");
+    expect(label).toHaveTextContent("Read as: A version number is a promise the release has to keep.");
+  });
+
+  it("shows no share label on a document", async () => {
+    renderSection();
+    await screen.findByText(DRAFT.title);
+    expect(screen.queryByTestId("share-draft-label")).not.toBeInTheDocument();
+  });
+
   it("shows nothing when there are no drafts", async () => {
     api.listDrafts.mockResolvedValue({ drafts: [] });
     renderSection();

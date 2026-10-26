@@ -11,10 +11,24 @@ import {
   getRippleDropPoints,
   ingestContentUrl,
   pollContentSource,
+  queueShareDrafts,
   recordCitation,
   setContentSourceActive,
 } from "../../api/rippletrace.js";
 import { safeMap } from "../../utils/safe";
+
+// What a piece's share drafts are doing (`share_drafts` on the drop point). Older pieces
+// (`skipped`) say nothing: they get drafts only when asked.
+const SHARE_STATUS = {
+  due: "Share drafts: being written",
+  made: "Share drafts: in Drafts on the Work page",
+  failed: "Share drafts: could not be written — try again",
+  cross_post: "Share drafts: with the earliest copy",
+};
+
+// A piece with no stored text (a video) is never due, so it says nothing rather than "being written".
+const shareStatus = (point) =>
+  point.share_drafts == null ? (point.content_hash ? SHARE_STATUS.due : null) : SHARE_STATUS[point.share_drafts];
 
 // Routes return the handler dict flat, but the pipeline envelope can also arrive
 // wrapped in `data`. Read through both rather than betting on one shape.
@@ -189,6 +203,22 @@ export default function RippleTrace() {
           ? detail.message
           : err.message || "Could not check for ripples"
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleShareDrafts(dropPointId) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await queueShareDrafts(dropPointId);
+      setNotice("Queued — the share drafts will be in Drafts on the Work page within about ten minutes.");
+      await load();
+    } catch (err) {
+      const detail = err?.data?.detail;
+      setError(detail?.error === "no_text" ? detail.message : err.message || "Could not queue share drafts");
     } finally {
       setBusy(false);
     }
@@ -532,6 +562,11 @@ export default function RippleTrace() {
                     {Number(point.velocity_score || 0).toFixed(2)} · spread{" "}
                     {Number(point.spread_score || 0).toFixed(0)}
                   </div>
+                  {shareStatus(point) && (
+                    <div className="text-[11px] text-zinc-500 mt-1" data-testid={`share-status-${point.id}`}>
+                      {shareStatus(point)}
+                    </div>
+                  )}
                 </div>
                 <div className="shrink-0 flex items-center gap-3">
                   <button
@@ -545,6 +580,18 @@ export default function RippleTrace() {
                   >
                     I found a citation
                   </button>
+                  {/* New pieces get share drafts on their own; this is for older ones, or again.
+                      A copy of a cross-post has none of its own (the earliest copy has them). */}
+                  {point.share_drafts !== "cross_post" && point.share_drafts !== null && point.share_drafts !== undefined && (
+                    <button
+                      type="button"
+                      onClick={() => handleShareDrafts(point.id)}
+                      disabled={busy}
+                      className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-40"
+                    >
+                      {point.share_drafts === "made" ? "Share drafts again" : "Make share drafts"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleDetect(point.id)}
