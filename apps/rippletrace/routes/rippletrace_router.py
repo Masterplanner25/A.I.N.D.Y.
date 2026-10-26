@@ -337,7 +337,7 @@ async def queue_share_drafts(
         return result
 
     return await execute_with_pipeline(
-        request, "rippletrace_queue_share_drafts", handler, user_id=str(current_user["sub"]), metadata={"db": db}
+        request, "rippletrace_queue_share_drafts", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
 
 
