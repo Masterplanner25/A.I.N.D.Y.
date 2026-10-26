@@ -37,6 +37,12 @@ python scripts/check_app_imports.py
 # API reference drift guard (boots app-profile, diffs live /apps/* vs the doc)
 python scripts/check_api_reference.py
 
+# Inventory: what exists, read from the registries (docs/verification/INVENTORY.md). CI runs --check.
+# A route or registration change means rerun it and commit; a client API change means
+# `UPDATE_CLIENT_ROUTES=1 npx vitest run client-routes-manifest` first (the "called by the client" column).
+python scripts/inventory.py
+AINDY_INVENTORY_DATABASE_URL=<real db url> python scripts/inventory.py --live   # rows per table, for the audit
+
 # App-profile smoke (mirrors CI — verifies boot_profile=default-apps, app_plugins_loaded=True)
 python -c "
 import os, json
@@ -701,6 +707,7 @@ Only after those three should you look at application code. Full write-ups:
 | Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
 | Resolution Check (does AI search resolve the owner's entities) | `docs/specs/RESOLUTION_CHECK_SPEC.md`: phases A–C built; `listed` is a verdict (§7.4); the score stays unwired (decision 5) |
 | Release handoff (A.I.N.D.Y. carries a runtime release past the approval gate) | `docs/specs/RELEASE_HANDOFF_SPEC.md`: **phase 1 built 2026-10-14** (§7.1; the watcher `release_handoff_watch`, `/apps/releases`, the Collaborator card); needs `AINDY_GITHUB_TOKEN` and real SMTP in `.env`; first real use 2.28.0. **Phase 3a built 2026-10-24**: Approve/Reject on the card (`POST /apps/releases/{id}/approve|reject`), only with a second token `AINDY_GITHUB_APPROVE_TOKEN` (Deployments: write) that nothing else sends; **never an MCP approve tool** (owner). **3b built the same day**: reply APPROVE/REJECT to the gate email (`release_reply.py`; the watcher reads the SMTP account's **Sent Mail** over IMAP, never the inbox, so a forged `From` cannot decide) |
+| Inventory (what exists, generated) | `docs/verification/INVENTORY.md` from `scripts/inventory.py`; client calls from `docs/verification/client_routes.json` (`client/src/test/client-routes-manifest.test.js`). The audit (after the ~10-29 rebuild) judges what it lists |
 | MCP launcher (another AI reads A.I.N.D.Y.) | `scripts/mcp_server.py`; guarded by `tests/unit/test_mcp_read_access.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |
