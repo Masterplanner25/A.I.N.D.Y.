@@ -37,6 +37,12 @@ python scripts/check_app_imports.py
 # API reference drift guard (boots app-profile, diffs live /apps/* vs the doc)
 python scripts/check_api_reference.py
 
+# Inventory: what exists, read from the registries (docs/verification/INVENTORY.md). CI runs --check.
+# A route or registration change means rerun it and commit; a client API change means
+# `UPDATE_CLIENT_ROUTES=1 npx vitest run client-routes-manifest` first (the "called by the client" column).
+python scripts/inventory.py
+AINDY_INVENTORY_DATABASE_URL=<real db url> python scripts/inventory.py --live   # rows per table, for the audit
+
 # App-profile smoke (mirrors CI — verifies boot_profile=default-apps, app_plugins_loaded=True)
 python -c "
 import os, json
@@ -135,7 +141,7 @@ def register() -> None:
     #   from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
     # `platform_layer.registry` exports a `register_syscall` too, and it is the wrong one —
     # it writes into a dict the SyscallDispatcher never reads. Every one of this repo's
-    # 83 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
+    # 84 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
     # this block used to say otherwise.
     #
     # Measured 2026-09-16 rather than carried forward: 97 registered at app-profile boot,
@@ -143,7 +149,7 @@ def register() -> None:
     # number), so 74 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
     # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`; +1 on
     # 09-28: `sys.v1.market.propose`; +2 on 09-30: `sys.v1.leadgen.search_segment`, `sys.v1.content.draft`, so 77 of 100;
-    # +2 on 10-14: `sys.v1.work.context`, `sys.v1.work.facts`, the MCP read access, so 79 of 102; +4 on 10-22: the archive steps for `archive_published_work_v1.nd`, so 83 of 106 — re-derived). The previous
+    # +2 on 10-14: `sys.v1.work.context`, `sys.v1.work.facts`, the MCP read access, so 79 of 102; +4 on 10-22: the archive steps for `archive_published_work_v1.nd`, so 83 of 106; +1 on 10-25: `sys.v1.rippletrace.create_share_drafts` for `share_drafts_v1.nd`, so 84 of 107 — re-derived). The previous
     # figure of 90 was stale, which is the same failure the runtime-floor lines above had —
     # a number nobody re-derives is a number that drifts. To re-derive: boot the app profile,
     # then `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())`.
@@ -209,14 +215,18 @@ only underneath us, in the agent backend (`nodus_vm`), and the one `.nd` we had 
 **A new workflow goes in `apps/<domain>/nodus/<name>.nd`, not in a new Python flow graph.** Existing
 Python flows stay as they are until one is deliberately ported.
 
-- **Ours so far, three:**
+- **Ours so far, four:**
   - `apps/analytics/nodus/reasoning_apply_v1.nd`: the reasoning flow.
   - `apps/analytics/nodus/infinity_recalc_v1.nd`: the daily Infinity recalculation for one user (#487).
   - `apps/rippletrace/nodus/archive_published_work_v1.nd`: four steps chained with `after`, each
     `with { retries: 2 }`, for one owner (#489).
+  - `apps/rippletrace/nodus/share_drafts_v1.nd`: the share drafts for one newly published piece (a
+    LinkedIn post, a short post, a meta description, the previous piece's What's Next? footer), into
+    the Drafts section (owner, 2026-10-25). Its step is idempotent: the drafts and the piece's mark
+    are one transaction.
 
-  Each has a flag: `AINDY_REASONING_NODUS_NATIVE`, `AINDY_INFINITY_RECALC_NODUS` and
-  `AINDY_ARCHIVE_NODUS`. The flags are off in code and on in compose, and any VM failure falls back
+  Each has a flag: `AINDY_REASONING_NODUS_NATIVE`, `AINDY_INFINITY_RECALC_NODUS`,
+  `AINDY_ARCHIVE_NODUS` and `AINDY_SHARE_DRAFTS_NODUS`. The flags are off in code and on in compose, and any VM failure falls back
   to Python.
 - **The pattern:**
   - **Source:** `apps/<domain>/nodus/*.nd`.
@@ -697,6 +707,8 @@ Only after those three should you look at application code. Full write-ups:
 | Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
 | Resolution Check (does AI search resolve the owner's entities) | `docs/specs/RESOLUTION_CHECK_SPEC.md`: phases A–C built; `listed` is a verdict (§7.4); the score stays unwired (decision 5) |
 | Release handoff (A.I.N.D.Y. carries a runtime release past the approval gate) | `docs/specs/RELEASE_HANDOFF_SPEC.md`: **phase 1 built 2026-10-14** (§7.1; the watcher `release_handoff_watch`, `/apps/releases`, the Collaborator card); needs `AINDY_GITHUB_TOKEN` and real SMTP in `.env`; first real use 2.28.0. **Phase 3a built 2026-10-24**: Approve/Reject on the card (`POST /apps/releases/{id}/approve|reject`), only with a second token `AINDY_GITHUB_APPROVE_TOKEN` (Deployments: write) that nothing else sends; **never an MCP approve tool** (owner). **3b built the same day**: reply APPROVE/REJECT to the gate email (`release_reply.py`; the watcher reads the SMTP account's **Sent Mail** over IMAP, never the inbox, so a forged `From` cannot decide) |
+| Operator notes (lessons from running the stack, testing on this host, releases) | `docs/operations/OPERATOR_NOTES.md` — durable lessons go here, never into the gitignored `SESSION_HANDOFF.md` |
+| Inventory (what exists, generated) | `docs/verification/INVENTORY.md` from `scripts/inventory.py`; client calls from `docs/verification/client_routes.json` (`client/src/test/client-routes-manifest.test.js`). The audit (after the ~10-29 rebuild) judges what it lists |
 | MCP launcher (another AI reads A.I.N.D.Y.) | `scripts/mcp_server.py`; guarded by `tests/unit/test_mcp_read_access.py` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Live stack verification scope | `LIVE_VERIFICATION_SCOPE.md` |

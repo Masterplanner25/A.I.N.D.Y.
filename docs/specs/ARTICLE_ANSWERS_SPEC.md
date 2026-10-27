@@ -112,9 +112,10 @@ The owner's chat on 2026-10-25 described two workflow families:
   the author's judgement, so this spec's outputs are **information for them**: answers, links,
   claims.
 - **After publication:** series links, meta description, a LinkedIn post built on the piece's central
-  point. These can be automated. Under the 10-22 rule they become a one-shot `.nd` workflow, started
-  when RippleTrace ingests a new piece, that saves its outputs as drafts for the owner to send.
-  §2's answers and §3's links feed it. It gets its own spec.
+  point. These can be automated, and since 2026-10-25 they are: `share_drafts_v1.nd`
+  (`apps/rippletrace/services/share_drafts.py`) writes the LinkedIn post, short post, meta description
+  and previous piece's footer for each new piece into the Drafts section. §2's answers and §3's links
+  can feed it once they exist.
 
 ---
 

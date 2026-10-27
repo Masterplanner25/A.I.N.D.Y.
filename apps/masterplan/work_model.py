@@ -142,6 +142,10 @@ class WorkDraft(Base):
     # [{"title", "url", "platform", "kind"}]: what it was written from, in citation order ([S1] …).
     sources = Column(JSON, nullable=True)
     model = Column(String(64), nullable=True)
+    # A share draft (`SHARE_KINDS` in `draft_service`) written from a published piece, which
+    # `drop_point_id` names (a soft reference: pieces are RippleTrace's). Both None for a document.
+    kind = Column(String(32), nullable=True)
+    drop_point_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
