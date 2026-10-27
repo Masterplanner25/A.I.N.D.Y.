@@ -81,6 +81,14 @@ export function recordCitation(dropPointId, url) {
   });
 }
 
+// Ask for a piece's share drafts (an older piece, or again). Queued: they reach the Drafts section
+// within about ten minutes. 409 `no_text` when the piece has no stored text.
+export function queueShareDrafts(dropPointId) {
+  return authRequest(`/apps/rippletrace/drop_points/${dropPointId}/share_drafts`, {
+    method: "POST",
+  });
+}
+
 export function getCausalChain(dropPointId, depth = 3) {
   return authRequest(`${ROUTES.RIPPLETRACE.CAUSAL_CHAIN(dropPointId)}?depth=${depth}`);
 }

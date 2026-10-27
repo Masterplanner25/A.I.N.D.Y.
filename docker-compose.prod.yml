@@ -199,6 +199,9 @@ services:
       # Archiving published work runs each owner with something due through
       # archive_published_work_v1.nd. ON since 2026-10-22; a settled catalogue stays in Python.
       AINDY_ARCHIVE_NODUS: "${AINDY_ARCHIVE_NODUS:-1}"
+      # Share drafts for each newly published piece run through share_drafts_v1.nd, one piece a
+      # run, only when one is due. ON since 2026-10-25; "" writes them in Python.
+      AINDY_SHARE_DRAFTS_NODUS: "${AINDY_SHARE_DRAFTS_NODUS:-1}"
       # Attainment (MASTERPLAN_GOAL_ATTAINMENT_SPEC §6). The shadow records and moves nothing;
       # it defaults ON in code, so leaving this unset keeps recording. The live flag is the
       # Phase 3 flip, default off; set it only after the shadow ledger has said something.
