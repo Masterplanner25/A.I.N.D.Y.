@@ -285,6 +285,7 @@ stayed parked. The two shadow flags have since been turned on (#156).
 | `AINDY_REASONING_NODUS_NATIVE` | nodus_vm as the reasoning path | **`1`** (compose default since 2026-10-22) |
 | `AINDY_INFINITY_RECALC_NODUS` | Daily Infinity recalculation per user via `infinity_recalc_v1.nd` | **`1`** (compose default since 2026-10-22) |
 | `AINDY_ARCHIVE_NODUS` | Archiving published work per owner via `archive_published_work_v1.nd`, only when something is due | **`1`** (compose default since 2026-10-22) |
+| `AINDY_SHARE_DRAFTS_NODUS` | Share drafts for a new piece via `share_drafts_v1.nd`, one piece a run, only when one is due | **`1`** (compose default since 2026-10-25) |
 | `AINDY_NEXT_ACTION_ACTING` | Next-action pre-dispatch | unset |
 | `AINDY_SEARCH_EMBEDDING_RANKING` / `_OUTCOME_WEIGHTING` / `_OUTREACH_SEND` | Search ranking + real outreach | unset |
 | `AINDY_DURABLE_CONTINUATION` / `_ALL` / `_FOLD_REPAIR` / `_STEP_GRANULARITY` | Durable execution | all `False` |

@@ -11,6 +11,14 @@ const BUTTON = "px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-
 const PRIMARY = `${BUTTON} bg-[#00ffaa] text-black hover:bg-[#00ffaa]/80`;
 const QUIET = `${BUTTON} border border-zinc-700 text-zinc-400 hover:bg-zinc-800`;
 
+// Share drafts, written from a published piece (owner, 2026-10-25). A document has no kind.
+const SHARE_KIND = {
+  linkedin_post: "LinkedIn post",
+  short_post: "Short post",
+  meta_description: "Meta description",
+  series_footer: "What's Next? footer",
+};
+
 const errorText = (e) => e?.body?.message || e?.message || "Something went wrong.";
 const slug = (title) => String(title || "draft").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "draft";
 
@@ -88,6 +96,17 @@ export default function DraftsSection() {
               {d.sources?.length ? ` · ${d.sources.length} source${d.sources.length === 1 ? "" : "s"}` : " · no sources"}
             </p>
           </button>
+          {SHARE_KIND[d.kind] && (
+            <div className="text-[11px] text-zinc-400 space-y-0.5" data-testid="share-draft-label">
+              <p>
+                <span className="text-amber-400 uppercase tracking-wider text-[10px] font-bold">{SHARE_KIND[d.kind]}</span>
+                {d.sources?.[0]?.title ? <> · from {d.sources[0].title}</> : null}
+              </p>
+              {/* The point the model read the piece as, or where a footer goes: a wrong reading
+                  should look wrong before it is copied anywhere. */}
+              {d.brief && <p className="text-zinc-500">{d.brief}</p>}
+            </div>
+          )}
           {d.work_name && (
             <p className="text-[11px] text-zinc-400">
               About {d.work_name} ·{" "}

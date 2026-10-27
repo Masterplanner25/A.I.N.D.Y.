@@ -1,0 +1,10 @@
+workflow share_drafts_v1 {
+  step write with { retries: 1 } {
+    let result = sys("sys.v1.rippletrace.create_share_drafts", input_payload["args"])
+    set_state("share_result", result)
+    if (result["status"] != "success") {
+      throw "share drafts step failed"
+    }
+    return result["data"]
+  }
+}

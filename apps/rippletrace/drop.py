@@ -33,6 +33,9 @@ class DropPointDB(Base):
     content_hash = Column(String(64), nullable=True)
     # The content_hash the memory chunks were written from; differs from content_hash when they are due.
     content_memory_hash = Column(String(64), nullable=True)
+    # Its share drafts (`share_drafts.py`): None = due, made, failed, cross_post (a copy: the earliest
+    # one gets them), skipped (stored before the feature shipped: new pieces only, owner 2026-10-25).
+    share_drafts = Column(String(16), nullable=True)
 
 
 class PingDB(Base):

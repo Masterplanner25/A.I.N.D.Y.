@@ -124,6 +124,8 @@ def _register_jobs() -> None:
     register_job("masterplan.segment_brief", _segment_brief)
     # The owner's Works per RippleTrace series, so published writing is tagged with its Work (WORK_MODEL_SPEC §5).
     register_job("masterplan.works_by_container", _works_by_container)
+    # RippleTrace's share drafts for a published piece land in the Drafts section (owner, 2026-10-25).
+    register_job("masterplan.save_share_drafts", _save_share_drafts)
     # Drafts a run wrote get the run's id when it completes (tools are not handed their run).
     register_job("masterplan.attach_drafts_to_run", _attach_drafts_to_run)
     register_job("masterplan.market_propose", _market_propose)
@@ -342,6 +344,11 @@ def _attach_drafts_to_run(*args, **kwargs):
 def _works_by_container(*args, **kwargs):
     from apps.masterplan.services.work_service import works_by_container
     return works_by_container(*args, **kwargs)
+
+
+def _save_share_drafts(*args, **kwargs):
+    from apps.masterplan.services.draft_service import save_share_drafts
+    return save_share_drafts(*args, **kwargs)
 
 
 def _segment_brief(*args, **kwargs):

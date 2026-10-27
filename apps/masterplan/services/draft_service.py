@@ -311,6 +311,39 @@ def write_draft(db: Session, user_id: Any, *, brief: str, sources: Any = None, t
     }
 
 
+
+
+# ── Share drafts: written by RippleTrace from a published piece ────────────────────────────
+
+#: What a share draft is (owner, 2026-10-25), in the order the Drafts section lists them.
+SHARE_KINDS = ("linkedin_post", "short_post", "meta_description", "series_footer")
+
+
+def save_share_drafts(*, user_id: Any, drop_point_id: str, piece: dict, items: list[dict], model: str | None,
+                      db: Session) -> list[str]:
+    """Add one draft per item for a published piece. Does not commit: the caller marks the piece in
+    the same transaction, so a piece is never marked made without its drafts, or the reverse.
+
+    ``piece`` is ``{title, url, platform}``; it becomes the drafts' one source, so each card says
+    what it came from. ``items`` are ``{kind, title, body, brief}``, kind one of `SHARE_KINDS`."""
+    uid = _uid(user_id)
+    source = [{"title": piece.get("title"), "url": piece.get("url"), "platform": piece.get("platform"),
+               "kind": "own"}]
+    ids = []
+    for item in items:
+        if item.get("kind") not in SHARE_KINDS or not (item.get("body") or "").strip():
+            continue
+        draft = WorkDraft(
+            user_id=uid, title=(item.get("title") or "")[:300], brief=item.get("brief") or "",
+            body=item["body"].strip()[:BODY_MAX_CHARS], sources=source, model=model,
+            kind=item["kind"], drop_point_id=drop_point_id,
+        )
+        db.add(draft)
+        db.flush()
+        ids.append(draft.id)
+    return ids
+
+
 # ── The owner's side: read, edit, delete ──────────────────────────────────────────────────
 
 
@@ -318,6 +351,7 @@ def serialize_draft(draft: WorkDraft, *, body: bool = True) -> dict:
     out = {
         "id": draft.id, "title": draft.title, "brief": draft.brief, "run_id": draft.run_id,
         "work_id": draft.work_id, "sources": draft.sources or [], "model": draft.model,
+        "kind": draft.kind, "drop_point_id": draft.drop_point_id,
         "created_at": draft.created_at.isoformat() if draft.created_at else None,
         "updated_at": draft.updated_at.isoformat() if draft.updated_at else None,
         "words": len((draft.body or "").split()),

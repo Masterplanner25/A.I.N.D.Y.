@@ -221,24 +221,6 @@ def match_playbooks(drop_point_id: str, db: Session):
     return _impl(drop_point_id, db)
 
 
-def generate_content(playbook_id: str, db: Session):
-    from apps.rippletrace.services.content_generator import generate_content as _impl
-
-    return _impl(playbook_id, db)
-
-
-def generate_content_for_drop(drop_point_id: str, db: Session):
-    from apps.rippletrace.services.content_generator import generate_content_for_drop as _impl
-
-    return _impl(drop_point_id, db)
-
-
-def generate_variations(playbook_id: str, db: Session):
-    from apps.rippletrace.services.content_generator import generate_variations as _impl
-
-    return _impl(playbook_id, db)
-
-
 def learning_stats(db: Session):
     from apps.rippletrace.services.learning_engine import learning_stats as _impl
 
@@ -491,35 +473,6 @@ async def playbook_match_view(request: Request, drop_point_id: str, db: Session 
         return {"matches": match_playbooks(drop_point_id, db)}
 
     return await _wrap_legacy(request, "rippletrace.legacy.playbook_match", fn, db=db)
-
-
-@router.get("/generate_content/{playbook_id}", dependencies=[Depends(add_deprecation_headers)])
-@limiter.limit("60/minute")
-async def generate_content_view(request: Request, playbook_id: str, db: Session = Depends(get_db)):
-    def fn():
-        return generate_content(playbook_id, db)
-
-    return await _wrap_legacy(request, "rippletrace.legacy.generate_content", fn, db=db)
-
-
-@router.post("/generate_content_for_drop/{drop_point_id}", dependencies=[Depends(add_deprecation_headers)])
-@limiter.limit("30/minute")
-async def generate_content_for_drop_view(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
-    def fn():
-        return generate_content_for_drop(drop_point_id, db)
-
-    return _with_execution_envelope(
-        await _wrap_legacy(request, "rippletrace.legacy.generate_content_for_drop", fn, db=db)
-    )
-
-
-@router.get("/generate_variations/{playbook_id}", dependencies=[Depends(add_deprecation_headers)])
-@limiter.limit("60/minute")
-async def generate_variations_view(request: Request, playbook_id: str, db: Session = Depends(get_db)):
-    def fn():
-        return generate_variations(playbook_id, db)
-
-    return await _wrap_legacy(request, "rippletrace.legacy.generate_variations", fn, db=db)
 
 
 @router.get("/learning_stats", dependencies=[Depends(add_deprecation_headers)])
