@@ -75,7 +75,8 @@ recreated**, so read it before every rebuild and add up the windows, as with FR-
 |---|---|---|---|
 | 1 | 2026-10-15 05:48Z → 2026-10-22 ~17:25Z | 2026-10-22, before the window closed | **0**: the metric had no samples at all, across **1,496** syscall dispatches (`aindy_syscall_outcome_total`) on that container |
 | 2 | 2026-10-22 ~17:25Z → 19:51Z | **never: lost** | unknown. The api container was deleted by mistake (a filtered `docker rm` during a test run) and recreated from the same image; that container was replaced at 19:51Z by the 2.28.1 rebuild **without a reading**. About 2.5 hours, little traffic, but **not zero**: it counts as no evidence |
-| 3 | 2026-10-22 19:51Z (2.28.1) → | owed **~2026-10-29**, and before any earlier rebuild | |
+| 3 | 2026-10-22 19:51Z (2.28.1) → 2026-10-30 02:25Z | 2026-10-30 02:25Z, before the 2.28.2 rebuild | **0**: no samples, across **793** syscall dispatches (`aindy_syscall_outcome_total`, 35 series) on that container |
+| 4 | 2026-10-30 02:36:51Z (2.28.2) → | before the next recreate | |
 
 Window 1's zero stands on its own and is evidence. Window 2 is a hole and must not be read as a zero.
 Any non-zero reading goes to the runtime with its `{syscall}` labels: each names a call site.

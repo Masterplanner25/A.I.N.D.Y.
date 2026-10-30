@@ -56,3 +56,21 @@ docker exec <api> python -c "import AINDY, AINDY._version as v, pymongo, dns.ver
 
 and then `/health`, the schema head, and the `AgentContinuation` log, as in `RUNTIME_2_28_1_UPGRADE.md` §3.
 The same rebuild brings anthropic 2.x into the image (#500); see the first planner run after it.
+
+## 5. Verified
+
+Window 3 of the identity counter was read first (0 over 793 dispatches, `RUNTIME_2_28_0_UPGRADE.md` §4).
+Then the image was rebuilt from `main` at #504 (`a27fed397a14`, 4 min 50 s), and the api recreated at
+**2026-10-30 02:36:51Z**. That opens window 4. Healthy after ~40 s, 0 restarts.
+
+| Where | Result |
+|---|---|
+| api container | `2.28.2 ['/usr/local/lib/python3.11/site-packages/AINDY'] 4.18.3 2.9.0 3.0.0`; anthropic `2.3.0` |
+| `/api/version` | `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16` |
+| schema | runtime `0020`; app `wk3shared0001 → sd1share0001` at boot; all 229 existing `drop_points` `share_drafts = skipped` |
+| Nodus flags; approve token | all four `1`; `AINDY_GITHUB_APPROVE_TOKEN` set |
+| agent runs `executing`; `AgentContinuation` log | 0 before and after; empty (soak row 4) |
+
+This rebuild also brought #486 → #501 live (the four Nodus workflows, release phase 3, share drafts). Still to check:
+the 07:00 UTC log line `(N via nodus)`, RippleTrace's order and the YouTube feed, "Read as:" in the SEO
+meta, and the first planner run on anthropic 2.x.
