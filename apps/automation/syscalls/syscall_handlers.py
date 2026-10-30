@@ -567,10 +567,9 @@ def _handle_automation_update_loop_adjustment(payload: dict, context: SyscallCon
 
 def handle_watcher_query(payload: dict, ctx: SyscallContext) -> dict:
     """
-    Query stored WatcherSignal records. Returns serialized dicts only.
+    Query the CALLER's stored WatcherSignal records. Returns serialized dicts only.
 
     Payload:
-      user_id:      str | None
       session_id:   str | None
       signal_type:  str | None
       limit:        int
@@ -578,15 +577,20 @@ def handle_watcher_query(payload: dict, ctx: SyscallContext) -> dict:
 
     Returns:
       {"signals": list[dict], "total": int}
-    """
-    from uuid import UUID
 
+    Scoped to ``ctx.user_id``, always. This used to filter by user only when the payload
+    named one, so a call without ``user_id`` returned every user's signals, and a payload
+    ``user_id`` chose whose. A payload ``user_id`` is no longer read: the runtime counts one
+    that differs from the caller (``aindy_payload_identity_mismatch_total``) and will refuse it
+    (DEC-103), and a caller without a user gets an error, not the whole table.
+    """
     from AINDY.db.database import SessionLocal
+    from AINDY.platform_layer.user_ids import require_user_id
     from apps.automation.models import WatcherSignal
 
+    caller_user_id = require_user_id(ctx.user_id)
     session_id = payload.get("session_id")
     signal_type = payload.get("signal_type")
-    requested_user_id = payload.get("user_id")
     limit = max(0, min(int(payload.get("limit") or 100), 500))
     offset = max(0, int(payload.get("offset") or 0))
 
@@ -594,13 +598,11 @@ def handle_watcher_query(payload: dict, ctx: SyscallContext) -> dict:
     db = external_db or SessionLocal()
     owns_session = external_db is None
     try:
-        query = db.query(WatcherSignal)
+        query = db.query(WatcherSignal).filter(WatcherSignal.user_id == caller_user_id)
         if session_id:
             query = query.filter(WatcherSignal.session_id == session_id)
         if signal_type:
             query = query.filter(WatcherSignal.signal_type == signal_type)
-        if requested_user_id:
-            query = query.filter(WatcherSignal.user_id == UUID(str(requested_user_id)))
 
         rows = (
             query.order_by(WatcherSignal.signal_timestamp.desc())

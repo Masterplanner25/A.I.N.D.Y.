@@ -15,21 +15,21 @@ logger = logging.getLogger(__name__)
 
 def watcher_signals_list_node(state, context):
     try:
-        from uuid import UUID
+        from AINDY.platform_layer.user_ids import require_user_id
         from apps.automation.models import WatcherSignal
 
         db = context.get("db")
+        # The caller's signals only. `state["user_id_filter"]` used to pick any user's, and
+        # with no filter this listed every user's: the same defect as `watcher.query` had.
+        caller_user_id = require_user_id(context.get("user_id"))
         session_id = state.get("session_id")
         signal_type = state.get("signal_type")
-        user_id_filter = state.get("user_id_filter")
         limit = state.get("limit", 50)
         offset_val = state.get("offset", 0)
 
-        q = db.query(WatcherSignal)
+        q = db.query(WatcherSignal).filter(WatcherSignal.user_id == caller_user_id)
         if session_id:
             q = q.filter(WatcherSignal.session_id == session_id)
-        if user_id_filter:
-            q = q.filter(WatcherSignal.user_id == UUID(str(user_id_filter)))
         if signal_type:
             q = q.filter(WatcherSignal.signal_type == signal_type)
 
