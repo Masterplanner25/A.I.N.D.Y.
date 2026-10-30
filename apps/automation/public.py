@@ -199,12 +199,21 @@ def create_loop_adjustment(db: Session, **kwargs) -> dict[str, Any]:
 def update_loop_adjustment(
     adjustment_id: str | UUID,
     db: Session,
+    *,
+    owner_user_id: UUID | None = None,
     **kwargs,
 ) -> dict[str, Any] | None:
-    """Update one LoopAdjustment record and return it as a dict."""
+    """Update one LoopAdjustment record and return it as a dict.
+
+    With ``owner_user_id`` the row must belong to that user, or nothing is updated and ``None``
+    is returned, as for an unknown id. The syscall passes the caller here.
+    """
     from apps.automation.models import LoopAdjustment
 
-    row = db.query(LoopAdjustment).filter(LoopAdjustment.id == adjustment_id).first()
+    query = db.query(LoopAdjustment).filter(LoopAdjustment.id == adjustment_id)
+    if owner_user_id is not None:
+        query = query.filter(LoopAdjustment.user_id == owner_user_id)
+    row = query.first()
     if row is None:
         return None
     for key, value in kwargs.items():
