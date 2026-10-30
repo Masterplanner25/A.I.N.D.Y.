@@ -482,10 +482,23 @@ def _handle_watcher_ingest(payload: dict, context: SyscallContext) -> dict:
         db.close()
 
 
+def _caller_user_id(context: SyscallContext) -> str:
+    """The caller's user id, for the `automation.list_*` reads. Never the payload's.
+
+    These read `payload.get("user_id") or context.user_id`, so a payload could name another
+    user and read their feedback, loop adjustments or logs (found with `watcher.query`, #506).
+    Every app caller already sends its own id or none. Without a caller this raises
+    instead of querying for the user "None".
+    """
+    from AINDY.platform_layer.user_ids import require_user_id
+
+    return str(require_user_id(context.user_id))
+
+
 def _handle_automation_list_feedback(payload: dict, context: SyscallContext) -> dict:
     from apps.automation.public import get_user_feedback
 
-    user_id = payload.get("user_id") or context.user_id
+    user_id = _caller_user_id(context)
     limit = int(payload.get("limit", 20) or 20)
     db, owns_session = _session_from_context(context)
     try:
@@ -499,7 +512,7 @@ def _handle_automation_list_feedback(payload: dict, context: SyscallContext) -> 
 def _handle_automation_list_loop_adjustments(payload: dict, context: SyscallContext) -> dict:
     from apps.automation.public import get_loop_adjustments
 
-    user_id = payload.get("user_id") or context.user_id
+    user_id = _caller_user_id(context)
     db, owns_session = _session_from_context(context)
     try:
         adjustments = list(
@@ -526,7 +539,7 @@ def _handle_automation_list_loop_adjustments(payload: dict, context: SyscallCont
 def _handle_automation_list_logs(payload: dict, context: SyscallContext) -> dict:
     from apps.automation.public import list_automation_logs
 
-    user_id = payload.get("user_id") or context.user_id
+    user_id = _caller_user_id(context)
     limit = int(payload.get("limit", 250) or 250)
     db, owns_session = _session_from_context(context)
     try:
