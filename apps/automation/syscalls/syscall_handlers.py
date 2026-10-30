@@ -552,10 +552,14 @@ def _handle_automation_list_logs(payload: dict, context: SyscallContext) -> dict
 
 def _handle_automation_create_loop_adjustment(payload: dict, context: SyscallContext) -> dict:
     from apps.automation.public import create_loop_adjustment
+    from AINDY.platform_layer.user_ids import require_user_id
 
+    # The row's owner is the caller. `**payload` used to let the payload's `user_id` choose it.
+    caller = require_user_id(context.user_id)
+    fields = {key: value for key, value in payload.items() if key != "user_id"}
     db, owns_session = _session_from_context(context)
     try:
-        adjustment = create_loop_adjustment(db=db, **payload)
+        adjustment = create_loop_adjustment(db=db, user_id=caller, **fields)
         return {"adjustment": adjustment or {}}
     finally:
         if owns_session:
@@ -564,14 +568,20 @@ def _handle_automation_create_loop_adjustment(payload: dict, context: SyscallCon
 
 def _handle_automation_update_loop_adjustment(payload: dict, context: SyscallContext) -> dict:
     from apps.automation.public import update_loop_adjustment
+    from AINDY.platform_layer.user_ids import require_user_id
 
     adjustment_id = payload.get("adjustment_id")
     if not adjustment_id:
         raise ValueError("sys.v1.automation.update_loop_adjustment requires 'adjustment_id'")
+    # Only the caller's own row, and never its owner: this used to update any user's adjustment
+    # by id, and a `user_id` in the patch was set on the row.
+    caller = require_user_id(context.user_id)
     db, owns_session = _session_from_context(context)
     try:
-        patch = {key: value for key, value in payload.items() if key != "adjustment_id"}
-        adjustment = update_loop_adjustment(adjustment_id=adjustment_id, db=db, **patch)
+        patch = {key: value for key, value in payload.items() if key not in ("adjustment_id", "user_id")}
+        adjustment = update_loop_adjustment(
+            adjustment_id=adjustment_id, db=db, owner_user_id=caller, **patch
+        )
         return {"adjustment": adjustment or {}}
     finally:
         if owns_session:
