@@ -224,8 +224,9 @@ def watcher_signals_list_node(state, context):
         result = dispatch_syscall(
             "sys.v1.watcher.query",
             {
+                # No `user_id` (it was `state["user_id_filter"]`, a filter naming any user):
+                # `watcher.query` lists the caller's own signals and nobody else's.
                 "session_id": state.get("session_id"),
-                "user_id": state.get("user_id_filter"),
                 "signal_type": state.get("signal_type"),
                 "limit": state.get("limit", 50),
                 "offset": state.get("offset", 0),
