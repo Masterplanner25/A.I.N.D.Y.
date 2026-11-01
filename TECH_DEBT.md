@@ -41,6 +41,31 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## RELEASE-NO-RUN-FROM-REQUEST-1: a handoff requested before its tag is pushed fails although the release succeeds (app-owned, P2)
+
+**Found by `AUDIT_2026-11-01` (#4).** The v2.29.0 handoff was requested at 03:11Z on 10-30. The tag
+was pushed at 03:47Z, and the publish run succeeded. The watcher's no-run timer
+(`AINDY_RELEASE_NO_RUN_MINUTES`, 30) counts from the request, so it marked the handoff `failed`
+(`no_run`) at 03:41Z and emailed "release stopped". The owner then approved the gate on GitHub, outside
+A.I.N.D.Y. **Fix:** count from the tag's first sight, or keep waiting while the tag doesn't exist.
+
+## LLM-OUTAGE-SILENT-1: a provider outage reaches the owner only through the log (app-owned, P2)
+
+**Found by `AUDIT_2026-11-01` (#3).** At 04:38Z on 2026-11-01 OpenAI answered 429
+`credit_balance_exhausted`. The `openai` circuit stayed open about 90 minutes and refused 1,500+ calls
+(drafts, embeddings), and one share-drafts piece was marked `failed`. Nothing told the owner. The
+release handoff already sends mail over the same SMTP. **Fix:** one notice when a provider circuit
+stays open past a threshold, naming the provider's error code. `credit_balance_exhausted` needs a
+person, not a retry.
+
+## NODUS-FALLBACK-SILENT-1: a `.nd` falling back to Python is one WARNING line (app-owned, P3)
+
+**Found by `AUDIT_2026-11-01` (#2).** Every scheduled Nodus run from 10-22 to 11-01 fell back to
+Python, with `nodus workflow '…' is not registered`, and nobody saw it for 10 days. The cause is fixed
+in #510. The fallback is correct, since a VM fault must not cost the work. Its invisibility is the
+debt. **Fix:** count fallbacks by workflow and reason, and show a run of them to the owner. The
+runtime may already have a metric to hang this on.
+
 ## DOCKER-PIP-LAYER-INVALIDATION-1: ✅ CLOSED 2026-09-20 — every source-only rebuild re-downloaded the whole dependency tree; `COPY apps` sat above `pip install` (app-owned, was P3)
 
 **Found 2026-09-20, the third rebuild of the day:** each of #392, #393 and #394 was a source-only
