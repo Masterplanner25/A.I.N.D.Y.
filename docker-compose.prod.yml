@@ -133,6 +133,11 @@ services:
       AINDY_RELEASE_REPLY_IMAP_HOST: "${AINDY_RELEASE_REPLY_IMAP_HOST:-}"
       AINDY_RELEASE_REPLY_MAILBOX: "${AINDY_RELEASE_REPLY_MAILBOX:-[Gmail]/Sent Mail}"
       AINDY_RELEASE_NOTIFY_TO: "${AINDY_RELEASE_NOTIFY_TO:-}"
+      # Owner notices (apps/automation/services/owner_notices.py): one email when a Nodus workflow
+      # falls back 3 times in a day, or OpenAI fails a probe (one tiny embedding every 15 min).
+      # To AINDY_NOTICE_TO, else every admin's address, over the SMTP settings above. "" turns it off.
+      AINDY_OWNER_NOTICES: "${AINDY_OWNER_NOTICES:-1}"
+      AINDY_NOTICE_TO: "${AINDY_NOTICE_TO:-}"
       AINDY_RELEASE_REPOS: "${AINDY_RELEASE_REPOS:-Masterplanner25/aindy-runtime}"
       AINDY_RELEASE_NO_RUN_MINUTES: "${AINDY_RELEASE_NO_RUN_MINUTES:-30}"
       AINDY_RELEASE_STALL_MINUTES: "${AINDY_RELEASE_STALL_MINUTES:-180}"

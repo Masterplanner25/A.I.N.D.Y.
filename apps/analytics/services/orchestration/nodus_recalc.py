@@ -30,12 +30,17 @@ def nodus_recalc_enabled() -> bool:
 def recalculate_user(db: Any, user_id: Any) -> tuple[bool, str]:
     """Recalculate one user's Infinity score. Returns ``(ok, via)``, via ``nodus`` or ``python``."""
     if nodus_recalc_enabled():
+        reason: object = "the VM run did not report success"
         try:
             if _recalc_via_nodus(db, user_id):
                 return True, "nodus"
             logger.warning("[Infinity Scheduler] nodus recalc failed for %s; falling back to python", user_id)
         except Exception as exc:  # pragma: no cover - defensive; the score must not be lost
+            reason = exc
             logger.warning("[Infinity Scheduler] nodus recalc raised for %s, falling back to python: %s", user_id, exc)
+        from apps._shared.nodus import record_nodus_fallback
+
+        record_nodus_fallback(db, workflow=_WORKFLOW, user_id=user_id, reason=reason)
     return bool(_recalc_via_python(db, user_id)), "python"
 
 

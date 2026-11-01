@@ -57,6 +57,13 @@ A.I.N.D.Y. **Fix:** count from the tag's first sight, or keep waiting while the 
 
 ## LLM-OUTAGE-SILENT-1: a provider outage reaches the owner only through the log (app-owned, P2)
 
+**Fix built 2026-11-01 (`owner_notices.py`), live after the next api rebuild; close it then.** A
+15-minute job probes OpenAI with one embedding of "ok", no retries. A code that needs a person
+(`insufficient_quota`, `credit_balance_exhausted`, a 401) sends a notice on the first failure; any other
+failure sends one on the second probe in a row. The first passing probe afterwards sends "recovered". The
+state is kept in `system_events`, because the job runs in a fresh process each tick and the breakers are
+per process. DeepSeek and Anthropic are not probed yet.
+
 **Found by `AUDIT_2026-11-01` (#3).** At 04:38Z on 2026-11-01 OpenAI answered 429
 `credit_balance_exhausted`. The `openai` circuit stayed open about 90 minutes and refused 1,500+ calls
 (drafts, embeddings), and one share-drafts piece was marked `failed`. Nothing told the owner. The
@@ -65,6 +72,11 @@ stays open past a threshold, naming the provider's error code. `credit_balance_e
 person, not a retry.
 
 ## NODUS-FALLBACK-SILENT-1: a `.nd` falling back to Python is one WARNING line (app-owned, P3)
+
+**Fix built 2026-11-01, live after the next api rebuild; close it then.** Each of the four callers now
+writes a durable `nodus.fallback` event (`apps/_shared/nodus.py::record_nodus_fallback`, with the
+workflow and the reason). Three in a day for one workflow send the owner one email, at most once a day
+(`owner_notices.py`, the same job).
 
 **Found by `AUDIT_2026-11-01` (#2).** Every scheduled Nodus run from 10-22 to 11-01 fell back to
 Python, with `nodus workflow '…' is not registered`, and nobody saw it for 10 days. The cause is fixed

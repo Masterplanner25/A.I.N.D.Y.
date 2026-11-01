@@ -59,14 +59,19 @@ def archive_due(db: Session, user_id: Any) -> bool:
 def archive_owner(db: Session, user_id: Any) -> tuple[dict, str]:
     """One batch for one owner. Returns ``(outcome, via)``, via ``nodus`` or ``python``."""
     if nodus_archive_enabled() and archive_due(db, user_id):
+        reason: object = "the VM run did not report success"
         try:
             outcome = _archive_via_nodus(db, user_id)
             if outcome is not None:
                 return outcome, "nodus"
             logger.warning("[content_archive] nodus run failed for %s; falling back to python", user_id)
         except Exception as exc:  # pragma: no cover - defensive; the batch must not be lost
+            reason = exc
             logger.warning("[content_archive] nodus run raised for %s, falling back to python: %s", user_id, exc)
         db.rollback()
+        from apps._shared.nodus import record_nodus_fallback
+
+        record_nodus_fallback(db, workflow=_WORKFLOW, user_id=user_id, reason=reason)
     from apps.rippletrace.services.content_archive import archive_step
 
     return archive_step(db, user_id=user_id), "python"
