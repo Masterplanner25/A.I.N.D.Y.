@@ -409,6 +409,7 @@ def message(handoff: ReleaseHandoff, stage: str) -> tuple[str, str]:
                 "is waiting for you.")
     failure = handoff.failure or {}
     what = {"no_run": "no publish run was found for the tag",
+            "no_tag": "the tag was never pushed",
             "stalled": "the run has not moved for a long time",
             "rejected": f"the approval gate was rejected{' by ' + failure['by'] if failure.get('by') else ''}",
             "cancelled": "the run was cancelled"}.get(failure.get("reason"))
@@ -541,6 +542,29 @@ def list_handoffs(db: Session, user_id: Any, *, active_only: bool = False, limit
     return {"handoffs": [serialize(r) for r in rows], "repos": list(allowed_repos())}
 
 
+def _await_run(handoff: ReleaseHandoff, github: GitHubActions, now: datetime) -> list[str]:
+    """No publish run yet. The no-run limit counts from when the tag is first seen, not from the
+    request: the owner may hand a release off before pushing its tag. The v2.29.0 handoff was
+    requested 36 minutes before its tag and failed six minutes before the run started (2026-10-30,
+    `RELEASE-NO-RUN-FROM-REQUEST-1`). A tag that never comes fails after the stall limit."""
+    tagged_at = _stage_time(handoff, "tagged")
+    if tagged_at is None:
+        if github.tag_exists(handoff.repo, handoff.tag):
+            # Recorded in the history only; the stage stays `requested`.
+            handoff.history = [*(handoff.history or []), {"stage": "tagged", "at": _iso(now), "detail": {}}]
+            return []
+        if now - _aware(handoff.created_at or handoff.stage_at) > timedelta(minutes=stall_minutes()):
+            handoff.failure = {"reason": "no_tag", "job": None, "conclusion": None, "url": None}
+            _enter(handoff, "failed", now, handoff.failure)
+            return ["failed"]
+        return []
+    if now - tagged_at > timedelta(minutes=no_run_minutes()):
+        handoff.failure = {"reason": "no_run", "job": None, "conclusion": None, "url": None}
+        _enter(handoff, "failed", now, handoff.failure)
+        return ["failed"]
+    return []
+
+
 def advance(db: Session, handoff: ReleaseHandoff, github: GitHubActions, *, now: datetime | None = None) -> list[str]:
     """Move one handoff forward to what GitHub says now. Returns the stages entered (in order).
 
@@ -552,11 +576,7 @@ def advance(db: Session, handoff: ReleaseHandoff, github: GitHubActions, *, now:
     if not handoff.run_id:
         run = github.find_run(handoff.repo, handoff.tag)
         if run is None:
-            if now - _aware(handoff.created_at or handoff.stage_at) > timedelta(minutes=no_run_minutes()):
-                handoff.failure = {"reason": "no_run", "job": None, "conclusion": None, "url": None}
-                _enter(handoff, "failed", now, handoff.failure)
-                return ["failed"]
-            return []
+            return _await_run(handoff, github, now)
         handoff.run_id, handoff.run_url = str(run.get("id")), run.get("html_url")
     else:
         run = github.get_run(handoff.repo, handoff.run_id)

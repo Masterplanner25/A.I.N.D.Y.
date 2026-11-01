@@ -98,9 +98,13 @@ is the design: *"autonomy does not require continuous AI reasoning."*
 
 Every transition writes one row of history: stage, time, the job or approval behind it. A transition
 is idempotent: the watcher reads the current truth from GitHub each tick, so a missed tick or a restart
-loses nothing. **A run not found within 30 minutes of the handoff** fails as `no_run` (a tag that was
-never pushed, or a workflow that did not start), and the owner is notified. A handoff with no stage
-change in 3 hours fails as `stalled`. Both limits are settings.
+loses nothing. **A run not found within 30 minutes of the tag's first sight** fails as `no_run` (a
+workflow that did not start), and the owner is notified. The owner may hand a release off before
+pushing its tag, so the watcher records `tagged` in the history (not a stage) when it first sees the
+tag, and counts from there. Until 2026-11-01 it counted from the request, and v2.29.0 failed six
+minutes before its run (`RELEASE-NO-RUN-FROM-REQUEST-1`). A tag that never comes fails as `no_tag`
+after the stall limit. A handoff with no stage change in 3 hours fails as `stalled`. Both limits are
+settings.
 
 ## 4. How it is built
 
