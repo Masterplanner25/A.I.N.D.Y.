@@ -35,13 +35,18 @@ def run_reasoning_apply(db: Any, user_id: Any) -> dict[str, Any]:
     breaks on the opt-in path.
     """
     if nodus_reasoning_enabled():
+        reason: object = "the VM run did not report success"
         try:
             recommendation = _apply_via_nodus(db, user_id)
             if recommendation is not None:
                 return {"data": recommendation, "_via": "nodus"}
             logger.warning("[reasoning] nodus apply returned no result; falling back to python")
         except Exception as exc:  # pragma: no cover - defensive; loop must not break
+            reason = exc
             logger.warning("[reasoning] nodus apply failed, falling back to python: %s", exc)
+        from apps._shared.nodus import record_nodus_fallback
+
+        record_nodus_fallback(db, workflow=_WORKFLOW, user_id=user_id, reason=reason)
     return {"data": _apply_via_python(db, user_id)}
 
 

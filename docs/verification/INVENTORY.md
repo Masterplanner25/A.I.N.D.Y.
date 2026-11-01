@@ -1,6 +1,6 @@
 ---
 title: "Inventory — what A.I.N.D.Y. contains"
-last_verified: "2026-10-26"
+last_verified: "2026-11-01"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -20,12 +20,12 @@ the audit's question. Live row counts are not here (they change): `python script
 | `/apps` routes | 304 (185 called by the client, 119 not) | 35 (mounted under `/apps`) |
 | Syscalls | 84 | 23 |
 | Agent tools | 17 | 0 |
-| Scheduled jobs | 14 | 0 |
+| Scheduled jobs | 15 | 0 |
 | Registered jobs | 34 | 0 |
 | Python flow graphs | 82 | 1 |
 | Tables | 87 | 36 |
 | Nodus workflows (`.nd`) | 4 | |
-| `AINDY_*` flags read by our code | 44 | |
+| `AINDY_*` flags read by our code | 46 | |
 
 ## Domains
 
@@ -35,7 +35,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | analytics | yes | arm, identity | 35 | 20 | 9 | 1 | 1 | 7 | 7 | 2 | 25 |
 | arm |  | analytics | 10 | 3 | 4 | 3 | 0 | 1 | 6 | 0 | 4 |
 | authorship |  |  | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 |
-| automation |  |  | 9 | 4 | 9 | 0 | 1 | 1 | 21 | 0 | 8 |
+| automation |  |  | 9 | 4 | 9 | 0 | 2 | 1 | 21 | 0 | 8 |
 | autonomy |  |  | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
 | dashboard |  |  | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | freelance |  | automation, search, tasks | 22 | 18 | 3 | 2 | 0 | 1 | 16 | 0 | 9 |
@@ -176,7 +176,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 **Syscalls (9):** `sys.v1.agent.suggest_tools` (agent.suggest_tools), `sys.v1.automation.create_loop_adjustment` (automation.write), `sys.v1.automation.list_feedback` (automation.read), `sys.v1.automation.list_logs` (automation.read), `sys.v1.automation.list_loop_adjustments` (automation.read), `sys.v1.automation.update_loop_adjustment` (automation.write), `sys.v1.score.feedback` (score.feedback), `sys.v1.watcher.ingest` (watcher.ingest), `sys.v1.watcher.query` (watcher.query)
 
-**Scheduled jobs (1):** `release_handoff_watch` (interval minutes=1)
+**Scheduled jobs (2):** `owner_notices_tick` (interval minutes=15), `release_handoff_watch` (interval minutes=1)
 
 **Registered jobs (1):** `automation.execute`
 
@@ -616,6 +616,8 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_NODUS_BOOT_ALLOWANCE_MS` | (runtime) | `60000` |
 | `AINDY_NODUS_MAX_EXECUTION_MS` | (runtime) | `120000` |
 | `AINDY_NODUS_MAX_MEMORY_MB` | (runtime) | `256` |
+| `AINDY_NOTICE_TO` | automation | `""` |
+| `AINDY_OWNER_NOTICES` | automation | `1` |
 | `AINDY_PASSWORD_RESET_TTL_MINUTES` | (runtime) | `30` |
 | `AINDY_PASSWORD_RESET_URL_TEMPLATE` | (runtime) | `""` |
 | `AINDY_PLAN_STEP_REFERENCES` | (runtime) | `""` |

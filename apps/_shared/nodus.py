@@ -59,6 +59,31 @@ def ensure_domain_nodus_workflow(domain: str, name: str) -> None:
         register_domain_nodus_workflows(str(Path(__file__).resolve().parents[1] / domain / "bootstrap.py"), domain)
 
 
+def record_nodus_fallback(db: Any, *, workflow: str, user_id: Any, reason: Any) -> None:
+    """Write a durable ``nodus.fallback`` event; ``owner_notices`` mails the owner on a run of them.
+
+    A WARNING line was the whole record until 2026-11-01 (`NODUS-FALLBACK-SILENT-1`), and the fallback
+    usually happens in a scheduled job's callback process, whose metrics die with it. Best effort: a
+    caller is already on its fallback path and must not fail there. Call it after any rollback, or
+    the rollback takes the event with it.
+    """
+    from datetime import datetime, timezone
+
+    try:
+        from AINDY.core.execution_signal_helper import queue_system_event
+
+        queue_system_event(
+            db=db,
+            event_type="nodus.fallback",
+            user_id=user_id,
+            source="nodus",
+            payload={"workflow": workflow, "reason": str(reason or "no result")[:500],
+                     "at": datetime.now(timezone.utc).isoformat()},
+        )
+    except Exception as exc:
+        logger.warning("nodus fallback for %s not recorded: %s", workflow, exc)
+
+
 def run_domain_nodus_workflow(domain: str, name: str, **kwargs: Any) -> dict[str, Any]:
     """`run_nodus_workflow`, after making sure ``name`` is registered in this process."""
     from AINDY.runtime.nodus_workflow_registry import run_nodus_workflow

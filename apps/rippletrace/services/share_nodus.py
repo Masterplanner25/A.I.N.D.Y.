@@ -44,14 +44,19 @@ def share_owner(db: Session, user_id: Any) -> tuple[dict | None, str]:
         return None, "none"
     piece = row.id
     if nodus_share_enabled():
+        reason: object = "the VM run did not report success"
         try:
             outcome = _share_via_nodus(db, user_id, piece)
             if outcome is not None:
                 return outcome, "nodus"
             logger.warning("[share_drafts] nodus run failed for %s; falling back to python", piece)
         except Exception as exc:  # pragma: no cover - defensive
+            reason = exc
             logger.warning("[share_drafts] nodus run raised for %s, falling back to python: %s", piece, exc)
         db.rollback()
+        from apps._shared.nodus import record_nodus_fallback
+
+        record_nodus_fallback(db, workflow=_WORKFLOW, user_id=user_id, reason=reason)
     try:
         return make_share_drafts(db, user_id, piece), "python"
     except Exception as exc:

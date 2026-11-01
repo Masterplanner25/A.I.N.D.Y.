@@ -236,6 +236,10 @@ Python flows stay as they are until one is deliberately ported.
     result and falls back to Python.
 
   `apps/rippletrace/services/archive_nodus.py` is the fullest example.
+- **A fallback must call `record_nodus_fallback(db, workflow=…, user_id=…, reason=…)`** (`apps/_shared/nodus.py`),
+  after any rollback. It writes a durable `nodus.fallback` event, and `owner_notices.py` emails the owner
+  when one workflow falls back 3 times in a day. Before 2026-11-01 a fallback was one WARNING line, and
+  10 days of them went unseen (`NODUS-FALLBACK-SILENT-1`). `test_owner_notices.py` checks every caller.
 - **A job that fires often must not start a cold worker for nothing.** Start a VM run only when
   there is work. The archive job runs every 10 minutes, so it checks `archive_due` first, and a
   settled catalogue stays on the Python path.

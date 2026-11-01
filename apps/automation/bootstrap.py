@@ -96,8 +96,19 @@ def _register_response_adapters() -> None:
 
 
 def _register_events() -> None:
-    from AINDY.platform_layer.registry import register_event_handler
+    from AINDY.platform_layer.registry import (
+        register_event_handler,
+        register_event_retention,
+        register_event_type,
+    )
+    from apps.automation.services.owner_notices import EVENT_TYPES as NOTICE_EVENT_TYPES
+
     register_event_handler("job_log.written", _handle_job_log_written)
+    # Owner notices: a Nodus fallback, a failed provider probe, a notice sent. Operational (90 days)
+    # outlives the month `owner_notices.last_notice` reads back.
+    for event_type in NOTICE_EVENT_TYPES:
+        register_event_type(event_type)
+        register_event_retention(event_type, "operational")
 
 
 def _handle_job_log_written(context: dict) -> None:
@@ -143,6 +154,18 @@ def _register_scheduled_jobs() -> None:
         name="Follow handed-off releases",
         trigger="interval",
         trigger_kwargs={"minutes": TICK_INTERVAL_MINUTES},
+    )
+
+    from apps.automation.services import owner_notices
+
+    # AUDIT_2026-11-01 §3: one email when a Nodus workflow keeps falling back or the LLM provider
+    # fails. Off unless AINDY_OWNER_NOTICES; one embedding probe of OpenAI a tick when on.
+    register_scheduled_job(
+        "owner_notices_tick",
+        owner_notices.owner_notices_tick,
+        name="Tell the owner about silent failures",
+        trigger="interval",
+        trigger_kwargs={"minutes": owner_notices.TICK_INTERVAL_MINUTES},
     )
 
 
