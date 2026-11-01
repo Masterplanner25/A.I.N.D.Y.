@@ -48,7 +48,7 @@ class GitHubActions:
         self.user_id = user_id
         self.http = session or requests
 
-    def _get(self, path: str, params: dict | None = None) -> Any:
+    def _get(self, path: str, params: dict | None = None, *, missing_ok: bool = False) -> Any:
         from AINDY.platform_layer.external_call_service import perform_external_call
 
         key = token()
@@ -69,6 +69,8 @@ class GitHubActions:
             raise GitHubUnavailable(f"Could not reach GitHub: {exc}") from exc
         if response.status_code in (401, 403):
             raise GitHubUnavailable(f"GitHub refused the token ({response.status_code}) for {path}.")
+        if missing_ok and response.status_code == 404:
+            return None
         if response.status_code >= 400:
             raise GitHubUnavailable(f"GitHub returned HTTP {response.status_code} for {path}.")
         try:
@@ -83,6 +85,10 @@ class GitHubActions:
         runs = [r for r in (body or {}).get("workflow_runs") or [] if r.get("head_branch") == tag]
         # The newest, should the tag have been pushed twice.
         return max(runs, key=lambda r: r.get("created_at") or "") if runs else None
+
+    def tag_exists(self, repo: str, tag: str) -> bool:
+        """Whether the tag has been pushed. A handoff can be requested before it is."""
+        return self._get(f"/repos/{repo}/git/ref/tags/{tag}", missing_ok=True) is not None
 
     def jobs(self, repo: str, run_id: str) -> list[dict]:
         return list((self._get(f"/repos/{repo}/actions/runs/{run_id}/jobs", {"per_page": 50}) or {}).get("jobs") or [])
