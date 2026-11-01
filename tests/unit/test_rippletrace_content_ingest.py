@@ -357,6 +357,62 @@ def test_upsert_drop_point_is_idempotent():
         session.close()
 
 
+MEDIUM_FEED_LINK = (
+    "https://medium.com/masterplan-infinite-weave/prototyping-with-ai-0130c2f74a8e"
+    "?source=rss----e6878c585a49---4"
+)
+MEDIUM_CLEAN = "https://medium.com/masterplan-infinite-weave/prototyping-with-ai-0130c2f74a8e"
+
+
+def test_normalize_url_drops_medium_feed_source_tag():
+    assert content_fetch.normalize_url(MEDIUM_FEED_LINK) == MEDIUM_CLEAN
+
+
+def test_normalize_url_keeps_source_on_other_hosts():
+    assert (
+        content_fetch.normalize_url("https://example.com/view?source=report-7")
+        == "https://example.com/view?source=report-7"
+    )
+
+
+def test_a_medium_piece_stored_with_the_tag_keeps_its_id_and_loses_the_tag():
+    """A row keyed on the tagged URL (before 2026-11-01) is found again, not duplicated."""
+    session = _build_session()
+    user_id = str(uuid.uuid4())
+    try:
+        legacy_id = content_ingest.legacy_drop_point_id_for(user_id, MEDIUM_FEED_LINK)
+        assert legacy_id != content_ingest.drop_point_id_for(user_id, MEDIUM_FEED_LINK)
+        DropPointDB = content_ingest.DropPointDB
+        session.add(DropPointDB(id=legacy_id, title="Prototyping with AI", platform="Medium",
+                                url=MEDIUM_FEED_LINK, user_id=uuid.UUID(user_id)))
+        session.commit()
+
+        row, created = content_ingest.upsert_drop_point(
+            session, user_id=user_id, url=MEDIUM_FEED_LINK, title="Prototyping with AI",
+            platform="Medium",
+        )
+        session.commit()
+        assert created is False
+        assert row.id == legacy_id
+        assert row.url == MEDIUM_CLEAN
+        assert session.query(DropPointDB).count() == 1
+    finally:
+        session.close()
+
+
+def test_a_new_medium_piece_is_stored_without_the_tag():
+    session = _build_session()
+    try:
+        row, created = content_ingest.upsert_drop_point(
+            session, user_id=str(uuid.uuid4()), url=MEDIUM_FEED_LINK, title="Next piece",
+            platform="Medium",
+        )
+        assert created is True
+        assert row.url == MEDIUM_CLEAN
+    finally:
+        session.close()
+
+
 def test_upsert_leaves_date_null_when_the_source_has_none():
     """An unknown publication date must stay unknown, not become "now".
 
