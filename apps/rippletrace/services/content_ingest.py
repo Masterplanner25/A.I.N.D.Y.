@@ -104,6 +104,18 @@ def drop_point_id_for(user_id: str | None, url: str) -> str:
     return f"dp-{digest[:32]}"
 
 
+def legacy_drop_point_id_for(user_id: str | None, url: str) -> str:
+    """The id a URL got before per-host trackers were dropped (2026-11-01).
+
+    A Medium piece stored before then is keyed on its URL *with* ``?source=rss…``. Its id is kept,
+    because work drafts, pings and the archive refer to it; `upsert_drop_point` finds the row under
+    this id and refreshes its URL to the clean form.
+    """
+    legacy = normalize_url(url, host_trackers=False)
+    digest = hashlib.sha256(f"{user_id or ''}|{legacy}".encode("utf-8")).hexdigest()
+    return f"dp-{digest[:32]}"
+
+
 def _as_uuid(user_id: str | None) -> uuid.UUID | None:
     if not user_id:
         return None
@@ -357,6 +369,10 @@ def upsert_drop_point(
     display_title = (title or "").strip() or canonical
 
     row = db.query(DropPointDB).filter(DropPointDB.id == identifier).first()
+    if row is None:
+        legacy = legacy_drop_point_id_for(user_id, url)
+        if legacy != identifier:
+            row = db.query(DropPointDB).filter(DropPointDB.id == legacy).first()
     if row is not None:
         row.title = display_title
         row.platform = resolved_platform

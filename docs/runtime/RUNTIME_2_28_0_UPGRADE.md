@@ -61,7 +61,7 @@ but in-process dispatch does not yet (§4), and several older syscalls of ours r
 Our one Nodus `sys()` script, `reasoning_apply_v1.nd`, passes the run owner's own id, so it is
 unaffected (the runtime checked it; nothing of ours changed).
 
-## 4. New counter: `aindy_payload_identity_mismatch_total{syscall}` (ask 3, window 1 read; window 3 owed ~10-29)
+## 4. New counter: `aindy_payload_identity_mismatch_total{syscall}` (ask 3, windows 1, 3 and 4 read 0)
 
 Registered on `/metrics/` with no samples at 2026-10-15 ~05:50 UTC. Every count would be our own
 in-process `get_dispatcher().dispatch(...)` call with a payload `user_id` that differs from its context:
@@ -76,7 +76,7 @@ recreated**, so read it before every rebuild and add up the windows, as with FR-
 | 1 | 2026-10-15 05:48Z → 2026-10-22 ~17:25Z | 2026-10-22, before the window closed | **0**: the metric had no samples at all, across **1,496** syscall dispatches (`aindy_syscall_outcome_total`) on that container |
 | 2 | 2026-10-22 ~17:25Z → 19:51Z | **never: lost** | unknown. The api container was deleted by mistake (a filtered `docker rm` during a test run) and recreated from the same image; that container was replaced at 19:51Z by the 2.28.1 rebuild **without a reading**. About 2.5 hours, little traffic, but **not zero**: it counts as no evidence |
 | 3 | 2026-10-22 19:51Z (2.28.1) → 2026-10-30 02:25Z | 2026-10-30 02:25Z, before the 2.28.2 rebuild | **0**: no samples, across **793** syscall dispatches (`aindy_syscall_outcome_total`, 35 series) on that container |
-| 4 | 2026-10-30 02:36:51Z (2.28.2) → | before the next recreate | |
+| 4 | 2026-10-30 02:36:51Z (2.28.2) → 2026-11-01 06:16Z | 2026-11-01 06:16Z, before the 2.29.0 rebuild | **0**: no samples, across **236** syscall dispatches (`aindy_syscall_outcome_total`, all `success`) on that container. The last window in observe mode: from 2.29.0 a label is a refused call (`RUNTIME_2_29_0_UPGRADE.md` §1) |
 
 Window 1's zero stands on its own and is evidence. Window 2 is a hole and must not be read as a zero.
 Any non-zero reading goes to the runtime with its `{syscall}` labels: each names a call site.
