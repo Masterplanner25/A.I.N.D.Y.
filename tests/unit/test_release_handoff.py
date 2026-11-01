@@ -41,9 +41,13 @@ def _ts(value):
 class FakeGitHub:
     """GitHub as it stood at one moment of the 2.27.0 run, rebuilt from the recorded responses."""
 
-    def __init__(self, moment: datetime, *, jobs=None, run=None, approvals=None):
+    def __init__(self, moment: datetime, *, jobs=None, run=None, approvals=None, tagged=True):
         self.moment, self.calls = moment, []
-        self._jobs, self._run, self._approvals = jobs, run, approvals
+        self._jobs, self._run, self._approvals, self._tagged = jobs, run, approvals, tagged
+
+    def tag_exists(self, repo, tag):
+        self.calls.append("tag_exists")
+        return self._tagged
 
     def _pypi(self):
         return next(j for j in JOBS if j["name"] == "Publish to PyPI")
@@ -178,8 +182,10 @@ def test_the_2_27_0_run_replayed_minute_by_minute(db_session, records):
     assert _tick(db_session, row, "05:08:35", records) == []           # wheel verified, release not yet
     assert _tick(db_session, row, "05:09:00", records) == ["done"]
 
-    assert [h["stage"] for h in row.history] == ["requested", "running", "at_gate", "approved", "published", "done"]
-    assert row.history[2]["at"] == "2026-10-10T04:56:26+00:00"        # the gate from TestPyPI's own end time
+    # `tagged`: the tag's first sight (04:54:10), which starts the no-run limit; it is not a stage.
+    assert [h["stage"] for h in row.history] == [
+        "requested", "tagged", "running", "at_gate", "approved", "published", "done"]
+    assert row.history[3]["at"] == "2026-10-10T04:56:26+00:00"        # the gate from TestPyPI's own end time
     assert _syscalls(records, "sys.v1.task.complete_full") == [{"task_name": "Release aindy-runtime 2.27.0"}]
     [note] = _syscalls(records, "sys.v1.memory.write")
     assert note["node_type"] == "outcome" and "release:2.27.0" in note["tags"]
@@ -279,14 +285,43 @@ def test_a_rejected_gate_stops_the_handoff(db_session, records):
     assert "rejected by Masterplanner25" in records["mail"][-1]["subject"]
 
 
-def test_no_run_within_the_limit_fails_as_no_run(db_session, records):
-    row = _handoff(db_session, created="04:00:00")
-    github = FakeGitHub(at("04:20:00"))
+def _no_run(github: FakeGitHub) -> FakeGitHub:
     github.find_run = lambda repo, tag: None
-    assert rh.process(db_session, row, github, now=at("04:20:00"), send=records["send"]) == []
-    assert rh.process(db_session, row, github, now=at("04:31:00"), send=records["send"]) == ["failed"]
+    return github
+
+
+def test_no_run_within_the_limit_of_the_tag_fails_as_no_run(db_session, records):
+    row = _handoff(db_session, created="04:00:00")
+    github = _no_run(FakeGitHub(at("04:00:00")))
+    assert rh.process(db_session, row, github, now=at("04:01:00"), send=records["send"]) == []  # tag seen
+    assert rh.process(db_session, row, github, now=at("04:31:00"), send=records["send"]) == []
+    assert rh.process(db_session, row, github, now=at("04:32:00"), send=records["send"]) == ["failed"]
     assert row.failure["reason"] == "no_run"
     assert "no publish run was found" in records["mail"][-1]["subject"]
+
+
+def test_a_handoff_requested_before_its_tag_waits_for_the_tag(db_session, records):
+    """2.29.0, 2026-10-30: requested 03:11, tag pushed 03:47, run at 03:47. It failed at 03:41 as
+    `no_run`, because the limit counted from the request (`RELEASE-NO-RUN-FROM-REQUEST-1`)."""
+    row = _handoff(db_session, created="03:11:00")
+    untagged = _no_run(FakeGitHub(at("03:11:00"), tagged=False))
+    for clock in ("03:12:00", "03:41:30", "03:46:00"):
+        assert rh.process(db_session, row, untagged, now=at(clock), send=records["send"]) == []
+    tagged = _no_run(FakeGitHub(at("03:47:00")))
+    assert rh.process(db_session, row, tagged, now=at("03:47:10"), send=records["send"]) == []
+    assert row.stage == "requested" and row.failure is None
+    assert [e["stage"] for e in row.history] == ["requested", "tagged"]
+    assert records["mail"] == []
+
+
+def test_a_tag_that_never_comes_fails_as_no_tag_after_the_stall_limit(db_session, records, monkeypatch):
+    monkeypatch.setenv("AINDY_RELEASE_STALL_MINUTES", "60")
+    row = _handoff(db_session, created="04:00:00")
+    untagged = _no_run(FakeGitHub(at("04:00:00"), tagged=False))
+    assert rh.process(db_session, row, untagged, now=at("04:59:00"), send=records["send"]) == []
+    assert rh.process(db_session, row, untagged, now=at("05:01:00"), send=records["send"]) == ["failed"]
+    assert row.failure["reason"] == "no_tag"
+    assert "the tag was never pushed" in records["mail"][-1]["subject"]
 
 
 def test_no_stage_change_for_the_limit_fails_as_stalled(db_session, records, monkeypatch):
