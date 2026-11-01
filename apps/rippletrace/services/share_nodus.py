@@ -61,9 +61,10 @@ def share_owner(db: Session, user_id: Any) -> tuple[dict | None, str]:
 
 
 def _share_via_nodus(db: Session, user_id: Any, drop_point_id: str) -> dict | None:
-    from AINDY.runtime.nodus_workflow_registry import run_nodus_workflow
+    from apps._shared.nodus import run_domain_nodus_workflow
 
-    out = run_nodus_workflow(
+    out = run_domain_nodus_workflow(
+        "rippletrace",
         _WORKFLOW,
         db=db,
         user_id=str(user_id),
