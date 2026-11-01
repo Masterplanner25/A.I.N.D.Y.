@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-10-22"
+last_verified: "2026-11-01"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -19,6 +19,8 @@ owner: "app-team"
 > **Numbering is the runtime's.** Its `CLAUDE.md` `APP-FR-*` ledger says *next available*; it also
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
+>
+> **Open as of 2026-11-01:** **FR-56 (P2: every `memory.generate_embedding` job submitted while the scheduler runs is written `pending` and never submitted; 2,387 such rows count as active against the admission caps)**, FR-55, FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-10-22 (night):** **FR-55 (P3: a guest Nodus wait cannot resume on a deadline, a resume loses `set_state`, the 30-minute wait deadline is fixed)**, FR-14 recurrence half, FR-6 items 2–3.
 >
@@ -53,6 +55,66 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-56 — `enqueue_embedding` passes `execute_inline_in_test_mode=False`, and in the queued path that flag returns before the job is submitted, so every embedding job's log row stays `pending` forever and counts as active against the admission caps 🔴 OPEN — filed 2026-11-01, P2 (no data lost: the 1-minute sweep embeds; latent: setting the per-user cap the boot log recommends would refuse the owner's every async job)
+
+**apps-monolith ref:** found by `AUDIT_2026-11-01` (#5). Read on runtime 2.29.0 in the api image and on
+runtime `main` at `b595fc1` (2026-11-01); the same code has been there since the extraction
+(`0d5d382`).
+
+### What we see
+
+`automation_logs` on 2026-11-01: **2,387 rows `pending`, every one `memory.generate_embedding`**, none
+ever started (`started_at` NULL, `attempt_count` 0). Meanwhile all 3,548 `memory_nodes` are
+`embedding_status = complete`, 0 pending. The `success` rows come in bursts (861 on 10-01, 22 on
+10-15) and none since 10-15 05:45Z. By user: the owner 1,696, no user 560, three others 131.
+
+### Why
+
+`AINDY/memory/embedding_jobs.py::enqueue_embedding` calls `dispatch_job(..., execute_inline_in_test_mode=False)`.
+In `_submit_async_job_inner` (`platform_layer/async_job_service.py`), once the JobLog row is written
+`pending`:
+
+```python
+if inline_enabled:            # test env, or no running scheduler ("runner disabled")
+    ...                       # runs inline, forces the row to success
+    return log_id
+if not execute_inline_in_test_mode:
+    return log_id             # ← queued path: returns before the semaphore and the executor
+```
+
+So with the scheduler running (every normal request), the job is recorded and never submitted.
+Only submissions that land before the scheduler starts take the inline path and finish, which is
+where the bursts come from. The node is embedded anyway, within a minute, by
+`process_pending_memory_embeddings` → `process_pending_embeddings`, which calls
+`process_embedding_job` directly and never touches the log row. `embedding_jobs.py` is the only
+caller passing `False`.
+
+### Why it matters
+
+- **The admission caps count it.** `_active_job_statuses()` is `("pending", "running", "deferred")`.
+  Both caps are unset here (0), so nothing is refused today. The runtime's own boot warning says
+  *"Set AINDY_ASYNC_MAX_CONCURRENT_PER_USER=2 to enforce fairness"*; doing that would refuse every
+  async job for the owner (1,696 "active") with a 429, and `AINDY_ASYNC_MAX_CONCURRENT_GLOBAL` would
+  trip at any value under 2,387.
+- **The log lies.** `/apps/automation/logs` shows thousands of jobs waiting that will never run, and
+  each new memory adds one.
+- A new node waits up to a minute for its embedding, not the seconds the job was meant to take. Minor.
+
+### Ask
+
+1. Submit the job in the queued path: the `if not execute_inline_in_test_mode: return log_id` guard
+   looks meant for the test/inline branch only. Or, if the sweep is meant to own embedding, stop
+   writing a JobLog for it at all.
+2. Have the sweep close the node's open `memory.generate_embedding` row (`success`, with `completed_at`)
+   when it embeds the node, so existing rows settle and none can strand again.
+3. A one-time migration or boot step that marks the stranded rows: `pending` with no `started_at`,
+   whose node is `complete`, set to `success` (or a distinct `superseded`).
+
+### What we do meanwhile
+
+Nothing in the app depends on these rows. We leave both admission caps unset until this ships, and
+we do not edit the rows by hand: they are the evidence.
+
 ## FR-55 — a guest Nodus wait can only end on an event or in failure: no timed resume, a resume restarts the script without its state, and the 30-minute deadline cannot be set per workflow 🔴 OPEN — filed 2026-10-22, P3 (no defect: it blocks porting our tick-driven jobs to `.nd`, nothing that runs today)
 
 **apps-monolith ref:** found 2026-10-22 while scoping the next `.nd` port. Owner, the same day:
