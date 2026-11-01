@@ -46,9 +46,10 @@ def _recalc_via_python(db: Any, user_id: Any) -> Any:
 
 
 def _recalc_via_nodus(db: Any, user_id: Any) -> bool:
-    from AINDY.runtime.nodus_workflow_registry import run_nodus_workflow
+    from apps._shared.nodus import run_domain_nodus_workflow
 
-    out = run_nodus_workflow(
+    out = run_domain_nodus_workflow(
+        "analytics",
         _WORKFLOW,
         db=db,
         user_id=str(user_id),
