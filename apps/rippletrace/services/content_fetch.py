@@ -60,6 +60,19 @@ _TRACKING_PARAMS = {
     "yclid",
 }
 
+# Trackers that only mean that on one host. Medium's feed links every piece as
+# ``?source=rss----<publication>---4``: the feed is the referrer, not the document, and the tag
+# went into share drafts' links (2026-11-01). Host-scoped, because elsewhere ``source`` can be
+# part of the document.
+_HOST_TRACKING_PARAMS = {"medium.com": {"source"}}
+
+
+def _host_tracking_params(host: str) -> set[str]:
+    for domain, params in _HOST_TRACKING_PARAMS.items():
+        if host == domain or host.endswith("." + domain):
+            return params
+    return set()
+
 _PLATFORM_BY_DOMAIN = {
     "linkedin.com": "LinkedIn",
     "x.com": "X",
@@ -100,13 +113,16 @@ class ContentFetchError(Exception):
 # ── URL handling ──────────────────────────────────────────────────────────────
 
 
-def normalize_url(url: str) -> str:
+def normalize_url(url: str, *, host_trackers: bool = True) -> str:
     """Fold a URL onto a stable identity for deduplication.
 
     Drops the fragment and tracking parameters, lowercases scheme and host, removes a
     redundant default port and a single trailing slash. Deliberately conservative:
     query parameters that are not known trackers are preserved, because for plenty of
     sites (``?p=123``, ``?v=abc``) the query *is* the document.
+
+    ``host_trackers=False`` keeps the per-host trackers: the form drop point ids were derived
+    from before 2026-11-01, which `legacy_drop_point_id_for` still needs.
     """
     parsed = urlparse((url or "").strip())
     scheme = (parsed.scheme or "").lower()
@@ -118,11 +134,12 @@ def normalize_url(url: str) -> str:
     ):
         netloc = f"{netloc}:{parsed.port}"
 
+    dropped = _TRACKING_PARAMS | (_host_tracking_params(netloc) if host_trackers else set())
     query = urlencode(
         [
             (key, value)
             for key, value in parse_qsl(parsed.query, keep_blank_values=True)
-            if key.lower() not in _TRACKING_PARAMS and not key.lower().startswith("utm_")
+            if key.lower() not in dropped and not key.lower().startswith("utm_")
         ]
     )
     path = parsed.path or "/"
