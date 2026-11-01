@@ -1,6 +1,6 @@
 ---
 title: "Runtime 2.29.0 adoption"
-last_verified: "2026-10-30"
+last_verified: "2026-11-01"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -76,3 +76,25 @@ recreate does not cut the poll → archive → share chain. Then, in this order:
    Then `/health`, the schema head, and the `AgentContinuation` log.
 3. **After a day of traffic:** read the counter again. Any label is a refused call: send the runtime
    its `{syscall}`.
+
+## 5. Verified
+
+The image was rebuilt from `main` at #513 (`998b66e88e09`, 20 min 47 s, a pin move), carrying #510,
+#511 and #513 with the pin. The api was recreated at **2026-11-01 16:40:25Z**, opening identity window
+5, and was healthy 53 s later with 0 restarts.
+
+| Where | Result |
+|---|---|
+| api container | `2.29.0 ['/usr/local/lib/python3.11/site-packages/AINDY']`, setuptools `84.2.1` (the `[security]` extra), pymongo `4.18.3`, anthropic `2.3.0` |
+| `/api/version`; `/health` | `boot_profile=default-apps`, `app_plugins_loaded=True`, `app_plugin_count=16`; 200 |
+| schema | runtime `0020`; app `sd1share0001 → rt1medium0001` at boot: 18 Medium `drop_points`, 0 still carrying `?source=rss` (#513) |
+| identity counter | HELP now reads "refused unless `AINDY_PAYLOAD_IDENTITY_DISPATCH=observe`"; no samples; the flag is not set |
+| Nodus flags | all four `1` |
+| agent runs `executing`; `AgentContinuation` log | 0; empty (soak row 4) |
+
+**Found on the way, fixed in #510:** a scheduled job's callback runs in a fresh subprocess
+(`runtime_callback_worker`) that imports only its own module, so the runtime's in-memory Nodus registry
+was empty there. Every scheduled `.nd` run from 2026-10-22 to 2026-11-01 fell back to Python with
+`nodus workflow '…' is not registered`, among them the first real share drafts (06:07Z). Nothing was
+lost. **Still to check:** the 07:00 UTC `(N via nodus)` line on 2026-11-02 is the first scheduled run
+on this image, and window 5 is read after a day of traffic.
