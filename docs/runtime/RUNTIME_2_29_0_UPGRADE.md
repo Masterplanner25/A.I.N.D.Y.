@@ -97,4 +97,8 @@ The image was rebuilt from `main` at #513 (`998b66e88e09`, 20 min 47 s, a pin mo
 was empty there. Every scheduled `.nd` run from 2026-10-22 to 2026-11-01 fell back to Python with
 `nodus workflow '…' is not registered`, among them the first real share drafts (06:07Z). Nothing was
 lost. **Still to check:** the 07:00 UTC `(N via nodus)` line on 2026-11-02 is the first scheduled run
-on this image, and window 5 is read after a day of traffic.
+on this image, and window 6 is read after a day of traffic.
+
+**Window 5** (16:40:25Z → 20:26Z, read before the recreate for #516): HELP/TYPE only, **0 refusals
+over 12 dispatches**. Too thin to count as the day's read, which moves to **window 6**, open from the
+api recreate at **2026-11-01 20:27:31Z** (image from `main` at #515, a 41 s source-only build).

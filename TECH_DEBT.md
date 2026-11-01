@@ -41,7 +41,13 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
-## RELEASE-NO-RUN-FROM-REQUEST-1: a handoff requested before its tag is pushed fails although the release succeeds (app-owned, P2)
+## RELEASE-NO-RUN-FROM-REQUEST-1: ✅ CLOSED 2026-11-01 — a handoff requested before its tag is pushed fails although the release succeeds (app-owned, was P2)
+
+**Closed 2026-11-01 by #516, live in the api recreated at 20:27Z.** The watcher now checks the tag
+(`GET /repos/{repo}/git/ref/tags/{tag}`) and records a `tagged` history entry on its first sight; the
+`no_run` limit counts from that entry. A tag that never appears fails as `no_tag` after the stall
+limit, saying the tag was never pushed. The 2.29.0 timeline is a test in `test_release_handoff.py`.
+The first real proof is the next runtime release.
 
 **Found by `AUDIT_2026-11-01` (#4).** The v2.29.0 handoff was requested at 03:11Z on 10-30. The tag
 was pushed at 03:47Z, and the publish run succeeded. The watcher's no-run timer
