@@ -20,7 +20,7 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-11-01:** **FR-56 (P2: every `memory.generate_embedding` job submitted while the scheduler runs is written `pending` and never submitted; 2,387 such rows count as active against the admission caps)**, FR-55, FR-14 recurrence half, FR-6 items 2–3.
+> **Open as of 2026-11-02:** FR-55, FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-10-22 (night):** **FR-55 (P3: a guest Nodus wait cannot resume on a deadline, a resume loses `set_state`, the 30-minute wait deadline is fixed)**, FR-14 recurrence half, FR-6 items 2–3.
 >
@@ -55,7 +55,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-56 — `enqueue_embedding` passes `execute_inline_in_test_mode=False`, and in the queued path that flag returns before the job is submitted, so every embedding job's log row stays `pending` forever and counts as active against the admission caps 🔴 OPEN — filed 2026-11-01, P2 (no data lost: the 1-minute sweep embeds; latent: setting the per-user cap the boot log recommends would refuse the owner's every async job)
+## FR-56 — `enqueue_embedding` passes `execute_inline_in_test_mode=False`, and in the queued path that flag returns before the job is submitted, so every embedding job's log row stays `pending` forever and counts as active against the admission caps ✅ SHIPPED in 2.29.1 (#871, DEC-104) — on the scheduler instance `enqueue_embedding` writes no row and the sweep embeds; the sweep closes a node's open row; `aindy-runtime memory settle-embedding-logs` settles the stranded ones. Filed 2026-11-01, shipped 2026-11-02; adopted in `RUNTIME_2_29_1_UPGRADE.md`, where the settle counts are recorded
 
 **apps-monolith ref:** found by `AUDIT_2026-11-01` (#5). Read on runtime 2.29.0 in the api image and on
 runtime `main` at `b595fc1` (2026-11-01); the same code has been there since the extraction
