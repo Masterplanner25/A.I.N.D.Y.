@@ -31,6 +31,11 @@ Add a note when something cost time to learn. Delete one when it stops being tru
   Per-request durations: pair `execution.started` and `execution.completed` by `trace_id`.
 - **To time a route without the api's own load,** use a throwaway container from the api image with
   `AINDY_ENABLE_BACKGROUND_TASKS=false`, and yappi across all threads.
+- **A scheduled job's own output never reaches the api log.** The callback runs in a subprocess whose
+  stdout and stderr the runtime captures (`runtime_callback_host.py`); only a callback that *fails*
+  shows, as the error the api process raises. So a passing tick is invisible: check that the job is
+  registered (`GET /platform/observability/system`, `scheduled_job_count`), run the function once by
+  hand with `PYTHONPATH=/app`, or have it leave a row.
 - **Cron hours:** 00, 06, 07, 12, 18 UTC.
 - **The api is localhost-only,** so no link in an email reaches it away from the desk.
 - **A minted token lasts about a day.**

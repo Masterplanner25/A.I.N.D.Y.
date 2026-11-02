@@ -55,9 +55,11 @@ was pushed at 03:47Z, and the publish run succeeded. The watcher's no-run timer
 (`no_run`) at 03:41Z and emailed "release stopped". The owner then approved the gate on GitHub, outside
 A.I.N.D.Y. **Fix:** count from the tag's first sight, or keep waiting while the tag doesn't exist.
 
-## LLM-OUTAGE-SILENT-1: a provider outage reaches the owner only through the log (app-owned, P2)
+## LLM-OUTAGE-SILENT-1: ✅ CLOSED 2026-11-01 — a provider outage reaches the owner only through the log (app-owned, was P2)
 
-**Fix built 2026-11-01 (`owner_notices.py`), live after the next api rebuild; close it then.** A
+**Closed 2026-11-01 by #519, live in the api recreated at 22:11:59Z.** `scheduled_job_count` went from 14 to 15, and a run by hand probed OpenAI (200) and returned `openai: ok`, sending nothing. The first real notice is the next outage.
+
+**What #519 built:** A
 15-minute job probes OpenAI with one embedding of "ok", no retries. A code that needs a person
 (`insufficient_quota`, `credit_balance_exhausted`, a 401) sends a notice on the first failure; any other
 failure sends one on the second probe in a row. The first passing probe afterwards sends "recovered". The
@@ -71,9 +73,11 @@ release handoff already sends mail over the same SMTP. **Fix:** one notice when 
 stays open past a threshold, naming the provider's error code. `credit_balance_exhausted` needs a
 person, not a retry.
 
-## NODUS-FALLBACK-SILENT-1: a `.nd` falling back to Python is one WARNING line (app-owned, P3)
+## NODUS-FALLBACK-SILENT-1: ✅ CLOSED 2026-11-01 — a `.nd` falling back to Python is one WARNING line (app-owned, was P3)
 
-**Fix built 2026-11-01, live after the next api rebuild; close it then.** Each of the four callers now
+**Closed 2026-11-01 by #519, live in the api recreated at 22:11:59Z** (same job and checks as `LLM-OUTAGE-SILENT-1`). No `nodus.fallback` event yet. The 07:00 UTC recalc on 11-02 is the first scheduled `.nd` run on this image; with #510 it should leave none.
+
+**What #519 built:** Each of the four callers now
 writes a durable `nodus.fallback` event (`apps/_shared/nodus.py::record_nodus_fallback`, with the
 workflow and the reason). Three in a day for one workflow send the owner one email, at most once a day
 (`owner_notices.py`, the same job).
