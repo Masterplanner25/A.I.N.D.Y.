@@ -52,17 +52,39 @@ Nothing for us: our `Dockerfile` installs `aindy-runtime[mcp,security]`, which a
   `aindy-runtime[mcp,security]>=2.29.1,<3.0`, plus the contract test.
 - **FR-56** marked shipped in `RUNTIME_FEATURE_REQUESTS.md`; CLAUDE.md's FR row and adoption pointer.
 
-## 4. Rebuild and settle
+## 4. Rebuild and settle: done 2026-11-02, and the settle found nothing
 
-Owed after merge, in this order:
+1. **Identity counter, window 7** (2026-11-01 22:11:59Z → 11-02 03:55:59Z): no samples at all, so 0
+   refused. As in window 6, the api's `/metrics` carried no syscall samples in the window.
+2. **Rebuilt** (image `d7fb75f055eb`) and **recreated at 04:24:08Z**, which opens window 8. Healthy at
+   04:24:57Z, 0 restarts, 16 plugins, 0 executing agent runs, empty `AgentContinuation` log.
+3. **In-container:** `AINDY._version` 2.29.1 from `/usr/local/lib/python3.11/site-packages/AINDY`,
+   setuptools 84.2.1.
+4. **`memory settle-embedding-logs` dry run: examined 0, settled 0, node pending 0, node gone 0.**
+   `--yes` was not run.
 
-1. Read `aindy_payload_identity_mismatch_total` (window 7, from 2026-11-01 22:11:59Z); the recreate
-   resets it.
-2. Rebuild (a pin move re-downloads the dependency layer) and recreate the api.
-3. In-container check: `AINDY._version` 2.29.1 from site-packages, setuptools ≥ 84.1.0.
-4. Health, 16 plugins, 0 restarts, the `AgentContinuation` log.
-5. `memory settle-embedding-logs` dry run. Expected on the 11-01 numbers: about 2,387 to settle, 0 left.
-6. `--yes` on the owner's word. Record the four counts here (examined, settled, node pending, node
-   gone) and send them to the runtime.
-7. After a day: no new `memory.generate_embedding` row `pending` with `started_at` NULL for longer than
-   a minute.
+**Why 0: FR-56's numbers came from the wrong table.** The 2,387 `pending` rows counted on 11-01 were
+in `automation_logs`, our mirror of `job_logs` (`job_log_sync_service.py`). In `job_logs` all 2,387
+were already `failed`, *"Stale: never started within 1 hour of creation"*, written by the runtime's
+`_cleanup_stale_logs` (the last at 11-01 19:41Z). The admission caps count `job_logs`, so they were
+never at risk beyond the last hour's rows. The cleanup writes `job_logs` without our sync, so the
+mirror stayed `pending`: `JOB-LOG-MIRROR-STALE-1`.
+
+**What 2.29.1 did fix is visible:** 0 `job_logs` rows created since the recreate, 0 active rows
+(`pending`/`running`/`deferred`), 0 nodes pending.
+
+**The mirror was corrected the same day** (owner's OK): the 2,387 drifted `automation_logs` rows took
+`status`, `error_message`, `started_at`, `completed_at` and `attempt_count` from their `job_logs` row.
+0 drift after.
+
+**The async caps:** nothing in `job_logs` holds a slot now, so setting
+`AINDY_ASYNC_MAX_CONCURRENT_PER_USER`/`_GLOBAL` is safe. Whether to set them is the owner's call.
+
+**For the runtime:** the four counts your handoff's ask 3 wanted are above (all 0), with the reason
+in FR-56's *Correction*. **One question, your call:** should `memory settle-embedding-logs` also take
+`job_logs` rows that are `memory.generate_embedding`, `failed` with *"Stale: never started within 1
+hour of creation"*, `attempt_count` 0, and whose node is embedded? There are 2,387 here. They record as
+failed work the sweep did. If not, we leave them as they are.
+
+Still owed here: after a day, check that no new `memory.generate_embedding` row has appeared in
+`job_logs`.

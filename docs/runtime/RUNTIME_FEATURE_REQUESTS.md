@@ -55,11 +55,31 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-56 — `enqueue_embedding` passes `execute_inline_in_test_mode=False`, and in the queued path that flag returns before the job is submitted, so every embedding job's log row stays `pending` forever and counts as active against the admission caps ✅ SHIPPED in 2.29.1 (#871, DEC-104) — on the scheduler instance `enqueue_embedding` writes no row and the sweep embeds; the sweep closes a node's open row; `aindy-runtime memory settle-embedding-logs` settles the stranded ones. Filed 2026-11-01, shipped 2026-11-02; adopted in `RUNTIME_2_29_1_UPGRADE.md`, where the settle counts are recorded
+## FR-56 — `enqueue_embedding` passes `execute_inline_in_test_mode=False`, and in the queued path that flag returns before the job is submitted, so every embedding job's log row stays `pending` forever and counts as active against the admission caps ✅ SHIPPED in 2.29.1 (#871, DEC-104) — on the scheduler instance `enqueue_embedding` writes no row and the sweep embeds; the sweep closes a node's open row; `aindy-runtime memory settle-embedding-logs` settles any left `pending`. Filed 2026-11-01, shipped 2026-11-02; adopted in `RUNTIME_2_29_1_UPGRADE.md`. **Corrected 2026-11-02: the admission-cap risk below was wrong** (see *Correction*)
 
 **apps-monolith ref:** found by `AUDIT_2026-11-01` (#5). Read on runtime 2.29.0 in the api image and on
 runtime `main` at `b595fc1` (2026-11-01); the same code has been there since the extraction
 (`0d5d382`).
+
+### Correction (2026-11-02)
+
+**We read the wrong table.** The 2,387 `pending` rows were in `automation_logs`, the app's mirror of
+`job_logs` (`apps/automation/services/job_log_sync_service.py`). In `job_logs` itself, which is what the
+admission caps count, the runtime's stale cleanup (`scheduler_service._cleanup_stale_logs`) had marked
+every one `failed` within about an hour of creation (*"Stale: never started within 1 hour of
+creation"*). That cleanup writes `job_logs` without the sync, so the mirror kept saying `pending`.
+
+So:
+- **The caps were never at risk** beyond the last hour's rows. *Why it matters* below overstates it;
+  the per-user cap of 2 would not have refused the owner's every job.
+- **The bug was real:** the jobs were never submitted, and the sweep did the work. 2.29.1 fixes it:
+  0 `job_logs` rows written since the recreate (2026-11-02 04:24Z), 0 nodes pending.
+- **The settle dry run found nothing** (examined 0, settled 0, node pending 0, node gone 0), because no
+  row was `pending` in `job_logs`. `--yes` was not run.
+- The 2,387 rows read `failed` in `job_logs` for work the sweep did. **Ask (open):** should the settle
+  command take those too? The question is in full in `RUNTIME_2_29_1_UPGRADE.md` §4.
+- The mirror's drift is ours: `JOB-LOG-MIRROR-STALE-1` in `TECH_DEBT.md`. The 2,387 mirror rows were
+  copied from `job_logs` on 2026-11-02 (owner's OK).
 
 ### What we see
 
@@ -91,7 +111,7 @@ caller passing `False`.
 
 ### Why it matters
 
-- **The admission caps count it.** `_active_job_statuses()` is `("pending", "running", "deferred")`.
+- **(Wrong; see *Correction*.) The admission caps count it.** `_active_job_statuses()` is `("pending", "running", "deferred")`.
   Both caps are unset here (0), so nothing is refused today. The runtime's own boot warning says
   *"Set AINDY_ASYNC_MAX_CONCURRENT_PER_USER=2 to enforce fairness"*; doing that would refuse every
   async job for the owner (1,696 "active") with a 429, and `AINDY_ASYNC_MAX_CONCURRENT_GLOBAL` would

@@ -41,6 +41,26 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## JOB-LOG-MIRROR-STALE-1: `automation_logs` keeps `pending` after the runtime marks the job `failed` (app-owned, P3)
+
+**Found 2026-11-02** at the 2.29.1 adoption, after it sent FR-56 the wrong way. `automation_logs` is
+our mirror of the runtime's `job_logs`: `apps/automation/services/job_log_sync_service.py` copies a row
+when the runtime hands it one. The runtime's `scheduler_service._cleanup_stale_logs` marks a `job_logs`
+row `failed` when it has stayed `pending` for an hour, and it writes `job_logs` directly. The sync
+never sees it, so the mirror says `pending` forever.
+
+**Cost:** 2,387 `memory.generate_embedding` rows read `pending` in `/apps/automation/logs` while
+`job_logs` had them `failed`. That count was taken for the admission caps' count and filed as FR-56's P2
+reason; the caps read `job_logs`, so they were never at risk (`RUNTIME_2_29_1_UPGRADE.md` §4).
+
+**Done:** the 2,387 rows were copied from `job_logs` on 2026-11-02 (owner's OK), 0 drift after. Since
+2.29.1 the embedding path writes no row, so nothing feeds the drift today. Any other job that strands
+`pending` would.
+
+**Fix, when it matters:** a step in an existing scheduled job that copies `job_logs` state onto mirror
+rows whose status differs, or ask the runtime for a hook on the stale cleanup. **Meanwhile, count
+`job_logs` for anything about admission or job health; `automation_logs` is a view for the client.**
+
 ## RELEASE-NO-RUN-FROM-REQUEST-1: ✅ CLOSED 2026-11-01 — a handoff requested before its tag is pushed fails although the release succeeds (app-owned, was P2)
 
 **Closed 2026-11-01 by #516, live in the api recreated at 20:27Z.** The watcher now checks the tag
