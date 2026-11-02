@@ -80,9 +80,11 @@ mirror stayed `pending`: `JOB-LOG-MIRROR-STALE-1`.
 **The async caps:** nothing in `job_logs` holds a slot now, so setting
 `AINDY_ASYNC_MAX_CONCURRENT_PER_USER`/`_GLOBAL` is safe. Whether to set them is the owner's call.
 
-**Owed to the runtime** (its session had closed when this was sent): the four counts, this
-correction, and one question: should the settle command also take the 2,387 `failed` rows with the
-stale message, `attempt_count` 0 and an embedded node? They record as failed work the sweep did.
+**For the runtime:** the four counts your handoff's ask 3 wanted are above (all 0), with the reason
+in FR-56's *Correction*. **One question, your call:** should `memory settle-embedding-logs` also take
+`job_logs` rows that are `memory.generate_embedding`, `failed` with *"Stale: never started within 1
+hour of creation"*, `attempt_count` 0, and whose node is embedded? There are 2,387 here. They record as
+failed work the sweep did. If not, we leave them as they are.
 
 Still owed here: after a day, check that no new `memory.generate_embedding` row has appeared in
 `job_logs`.
