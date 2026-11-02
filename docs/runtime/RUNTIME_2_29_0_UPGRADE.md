@@ -102,3 +102,6 @@ on this image, and window 6 is read after a day of traffic.
 **Window 5** (16:40:25Z → 20:26Z, read before the recreate for #516): HELP/TYPE only, **0 refusals
 over 12 dispatches**. Too thin to count as the day's read, which moves to **window 6**, open from the
 api recreate at **2026-11-01 20:27:31Z** (image from `main` at #515, a 41 s source-only build).
+
+**Window 6** (20:27:31Z → 22:10:58Z, read before the recreate for #519): HELP/TYPE only, and no syscall
+samples at all. The day's read moves to **window 7**, open from **2026-11-01 22:11:59Z** (`main` at #519).
