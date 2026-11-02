@@ -68,6 +68,27 @@ describe("RippleTrace share drafts", () => {
 
     fireEvent.click(ask);
     await waitFor(() => expect(mockQueue).toHaveBeenCalledWith("old"));
-    expect(await screen.findByText(/within about ten minutes/)).toBeTruthy();
+    expect((await screen.findAllByText(/within about ten minutes/)).length).toBeGreaterThan(0);
+  });
+
+  it("says what happened beside the piece, not only at the top of the page", async () => {
+    // 2026-11-02: the owner clicked "Share drafts again" twice and saw nothing, because the
+    // notice sits above the list.
+    render(<RippleTrace />);
+    fireEvent.click(await screen.findByRole("button", { name: "Share drafts again" }));
+
+    const note = await screen.findByTestId("share-note");
+    expect(note).toHaveTextContent("within about ten minutes");
+    expect(screen.getAllByTestId("share-note")).toHaveLength(1);
+  });
+
+  it("a refused request is reported beside the piece too", async () => {
+    mockQueue.mockRejectedValue(Object.assign(new Error("x"), {
+      data: { detail: { error: "no_text", message: "This piece has no stored text to write from yet." } },
+    }));
+    render(<RippleTrace />);
+    fireEvent.click(await screen.findByRole("button", { name: "Make share drafts" }));
+
+    expect(await screen.findByTestId("share-note")).toHaveTextContent("no stored text");
   });
 });

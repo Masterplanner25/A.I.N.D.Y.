@@ -295,8 +295,19 @@ def _tags_for(row: DropPointDB, series: dict[str, str], works: dict[str, list[st
     return list(dict.fromkeys(tags))
 
 
+def copy_order(row: DropPointDB) -> tuple:
+    """Earliest published first; on a tie, the copy whose text was stored first, then the id.
+
+    Feeds often give a cross-post the same timestamp on every platform. Until 2026-11-02 the id
+    broke that tie, so a copy fetched a day later could sort first and take over: the earlier copy's
+    memory was rewritten onto it, and its drafts were queued on a copy that had none."""
+    return (row.date_dropped is None, row.date_dropped or datetime.max,
+            row.content_fetched_at is None, row.content_fetched_at or datetime.max.replace(tzinfo=timezone.utc),
+            row.id)
+
+
 def _cross_post_groups(rows: list[DropPointDB]) -> list[list[DropPointDB]]:
-    """Pieces sharing a title, earliest first: the first is remembered, the rest are its copies."""
+    """Pieces sharing a title, in `copy_order`: the first is remembered, the rest are its copies."""
     from apps.rippletrace.services.container_service import _normalize
 
     by_title: dict[str, list[DropPointDB]] = {}
@@ -304,7 +315,7 @@ def _cross_post_groups(rows: list[DropPointDB]) -> list[list[DropPointDB]]:
         key = _normalize(row.title or "")
         if key:
             by_title.setdefault(key, []).append(row)
-    return [sorted(members, key=lambda r: (r.date_dropped or datetime.max, r.id))
+    return [sorted(members, key=copy_order)
             for members in by_title.values() if len(members) > 1]
 
 
@@ -316,7 +327,8 @@ def _stored_pieces(db: Session, user_id) -> list[DropPointDB]:
     return (
         db.query(DropPointDB)
         .options(load_only(DropPointDB.id, DropPointDB.title, DropPointDB.platform, DropPointDB.url,
-                           DropPointDB.date_dropped, DropPointDB.content_hash, DropPointDB.content_memory_hash))
+                           DropPointDB.date_dropped, DropPointDB.content_fetched_at, DropPointDB.content_hash,
+                           DropPointDB.content_memory_hash))
         .filter(DropPointDB.user_id == user_id, DropPointDB.content_hash.isnot(None))
         .all()
     )

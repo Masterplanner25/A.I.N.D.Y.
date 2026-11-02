@@ -93,18 +93,25 @@ def _normalize(text: str) -> str:
 
 
 def _copies(db: Session, row: DropPointDB) -> list[DropPointDB]:
-    """Every copy of the piece (same title, any platform), earliest first."""
+    """Every copy of the piece (same title, any platform), in `copy_order`."""
+    from apps.rippletrace.services.content_archive import copy_order
+
     key = _normalize(row.title)
     if not key:
         return [row]
     candidates = db.query(DropPointDB).filter(DropPointDB.user_id == row.user_id).all()
     same = [r for r in candidates if _normalize(r.title) == key]
-    return sorted(same, key=lambda r: (r.date_dropped is None, r.date_dropped, r.id))
+    return sorted(same, key=copy_order)
 
 
 def _canonical(db: Session, row: DropPointDB) -> DropPointDB:
-    """The copy that gets the drafts: the earliest one with text."""
-    stored = [r for r in _copies(db, row) if r.content_hash]
+    """The copy that gets the drafts: one that already has them, else the first with text. Asking
+    again for a piece whose drafts are made must queue that copy, not a later twin of it."""
+    copies = _copies(db, row)
+    made = [r for r in copies if r.share_drafts == MADE]
+    if made:
+        return made[0]
+    stored = [r for r in copies if r.content_hash]
     return stored[0] if stored else row
 
 

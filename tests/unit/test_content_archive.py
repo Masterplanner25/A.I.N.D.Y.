@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import create_engine
@@ -263,6 +263,25 @@ def test_an_earlier_copy_that_arrives_later_takes_over_and_the_later_one_leaves_
     assert (outcome["collapsed"], outcome["remembered"]) == (1, 1)
     assert _chunks(db, owner, later) == []
     assert "also on Medium" in _chunks(db, owner, earlier)[0]["content"]
+
+
+def test_a_same_time_copy_fetched_later_does_not_take_over(db, owner):
+    """2026-11-02: Medium and DEV gave "Prototyping with AI" the same timestamp. The DEV copy arrived a
+    day later and, on the id tie-break, took over the Medium copy's memory. The first stored copy keeps it."""
+    from apps.rippletrace.services.content_archive import archive_step
+
+    first = _stored(db, owner, "Medium", "zz-prototyping", "Prototyping with AI", 1)
+    first.content_fetched_at = datetime(2026, 11, 1, 5, 37, tzinfo=timezone.utc)
+    db.commit()
+    assert archive_step(db, user_id=str(owner), fetchers={}, pause=0)["remembered"] == 1
+
+    later = _stored(db, owner, "DEV", "aa-prototyping", "Prototyping with AI", 1)  # sorts first by id
+    later.content_fetched_at = datetime(2026, 11, 2, 5, 24, tzinfo=timezone.utc)
+    db.commit()
+    outcome = archive_step(db, user_id=str(owner), fetchers={}, pause=0)
+    assert outcome["collapsed"] == 1
+    assert _chunks(db, owner, later) == []
+    assert "also on DEV" in _chunks(db, owner, first)[0]["content"]
 
 
 def test_a_copy_is_never_written_to_memory_even_without_the_collapse_step(db, owner):
