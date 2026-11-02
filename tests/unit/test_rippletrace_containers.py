@@ -138,6 +138,60 @@ def test_a_phrase_in_too_few_titles_is_not_a_series(db_session):
     assert "2025 chatgpt case study series" not in names
 
 
+def test_a_cross_posted_piece_counts_once(db_session):
+    """DEV and Medium copies of one piece are one piece (2026-11-02). Three pieces posted twice are
+    three of four, under the 4-piece floor, not six of eight."""
+    for subject in SUBJECTS[:3]:
+        for _ in range(2):
+            _drop(db_session, f"{SERIES}: {subject}")
+    _drop(db_session, "Unrelated One")
+    db_session.commit()
+
+    names = {c["normalized"] for c in container_service.detect_candidates(db_session, USER)}
+    assert "2025 chatgpt case study series" not in names
+
+
+def test_the_candidate_counts_pieces_not_copies(db_session):
+    for subject in SUBJECTS[:4]:
+        for _ in range(2):
+            _drop(db_session, f"{SERIES}: {subject}")
+    db_session.commit()
+
+    (candidate,) = [c for c in container_service.detect_candidates(db_session, USER)
+                    if c["normalized"] == "2025 chatgpt case study series"]
+    assert (candidate["drop_count"], candidate["corpus_size"]) == (4, 4)
+    assert len(candidate["examples"]) == len(set(candidate["examples"]))
+
+
+def test_a_named_series_tags_its_pieces_although_it_was_never_a_candidate(db_session):
+    """The page's "Name a series" box confirms a name the corpus is too small to suggest."""
+    _seed_series(db_session, count=2, prefix="2026 Agents Case Study Series")
+    for title in ("Unrelated One", "Unrelated Two", "Unrelated Three", "Unrelated Four",
+                  "Unrelated Five", "Unrelated Six", "Unrelated Seven", "Unrelated Eight"):
+        _drop(db_session, title)
+    db_session.commit()
+    assert not [c for c in container_service.detect_candidates(db_session, USER)
+                if c["normalized"].startswith("2026 agents")]
+
+    result = container_service.confirm_container(db_session, USER, name="2026 Agents Case Study Series")
+    assert result["drop_count"] == 2
+    tagged = [t for t, e in _entities(db_session).items() if "2026 Agents Case Study Series" in e]
+    assert len(tagged) == 2
+
+
+def test_get_containers_reaches_the_containers_route():
+    """`/{trace_id}` was declared above the containers routes and answered `GET /containers` with an
+    empty trace graph. The catch-all must come last."""
+    from apps.rippletrace.routes.rippletrace_router import router
+
+    paths = [getattr(r, "path", "") for r in router.routes]
+    catch_all = [i for i, p in enumerate(paths) if p.endswith("/{trace_id}")]
+    assert catch_all, "the trace route is gone"
+    one_segment = [i for i, p in enumerate(paths)
+                   if p.count("/") == paths[catch_all[0]].count("/") and "{" not in p.rsplit("/", 1)[-1]]
+    assert all(i < catch_all[0] for i in one_segment), [paths[i] for i in one_segment if i > catch_all[0]]
+
+
 def test_detection_sees_only_your_own_drops(db_session):
     _seed_series(db_session)
     assert container_service.detect_candidates(db_session, OTHER) == []

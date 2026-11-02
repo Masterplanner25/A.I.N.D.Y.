@@ -105,7 +105,14 @@ def detect_candidates(db: Session, user_id: Any, *, limit: int = MAX_CANDIDATES)
         .filter(DropPointDB.user_id == uid, DropPointDB.title.isnot(None))
         .all()
     )
-    titles = [row.title for row in rows if (row.title or "").strip()]
+    # One title per piece: a piece cross-posted to DEV and Medium is two rows with one title, and
+    # counting both doubled every series and the corpus with it (2026-11-02).
+    by_piece: dict[str, str] = {}
+    for row in rows:
+        key = _normalize(row.title or "")
+        if key:
+            by_piece.setdefault(key, row.title)
+    titles = list(by_piece.values())
     corpus_size = len(titles)
     if corpus_size < MIN_CONTAINER_DROPS:
         return []

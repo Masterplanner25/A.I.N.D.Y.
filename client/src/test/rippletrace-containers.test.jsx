@@ -201,4 +201,42 @@ describe("RippleTrace containers", () => {
     expect(await screen.findByText(/Add published content/i)).toBeTruthy();
     expect(screen.queryByTestId("container-candidates")).toBeNull();
   });
+
+  // ── naming a series by hand ──────────────────────────────────────────────────────────
+
+  it("names a series the corpus is too small to suggest", async () => {
+    // 2026-11-02: a new series is 8 of 193 pieces, under the 10% a candidate needs, so it is
+    // never asked about. The author can still name it.
+    mockGetCandidates.mockResolvedValue({ candidates: [] });
+    mockConfirm.mockResolvedValue({ id: "c-2", drop_count: 15 });
+    render(<RippleTrace />);
+
+    const form = await screen.findByTestId("name-a-series");
+    fireEvent.change(screen.getByLabelText("Series name"), { target: { value: "  2026 Agents Case Study Series " } });
+    fireEvent.click(screen.getByRole("button", { name: /Confirm series/i }));
+
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalledWith("2026 Agents Case Study Series"));
+    expect(await screen.findByText(/its pieces are now linked/i)).toBeTruthy();
+    await waitFor(() => expect(screen.getByLabelText("Series name").value).toBe(""));
+    expect(form).toBeTruthy();
+  });
+
+  it("says so when no title carries the typed name", async () => {
+    mockGetCandidates.mockResolvedValue({ candidates: [] });
+    mockConfirm.mockResolvedValue({ id: "c-3", drop_count: 0 });
+    render(<RippleTrace />);
+
+    await screen.findByTestId("name-a-series");
+    fireEvent.change(screen.getByLabelText("Series name"), { target: { value: "2026 Agnets Series" } });
+    fireEvent.click(screen.getByRole("button", { name: /Confirm series/i }));
+
+    expect(await screen.findByText(/no title carries it yet/i)).toBeTruthy();
+  });
+
+  it("an empty name sends nothing", async () => {
+    render(<RippleTrace />);
+    await screen.findByTestId("name-a-series");
+    expect(screen.getByRole("button", { name: /Confirm series/i }).disabled).toBe(true);
+    expect(mockConfirm).not.toHaveBeenCalled();
+  });
 });

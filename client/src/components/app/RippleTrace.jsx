@@ -68,6 +68,9 @@ export default function RippleTrace() {
   const [suggestedFeeds, setSuggestedFeeds] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [containers, setContainers] = useState([]);
+  // A series named by hand: one too new or too small to recur across 10% of the titles, which is
+  // the only way a candidate is offered above.
+  const [seriesName, setSeriesName] = useState("");
   // "I found a citation" — one open form at a time, keyed by drop point id.
   const [citingFor, setCitingFor] = useState(null);
   const [citationUrl, setCitationUrl] = useState("");
@@ -107,18 +110,30 @@ export default function RippleTrace() {
     setBusy(true);
     setError("");
     try {
-      await (confirmed ? confirmContainer(name) : dismissContainer(name));
+      const result = await (confirmed ? confirmContainer(name) : dismissContainer(name));
+      const count = unwrap(result, "drop_count");
       setNotice(
-        confirmed
-          ? `Confirmed "${name}" — its pieces are now linked as one body of work.`
-          : `Dismissed "${name}" — it will not be suggested again.`,
+        !confirmed
+          ? `Dismissed "${name}" — it will not be suggested again.`
+          : count === 0
+            ? `Confirmed "${name}", but no title carries it yet. Check the spelling; new pieces with it will be linked as they arrive.`
+            : `Confirmed "${name}" — its pieces are now linked as one body of work.`,
       );
       await load();
+      return true;
     } catch (err) {
       setError(err.message || "Could not record that");
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleNameSeries(event) {
+    event.preventDefault();
+    const name = seriesName.trim();
+    if (!name) return;
+    if (await decideContainer(name, true)) setSeriesName("");
   }
 
   async function handleIngest(event, overrideUrl) {
@@ -432,6 +447,29 @@ export default function RippleTrace() {
               </ul>
             </div>
           }
+
+          <form onSubmit={handleNameSeries} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4" data-testid="name-a-series">
+            <h2 className="text-sm font-semibold text-zinc-100">Name a series</h2>
+            <p className="mt-1 text-xs text-zinc-400">
+              Type the phrase your titles share, as it appears in them. Every piece whose title
+              carries it is linked as one body of work.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <input
+                value={seriesName}
+                onChange={(event) => setSeriesName(event.target.value)}
+                placeholder="2026 Agents Case Study Series"
+                aria-label="Series name"
+                className="flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+              />
+              <button
+                type="submit"
+                disabled={busy || !seriesName.trim()}
+                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
+                Confirm series
+              </button>
+            </div>
+          </form>
 
           <section className="border border-zinc-800 rounded-lg bg-zinc-950/70 p-4">
         <div className="flex items-center justify-between mb-3">
