@@ -236,6 +236,11 @@ Python flows stay as they are until one is deliberately ported.
     result and falls back to Python.
 
   `apps/rippletrace/services/archive_nodus.py` is the fullest example.
+
+  **The `.nd` files ship as package data** (`[tool.setuptools.package-data]` in `pyproject.toml`). A
+  scheduled job's callback imports the *installed* `apps`, not `/app/apps`; until 2026-11-02 that copy
+  had no `nodus/` folders, so every scheduled run fell back with "is not registered".
+  `test_nodus_files_are_packaged.py` builds the wheel and checks them.
 - **A fallback must call `record_nodus_fallback(db, workflow=…, user_id=…, reason=…)`** (`apps/_shared/nodus.py`),
   after any rollback. It writes a durable `nodus.fallback` event, and `owner_notices.py` emails the owner
   when one workflow falls back 3 times in a day. Before 2026-11-01 a fallback was one WARNING line, and

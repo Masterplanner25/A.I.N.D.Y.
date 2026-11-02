@@ -56,7 +56,11 @@ def ensure_domain_nodus_workflow(domain: str, name: str) -> None:
     from AINDY.runtime.nodus_workflow_registry import get_nodus_workflow
 
     if get_nodus_workflow(name) is None:
-        register_domain_nodus_workflows(str(Path(__file__).resolve().parents[1] / domain / "bootstrap.py"), domain)
+        bootstrap = Path(__file__).resolve().parents[1] / domain / "bootstrap.py"
+        register_domain_nodus_workflows(str(bootstrap), domain)
+        if get_nodus_workflow(name) is None:
+            # Say where it looked: "is not registered" alone hid a package without its .nd files.
+            raise LookupError(f"nodus workflow {name!r} not found: no {name}.nd in {bootstrap.parent / 'nodus'}")
 
 
 def record_nodus_fallback(db: Any, *, workflow: str, user_id: Any, reason: Any) -> None:
