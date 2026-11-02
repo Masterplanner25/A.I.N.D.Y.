@@ -74,6 +74,9 @@ export default function RippleTrace() {
   // "I found a citation" — one open form at a time, keyed by drop point id.
   const [citingFor, setCitingFor] = useState(null);
   const [citationUrl, setCitationUrl] = useState("");
+  // What happened to a share-drafts request, shown beside the piece: the page notice sits above
+  // the list, out of sight from the button (2026-11-02).
+  const [shareNote, setShareNote] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -227,13 +230,18 @@ export default function RippleTrace() {
     setBusy(true);
     setError("");
     setNotice("");
+    setShareNote(null);
     try {
       await queueShareDrafts(dropPointId);
-      setNotice("Queued — the share drafts will be in Drafts on the Work page within about ten minutes.");
+      const text = "Queued — the share drafts will be in Drafts on the Work page within about ten minutes.";
+      setNotice(text);
+      setShareNote({ id: dropPointId, text });
       await load();
     } catch (err) {
       const detail = err?.data?.detail;
-      setError(detail?.error === "no_text" ? detail.message : err.message || "Could not queue share drafts");
+      const text = detail?.error === "no_text" ? detail.message : err.message || "Could not queue share drafts";
+      setError(text);
+      setShareNote({ id: dropPointId, text, failed: true });
     } finally {
       setBusy(false);
     }
@@ -629,6 +637,14 @@ export default function RippleTrace() {
                     >
                       {point.share_drafts === "made" ? "Share drafts again" : "Make share drafts"}
                     </button>
+                  )}
+                  {shareNote?.id === point.id && (
+                    <span
+                      data-testid="share-note"
+                      className={`text-xs ${shareNote.failed ? "text-red-400" : "text-emerald-400"}`}
+                    >
+                      {shareNote.text}
+                    </span>
                   )}
                   <button
                     type="button"

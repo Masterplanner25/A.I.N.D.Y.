@@ -250,6 +250,19 @@ def test_an_older_piece_is_queued_on_request_and_a_copy_queues_the_original(db, 
     assert queue_piece(db, uuid.uuid4(), "dp-original")["reason"] == "not_found"
 
 
+def test_asking_again_queues_the_copy_that_has_the_drafts(db, owner):
+    """2026-11-02: "Share drafts again" on the Medium copy queued its same-time DEV twin, which had no
+    drafts and no memory, so nothing was written and the button looked dead."""
+    from apps.rippletrace.services.share_drafts import queue_piece
+
+    when = datetime(2026, 11, 1, 5, 10, 30)
+    medium = _drop(db, owner, "zz-proto", title="Prototyping with AI", platform="Medium", when=when, share="made")
+    _drop(db, owner, "aa-proto", title="Prototyping with AI", when=when, remembered=False)
+
+    assert queue_piece(db, owner, "dp-zz-proto") == {"queued": True, "drop_point_id": "dp-zz-proto"}
+    assert medium.share_drafts is None
+
+
 # ── the job: Nodus when something is due, then Python, then failed ─────────────────────
 
 
