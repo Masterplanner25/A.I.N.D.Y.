@@ -44,3 +44,9 @@ include-package-data = true
 where = ["."]
 include = ["apps*"]
 namespaces = true
+
+# The Nodus workflows. `include-package-data` alone ships nothing without a MANIFEST.in, so until
+# 2026-11-02 the image's installed `apps` had no `nodus/` folders: a scheduled job's callback
+# imports that copy, registered nothing and fell back to Python on every run.
+[tool.setuptools.package-data]
+"*" = ["*.nd"]
