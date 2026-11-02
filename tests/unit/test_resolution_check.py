@@ -318,7 +318,9 @@ def test_the_planner_is_told_what_resolves_and_what_it_is_confused_with(db_sessi
     assert lines[brand] == "AI search (check of 2026-10-12; rechecked automatically every Monday): resolved on 3 of 3 engines"
     assert lines[nodus].startswith("AI search (check of 2026-10-12; rechecked automatically every Monday): wrong on 3 of 3 engines, confused with "
                                    "Nodus Research; ")  # named by all three, so first
-    assert _line(db_session, "Nodus").endswith(f". {lines[nodus]}")
+    # work_context reads the real clock, so compare against the line on that clock: against NOW's line
+    # this failed once the 10-12 fixture turned three weeks old (2026-11-02).
+    assert _line(db_session, "Nodus").endswith(f". {rr.planner_lines(db_session, USER)[nodus]}")
     assert "AI search" not in _line(db_session, "aindy-runtime")  # not asked about: nothing said
 
 
