@@ -77,8 +77,9 @@ mirror stayed `pending`: `JOB-LOG-MIRROR-STALE-1`.
 `status`, `error_message`, `started_at`, `completed_at` and `attempt_count` from their `job_logs` row.
 0 drift after.
 
-**The async caps:** nothing in `job_logs` holds a slot now, so setting
-`AINDY_ASYNC_MAX_CONCURRENT_PER_USER`/`_GLOBAL` is safe. Whether to set them is the owner's call.
+**The async caps:** nothing in `job_logs` holds a slot now. **The owner set
+`AINDY_ASYNC_MAX_CONCURRENT_PER_USER=2` on 2026-11-02** (the boot warning's value, wired in
+`docker-compose.prod.yml`); the global cap stays unset.
 
 **For the runtime:** the four counts your handoff's ask 3 wanted are above (all 0), with the reason
 in FR-56's *Correction*. **One question, your call:** should `memory settle-embedding-logs` also take

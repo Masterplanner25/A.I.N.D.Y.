@@ -589,6 +589,7 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_ARM_PROJECT_ROOT` | arm |  |
 | `AINDY_ARM_REASONING_EFFORT` | arm |  |
 | `AINDY_ASYNC_HEAVY_EXECUTION` | (runtime) | `false` |
+| `AINDY_ASYNC_MAX_CONCURRENT_PER_USER` | (runtime) | `2` |
 | `AINDY_AUTHORITY_NEGOTIATION` | (runtime) | `""` |
 | `AINDY_BOOTSTRAP_RECONCILE` | (runtime) | `false` |
 | `AINDY_BOOT_MODE` | (runtime) | `app-profile` |

@@ -97,6 +97,12 @@ services:
       # Plain os.getenv upstream, so an empty value is safely false (unlike the TYPED
       # pydantic bools above — see AINDY_REQUIRE_VERIFIED_LOGIN).
       AINDY_ASYNC_HEAVY_EXECUTION: "${AINDY_ASYNC_HEAVY_EXECUTION:-false}"
+      # Async admission, per user (owner, 2026-11-02): at most 2 of one user's jobs active
+      # (`job_logs` pending/running/deferred); the third is refused with a 429. The runtime's
+      # boot warning recommends 2. Held at 0 until 2.29.1 (FR-56); `job_logs` held 0 active
+      # rows at its adoption. Count `job_logs` to check it, not our mirror `automation_logs`.
+      # The global cap (AINDY_ASYNC_MAX_CONCURRENT_GLOBAL) stays unset.
+      AINDY_ASYNC_MAX_CONCURRENT_PER_USER: "${AINDY_ASYNC_MAX_CONCURRENT_PER_USER:-2}"
       # Password recovery. /auth/password/forgot always returns 200 (never discloses
       # whether the address exists) but 503s when no email channel is configured — the
       # UI surfaces that one plainly, since it describes the deployment, not an account.
