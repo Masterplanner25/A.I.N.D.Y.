@@ -907,59 +907,6 @@ async def get_event_upstream(
     return result
 
 
-@router.get("/{trace_id}")
-@limiter.limit("60/minute")
-async def get_trace_graph(
-    request: Request,
-    trace_id: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    def handler(ctx):
-        from apps.rippletrace.services.rippletrace_service import count_trace_events
-
-        user_id = str(current_user["sub"])
-        events = count_trace_events(db, trace_id, user_id)
-
-        if events == 0:
-            return {
-                "trace_id": trace_id,
-                "nodes": [],
-                "edges": [],
-                "root_event": None,
-                "terminal_events": [],
-                "ripple_span": {
-                    "node_count": 0,
-                    "edge_count": 0,
-                    "depth": 0,
-                    "terminal_count": 0,
-                },
-                "insights": {
-                    "root_cause": None,
-                    "dominant_path": [],
-                    "failure_clusters": [],
-                    "summary": "No causal insight available for this trace.",
-                    "recommendations": [],
-                },
-            }
-
-        graph = build_trace_graph(db, trace_id)
-
-        return {
-            "trace_id": trace_id,
-            "nodes": graph["nodes"],
-            "edges": graph["edges"],
-            "root_event": detect_root_event(db, trace_id),
-            "terminal_events": detect_terminal_events(db, trace_id),
-            "ripple_span": calculate_ripple_span(db, trace_id),
-            "insights": generate_trace_insights(db, trace_id),
-        }
-
-    return await execute_with_pipeline(
-        request, "rippletrace_trace_graph", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
-    )
-
-
 # ── Containers ───────────────────────────────────────────────────────────────────
 #
 # A container is the project or series a piece belongs to — "2025 ChatGPT Case Study Series"
@@ -1155,4 +1102,59 @@ async def content_archive_step(
 
     return await execute_with_pipeline(
         request, "rippletrace.content.archive", materialized(handler), user_id=user_id, metadata={"db": db}
+    )
+
+
+# The catch-all comes last. Declared above the containers routes until 2026-11-02, it answered
+# `GET /containers` with an empty trace graph; FastAPI matches routes in declaration order.
+@router.get("/{trace_id}")
+@limiter.limit("60/minute")
+async def get_trace_graph(
+    request: Request,
+    trace_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    def handler(ctx):
+        from apps.rippletrace.services.rippletrace_service import count_trace_events
+
+        user_id = str(current_user["sub"])
+        events = count_trace_events(db, trace_id, user_id)
+
+        if events == 0:
+            return {
+                "trace_id": trace_id,
+                "nodes": [],
+                "edges": [],
+                "root_event": None,
+                "terminal_events": [],
+                "ripple_span": {
+                    "node_count": 0,
+                    "edge_count": 0,
+                    "depth": 0,
+                    "terminal_count": 0,
+                },
+                "insights": {
+                    "root_cause": None,
+                    "dominant_path": [],
+                    "failure_clusters": [],
+                    "summary": "No causal insight available for this trace.",
+                    "recommendations": [],
+                },
+            }
+
+        graph = build_trace_graph(db, trace_id)
+
+        return {
+            "trace_id": trace_id,
+            "nodes": graph["nodes"],
+            "edges": graph["edges"],
+            "root_event": detect_root_event(db, trace_id),
+            "terminal_events": detect_terminal_events(db, trace_id),
+            "ripple_span": calculate_ripple_span(db, trace_id),
+            "insights": generate_trace_insights(db, trace_id),
+        }
+
+    return await execute_with_pipeline(
+        request, "rippletrace_trace_graph", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
     )
