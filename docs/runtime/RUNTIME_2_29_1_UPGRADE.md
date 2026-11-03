@@ -89,3 +89,22 @@ failed work the sweep did. If not, we leave them as they are.
 
 Still owed here: after a day, check that no new `memory.generate_embedding` row has appeared in
 `job_logs`.
+
+## 5. The first scheduled Nodus run, 2026-11-02 07:00Z
+
+Not a 2.29.1 change, but proven on it. Until #529 the wheel shipped no `.nd` files, so a scheduled
+job's callback, which imports the installed `apps`, registered no workflow and every run fell back to
+Python ("nodus workflow '…' is not registered"). The api was recreated with #529 at 06:20:56Z.
+
+At the 07:00 Infinity recalc, `infinity_recalc_v1` ran for all 4 users through `nodus_execute`:
+
+| | |
+|---|---|
+| `flow_runs` (`nodus_execute`) | 4, all `success`, `nodus_status` `success`, one per user |
+| `system_events` | 4 `nodus.execute.started`, 4 `nodus.execute.completed`, 0 `nodus.fallback` |
+| Time | 18.2 s for the first run (cold worker), 1.5–1.8 s for the other three (warm) |
+| Written | 4 `user_scores` and 4 `score_history` rows at 07:00:25Z |
+
+The api log had no recalc line, because the callback runs in its own process. Check the database, not
+the log. The archive and share-drafts workflows have not run yet, because neither had work due; they
+start a run only when there is some.
