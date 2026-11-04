@@ -22,7 +22,7 @@ import imaplib
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import Message
 from email.utils import parsedate_to_datetime
 from typing import Any, Callable
@@ -123,7 +123,11 @@ class SentMailbox:
 
     def messages(self, code: str, since: datetime) -> list[dict]:
         client = self._open()
-        status, data = client.search(None, "SINCE", since.strftime("%d-%b-%Y"), "SUBJECT", f'"[{code}]"')
+        # IMAP SINCE compares dates in the server's timezone (Gmail: the account's, e.g. Pacific), with no
+        # time part. A gate at 06:08Z on 11-04 is 11-03 there, and SINCE 04-Nov missed the reply
+        # (2026-11-04, 2.30.0). Search from the day before; pick_reply checks the real time.
+        day = (since.astimezone(timezone.utc) - timedelta(days=1)).strftime("%d-%b-%Y")
+        status, data = client.search(None, "SINCE", day, "SUBJECT", f'"[{code}]"')
         if status != "OK":
             return []
         found = []
