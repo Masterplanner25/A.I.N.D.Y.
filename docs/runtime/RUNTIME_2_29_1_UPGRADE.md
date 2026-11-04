@@ -87,8 +87,10 @@ in FR-56's *Correction*. **One question, your call:** should `memory settle-embe
 hour of creation"*, `attempt_count` 0, and whose node is embedded? There are 2,387 here. They record as
 failed work the sweep did. If not, we leave them as they are.
 
-Still owed here: after a day, check that no new `memory.generate_embedding` row has appeared in
-`job_logs`.
+**The day-after check, done 2026-11-04 ~03:50Z:** no `memory.generate_embedding` row has been
+written to `job_logs` since the 04:24:08Z recreate, and none is open. All 128 memory nodes created
+since the 06:20:56Z recreate are embedded, and 0 are pending. **Identity counter, window 9** (from
+2026-11-02 06:20:56Z): no samples, so 0 refused.
 
 ## 5. The first scheduled Nodus run, 2026-11-02 07:00Z
 
