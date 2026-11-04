@@ -57,8 +57,12 @@ reason; the caps read `job_logs`, so they were never at risk (`RUNTIME_2_29_1_UP
 2.29.1 the embedding path writes no row, so nothing feeds the drift today. Any other job that strands
 `pending` would.
 
-**Fix, when it matters:** a step in an existing scheduled job that copies `job_logs` state onto mirror
-rows whose status differs, or ask the runtime for a hook on the stale cleanup. **Meanwhile, count
+**Fixed upstream in 2.29.2 (#882, DEC-105):** the stale cleanup now fires `job_log.written` for each
+row it fails, and `_handle_job_log_written` syncs it. This closes once 2.29.2 is live and a stale row
+is seen reaching the mirror (`RUNTIME_2_29_2_UPGRADE.md` §2).
+
+**Fix, if it had stayed ours:** a step in an existing scheduled job that copies `job_logs` state onto mirror
+rows whose status differs. **Meanwhile, count
 `job_logs` for anything about admission or job health; `automation_logs` is a view for the client.**
 
 ## RELEASE-NO-RUN-FROM-REQUEST-1: ✅ CLOSED 2026-11-01 — a handoff requested before its tag is pushed fails although the release succeeds (app-owned, was P2)
