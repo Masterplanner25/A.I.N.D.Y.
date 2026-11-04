@@ -48,13 +48,24 @@ Proven in the runtime's CI (`test_job_log_settle_postgres.py`). Nothing to do he
 - **Pin and floor together:** `constraints.txt` `==2.30.0` and `pyproject.toml`
   `aindy-runtime[mcp,security]>=2.30.0,<3.0`, plus the contract test and CLAUDE.md.
 
-## 5. Rebuild and settle
+## 5. Rebuild and settle: done 2026-11-04
 
-Owed after this PR merges. Before the recreate, read `aindy_payload_identity_mismatch_total`
-(window 10, open since 05:13:18Z). After it:
+1. **Identity counter, window 10** (2026-11-04 05:13:18Z → 06:44:19Z): no samples, so 0 refused.
+   0 agent runs executing before the recreate.
+2. **Rebuilt** (image `b055d77df722`) and **recreated at 06:44:49Z**, which opens window 11. Healthy,
+   0 restarts, `default-apps` with 16 plugins, an empty `AgentContinuation` log, 0 agent runs
+   executing, and all 4 `.nd` workflows in site-packages. #535's reply fix is in the installed
+   `release_reply.py`.
+3. **The handoff's check:**
 
-```bash
-docker exec <api> python -c "import AINDY, AINDY._version as v; print(v.__version__, list(AINDY.__path__))"
-# expect: 2.30.0 ['/usr/local/lib/python3.11/site-packages/AINDY']
-docker exec <api> aindy-runtime jobs settle-stale-units        # dry run; expect 2,387
-```
+   ```text
+   $ docker exec <api> python -c "import AINDY, AINDY._version as v; print(v.__version__, list(AINDY.__path__))"
+   2.30.0 ['/usr/local/lib/python3.11/site-packages/AINDY']
+   ```
+
+4. **Asks 2 (both halves):**
+   - **The dry run** printed `dry-run: 2387 unit(s) would become failed. Re-run with --yes.`
+   - **`--yes`**, with the owner's OK, printed `ok: settled 2387 unit(s) as failed.`, written
+     06:47:50Z → 06:47:56Z.
+   - **The 2.29.2 handoff's query now reads 0.** No `job_log` unit is `pending` at all.
+   - **The 2,387 job rows are unchanged** and still `failed` with the stale message.
