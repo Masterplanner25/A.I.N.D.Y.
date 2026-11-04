@@ -84,7 +84,17 @@ def test_planner_generates_plan_over_registered_tools(client, runtime_local_plan
     assert plan.get("overall_risk") in {"low", "medium", "high"}
 
 
-def test_run_created_with_persisted_plan(client, runtime_local_planner):
+@pytest.fixture
+def _recall_own_session_off(monkeypatch):
+    """Runtime 2.30.0 turns AINDY_MEMORY_RECALL_OWN_SESSION on by default (DEC-106). On this suite's SQLite
+    `StaticPool` fixture every session shares one connection, so closing the recall's own read session
+    rolls that connection back and the run this test just created is gone ("Run not found"). The handoff
+    names this: it is the fixture, not the route; on Postgres each session has its own connection, and
+    the stack runs the flag on. Off here so the test checks what it is about, the persisted plan."""
+    monkeypatch.setenv("AINDY_MEMORY_RECALL_OWN_SESSION", "false")
+
+
+def test_run_created_with_persisted_plan(_recall_own_session_off, client, runtime_local_planner):
     """POST /apps/agent/run generates a plan and persists an agent run.
 
     Without auto-execute trust the run lands in pending_approval — proving the

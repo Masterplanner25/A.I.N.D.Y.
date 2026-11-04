@@ -24,8 +24,13 @@ No change here: `.env` sets `AINDY_MEMORY_RECALL_OWN_SESSION=true`, and compose 
 (`"${AINDY_MEMORY_RECALL_OWN_SESSION:-}"`, where a blank value now also means on). We keep the line.
 
 **The `StaticPool` note:** our `tests/fixtures/db.py` builds the SQLite `db_session` on one
-`StaticPool` connection, which is the shape the handoff warns about. The CI suite on this PR is the
-check. If rows vanish after a recall in a test, this is the first thing to look at.
+`StaticPool` connection, which is the shape the handoff warns about, and **it reached one test.**
+`test_agent_planner_runtime_local.py::test_run_created_with_persisted_plan` creates an agent run, and
+the follow-up `GET /apps/agent/runs/{id}` answered *Run not found*. Locally it fails with the flag on
+and passes with it off. The rest of the suite passed. The test now turns the flag off through a
+fixture, with the reason in its docstring. The api runs on Postgres, where each session has its own
+connection, so it keeps the flag on. If rows vanish after a recall in another test, this is the first
+thing to look at.
 
 ## 2. Closing the stranded units (#886, DEC-107)
 
