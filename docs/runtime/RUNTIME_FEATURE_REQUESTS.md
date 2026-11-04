@@ -76,8 +76,9 @@ So:
   0 `job_logs` rows written since the recreate (2026-11-02 04:24Z), 0 nodes pending.
 - **The settle dry run found nothing** (examined 0, settled 0, node pending 0, node gone 0), because no
   row was `pending` in `job_logs`. `--yes` was not run.
-- The 2,387 rows read `failed` in `job_logs` for work the sweep did. **Ask (open):** should the settle
-  command take those too? The question is in full in `RUNTIME_2_29_1_UPGRADE.md` §4.
+- The 2,387 rows read `failed` in `job_logs` for work the sweep did. **Ask:** should the settle
+  command take those too? (`RUNTIME_2_29_1_UPGRADE.md` §4.) **Answered in 2.29.2: no.** "Never
+  started" is true of them and they hold no slot, so they stay as they are (`RUNTIME_2_29_2_UPGRADE.md` §2).
 - The mirror's drift is ours: `JOB-LOG-MIRROR-STALE-1` in `TECH_DEBT.md`. The 2,387 mirror rows were
   copied from `job_logs` on 2026-11-02 (owner's OK).
 
