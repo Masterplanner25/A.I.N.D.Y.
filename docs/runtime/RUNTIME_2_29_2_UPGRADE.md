@@ -55,13 +55,22 @@ leave them as they are.
    but none had an open `job_logs` row to close, so the Postgres JSON filter ran with nothing to match.
    It has not been tested here on a real row.
 
-## 4. Rebuild
+## 4. Rebuild: done 2026-11-04
 
-Owed after this PR merges. Note the build cache was pruned on 2026-11-04, so this build re-downloads
-everything. Before the recreate, read `aindy_payload_identity_mismatch_total` (window 9). After it,
-run the handoff's check:
+1. **Identity counter, window 9** (2026-11-02 06:20:56Z → 11-04 05:12:52Z): no samples, so 0 refused.
+   0 agent runs executing before the recreate.
+2. **Rebuilt** (image `f4e575daafe2`; the build cache had been pruned, so the dependency tree was
+   downloaded again) and **recreated at 05:13:18Z**, which opens window 10. Healthy, 0 restarts.
+3. **The handoff's check:**
 
-```bash
-docker exec <api> python -c "import AINDY, AINDY._version as v, pydantic; print(v.__version__, list(AINDY.__path__), pydantic.VERSION)"
-# expect: 2.29.2 ['/usr/local/lib/python3.11/site-packages/AINDY'] 2.14.2
-```
+   ```text
+   $ docker exec <api> python -c "import AINDY, AINDY._version as v, pydantic; print(v.__version__, list(AINDY.__path__), pydantic.VERSION)"
+   2.29.2 ['/usr/local/lib/python3.11/site-packages/AINDY'] 2.14.2
+   ```
+
+4. **Boot:** `boot_profile` `default-apps`, `app_plugins_loaded` true, 16 plugins. The
+   `AgentContinuation` log is empty and 0 agent runs are executing. All 4 `.nd` workflows are in
+   site-packages.
+
+Still owed here: confirm `JOB-LOG-MIRROR-STALE-1` live the first time a stale row reaches
+`automation_logs` (§2).
