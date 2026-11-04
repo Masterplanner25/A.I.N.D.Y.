@@ -228,3 +228,31 @@ def test_the_code_is_stable_per_handoff_and_differs_between_them():
 def test_utc_dates_compare(reply_enabled):
     sent = datetime(2026, 10, 10, 4, 59, tzinfo=timezone.utc)
     assert rr.parse(mail("x", "APPROVE", sent))["sent"] == sent
+
+
+def test_the_search_finds_a_reply_sent_late_on_a_pacific_evening():
+    """2026-11-04: the 2.30.0 gate went out at 06:08Z, 22:08 on 11-03 in the account's Pacific time.
+    Gmail's IMAP SINCE compares the mailbox's local date, so `SINCE 04-Nov-2026` (the UTC date) did not
+    match the owner's APPROVE reply at 23:09 -0700, and the gate sat waiting."""
+    from datetime import timedelta
+
+    pacific = timezone(timedelta(hours=-8))
+    code = "GWMTEG74"
+    gate = mail(f"[{code}] aindy-runtime 2.30.0 is waiting for your approval", "…",
+                datetime(2026, 11, 3, 22, 8, 29, tzinfo=pacific), "<gate@x>")
+    reply = mail(f"Re: [{code}] aindy-runtime 2.30.0 is waiting for your approval", "APPROVE",
+                 datetime(2026, 11, 3, 23, 9, tzinfo=timezone(timedelta(hours=-7))), "<r@x>")
+
+    class PacificImap(FakeImap):
+        def search(self, charset, *criteria):
+            day = datetime.strptime(criteria[criteria.index("SINCE") + 1], "%d-%b-%Y").date()
+            status, data = super().search(charset, *criteria)
+            folder = self.folders[self.selected]
+            keep = [n for n in data[0].split() if rr.parse(folder[int(n) - 1])["sent"].astimezone(pacific).date() >= day]
+            return status, [b" ".join(keep)]
+
+    imap = PacificImap({"[Gmail]/Sent Mail": [gate, reply], "INBOX": []})
+    gate_sent = datetime(2026, 11, 4, 6, 8, 29, tzinfo=timezone.utc)
+    found = rr.SentMailbox(connect=lambda host: imap).messages(code, gate_sent)
+    picked = rr.pick_reply(found, code=code, gate_subject=rr.parse(gate)["subject"], gate_sent=gate_sent)
+    assert picked is not None and picked["word"] == "APPROVE"
