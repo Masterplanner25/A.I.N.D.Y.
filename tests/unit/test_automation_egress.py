@@ -17,7 +17,7 @@ import pytest
 
 import AINDY.platform_layer.external_call_service as ecs
 import apps.automation.services.automation_execution_service as aes
-from apps.automation.services import egress
+from apps._shared import egress
 
 pytestmark = pytest.mark.app_profile
 
@@ -55,13 +55,21 @@ def run_operations(monkeypatch):
         "fd00::1",
         "::ffff:127.0.0.1",  # IPv4-mapped loopback
         "224.0.0.1",
+        "64:ff9b::a00:1",  # NAT64 (well-known prefix) for 10.0.0.1
+        "64:ff9b::7f00:1",  # NAT64 for 127.0.0.1
+        "64:ff9b:1::a00:1",  # NAT64 local-use prefix
+        "2002:a00:1::1",  # 6to4 for 10.0.0.1
+        "2002:a9fe:a9fe::1",  # 6to4 for 169.254.169.254
     ],
 )
 def test_non_public_addresses_are_refused(address):
     assert egress.is_public_address(address) is False
 
 
-@pytest.mark.parametrize("address", ["93.184.215.14", "8.8.8.8", "2606:4700:4700::1111"])
+@pytest.mark.parametrize(
+    "address",
+    ["93.184.215.14", "8.8.8.8", "2606:4700:4700::1111", "64:ff9b::808:808", "2002:808:808::1"],
+)
 def test_public_addresses_are_allowed(address):
     assert egress.is_public_address(address) is True
 
@@ -147,6 +155,86 @@ def test_smtp_to_a_private_host_is_refused(monkeypatch):
     _fake_dns(monkeypatch, {"mailpit": "172.18.0.9"})
     with pytest.raises(egress.BlockedDestination, match="not_public:mailpit"):
         egress.PublicSMTP("mailpit", 1025, timeout=1)
+
+
+# ── requests (RippleTrace's content fetcher) ──────────────────────────────────────────
+
+
+class _Ok(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802 - stdlib name
+        body = b"<html><title>ok</title></html>"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_a):
+        pass
+
+
+def test_the_requests_session_refuses_a_private_name(monkeypatch):
+    import requests
+
+    _fake_dns(monkeypatch, {"mailpit": "172.18.0.9"})
+    with egress.public_requests_session() as session, pytest.raises(requests.ConnectionError) as excinfo:
+        session.get("http://mailpit:8025/api/v1/messages", timeout=2)
+    assert "not_public:mailpit" in str(excinfo.value)
+
+
+def test_the_requests_session_still_fetches_a_public_page(monkeypatch):
+    """A real request end to end through the guarded pool (the test server stands in for public)."""
+    server = http.server.HTTPServer(("127.0.0.1", 0), _Ok)
+    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread.start()
+    try:
+        _fake_dns(monkeypatch, {"public.test": "127.0.0.1"})
+        real_is_public = egress.is_public_address
+        monkeypatch.setattr(egress, "is_public_address", lambda a: a == "127.0.0.1" or real_is_public(a))
+        with egress.public_requests_session() as session:
+            response = session.get(f"http://public.test:{server.server_address[1]}/", timeout=5)
+        assert response.status_code == 200 and "ok" in response.text
+    finally:
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_the_requests_session_ignores_proxy_variables(monkeypatch):
+    monkeypatch.setenv("HTTP_PROXY", "http://10.0.0.1:3128")
+    monkeypatch.setenv("HTTPS_PROXY", "http://10.0.0.1:3128")
+    with egress.public_requests_session() as session:
+        assert session.trust_env is False
+
+
+def test_content_fetch_refuses_a_rebinding_hostname(monkeypatch):
+    """The early check sees a public address; the connect sees a private one. The connect wins."""
+    import socket
+
+    import AINDY.platform_layer.external_call_service as ecs
+    from apps.rippletrace.services import content_fetch
+
+    answers = iter(["93.184.215.14", "10.0.0.7", "10.0.0.7", "10.0.0.7"])
+    real = socket.getaddrinfo
+
+    def rebinding(host, port, *args, **kwargs):
+        if host == "rebind.test":
+            return real(next(answers), port, *args, **kwargs)
+        return real(host, port, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", rebinding)
+    monkeypatch.setattr(ecs, "perform_external_call", lambda *, operation, **_kw: operation())
+
+    with pytest.raises(content_fetch.ContentFetchError) as excinfo:
+        content_fetch.fetch_url("http://rebind.test/feed")
+    assert "not_public:rebind.test" in str(excinfo.value)
+
+
+def test_content_fetch_uses_the_guarded_session():
+    import inspect
+
+    from apps.rippletrace.services import content_fetch
+
+    assert "public_requests_session()" in inspect.getsource(content_fetch.fetch_url)
 
 
 # ── The connectors use the guard ──────────────────────────────────────────────────────
