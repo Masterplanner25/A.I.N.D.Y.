@@ -91,7 +91,7 @@ def test_materialize_leaves_non_rows_alone():
 
 def test_every_rippletrace_pipeline_handler_is_materialized():
     """The 44 RippleTrace routes hand raw service results to the pipeline; each must go through
-    `materialized(...)`. The legacy surface does it once, in `_run_legacy`."""
+    `materialized(...)`. (The legacy surface, which did it once in `_run_legacy`, was retired 2026-11-07.)"""
     root = pathlib.Path(__file__).resolve().parents[2] / "apps" / "rippletrace" / "routes"
     src = (root / "rippletrace_router.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
