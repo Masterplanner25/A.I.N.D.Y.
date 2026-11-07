@@ -45,11 +45,12 @@ def _register_models() -> None:
 def _register_routers() -> None:
     from AINDY.platform_layer.registry import register_router
     from apps.rippletrace.routes.rippletrace_router import router as rippletrace_router
-    from apps.rippletrace.routes.legacy_surface_router import router as legacy_surface_router
     from AINDY.routes.db_verify_router import router as db_verify_router
 
+    # The legacy surface (24 root-level routes behind the shared key) was retired 2026-11-07. It
+    # acted as no user, so it read and changed every user's RippleTrace data, and the client had
+    # already moved to /apps/rippletrace/*; a browser cannot hold the shared key anyway.
     register_router(rippletrace_router)
-    register_router(legacy_surface_router)
     register_router(db_verify_router, legacy_root=True)
 
 
@@ -57,7 +58,7 @@ def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
     from AINDY.platform_layer.response_adapters import raw_json_adapter
 
-    for prefix in ("rippletrace", "legacy_surface", "observability", "db", "flow"):
+    for prefix in ("rippletrace", "observability", "db", "flow"):
         register_response_adapter(prefix, raw_json_adapter)
 
 

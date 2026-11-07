@@ -124,7 +124,6 @@ Mutable domain features. All paths below are prefixed with `/apps`.
 - `apps/rippletrace/routes/rippletrace_router.py` (router prefix `/rippletrace`) **[JWT auth required]** ? `/apps/rippletrace/*`
 - `apps/network_bridge/routes/network_bridge_router.py` (router prefix `/network_bridge`) **[API key required]** ? `/apps/network_bridge/*`
 - `apps/analytics/routes/main_router.py` (router prefix `/compute`) **[JWT auth required]** ? `/apps/compute/calculate_twr`, `/apps/compute/calculate_engagement`, etc. (legacy KPI surface)
-- `apps/rippletrace/routes/legacy_surface_router.py` (no router prefix, env-gated) **[compatibility surface]** ? `/apps/*` (old ripple/strategy/playbook endpoints; enabled via `AINDY_ENABLE_LEGACY_SURFACE=true`)
 
 **Authentication model:**
 
@@ -360,68 +359,9 @@ Trace (`/platform/nodus/trace/*`):
 Root route registered directly in `AINDY/main.py`:
 - `GET /`
 
-Legacy compatibility routes are registered in `apps/rippletrace/routes/legacy_surface_router.py` and include:
-- `/dashboard`
-- `/top_drop_points`
-- `/analyze_ripple/{drop_point_id}`
-- `/ripple_deltas/{drop_point_id}`
-- `/emerging_drops`
-- `/predict/{drop_point_id}`
-- `/prediction_summary`
-- `/recommend/{drop_point_id}`
-- `/recommendations_summary`
-- `/influence_graph`
-- `/influence_chain/{drop_point_id}`
-- `/causal_graph`
-- `/causal_chain/{drop_point_id}`
-- `/narrative/{drop_point_id}`
-- `/narrative_summary`
-- `/strategies`
-- `/strategy/{strategy_id}`
-- `/strategy_match/{drop_point_id}`
-- `/build_playbook/{strategy_id}`
-- `/playbooks`
-- `/playbook/{playbook_id}`
-- `/playbook_match/{drop_point_id}`
-- `/learning_stats`
-- `/evaluate/{drop_point_id}`
-
 ## Legacy Compatibility Surface (Rippletrace)
 
-> **Deprecation status**: These routes are maintained for backward
-> compatibility. No new callers should be added. Migrate to the primary
-> `/apps/rippletrace/*` surface.
->
-> **Retired 2026-10-25:** `/generate_content/{playbook_id}`, `/generate_content_for_drop/{drop_point_id}`
-> and `/generate_variations/{playbook_id}`. They wrote posts from playbooks (0 existed) and never read the
-> piece; share drafts (`services/share_drafts.py`) replace them.
-
-| Method | Path | Primary equivalent | Status |
-|---|---|---|---|
-| GET | `/analyze_ripple/{drop_point_id}` | None | unique — no equivalent, do not remove |
-| GET | `/dashboard` | None | unique — no equivalent, do not remove |
-| GET | `/top_drop_points` | None | unique — no equivalent, do not remove |
-| GET | `/ripple_deltas/{drop_point_id}` | None | unique — no equivalent, do not remove |
-| GET | `/emerging_drops` | None | unique — no equivalent, do not remove |
-| GET | `/predict/{drop_point_id}` | `GET /rippletrace/predictions/{drop_point_id}` | deprecated |
-| GET | `/prediction_summary` | `GET /rippletrace/predictions/summary` | deprecated |
-| GET | `/recommend/{drop_point_id}` | `GET /rippletrace/recommendations/{drop_point_id}` | deprecated |
-| GET | `/recommendations_summary` | `GET /rippletrace/recommendations/summary` | deprecated |
-| GET | `/influence_graph` | None | unique — no equivalent, do not remove |
-| GET | `/influence_chain/{drop_point_id}` | None | unique — no equivalent, do not remove |
-| GET | `/causal_graph` | `GET /rippletrace/causal/graph` | deprecated |
-| GET | `/causal_chain/{drop_point_id}` | `GET /rippletrace/causal/chain/{drop_point_id}` | deprecated |
-| GET | `/narrative/{drop_point_id}` | `GET /rippletrace/narrative/{drop_point_id}` | deprecated |
-| GET | `/narrative_summary` | `GET /rippletrace/narrative/summary` | deprecated |
-| GET | `/strategies` | `GET /rippletrace/strategies` and `GET /rippletrace/strategies/build` | deprecated |
-| GET | `/strategy/{strategy_id}` | `GET /rippletrace/strategies/{strategy_id}` | deprecated |
-| GET | `/strategy_match/{drop_point_id}` | `GET /rippletrace/strategies/match/{drop_point_id}` | deprecated |
-| POST | `/build_playbook/{strategy_id}` | None | unique — no equivalent, do not remove |
-| GET | `/playbooks` | `GET /rippletrace/playbooks` | deprecated |
-| GET | `/playbook/{playbook_id}` | `GET /rippletrace/playbooks/{playbook_id}` | deprecated |
-| GET | `/playbook_match/{drop_point_id}` | `GET /rippletrace/playbooks/match/{drop_point_id}` | deprecated |
-| GET | `/learning_stats` | `GET /rippletrace/learning/stats` | deprecated |
-| POST | `/evaluate/{drop_point_id}` | `POST /rippletrace/learning/evaluate/{drop_point_id}` | deprecated |
+**Retired 2026-11-07:** the legacy compatibility surface (`legacy_surface_router.py`, 24 root-level routes behind the shared API key) is gone. It acted as no user, so it read and changed every user's RippleTrace data. Every caller had moved to `/apps/rippletrace/*`, and a browser cannot hold the shared key. `/analyze_ripple`, `/dashboard` and `/top_drop_points` had no user-facing equivalent; no client or signed-in user could reach them.
 
 ## 2. Per-Route Contract Definition (Current Implementation)
 
@@ -621,7 +561,8 @@ Errors: Not explicitly defined.
 `GET /network_bridge/authors`
 Method: GET
 Request Body: None
-Query Params: `platform` (optional), `limit` (optional, default 100)
+Query Params: `platform` (optional), `limit` (optional, default 100, at most 500)
+Scope: the gateway's own authors only, rows with no owner, never sign-in rows (`platform` `AINDY`). The shared key names no user, so it sees nothing a user owns (2026-11-07).
 Response: `{ "authors": [ { "id": str, "name": str, "platform": str, "notes": str|null, "joined_at": str|null, "last_seen": str|null } ], "count": int, "platform": str|null }`
 Status Codes: 200
 Errors: Not explicitly defined.

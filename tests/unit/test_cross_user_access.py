@@ -147,6 +147,132 @@ def test_a_ripple_event_cannot_land_on_another_users_drop_point(db_session):
         rippletrace_services.log_ripple_event(db_session, {"drop_point_id": drop.id}, user_id=str(uuid.uuid4()))
 
 
+def test_a_caller_cannot_choose_a_drop_point_or_ping_id(db_session):
+    """Ingest ids are sha256(user|url): a chosen id could take someone's future drop point first."""
+    from types import SimpleNamespace
+
+    from apps.rippletrace.services.content_ingest import drop_point_id_for
+
+    owner, victim = uuid.uuid4(), uuid.uuid4()
+    claimed = drop_point_id_for(str(victim), "https://victim.example/post")
+    dp = SimpleNamespace(
+        id=claimed, title="t", platform="p", url=None, date_dropped=None,
+        core_themes=["a"], tagged_entities=["b"], intent="published",
+    )
+    made = rippletrace_services.add_drop_point(db_session, dp, user_id=str(owner))
+    assert made.id != claimed and made.id.startswith("dp-manual-")
+    assert db_session.query(DropPointDB).filter(DropPointDB.id == claimed).first() is None
+
+    ping = SimpleNamespace(
+        id="ping-chosen", drop_point_id=made.id, ping_type="mention", source_platform="x", strength=1.0,
+        date_detected=None, connection_summary=None, external_url=None, reaction_notes=None,
+    )
+    stored = rippletrace_services.add_ping(db_session, ping, user_id=str(owner))
+    assert stored.id != "ping-chosen" and stored.id.startswith("ping-manual-")
+
+
+def _attempt(db, write, monkeypatch=None):
+    """Run a write that may collide on a primary key, rolling back only that write.
+
+    The session sits in the fixture's outer transaction, so a plain rollback would also erase
+    the rows this test set up. A savepoint holds the attempt; a commit inside it only flushes.
+    """
+    if monkeypatch is not None:
+        monkeypatch.setattr(db, "commit", db.flush)
+    try:
+        with db.begin_nested():
+            write()
+            db.flush()
+    except Exception:
+        pass  # the id is taken: the write fails, which is the safe outcome
+    if monkeypatch is not None:
+        monkeypatch.undo()
+
+
+def test_ingest_never_updates_a_drop_point_another_user_holds(db_session):
+    """A row with the caller's deterministic id that someone else owns is left untouched."""
+    from apps.rippletrace.services.content_ingest import drop_point_id_for, upsert_drop_point
+
+    victim, squatter = uuid.uuid4(), uuid.uuid4()
+    url = "https://victim.example/post"
+    _drop(db_session, squatter, ident=drop_point_id_for(str(victim), url))
+
+    _attempt(db_session, lambda: upsert_drop_point(db_session, user_id=str(victim), url=url, title="Victim's piece"))
+    row = db_session.query(DropPointDB).filter(DropPointDB.id == drop_point_id_for(str(victim), url)).one()
+    assert row.user_id == squatter and row.title == "A piece"
+
+
+def test_a_citation_never_lands_on_another_drop_points_ping(db_session, monkeypatch):
+    from apps.rippletrace.services import citation_record
+    from apps.rippletrace.services.ripple_detection import ping_id_for
+
+    victim, squatter = uuid.uuid4(), uuid.uuid4()
+    victims_drop, squatters_drop = _drop(db_session, victim), _drop(db_session, squatter)
+    url = "https://cites.example/page"
+    squatted = PingDB(
+        id=ping_id_for(victims_drop.id, url), drop_point_id=squatters_drop.id, ping_type="mention",
+        source_platform="x", user_id=squatter,
+    )
+    db_session.add(squatted)
+    db_session.commit()
+    monkeypatch.setattr(
+        citation_record, "_check", lambda *a, **k: (citation_record.VERIFIED, "seen", "Page")
+    )
+
+    _attempt(
+        db_session,
+        lambda: citation_record.record_citation(db_session, drop_point=victims_drop, url=url, user_id=str(victim)),
+        monkeypatch=monkeypatch,
+    )
+    db_session.refresh(squatted)
+    assert squatted.drop_point_id == squatters_drop.id
+    assert squatted.verification != citation_record.VERIFIED
+
+
+def test_the_legacy_shared_key_surface_is_gone(app, client):
+    from AINDY.config import settings
+
+    headers = {"X-API-Key": settings.AINDY_API_KEY or "test"}
+    for path in ("/apps/influence_graph", "/apps/dashboard", "/apps/narrative/x", "/apps/learning_stats"):
+        assert client.get(path, headers=headers).status_code == 404, path
+
+
+# ── Network bridge ──────────────────────────────────────────────────────────────────────────
+
+
+def test_the_shared_key_lists_only_the_gateways_authors(db_session):
+    from apps.authorship.models import AuthorDB
+    from apps.network_bridge.services import network_bridge_services as bridge
+
+    db_session.add_all([
+        AuthorDB(id=f"a-{uuid.uuid4().hex}", name="person@example.com", platform=bridge.SIGN_IN_PLATFORM),
+        AuthorDB(id=f"a-{uuid.uuid4().hex}", name="owned", platform="Gateway", user_id=uuid.uuid4()),
+        AuthorDB(id=f"a-{uuid.uuid4().hex}", name="gateway-author", platform="Gateway"),
+    ])
+    db_session.commit()
+
+    names = {row["name"] for row in bridge.list_authors(db_session, limit=10_000)}
+    assert "gateway-author" in names
+    assert "person@example.com" not in names and "owned" not in names
+
+
+def test_a_sign_in_author_row_has_its_owner(db_session, monkeypatch):
+    from apps.network_bridge.services import network_bridge_services as bridge
+
+    seen = {}
+    monkeypatch.setattr(bridge, "register_author", lambda **kw: seen.update(kw) or {"id": "a"})
+    monkeypatch.setattr(bridge, "dispatch_syscall", lambda *a, **k: {})
+    user = str(uuid.uuid4())
+    try:
+        bridge.connect_external_author(
+            db_session, author_name="me@example.com", platform=bridge.SIGN_IN_PLATFORM,
+            connection_type="sign_in", notes=None, user_id=user,
+        )
+    except Exception:
+        pass  # later steps are not under test; the author row is written first
+    assert seen.get("user_id") == user
+
+
 # ── Freelance ───────────────────────────────────────────────────────────────────────────────
 
 

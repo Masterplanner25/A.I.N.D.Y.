@@ -123,7 +123,13 @@ def record_citation(
         raise NotACitation(note or "page does not reference the drop point")
 
     identifier = ping_id_for(drop_point.id, cleaned)
-    existing = db.query(PingDB).filter(PingDB.id == identifier).first()
+    # Deterministic id, so also match the drop point it belongs to: a ping with this id on
+    # anyone else's drop point is never treated as this citation.
+    existing = (
+        db.query(PingDB)
+        .filter(PingDB.id == identifier, PingDB.drop_point_id == drop_point.id)
+        .first()
+    )
     created = existing is None
     upgraded = False
 

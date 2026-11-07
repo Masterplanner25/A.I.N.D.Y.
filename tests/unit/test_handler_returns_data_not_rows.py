@@ -105,5 +105,5 @@ def test_every_rippletrace_pipeline_handler_is_materialized():
                 bare.append(call.args[1].value if len(call.args) > 1 and isinstance(call.args[1], ast.Constant) else call.lineno)
     assert not bare, f"rippletrace routes handing raw handler results to the pipeline: {bare}"
     assert wrapped >= 40, wrapped
-    legacy = (root / "legacy_surface_router.py").read_text(encoding="utf-8")
-    assert "handler=materialized(handler)" in legacy
+    # legacy_surface_router.py was retired 2026-11-07; it must not come back.
+    assert not (root / "legacy_surface_router.py").exists()

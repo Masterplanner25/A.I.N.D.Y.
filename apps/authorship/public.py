@@ -56,12 +56,21 @@ def list_authors(
     *,
     platform: str | None = None,
     limit: int = 100,
+    unowned_only: bool = False,
+    exclude_platforms: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     from apps.authorship.services.author_directory_service import (
         list_authors as _list_authors,
     )
 
-    return [_author_to_dict(row) for row in _list_authors(db, platform=platform, limit=limit)]
+    rows = _list_authors(
+        db,
+        platform=platform,
+        limit=limit,
+        unowned_only=unowned_only,
+        exclude_platforms=exclude_platforms,
+    )
+    return [_author_to_dict(row) for row in rows]
 
 
 __all__ = [
