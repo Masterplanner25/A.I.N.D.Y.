@@ -78,15 +78,42 @@ them as a non-admin**, and `client/src` does not call them.
   container having no `git` binary (`FileNotFoundError: 'git'`), not the runtime. CI has it.
 - **No test failed with `TENANT_VIOLATION` or an unexpected 403.** Output from passing tests is not captured, so
   this says what failed, not what was logged.
-- **Integration tests** run in CI, not here.
+- **CI on #539 was green.** It runs `tests -m app_profile`, which includes the `git` test above. **Nodus VM
+  Integration** runs after merge, against a live stack, and passed on `main` at 08:09Z. Anything under
+  `tests/integration` not marked `app_profile`, and not in that workflow, was not run.
 
-## 7. Rebuild: owed
+## 7. Rebuild: done 2026-11-07
 
-1. **Read identity window 12 right before the recreate.** On 2026-11-07 at 07:50Z (window open since 11-04
-   07:13:27Z) it had no samples, so 0 refused, over 85 syscall outcomes on `/metrics`. 0 agent runs executing.
-2. Rebuild, recreate, and run the handoff's in-container check.
-3. After every restart: `AgentContinuation` log, stranded `executing` runs must be 0.
-4. Ask 2 of 2.31.1: `nodus_memory_search` with a query and `nodus_memory_tree` with `/memory/<user id>/**`.
-5. **Tell the runtime we are on 2.31.3**, by recording it here. Its advisory waits for this.
-6. After a day of normal traffic: `aindy_payload_identity_mismatch_total` by `syscall`, and any log line saying
-   `ignoring agent run state`, `belongs to another user` or `does not belong to this run`.
+**We are on 2.31.3, live since 08:14:02Z on 2026-11-07.** This is the line the runtime's advisory waits for.
+
+1. **Identity counter, window 12** (2026-11-04 07:13:27Z → 2026-11-07 08:13:40Z): no samples, so 0 refused,
+   over 85 syscall outcomes on `/metrics`. 0 agent runs executing before the recreate.
+2. **Rebuilt** (image `fefa37feac45`) and **recreated at 08:14:02Z**, which opens window 13. Healthy in about
+   a minute, 0 restarts, `default-apps` with 16 plugins, an empty `AgentContinuation` log, 0 agent runs
+   executing, and all 4 `.nd` workflows in site-packages. Runtime schema head `0020`, app head `rt1medium0001`.
+3. **The handoff's check:**
+
+   ```text
+   $ docker exec <api> python -c "import AINDY, AINDY._version as v; print(v.__version__, list(AINDY.__path__))"
+   2.31.3 ['/usr/local/lib/python3.11/site-packages/AINDY']
+   ```
+
+4. **Ask 2 of 2.31.1, a live MCP call on this build,** as the owner, from an `mcp` client inside the container:
+
+   | Tool | Arguments | Status | Nodes |
+   |---|---|---|---|
+   | `nodus_memory_search` | a query | `success` | 5 |
+   | `nodus_memory_tree` | `/memory/<user id>/**` | `success` | 26 |
+
+   The owner has 1,397 nodes and 26 of them have a path, so `tree` returns exactly the nodes with a path. That
+   is `MEM-PATH-NULL-1` as the handoff describes it. `nodus_work_context` also returned `success`, with 9 Works.
+5. **The launcher's allowlist, live:** the same client started the launcher with
+   `AINDY_MCP_SERVER_TOOLS=sys.v1.memory.delete` set. It listed its seven read tools and no delete.
+6. **No log line** says `TENANT_VIOLATION`, `ignoring agent run state`, `belongs to another user` or `does not
+   belong to this run`. That covers boot only, so it is not the day-of-traffic check below.
+
+**Still owed:**
+
+- **After a day of normal traffic (ask 3 of 2.31.2):** `aindy_payload_identity_mismatch_total` by `syscall`, and
+  those same log lines.
+- **#535:** a gate opened before midnight local time (§1).
