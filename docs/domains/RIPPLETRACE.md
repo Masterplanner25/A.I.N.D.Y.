@@ -28,7 +28,7 @@ Canonical domain routes:
 - `GET /rippletrace/recent`
 - `POST /rippletrace/event`
 
-**Retired 2026-11-07:** the legacy compatibility surface (`legacy_surface_router.py`, 24 root-level routes behind the shared API key) is gone. It acted as no user, so it read and changed every user's RippleTrace data. Every caller had moved to `/apps/rippletrace/*`, and a browser cannot hold the shared key. `/analyze_ripple`, `/dashboard` and `/top_drop_points` had no user-facing equivalent; no client or signed-in user could reach them.
+**Retired 2026-11-07:** the legacy compatibility surface (RippleTrace's legacy surface router, 24 root-level routes behind the shared API key) is gone. It acted as no user, so it read and changed every user's RippleTrace data. Every caller had moved to `/apps/rippletrace/*`, and a browser cannot hold the shared key. `/analyze_ripple`, `/dashboard` and `/top_drop_points` had no user-facing equivalent; no client or signed-in user could reach them.
 
 ## 4. Product Surface
 - GraphView reads the canonical, user-scoped routes: `/apps/rippletrace/influence/graph`, `/apps/rippletrace/causal/graph` and `/apps/rippletrace/narrative/{drop_point_id}`.

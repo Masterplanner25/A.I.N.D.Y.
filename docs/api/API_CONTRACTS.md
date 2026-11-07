@@ -361,7 +361,7 @@ Root route registered directly in `AINDY/main.py`:
 
 ## Legacy Compatibility Surface (Rippletrace)
 
-**Retired 2026-11-07:** the legacy compatibility surface (`legacy_surface_router.py`, 24 root-level routes behind the shared API key) is gone. It acted as no user, so it read and changed every user's RippleTrace data. Every caller had moved to `/apps/rippletrace/*`, and a browser cannot hold the shared key. `/analyze_ripple`, `/dashboard` and `/top_drop_points` had no user-facing equivalent; no client or signed-in user could reach them.
+**Retired 2026-11-07:** the legacy compatibility surface (RippleTrace's legacy surface router, 24 root-level routes behind the shared API key) is gone. It acted as no user, so it read and changed every user's RippleTrace data. Every caller had moved to `/apps/rippletrace/*`, and a browser cannot hold the shared key. `/analyze_ripple`, `/dashboard` and `/top_drop_points` had no user-facing equivalent; no client or signed-in user could reach them.
 
 ## 2. Per-Route Contract Definition (Current Implementation)
 
