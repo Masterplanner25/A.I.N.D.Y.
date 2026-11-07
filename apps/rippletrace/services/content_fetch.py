@@ -17,7 +17,6 @@ uses the stdlib ``html.parser`` rather than pulling in bs4/feedparser.
 
 from __future__ import annotations
 
-import ipaddress
 import logging
 import re
 import socket
@@ -30,6 +29,8 @@ from urllib.parse import urljoin, urlparse, urlunparse, parse_qsl, urlencode
 
 import requests
 from defusedxml import ElementTree as DefusedET
+
+from apps._shared.egress import is_public_address, public_requests_session
 
 logger = logging.getLogger(__name__)
 
@@ -172,11 +173,11 @@ def assert_public_url(url: str) -> str:
     means a hostname with a split A record cannot smuggle a request to the internal
     interface.
 
-    Residual risk, stated rather than hidden: this validates at resolution time and
-    ``requests`` resolves again when it connects, so a hostname whose DNS flips between
-    the two (rebinding) is not covered. Closing that needs connect-to-pinned-IP with a
-    Host override; the redirect loop in ``fetch_url`` re-validates every hop, which is
-    the vector that actually shows up in practice (an open redirect to 169.254.169.254).
+    This is the early, readable refusal. It is not what stops a rebinding hostname: it
+    validates at resolution time, and a name whose DNS answers differently on the connect
+    would get past it. ``fetch_url`` therefore connects through
+    ``apps._shared.egress.public_requests_session``, which checks the address it actually
+    connects to (2026-11-07). The redirect loop still re-validates every hop here as well.
     """
     candidate = (url or "").strip()
     parsed = urlparse(candidate)
@@ -198,12 +199,12 @@ def assert_public_url(url: str) -> str:
         if family not in (socket.AF_INET, socket.AF_INET6):
             continue
         try:
-            address = ipaddress.ip_address(sockaddr[0])
+            public = is_public_address(sockaddr[0])
         except ValueError:
             raise ContentFetchError(f"Could not interpret the address for {host}.") from None
-        if not address.is_global or address.is_multicast:
+        if not public:
             raise ContentFetchError(
-                f"{host} resolves to a non-public address ({address}); refusing to fetch it."
+                f"{host} resolves to a non-public address ({sockaddr[0]}); refusing to fetch it."
             )
     return candidate
 
@@ -326,8 +327,9 @@ def fetch_url(
 
     # One Session across the redirect chain: redirects are followed by hand (so each
     # hop is re-validated), and a shared session reuses the connection instead of
-    # standing up a new one per hop.
-    session = requests.Session()
+    # standing up a new one per hop. Every connection it opens is checked at connect time,
+    # on the address actually used, and environment proxies are ignored.
+    session = public_requests_session()
     try:
         for _hop in range(MAX_REDIRECTS + 1):
             target = current

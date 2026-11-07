@@ -9,8 +9,6 @@ from sqlalchemy.orm import Session
 from apps.rippletrace.services.engine_registry import call_with_engine_breaker
 
 NARRATIVE_SPIKE_THRESHOLD = 5.0
-EMERGING_VELOCITY_THRESHOLD = 0.75
-EMERGING_NARRATIVE_CEILING = 20.0
 
 
 def _normalize(value: Optional[float]) -> float:
@@ -132,9 +130,10 @@ def drop_point_ids_with_history(db: Session, user_id=None) -> List[str]:
     from apps.analytics.public import list_score_snapshot_drop_point_ids
     from apps.rippletrace.models import DropPointDB
 
-    ids = list_score_snapshot_drop_point_ids(db, min_count=2)
+    # No user, no drop points: this used to return everyone's for the retired shared-key surface.
     if user_id is None:
-        return ids
+        return []
+    ids = list_score_snapshot_drop_point_ids(db, min_count=2)
     owned = {
         row[0]
         for row in db.query(DropPointDB.id)
@@ -157,50 +156,5 @@ def _delta_stats_for_drop(
     return previous, latest, payload
 
 
-def find_momentum_leaders(db: Session) -> dict:
-    candidate_ids = drop_point_ids_with_history(db)
-    fastest_accelerator = None
-    biggest_spike = None
-    for drop_id in candidate_ids:
-        stats_data = _delta_stats_for_drop(drop_id, db)
-        if not stats_data:
-            continue
-        _, _, payload = stats_data
-        velocity_rate = payload["rates"]["velocity_rate"]
-        narrative_delta = payload["deltas"]["narrative"]
-
-        if (
-            not fastest_accelerator
-            or velocity_rate > fastest_accelerator["rates"]["velocity_rate"]
-        ):
-            fastest_accelerator = payload
-
-        if not biggest_spike or narrative_delta > biggest_spike["deltas"]["narrative"]:
-            biggest_spike = payload
-
-    return {
-        "fastest_accelerating": fastest_accelerator,
-        "biggest_spike": biggest_spike,
-    }
-
-
-def emerging_drops(
-    db: Session,
-    velocity_threshold: float = EMERGING_VELOCITY_THRESHOLD,
-    narrative_ceiling: float = EMERGING_NARRATIVE_CEILING,
-    limit: int = 5,
-) -> List[dict]:
-    emerging = []
-    candidate_ids = drop_point_ids_with_history(db)
-    for drop_id in candidate_ids:
-        stats_data = _delta_stats_for_drop(drop_id, db)
-        if not stats_data:
-            continue
-        _, _, payload = stats_data
-        velocity_rate = payload["rates"]["velocity_rate"]
-        narrative_score = payload["latest_scores"]["narrative_score"]
-        if velocity_rate > velocity_threshold and narrative_score <= narrative_ceiling:
-            emerging.append(payload)
-            if len(emerging) >= limit:
-                break
-    return emerging
+# find_momentum_leaders and emerging_drops were removed 2026-11-07: they read every user's drop
+# points, and their only caller, the shared-key legacy surface, was retired.

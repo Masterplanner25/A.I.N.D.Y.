@@ -125,6 +125,22 @@ def test_summaries_read_only_the_callers_history(db_session, monkeypatch):
     assert delta_engine.drop_point_ids_with_history(db_session, str(mine)) == [own.id]
 
 
+def test_a_lookup_with_no_user_finds_nothing(db_session, monkeypatch):
+    """Fail closed: a caller who forgets the user gets nothing, not every user's rows."""
+    from apps.social.services import social_performance_service
+
+    drop = _drop(db_session, uuid.uuid4())
+    import apps.analytics.public as analytics
+
+    monkeypatch.setattr(analytics, "list_score_snapshot_drop_point_ids", lambda db, min_count: [drop.id])
+
+    assert influence_graph.query_drops(db_session, None).all() == []
+    assert delta_engine.drop_point_ids_with_history(db_session) == []
+    assert influence_graph.build_influence_graph(db_session)["nodes"] == []
+    assert social_performance_service.summarize_social_performance(user_id=None)["reason"] == "user_required"
+    assert social_performance_service.get_social_performance_signals(user_id=None) == []
+
+
 def test_a_ping_needs_the_drop_points_owner(db_session):
     from types import SimpleNamespace
 

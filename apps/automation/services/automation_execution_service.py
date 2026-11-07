@@ -7,7 +7,7 @@ from typing import Any
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
-from apps.automation.services import egress as _egress
+from apps._shared import egress as _egress
 
 # Every endpoint below that comes from `automation_config` is the caller's choice, so it goes
 # through the egress module: http(s) only, public addresses only, checked at connect time.
