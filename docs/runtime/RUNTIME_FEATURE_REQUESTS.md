@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-11-01"
+last_verified: "2026-11-07"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -19,6 +19,11 @@ owner: "app-team"
 > **Numbering is the runtime's.** Its `CLAUDE.md` `APP-FR-*` ledger says *next available*; it also
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
+>
+> **Open as of 2026-11-07:** **FR-57 (P2: registration cannot be closed)**, **FR-58 (P3: `/db/verify` is not
+> operator-only)**, FR-55, FR-14 recurrence half, FR-6 items 2–3. The third runtime item from the app's 11-07 route
+> sweep, the watcher routes acting as any user under the shared key, was already answered by 2.31.4 (DEC-117,
+> per-user watcher keys), so it is not filed.
 >
 > **Open as of 2026-11-02:** FR-55, FR-14 recurrence half, FR-6 items 2–3.
 >
@@ -55,6 +60,47 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-57 — registration cannot be closed: `POST /auth/register` is always public, and nothing limits who may sign up 🔴 OPEN — filed 2026-11-07, P2
+
+**apps-monolith ref:** the app's 11-07 route sweep. Read on runtime 2.31.3 (installed) and on runtime `main` at
+`a71fe29` (2.31.4 + docs), where it is unchanged.
+
+**What we see.** `AINDY/routes/auth_router.py::register` is a public endpoint with a 10/minute rate limit and no
+setting that turns it off or limits it. `AINDY_REQUIRE_VERIFIED_LOGIN` (default off) makes a new account prove its
+address before it can log in. It does not stop anyone with a working inbox from getting an account.
+
+**Why it matters to us.** A.I.N.D.Y. is one person's system. Every account a stranger can open is a share of the
+owner's paid model and search keys (OpenAI, Perplexity, DeepSeek), whose limits are per account, and a caller on
+every route an app has not yet audited. The 11-07 sweep fixed what it found. But "only the owner can sign up" is a
+property we cannot state today, so the only control we have is network reach: the api is bound to `127.0.0.1` since
+11-07 (#544).
+
+**Ask.** A runtime setting that closes registration, in two steps:
+
+1. **`AINDY_REGISTRATION=closed`:** `/auth/register` refuses. Keep the uniform response the enumeration fix needs
+   (FR-6 Phase C): answer the same for every address and send nothing.
+2. **Optional, `invite`:** an operator mints a single-use invite token and register requires it.
+
+Existing accounts, login and password reset are unchanged. Default `open`, so no deployment changes behaviour on
+upgrade.
+
+**What we would do with it.** Set `closed` in compose, and keep the loopback bind until the remaining sweep items
+are done.
+
+## FR-58 — `GET /db/verify` returns the whole database schema to any holder of the shared service key; it is not operator-only 🔴 OPEN — filed 2026-11-07, P3
+
+**apps-monolith ref:** the app's 11-07 route sweep. `AINDY/routes/db_verify_router.py` on runtime 2.31.3 and on `main`
+at `a71fe29`: the router depends on `verify_api_key` alone. Our RippleTrace bootstrap mounts it at the legacy root.
+
+**What we see.** Every table, column, type and nullability comes back to a caller that holds `AINDY_API_KEY`. That
+is metadata, not rows, and 2.31.4's handoff already says the shared key is for services only. So this is low
+severity. It is still the one route we mount whose only purpose is operator diagnostics, and it has no operator
+check.
+
+**Ask.** Gate it with `require_admin_principal`, as DEC-114 did for the agent registry's routes. Or make mounting it
+opt-in, since we mount it only because RippleTrace's bootstrap always has. Either is fine. We will drop our mount if
+you prefer the second.
+
 ## FR-56 — `enqueue_embedding` passes `execute_inline_in_test_mode=False`, and in the queued path that flag returns before the job is submitted, so every embedding job's log row stays `pending` forever and counts as active against the admission caps ✅ SHIPPED in 2.29.1 (#871, DEC-104) — on the scheduler instance `enqueue_embedding` writes no row and the sweep embeds; the sweep closes a node's open row; `aindy-runtime memory settle-embedding-logs` settles any left `pending`. Filed 2026-11-01, shipped 2026-11-02; adopted in `RUNTIME_2_29_1_UPGRADE.md`. **Corrected 2026-11-02: the admission-cap risk below was wrong** (see *Correction*)
 
 **apps-monolith ref:** found by `AUDIT_2026-11-01` (#5). Read on runtime 2.29.0 in the api image and on
