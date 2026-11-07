@@ -2621,15 +2621,21 @@ Your handoffs, newest first — `?active=true` for the ones still being followed
 #### POST /apps/releases
 Hand off a release — `{repo, tag}` (`repo` defaults to `Masterplanner25/aindy-runtime`; `AINDY_RELEASE_REPOS` lists the allowed ones)
 
+**Access:** an operator only; anyone else gets 403.
+
 **Response 200:** the handoff (`stage: "requested"`), its release task created and started; 409 while the same tag is already handed off, or once it is released; 422 for a repository not allowed or a tag not like `v2.28.0`; 503 when `AINDY_GITHUB_TOKEN` is not set
 
 #### POST /apps/releases/{handoff_id}/approve
 Approve the gate as the owner: GitHub publishes to PyPI — `{comment?}`. Re-reads GitHub's pending deployments first and sends one review for `production` (comment `Approved from A.I.N.D.Y. (collaborator)`), never retried
 
+**Access:** an operator only; anyone else gets 403.
+
 **Response 200:** the handoff, with `decision` set and `stage` still `at_gate` until the next tick; 404 for a handoff that is not yours; 409 when it is not at the gate, was already decided from A.I.N.D.Y., or GitHub no longer has the gate pending; 502 when GitHub refuses or cannot be reached; 503 when `AINDY_GITHUB_APPROVE_TOKEN` is not set
 
 #### POST /apps/releases/{handoff_id}/reject
 Reject the gate as the owner — `{comment?}`. Same checks and refusals as approve; the next tick reads the rejection and the handoff ends `failed` (`reason: "rejected"`)
+
+**Access:** an operator only; anyone else gets 403.
 
 **Response 200:** the handoff, with `decision` set
 

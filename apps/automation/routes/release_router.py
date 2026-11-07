@@ -3,6 +3,9 @@
 A handoff is recorded here; the scheduled watcher (`release_handoff_watch`) follows the run from there,
 once a minute. Approve and reject (phase 3) answer the gate on GitHub as the owner. Refusals are
 `{error: "release_refused", message}`.
+
+Starting a handoff and deciding a gate need an operator. Both act on the owner's repositories with the
+stack's own GitHub tokens, so owning the handoff row is not enough: anyone could make that row.
 """
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
@@ -12,9 +15,9 @@ from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from AINDY.services.auth_service import get_current_user
+from AINDY.services.auth_service import get_current_user, require_admin_principal
 
-router = APIRouter(prefix="/releases", tags=["Releases"])
+router =APIRouter(prefix="/releases", tags=["Releases"])
 
 
 class HandoffBody(BaseModel):
@@ -61,7 +64,7 @@ async def list_releases_route(request: Request, active: bool = False, limit: int
 @router.post("")
 @limiter.limit("10/minute")
 async def hand_off_release_route(request: Request, body: HandoffBody, db: Session = Depends(get_db),
-                                 current_user: dict = Depends(get_current_user)):
+                                 current_user: dict = Depends(require_admin_principal)):
     """Hand a tagged release off: A.I.N.D.Y. finds its publish run and follows it to the end."""
     user_id = str(current_user["sub"])
 
@@ -92,7 +95,7 @@ async def _decide(request: Request, route_name: str, handoff_id: str, state: str
 @router.post("/{handoff_id}/approve")
 @limiter.limit("10/minute")
 async def approve_release_route(request: Request, handoff_id: str, body: DecisionBody | None = None,
-                                db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+                                db: Session = Depends(get_db), current_user: dict = Depends(require_admin_principal)):
     """Approve the gate as the owner (§7.3): publishes to PyPI. Needs `AINDY_GITHUB_APPROVE_TOKEN`."""
     return await _decide(request, "automation.release.approve", handoff_id, "approved", body or DecisionBody(),
                          db, current_user)
@@ -101,7 +104,7 @@ async def approve_release_route(request: Request, handoff_id: str, body: Decisio
 @router.post("/{handoff_id}/reject")
 @limiter.limit("10/minute")
 async def reject_release_route(request: Request, handoff_id: str, body: DecisionBody | None = None,
-                               db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+                               db: Session = Depends(get_db), current_user: dict = Depends(require_admin_principal)):
     """Reject the gate as the owner (§7.3); the next tick reads the rejection and stops the handoff."""
     return await _decide(request, "automation.release.reject", handoff_id, "rejected", body or DecisionBody(),
                          db, current_user)

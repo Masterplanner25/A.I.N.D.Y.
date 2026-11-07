@@ -147,6 +147,51 @@ def test_distinct_genesis_links_are_allowed():
         engine.dispose()
 
 
+def _owned_session(session, owner):
+    gs = _synthesis_ready_session(session, draft={"time_horizon_years": 5, "vision_statement": "the owner's"})
+    gs.user_id = owner
+    session.commit()
+    return gs
+
+
+def test_only_the_owner_can_lock_a_session():
+    """Another user reads as not found: no plan, the draft stays private, the owner can still lock."""
+    engine, session_factory = _build_session()
+    session = session_factory()
+    try:
+        owner, other = uuid.uuid4(), uuid.uuid4()
+        gs = _owned_session(session, owner)
+
+        with pytest.raises(Exception, match="not found"):
+            create_masterplan_from_genesis(gs.id, {}, session, user_id=str(other))
+
+        session.refresh(gs)
+        assert gs.status == "synthesized"
+        assert session.query(MasterPlan).count() == 0
+
+        plan = create_masterplan_from_genesis(gs.id, {}, session, user_id=str(owner))
+        assert plan.user_id == owner
+        assert plan.structure_json["vision_statement"] == "the owner's"
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_a_caller_with_no_user_cannot_lock_an_owned_session():
+    engine, session_factory = _build_session()
+    session = session_factory()
+    try:
+        gs = _owned_session(session, uuid.uuid4())
+
+        with pytest.raises(Exception, match="not found"):
+            create_masterplan_from_genesis(gs.id, {}, session, user_id=None)
+
+        assert session.query(MasterPlan).count() == 0
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_factory_rejects_session_not_synthesis_ready():
     """A session that has not been synthesized cannot be locked."""
     engine, session_factory = _build_session()
