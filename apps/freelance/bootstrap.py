@@ -65,7 +65,7 @@ def _register_router() -> None:
     if not settings.STRIPE_WEBHOOK_SECRET:
         logger.warning(
             "[freelance] STRIPE_WEBHOOK_SECRET is not set. "
-            "Stripe webhooks will reject all incoming events with 400. "
+            "Stripe webhooks will refuse all incoming events with 503. "
             "Set STRIPE_WEBHOOK_SECRET to enable payment automation."
         )
     register_router(freelance_router)

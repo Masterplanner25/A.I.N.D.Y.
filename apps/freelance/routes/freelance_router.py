@@ -822,7 +822,8 @@ async def stripe_webhook(
 ):
     """
     Receive Stripe webhook events. Public endpoint — no auth.
-    Verified via HMAC-SHA256 signature (Stripe-Signature header).
+    Verified via HMAC-SHA256 signature (Stripe-Signature header). With no secret configured nothing
+    can be verified, so every event is refused.
     """
     from AINDY.config import settings
     from apps.freelance.services.freelance_service import verify_stripe_signature
@@ -851,13 +852,14 @@ async def stripe_webhook(
         # rewritten as RouteExecutionViolation, so Stripe saw a 500 for a rejected
         # signature — which reads as "retry me" rather than "this delivery is invalid",
         # and 500s are exactly what Stripe retries.
-        if webhook_secret:
-            if not stripe_signature:
-                raise HTTPException(status_code=400, detail="stripe-signature header missing")
-            if not verify_stripe_signature(payload_bytes, stripe_signature, webhook_secret):
-                raise HTTPException(
-                    status_code=400, detail="stripe-signature verification failed"
-                )
+        if not webhook_secret:
+            raise HTTPException(status_code=503, detail="stripe webhooks are not configured")
+        if not stripe_signature:
+            raise HTTPException(status_code=400, detail="stripe-signature header missing")
+        if not verify_stripe_signature(payload_bytes, stripe_signature, webhook_secret):
+            raise HTTPException(
+                status_code=400, detail="stripe-signature verification failed"
+            )
 
         try:
             event = _json.loads(payload_bytes)

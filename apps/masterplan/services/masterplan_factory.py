@@ -14,9 +14,14 @@ logger = logging.getLogger(__name__)
 
 def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, user_id: str = None):
 
+    # Only the session's owner can lock it. Another user's session reads as not found, and a caller
+    # with no user reaches only a session with no owner.
+    owner_filter = (
+        GenesisSessionDB.user_id == UUID(str(user_id)) if user_id else GenesisSessionDB.user_id.is_(None)
+    )
     session = (
         db.query(GenesisSessionDB)
-        .filter(GenesisSessionDB.id == session_id)
+        .filter(GenesisSessionDB.id == session_id, owner_filter)
         .with_for_update()
         .first()
     )
