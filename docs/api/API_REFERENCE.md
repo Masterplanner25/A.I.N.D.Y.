@@ -398,10 +398,14 @@ Process Revenue Scaling
 #### GET /apps/coordination/agents
 Get Agents
 
+**Access:** operator only: an admin session or a `platform.admin` key. Anyone else gets 403 (runtime 2.31.3, DEC-114).
+
 **Response 200:** unspecified
 
 #### POST /apps/coordination/agents/register
 Register Agent
+
+**Access:** operator only: an admin session or a `platform.admin` key. Anyone else gets 403 (runtime 2.31.3, DEC-114).
 
 **Body:** agent_id: string (required), capabilities: array[string], current_state: map[unspecified], health_status: string, load: number
 
@@ -410,10 +414,14 @@ Register Agent
 #### GET /apps/coordination/agents/status
 Get Agents Status
 
+**Access:** operator only: an admin session or a `platform.admin` key. Anyone else gets 403 (runtime 2.31.3, DEC-114).
+
 **Response 200:** unspecified
 
 #### DELETE /apps/coordination/agents/{agent_id}
 Deregister Agent
+
+**Access:** operator only: an admin session or a `platform.admin` key. Anyone else gets 403 (runtime 2.31.3, DEC-114).
 
 **Parameters:** agent_id (path): string
 
@@ -421,6 +429,8 @@ Deregister Agent
 
 #### POST /apps/coordination/agents/{agent_id}/heartbeat
 Heartbeat Agent
+
+**Access:** operator only: an admin session or a `platform.admin` key. Anyone else gets 403 (runtime 2.31.3, DEC-114).
 
 **Parameters:** agent_id (path): string
 
@@ -444,6 +454,8 @@ Detect Run Conflict Route
 
 #### GET /apps/coordination/graph
 Get Coordination Graph
+
+**Access:** any signed-in user. A non-operator sees only the agents in their own events (runtime 2.31.3, DEC-114).
 
 **Response 200:** unspecified
 

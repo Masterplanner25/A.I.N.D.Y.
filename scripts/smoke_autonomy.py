@@ -7,6 +7,9 @@ Covers:
                → conflict detection → deregister
   automation — logs list, scheduler status (raw_json_adapter)
 
+Since runtime 2.31.3 (DEC-114) the coordination registry routes answer 403 unless the caller is an
+operator, so the coordination steps need an admin login. This script's own signup account is not one.
+
 Response shapes:
   legacy_envelope_adapter (autonomy + coordination):
     {"status": "SUCCESS", "data": <payload>, "result": <payload>, "events": [], "trace_id": "..."}
