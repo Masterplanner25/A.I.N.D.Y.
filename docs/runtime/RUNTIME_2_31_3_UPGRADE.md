@@ -112,8 +112,18 @@ them as a non-admin**, and `client/src` does not call them.
 6. **No log line** says `TENANT_VIOLATION`, `ignoring agent run state`, `belongs to another user` or `does not
    belong to this run`. That covers boot only, so it is not the day-of-traffic check below.
 
+## 8. Identity window 13, closed early
+
+**Window 13** (2026-11-07 08:14:02Z → 15:43:06Z): no samples, so 0 refused, over 1 syscall outcome on `/metrics`
+(`sys.v1.nodus.execute`). None of the log lines in §7 appeared, and 0 agent runs were executing. The stack came
+down at that reading to free room on the host for another release. About 7.5 hours and one syscall say very
+little, so **this is not the day-of-traffic read.**
+
+**Window 14** opened at 20:05:42Z the same day, on image `f894b90acb1b` (runtime 2.31.3, `main` through #542,
+app schema head `fl1metrics0001`).
+
 **Still owed:**
 
-- **After a day of normal traffic (ask 3 of 2.31.2):** `aindy_payload_identity_mismatch_total` by `syscall`, and
-  those same log lines.
+- **After a day of normal traffic, from about 2026-11-08 20:05Z (ask 3 of 2.31.2):**
+  `aindy_payload_identity_mismatch_total` by `syscall`, and those same log lines.
 - **#535:** a gate opened before midnight local time (§1).
