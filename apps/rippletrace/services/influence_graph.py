@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Dict, List, Set
 from uuid import UUID
 
+from sqlalchemy import false
 from sqlalchemy.orm import Session
 
 from apps.rippletrace.models import DropPointDB, PingDB
@@ -24,11 +25,16 @@ def _collect_platforms(pings: List[PingDB]) -> Dict[str, Set[str]]:
 
 
 def query_drops(db: Session, user_id=None):
-    """One user's drop points. Only the operator's API-key surface passes no user, and reads them all."""
+    """One user's drop points. With no user it matches nothing.
+
+    It used to read every user's when given no user, for the shared-key legacy surface. That
+    surface is retired (2026-11-07), so failing closed costs nothing and means a caller who
+    forgets the user gets an empty graph, not everyone's.
+    """
     query = db.query(DropPointDB)
-    if user_id is not None:
-        query = query.filter(DropPointDB.user_id == UUID(str(user_id)))
-    return query
+    if user_id is None:
+        return query.filter(false())
+    return query.filter(DropPointDB.user_id == UUID(str(user_id)))
 
 
 def build_influence_graph(db: Session, user_id=None) -> Dict[str, List[Dict]]:

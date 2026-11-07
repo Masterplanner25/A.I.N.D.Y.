@@ -28,6 +28,11 @@ def compute_conversion_signal(post: dict[str, Any]) -> float:
 
 
 def summarize_social_performance(*, user_id: str | None = None, limit: int = 50) -> dict[str, Any]:
+    # No user, no posts. Without this the query below had no filter and summarised every
+    # user's posts; the syscalls pass `payload.user_id or ctx.user_id or None`, so a call with
+    # neither would have read them all (2026-11-07).
+    if not user_id:
+        return {"status": "degraded", "data": [], "reason": "user_required"}
     try:
         mongo = get_mongo_client()
         # Local graceful-degradation path: social performance can return an
@@ -38,9 +43,7 @@ def summarize_social_performance(*, user_id: str | None = None, limit: int = 50)
             return {"status": "degraded", "data": [], "reason": "mongodb_unavailable"}
         social_db = mongo[MONGO_DB_NAME]
         posts = social_db["posts"]
-        query: dict[str, Any] = {}
-        if user_id:
-            query["user_id"] = str(user_id)
+        query: dict[str, Any] = {"user_id": str(user_id)}
 
         docs = list(posts.find(query).sort("created_at", -1).limit(limit))
     except ServerSelectionTimeoutError:
