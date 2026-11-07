@@ -337,11 +337,19 @@ def collect_feedback(db: Session, feedback_data: FeedbackCreate, user_id: str = 
     """
     Records client feedback and summarizes it for future optimization.
     """
-    order = db.query(FreelanceOrder).filter(FreelanceOrder.id == feedback_data.order_id).first()
+    # Only the order's owner can rate it: a rating changes the order's quality and income efficiency.
+    user_uuid = uuid.UUID(str(user_id)) if user_id else None
+    order = (
+        db.query(FreelanceOrder)
+        .filter(
+            FreelanceOrder.id == feedback_data.order_id,
+            FreelanceOrder.user_id == user_uuid if user_uuid else FreelanceOrder.user_id.is_(None),
+        )
+        .first()
+    )
     if not order:
         raise ValueError(f"Order {feedback_data.order_id} not found")
 
-    user_uuid = uuid.UUID(str(user_id)) if user_id else None
     feedback = ClientFeedback(
         order_id=feedback_data.order_id,
         rating=feedback_data.rating,
@@ -414,6 +422,7 @@ def update_revenue_metrics(db: Session, user_id: str = None):
     total = sum(total_revenue) if total_revenue else 0.0
 
     metric = RevenueMetrics(
+        user_id=uuid.UUID(str(user_id)) if user_id else None,
         total_revenue=total,
         avg_execution_time=_average(
             [order.time_to_completion_seconds for order in delivered_orders if order.time_to_completion_seconds is not None]
@@ -456,8 +465,13 @@ def get_all_feedback(db: Session, user_id: str = None):
     return q.order_by(ClientFeedback.created_at.desc()).all()
 
 
-def get_latest_metrics(db: Session):
-    return db.query(RevenueMetrics).order_by(RevenueMetrics.date.desc()).first()
+def get_latest_metrics(db: Session, user_id: str):
+    return (
+        db.query(RevenueMetrics)
+        .filter(RevenueMetrics.user_id == uuid.UUID(str(user_id)))
+        .order_by(RevenueMetrics.date.desc())
+        .first()
+    )
 
 
 def queue_delivery_generation(db: Session, order_id: int, user_id: str | None = None) -> dict:

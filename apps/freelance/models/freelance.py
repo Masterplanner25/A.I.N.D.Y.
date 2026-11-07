@@ -80,6 +80,7 @@ class RevenueMetrics(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     date = Column(DateTime, default=func.now())
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     total_revenue = Column(Float, nullable=False, default=0.0)
     avg_execution_time = Column(Float, nullable=True)
     income_efficiency = Column(Float, nullable=True)

@@ -52,6 +52,42 @@ TRUST_TIER_WEIGHTS = {
 }
 
 
+# There is no stored trust graph yet, so nobody can be shown to be in a post's circle. Until there is,
+# a post with one of these tiers, or marked private, is visible only to its author.
+RESTRICTED_TIERS = (TrustTier.INNER_CIRCLE, TrustTier.COLLAB)
+
+
+def _post_is_visible(post_doc: dict, viewer_id: str) -> bool:
+    if post_doc.get("user_id") == viewer_id:
+        return True
+    if post_doc.get("visibility") == "private":
+        return False
+    return post_doc.get("trust_tier_required") not in RESTRICTED_TIERS
+
+
+def _visible_posts_query(viewer_id: str) -> dict:
+    """`_post_is_visible` as a Mongo filter. `$nin` and `$ne` both match a post missing the field."""
+    return {
+        "$or": [
+            {"user_id": viewer_id},
+            {
+                "visibility": {"$ne": "private"},
+                "trust_tier_required": {"$nin": list(RESTRICTED_TIERS)},
+            },
+        ]
+    }
+
+
+def _refuse_hidden_post(db: Database, post_id: str, viewer_id: str) -> None:
+    """A post the viewer may not see reads as not found. A missing post is the caller's to report."""
+    post_doc = db["posts"].find_one({"id": post_id})
+    if post_doc and not _post_is_visible(post_doc, viewer_id):
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "post_not_found", "message": "Post not found"},
+        )
+
+
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -419,6 +455,7 @@ def create_post(
         post_data = post.dict()
         user_id = str(current_user["sub"])
         post_data["user_id"] = user_id
+        post_data["author_id"] = user_id  # the caller, never what the body claims
         # Bind the denormalized author_username to the canonical users.username
         # when the user has one, so feed labels match the account identity.
         canonical, is_canonical = resolve_canonical_username(sql_db, user_id)
@@ -490,7 +527,7 @@ def get_feed(
                 },
             )
         posts_collection = db["posts"]
-        query = {}
+        query = _visible_posts_query(str(current_user["sub"]))
         if trust_filter:
             query["trust_tier_required"] = trust_filter
 
@@ -607,7 +644,7 @@ def record_post_interaction(
             return _mongo_degraded_payload("mongodb_unavailable")
         except PyMongoError as exc:
             return _mongo_degraded_payload(str(exc))
-        if not post_doc:
+        if not post_doc or not _post_is_visible(post_doc, str(current_user["sub"])):
             raise HTTPException(
                 status_code=404,
                 detail={"error": "post_not_found", "message": "Post not found"},
@@ -677,6 +714,7 @@ def create_post_comment(
             return _mongo_degraded_payload("mongodb_unavailable")
         user_id = str(current_user["sub"])
         try:
+            _refuse_hidden_post(db, post_id, user_id)
             author_username = _resolve_comment_author(db, sql_db, user_id, body.author_username)
             comment = create_comment(
                 db,
@@ -754,6 +792,7 @@ def list_post_comments(
         if db is None:
             return _mongo_degraded_payload("mongodb_unavailable")
         try:
+            _refuse_hidden_post(db, post_id, str(current_user["sub"]))
             comments = list_comments(db, post_id=post_id, limit=limit)
         except ServerSelectionTimeoutError:
             return _mongo_degraded_payload("mongodb_unavailable")

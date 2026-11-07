@@ -3,9 +3,8 @@ from typing import Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
-from apps.rippletrace.models import DropPointDB
 from apps.rippletrace.services.delta_engine import compute_deltas
-from apps.rippletrace.services.influence_graph import build_influence_graph
+from apps.rippletrace.services.influence_graph import build_influence_graph, query_drops
 
 
 def _parse_date(value: Optional[str]) -> Optional[datetime]:
@@ -34,12 +33,12 @@ def _velocity_rate(drop_point_id: str, db: Session, cache: Dict[str, float]) -> 
     return rate
 
 
-def build_causal_graph(db: Session) -> Dict[str, List[Dict]]:
-    influence = build_influence_graph(db)
+def build_causal_graph(db: Session, user_id=None) -> Dict[str, List[Dict]]:
+    influence = build_influence_graph(db, user_id)
     causal_edges: List[Dict] = []
     nodes = influence["nodes"]
     node_lookup = {node["id"]: node for node in nodes}
-    drops = db.query(DropPointDB).all()
+    drops = query_drops(db, user_id).all()
     if not drops:
         return {"nodes": [], "causal_edges": []}
 
@@ -102,8 +101,8 @@ def build_causal_graph(db: Session) -> Dict[str, List[Dict]]:
     return {"nodes": nodes, "causal_edges": causal_edges}
 
 
-def get_causal_chain(drop_point_id: str, db: Session, depth: int = 3) -> Dict:
-    graph = build_causal_graph(db)
+def get_causal_chain(drop_point_id: str, db: Session, depth: int = 3, user_id=None) -> Dict:
+    graph = build_causal_graph(db, user_id)
     node_map = {node["id"]: node for node in graph["nodes"]}
     if drop_point_id not in node_map:
         return {"drop_point_id": drop_point_id, "upstream_causes": [], "downstream_effects": []}

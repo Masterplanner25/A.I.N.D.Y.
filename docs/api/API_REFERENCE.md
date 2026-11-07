@@ -2030,6 +2030,8 @@ Ingest a published URL. A feed (RSS/Atom) is registered as a recurring content s
 #### POST /apps/rippletrace/learning/adjust
 Adjust Learning Thresholds
 
+**Access:** an operator only; anyone else gets 403.
+
 **Response 200:** unspecified
 
 #### POST /apps/rippletrace/learning/evaluate/{drop_point_id}
@@ -2041,6 +2043,8 @@ Evaluate Learning Outcome
 
 #### GET /apps/rippletrace/learning/stats
 Get Learning Stats
+
+**Access:** an operator only; anyone else gets 403.
 
 **Response 200:** unspecified
 
@@ -2073,10 +2077,14 @@ All Pings
 #### GET /apps/rippletrace/playbooks
 List Playbooks View
 
+**Access:** an operator only; anyone else gets 403.
+
 **Response 200:** unspecified
 
 #### GET /apps/rippletrace/playbooks/match/{drop_point_id}
 Match Playbooks View
+
+**Access:** an operator only; anyone else gets 403.
 
 **Parameters:** drop_point_id (path): string
 
@@ -2084,6 +2092,8 @@ Match Playbooks View
 
 #### GET /apps/rippletrace/playbooks/{playbook_id}
 Get Playbook View
+
+**Access:** an operator only; anyone else gets 403.
 
 **Parameters:** playbook_id (path): string
 
@@ -2169,15 +2179,21 @@ Poll Content Source
 #### GET /apps/rippletrace/strategies
 List Strategies View
 
+**Access:** an operator only; anyone else gets 403.
+
 **Response 200:** unspecified
 
 #### GET /apps/rippletrace/strategies/build
 Build Strategies View
 
+**Access:** an operator only; anyone else gets 403.
+
 **Response 200:** unspecified
 
 #### GET /apps/rippletrace/strategies/match/{drop_point_id}
 Match Strategies View
+
+**Access:** an operator only; anyone else gets 403.
 
 **Parameters:** drop_point_id (path): string
 
@@ -2185,6 +2201,8 @@ Match Strategies View
 
 #### GET /apps/rippletrace/strategies/{strategy_id}
 Get Strategy View
+
+**Access:** an operator only; anyone else gets 403.
 
 **Parameters:** strategy_id (path): string
 

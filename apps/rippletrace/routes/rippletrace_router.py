@@ -18,7 +18,7 @@ from apps.rippletrace.services import ripple_detection
 from apps.rippletrace.services import rippletrace_services
 from apps.rippletrace.services.content_fetch import ContentFetchError
 from apps.rippletrace.services.mention_search import MentionSearchUnavailable
-from AINDY.services.auth_service import get_current_user
+from AINDY.services.auth_service import get_current_user, require_admin_principal
 from apps.rippletrace.services import causal_engine
 from apps.rippletrace.services import learning_engine
 from apps.rippletrace.services import narrative_engine
@@ -49,6 +49,30 @@ def uuid_or_none(value):
         return UUID(str(value))
     except (TypeError, ValueError):
         return None
+
+
+def _require_own_drop_point(db: Session, drop_point_id: str, current_user: dict) -> None:
+    """Another user's drop point reads as not found. Run this inside the handler, so the 404 survives."""
+    from apps.rippletrace.models import DropPointDB
+
+    owned = (
+        db.query(DropPointDB.id)
+        .filter(DropPointDB.id == drop_point_id, DropPointDB.user_id == uuid_or_none(current_user["sub"]))
+        .first()
+    )
+    if owned is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "drop_point_not_found", "message": "Drop point not found"},
+        )
+
+
+def _require_own_event(db: Session, event_id: UUID, current_user: dict) -> None:
+    if not rippletrace_service.user_owns_event(db, event_id, str(current_user["sub"])):
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "event_not_found", "message": "Event not found"},
+        )
 
 
 # === Schemas ===
@@ -525,7 +549,7 @@ async def get_causal_graph(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        return causal_engine.build_causal_graph(db)
+        return causal_engine.build_causal_graph(db, str(current_user["sub"]))
 
     result = await execute_with_pipeline(
         request, "rippletrace_causal_graph", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
@@ -547,7 +571,7 @@ async def get_influence_graph(
     from apps.rippletrace.services import influence_graph as influence_engine
 
     def handler(ctx):
-        return influence_engine.build_influence_graph(db)
+        return influence_engine.build_influence_graph(db, str(current_user["sub"]))
 
     result = await execute_with_pipeline(
         request, "rippletrace_influence_graph", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
@@ -565,7 +589,8 @@ async def get_causal_chain_view(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        return causal_engine.get_causal_chain(drop_point_id, db, depth=depth)
+        _require_own_drop_point(db, drop_point_id, current_user)
+        return causal_engine.get_causal_chain(drop_point_id, db, depth=depth, user_id=str(current_user["sub"]))
 
     result = await execute_with_pipeline(
         request, "rippletrace_causal_chain", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
@@ -582,7 +607,7 @@ async def get_narrative_summary(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        return narrative_engine.narrative_summary(db, limit=limit)
+        return narrative_engine.narrative_summary(db, limit=limit, user_id=str(current_user["sub"]))
 
     result = await execute_with_pipeline(
         request, "rippletrace_narrative_summary", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
@@ -599,6 +624,7 @@ async def get_narrative(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        _require_own_drop_point(db, drop_point_id, current_user)
         return narrative_engine.generate_narrative(drop_point_id, db)
 
     result = await execute_with_pipeline(
@@ -616,7 +642,7 @@ async def get_predictions_summary(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        return prediction_engine.prediction_summary(db, limit=limit)
+        return prediction_engine.prediction_summary(db, limit=limit, user_id=str(current_user["sub"]))
 
     result = await execute_with_pipeline(
         request, "rippletrace_predictions_summary", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
@@ -634,6 +660,7 @@ async def get_drop_point_prediction(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        _require_own_drop_point(db, drop_point_id, current_user)
         return prediction_engine.predict_drop_point(
             drop_point_id, db, record_learning=record_learning
         )
@@ -653,7 +680,7 @@ async def get_system_recommendations(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        return recommendation_engine.system_recommendations(db, limit=limit)
+        return recommendation_engine.system_recommendations(db, limit=limit, user_id=str(current_user["sub"]))
 
     result = await execute_with_pipeline(
         request, "rippletrace_recs_system", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
@@ -670,7 +697,7 @@ async def get_recommendations_summary(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        return recommendation_engine.recommendations_summary(db, limit=limit)
+        return recommendation_engine.recommendations_summary(db, limit=limit, user_id=str(current_user["sub"]))
 
     result = await execute_with_pipeline(
         request, "rippletrace_recs_summary", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
@@ -687,6 +714,7 @@ async def get_drop_point_recommendation(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        _require_own_drop_point(db, drop_point_id, current_user)
         return recommendation_engine.recommend_for_drop_point(drop_point_id, db)
 
     result = await execute_with_pipeline(
@@ -700,7 +728,7 @@ async def get_drop_point_recommendation(
 async def get_learning_stats(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(ctx):
         return learning_engine.learning_stats(db)
@@ -720,6 +748,7 @@ async def evaluate_learning_outcome(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        _require_own_drop_point(db, drop_point_id, current_user)
         return learning_engine.evaluate_outcome(drop_point_id, db)
 
     result = await execute_with_pipeline(
@@ -733,7 +762,7 @@ async def evaluate_learning_outcome(
 async def adjust_learning_thresholds(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(ctx):
         return learning_engine.adjust_thresholds(db)
@@ -749,7 +778,7 @@ async def adjust_learning_thresholds(
 async def list_playbooks_view(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(ctx):
         return playbook_engine.list_playbooks(db)
@@ -766,7 +795,7 @@ async def match_playbooks_view(
     request: Request,
     drop_point_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(ctx):
         return playbook_engine.match_playbooks(drop_point_id, db)
@@ -783,7 +812,7 @@ async def get_playbook_view(
     request: Request,
     playbook_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(ctx):
         result = playbook_engine.get_playbook(playbook_id, db)
@@ -802,7 +831,7 @@ async def get_playbook_view(
 async def list_strategies_view(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(ctx):
         return strategy_engine.list_strategies(db)
@@ -818,7 +847,7 @@ async def list_strategies_view(
 async def build_strategies_view(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(ctx):
         return strategy_engine.build_strategies(db)
@@ -835,7 +864,7 @@ async def match_strategies_view(
     request: Request,
     drop_point_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(ctx):
         return strategy_engine.match_strategies(drop_point_id, db)
@@ -852,7 +881,7 @@ async def get_strategy_view(
     request: Request,
     strategy_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(ctx):
         result = strategy_engine.get_strategy(strategy_id, db)
@@ -882,6 +911,7 @@ async def get_event_downstream(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        _require_own_event(db, event_id, current_user)
         return rippletrace_service.get_downstream_effects(db, event_id)
 
     result = await execute_with_pipeline(
@@ -899,6 +929,7 @@ async def get_event_upstream(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        _require_own_event(db, event_id, current_user)
         return rippletrace_service.get_upstream_causes(db, event_id)
 
     result = await execute_with_pipeline(

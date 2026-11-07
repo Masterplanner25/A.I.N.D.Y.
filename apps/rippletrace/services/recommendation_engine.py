@@ -147,8 +147,8 @@ def recommend_for_drop_point(
     )
 
 
-def recommendations_summary(db: Session, limit: int = 20) -> Dict[str, List[Dict]]:
-    candidates = drop_point_ids_with_history(db)[:limit]
+def recommendations_summary(db: Session, limit: int = 20, user_id=None) -> Dict[str, List[Dict]]:
+    candidates = drop_point_ids_with_history(db, user_id)[:limit]
     summary = {"high_priority_actions": [], "medium_priority_actions": [], "low_priority_actions": []}
     for drop_point_id in candidates:
         rec = recommend_for_drop_point(drop_point_id, db, log_prediction=False)
@@ -172,8 +172,8 @@ def recommendations_summary(db: Session, limit: int = 20) -> Dict[str, List[Dict
     return summary
 
 
-def system_recommendations(db: Session, limit: int = 20) -> List[Dict]:
+def system_recommendations(db: Session, limit: int = 20, user_id=None) -> List[Dict]:
     return [
         recommend_for_drop_point(dp_id, db, log_prediction=False)
-        for dp_id in drop_point_ids_with_history(db)[:limit]
+        for dp_id in drop_point_ids_with_history(db, user_id)[:limit]
     ]
