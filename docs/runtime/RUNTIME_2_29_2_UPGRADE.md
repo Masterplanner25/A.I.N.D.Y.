@@ -72,5 +72,5 @@ leave them as they are.
    `AgentContinuation` log is empty and 0 agent runs are executing. All 4 `.nd` workflows are in
    site-packages.
 
-Still owed here: confirm `JOB-LOG-MIRROR-STALE-1` live the first time a stale row reaches
-`automation_logs` (§2).
+`JOB-LOG-MIRROR-STALE-1` (§2) was closed on 2026-11-07 on a code read, by the owner's call. No stale
+row has reached `automation_logs` yet, so the path is not proven live (`TECH_DEBT.md`).

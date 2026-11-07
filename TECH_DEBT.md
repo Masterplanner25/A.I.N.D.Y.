@@ -41,7 +41,14 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
-## JOB-LOG-MIRROR-STALE-1: `automation_logs` keeps `pending` after the runtime marks the job `failed` (app-owned, P3)
+## JOB-LOG-MIRROR-STALE-1: ✅ CLOSED 2026-11-07 — `automation_logs` keeps `pending` after the runtime marks the job `failed` (app-owned, was P3)
+
+**Closed 2026-11-07 on a code read (owner's call), not on a live stale row.** No row has gone stale
+since 2.29.2 went live on 11-04, and waiting for one may take a long time. The installed runtime's
+`_cleanup_stale_logs` calls `_emit_job_log_written` for each row it fails, and
+`apps/automation/bootstrap.py` registers `_handle_job_log_written` for that event. On 11-07 `job_logs`
+and `automation_logs` showed 0 status drift and no missing rows, and no row was `pending` or `running`.
+**If a stale row is ever seen stuck `pending` in the mirror, reopen this.**
 
 **Found 2026-11-02** at the 2.29.1 adoption, after it sent FR-56 the wrong way. `automation_logs` is
 our mirror of the runtime's `job_logs`: `apps/automation/services/job_log_sync_service.py` copies a row
@@ -54,16 +61,17 @@ never sees it, so the mirror says `pending` forever.
 reason; the caps read `job_logs`, so they were never at risk (`RUNTIME_2_29_1_UPGRADE.md` §4).
 
 **Done:** the 2,387 rows were copied from `job_logs` on 2026-11-02 (owner's OK), 0 drift after. Since
-2.29.1 the embedding path writes no row, so nothing feeds the drift today. Any other job that strands
-`pending` would.
+2.29.1 the embedding path writes no row **on the instance holding the scheduler**, where the sweep owns
+embedding. A process with no scheduler, such as the Nodus worker, still submits the job, which writes
+a row and closes it itself: 15 on 2026-11-05, all `success` within about a second and all in the
+mirror. Such a row can strand only if its process dies mid-job.
 
 **Fixed upstream in 2.29.2 (#882, DEC-105):** the stale cleanup now fires `job_log.written` for each
-row it fails, and `_handle_job_log_written` syncs it. This closes once 2.29.2 is live and a stale row
-is seen reaching the mirror (`RUNTIME_2_29_2_UPGRADE.md` §2).
+row it fails, and `_handle_job_log_written` syncs it (`RUNTIME_2_29_2_UPGRADE.md` §2).
 
 **Fix, if it had stayed ours:** a step in an existing scheduled job that copies `job_logs` state onto mirror
-rows whose status differs. **Meanwhile, count
-`job_logs` for anything about admission or job health; `automation_logs` is a view for the client.**
+rows whose status differs. **Still count `job_logs` for anything about admission or job health;
+`automation_logs` is a view for the client.**
 
 ## RELEASE-NO-RUN-FROM-REQUEST-1: ✅ CLOSED 2026-11-01 — a handoff requested before its tag is pushed fails although the release succeeds (app-owned, was P2)
 
