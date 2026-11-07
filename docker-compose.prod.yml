@@ -279,8 +279,10 @@ services:
       NODUS_RUN_STATE_ROOT: /var/lib/aindy/nodus-state
     volumes:
       - nodus_state:/var/lib/aindy/nodus-state
+    # Loopback only (owner, 2026-11-07): signup is open and needs no verified email, so a port on
+    # 0.0.0.0 let anyone on the same network make an account. The host is used from this laptop alone.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/health"]
       interval: 15s
@@ -346,8 +348,10 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
     ports:
-      - "8025:8025"   # web inbox
-      - "1025:1025"   # SMTP (exposed so a non-compose `aindy-runtime serve` can reach it)
+      # Loopback only, like the api: the web inbox has no login, so on 0.0.0.0 anyone on the
+      # network could read every mail the stack sends, password resets included.
+      - "127.0.0.1:8025:8025"   # web inbox
+      - "127.0.0.1:1025:1025"   # SMTP (exposed so a non-compose `aindy-runtime serve` can reach it)
 
   # Social layer is Mongo-backed but degradable; enable if you need it and set MONGO_URL.
   # mongo:

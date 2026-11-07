@@ -122,8 +122,15 @@ little, so **this is not the day-of-traffic read.**
 **Window 14** opened at 20:05:42Z the same day, on image `f894b90acb1b` (runtime 2.31.3, `main` through #542,
 app schema head `fl1metrics0001`).
 
+## 9. Identity window 14, closed by the port change
+
+**Window 14** (2026-11-07 20:05:42Z → 21:52Z): no samples, so 0 refused, over 59 syscall outcomes on `/metrics`,
+all `success`. The api was recreated at 21:52:53Z to bind its port to `127.0.0.1` (the owner uses the stack from this laptop only), which opens **window
+15** on the same image. The old container's log was not searched for the §7 lines before it was replaced, and
+under 2 hours of traffic is still not a day, so **this is not the day-of-traffic read either.**
+
 **Still owed:**
 
-- **After a day of normal traffic, from about 2026-11-08 20:05Z (ask 3 of 2.31.2):**
+- **After a day of normal traffic, from about 2026-11-08 21:53Z (ask 3 of 2.31.2):**
   `aindy_payload_identity_mismatch_total` by `syscall`, and those same log lines.
 - **#535:** a gate opened before midnight local time (§1).
