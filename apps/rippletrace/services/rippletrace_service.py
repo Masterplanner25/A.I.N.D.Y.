@@ -99,33 +99,73 @@ def detect_failure_clusters(db, trace_id: str) -> list[dict[str, Any]]:
     return sorted(clustered.values(), key=lambda item: item["count"], reverse=True)
 
 
-def _extract_drop_point_ids_from_events(
-    events: list[dict[str, Any]],
-) -> list[str]:
+def _owned_drop_point_ids(db, events: list[dict[str, Any]], user_id: str | None = None) -> list[str]:
+    """The drop points named in ``events`` that belong to the user whose event named them.
+
+    An event's payload is written by whoever posted it (`POST /rippletrace/event` takes any
+    `drop_point_id`), so naming a drop point proves nothing. Without this, a user could post an
+    event naming someone else's drop point into their own trace, open the trace, and read that
+    drop point's prediction and recommendation. A drop point counts only if its owner is the
+    event's user, and also the caller when one is given. The runtime's execution-graph view
+    calls this with no caller, so the event's owner is what makes it safe there.
     """
-    Extract drop_point_id values from event payloads.
-    Returns unique, non-empty ids in order of appearance.
-    """
-    seen: set[str] = set()
-    result: list[str] = []
+    from apps.rippletrace.models import DropPointDB
+
+    named: list[tuple[str, uuid.UUID | None]] = []
     for event in events:
         payload = event.get("payload") or {}
         dp_id = payload.get("drop_point_id") or payload.get("drop_id")
-        if dp_id and isinstance(dp_id, str) and dp_id not in seen:
-            seen.add(dp_id)
-            result.append(dp_id)
-    return result
+        if not dp_id or not isinstance(dp_id, str):
+            continue
+        try:
+            event_id = uuid.UUID(str(event.get("id")))
+        except (TypeError, ValueError):
+            event_id = None
+        named.append((dp_id, event_id))
+    if not named:
+        return []
+
+    event_ids = [event_id for _dp, event_id in named if event_id is not None]
+    event_owner = (
+        dict(db.query(SystemEvent.id, SystemEvent.user_id).filter(SystemEvent.id.in_(event_ids)).all())
+        if event_ids
+        else {}
+    )
+    dp_owner = dict(
+        db.query(DropPointDB.id, DropPointDB.user_id)
+        .filter(DropPointDB.id.in_([dp for dp, _event in named]))
+        .all()
+    )
+    caller = None
+    if user_id is not None:
+        try:
+            caller = uuid.UUID(str(user_id))
+        except (TypeError, ValueError):
+            return []
+
+    owned: list[str] = []
+    for dp_id, event_id in named:
+        owner = dp_owner.get(dp_id)
+        if owner is None or dp_id in owned:
+            continue
+        if event_owner.get(event_id) != owner:
+            continue
+        if caller is not None and owner != caller:
+            continue
+        owned.append(dp_id)
+    return owned
 
 
-def generate_trace_insights(db, trace_id: str) -> dict[str, Any]:
+def generate_trace_insights(db, trace_id: str, user_id: str | None = None) -> dict[str, Any]:
     root_event = detect_root_event(db, trace_id)
     terminal_events = detect_terminal_events(db, trace_id)
     dominant_path = detect_dominant_path(db, trace_id)
     failure_clusters = detect_failure_clusters(db, trace_id)
     ripple_span = calculate_ripple_span(db, trace_id)
 
-    drop_point_ids = _extract_drop_point_ids_from_events(
-        terminal_events + ([root_event] if root_event else [])
+    # Only drop points owned by the event's user (and the caller, when given); see above.
+    drop_point_ids = _owned_drop_point_ids(
+        db, terminal_events + ([root_event] if root_event else []), user_id
     )
 
     predictions: list[dict[str, Any]] = []
