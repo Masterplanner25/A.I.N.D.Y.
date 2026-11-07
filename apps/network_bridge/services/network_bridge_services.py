@@ -41,7 +41,9 @@ def connect_external_author(
     """
     from datetime import datetime
 
-    author = register_author(db=db, name=author_name, platform=platform, notes=notes)
+    # The owner rides along: a sign-in's author row is named with the user's email, and without
+    # an owner it was one of a pile of ownerless rows the shared key could list.
+    author = register_author(db=db, name=author_name, platform=platform, notes=notes, user_id=user_id)
 
     ripple_event = {
         "ping_type": connection_type,
@@ -173,8 +175,23 @@ def _record_bridge_user_event(db: Session, name: str) -> None:
         logger.warning("[network_bridge] bridge user event write failed: %s", exc)
 
 
+MAX_AUTHORS = 500
+
+
 def list_authors(db: Session, platform: str | None = None, limit: int = 100):
+    """The gateway's own authors: what the shared key created, nothing a user owns.
+
+    This is read with the shared server key, which names no user. So it returns only rows
+    with no owner, and never sign-in rows, which are named with a user's email (those made
+    before sign-ins recorded their owner have none, so the platform is excluded as well).
+    """
     from apps.authorship.public import list_authors as list_authors_public
 
-    return list_authors_public(db, platform=platform, limit=limit)
+    return list_authors_public(
+        db,
+        platform=platform,
+        limit=max(1, min(int(limit), MAX_AUTHORS)),
+        unowned_only=True,
+        exclude_platforms=(SIGN_IN_PLATFORM,),
+    )
 

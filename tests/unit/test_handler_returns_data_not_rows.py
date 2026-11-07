@@ -91,7 +91,7 @@ def test_materialize_leaves_non_rows_alone():
 
 def test_every_rippletrace_pipeline_handler_is_materialized():
     """The 44 RippleTrace routes hand raw service results to the pipeline; each must go through
-    `materialized(...)`. The legacy surface does it once, in `_run_legacy`."""
+    `materialized(...)`. (The legacy surface, which did it once in `_run_legacy`, was retired 2026-11-07.)"""
     root = pathlib.Path(__file__).resolve().parents[2] / "apps" / "rippletrace" / "routes"
     src = (root / "rippletrace_router.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
@@ -105,5 +105,5 @@ def test_every_rippletrace_pipeline_handler_is_materialized():
                 bare.append(call.args[1].value if len(call.args) > 1 and isinstance(call.args[1], ast.Constant) else call.lineno)
     assert not bare, f"rippletrace routes handing raw handler results to the pipeline: {bare}"
     assert wrapped >= 40, wrapped
-    legacy = (root / "legacy_surface_router.py").read_text(encoding="utf-8")
-    assert "handler=materialized(handler)" in legacy
+    # legacy_surface_router.py was retired 2026-11-07; it must not come back.
+    assert not (root / "legacy_surface_router.py").exists()

@@ -76,8 +76,11 @@ def _require_own_event(db: Session, event_id: UUID, current_user: dict) -> None:
 
 
 # === Schemas ===
+# `id` is accepted for old clients and ignored: the server makes every id. Ingestion's ids are
+# deterministic (sha256 of user and URL; of drop point and URL for a ping), so a caller who could
+# choose an id could create someone else's future row first.
 class DropPoint(BaseModel):
-    id: str
+    id: Optional[str] = None
     title: str
     platform: str
     url: Optional[str] = None
@@ -88,7 +91,7 @@ class DropPoint(BaseModel):
 
 
 class Ping(BaseModel):
-    id: str
+    id: Optional[str] = None
     drop_point_id: str
     ping_type: str
     source_platform: str

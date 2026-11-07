@@ -368,11 +368,15 @@ def upsert_drop_point(
     dropped_at = naive_utc(published_at)
     display_title = (title or "").strip() or canonical
 
-    row = db.query(DropPointDB).filter(DropPointDB.id == identifier).first()
+    # The id is deterministic, so the lookup also asks for the owner: a row with this id that
+    # belongs to someone else is never updated as if it were the caller's.
+    owner = _as_uuid(user_id)
+    owned = DropPointDB.user_id == owner if owner is not None else DropPointDB.user_id.is_(None)
+    row = db.query(DropPointDB).filter(DropPointDB.id == identifier, owned).first()
     if row is None:
         legacy = legacy_drop_point_id_for(user_id, url)
         if legacy != identifier:
-            row = db.query(DropPointDB).filter(DropPointDB.id == legacy).first()
+            row = db.query(DropPointDB).filter(DropPointDB.id == legacy, owned).first()
     if row is not None:
         row.title = display_title
         row.platform = resolved_platform

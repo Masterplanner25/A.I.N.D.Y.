@@ -28,45 +28,10 @@ Canonical domain routes:
 - `GET /rippletrace/recent`
 - `POST /rippletrace/event`
 
-Compatibility routes:
-- `/dashboard`
-- `/top_drop_points`
-- `/analyze_ripple/{drop_point_id}`
-- `/ripple_deltas/{drop_point_id}`
-- `/emerging_drops`
-- `/predict/{drop_point_id}`
-- `/prediction_summary`
-- `/recommend/{drop_point_id}`
-- `/recommendations_summary`
-- `/influence_graph`
-- `/influence_chain/{drop_point_id}`
-- `/causal_graph`
-- `/causal_chain/{drop_point_id}`
-- `/narrative/{drop_point_id}`
-- `/narrative_summary`
-- `/strategies`
-- `/strategy/{strategy_id}`
-- `/strategy_match/{drop_point_id}`
-- `/build_playbook/{strategy_id}`
-- `/playbooks`
-- `/playbook/{playbook_id}`
-- `/playbook_match/{drop_point_id}`
-- `/generate_content/{playbook_id}`
-- `/generate_content_for_drop/{drop_point_id}`
-- `/generate_variations/{playbook_id}`
-- `/learning_stats`
-- `/evaluate/{drop_point_id}`
-
-These compatibility endpoints are now served by the app-owned
-`apps/rippletrace/routes/legacy_surface_router.py` (registered via the app bootstrap),
-not `AINDY/main.py`.
+**Retired 2026-11-07:** the legacy compatibility surface (RippleTrace's legacy surface router, 24 root-level routes behind the shared API key) is gone. It acted as no user, so it read and changed every user's RippleTrace data. Every caller had moved to `/apps/rippletrace/*`, and a browser cannot hold the shared key. `/analyze_ripple`, `/dashboard` and `/top_drop_points` had no user-facing equivalent; no client or signed-in user could reach them.
 
 ## 4. Product Surface
-- The frontend graph experience depends on the compatibility graph endpoints:
-  - `/influence_graph`
-  - `/causal_graph`
-  - `/narrative/{drop_point_id}`
-- Those routes were restored specifically to keep the GraphView and related dashboard flows working after `AINDY/main.py` cleanup.
+- GraphView reads the canonical, user-scoped routes: `/apps/rippletrace/influence/graph`, `/apps/rippletrace/causal/graph` and `/apps/rippletrace/narrative/{drop_point_id}`.
 
 ## 5. Current Reality
 Implemented:

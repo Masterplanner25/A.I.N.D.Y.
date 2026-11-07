@@ -35,9 +35,9 @@ APP_PREFIX = "/apps/"
 def _live_app_routes() -> set[tuple[str, str]]:
     """Boot the app-profile server and return its ``/apps/*`` (method, path) pairs."""
     # Self-contained boot env so the check runs identically in CI and locally.
-    # setdefault lets a caller (e.g. the CI job) override the datastore config;
-    # the legacy compatibility surface is forced on because the reference
-    # documents it (see the "Legacy Compatibility" section).
+    # setdefault lets a caller (e.g. the CI job) override the datastore config.
+    # The runtime's legacy-root mounts are forced on so they are compared too. (RippleTrace's
+    # own legacy compatibility surface was retired 2026-11-07 and is no longer documented.)
     for key, value in {
         "DATABASE_URL": "sqlite://",
         "AINDY_ALLOW_SQLITE": "1",

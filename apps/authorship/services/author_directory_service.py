@@ -48,10 +48,16 @@ def list_authors(
     *,
     platform: str | None = None,
     limit: int = 100,
+    unowned_only: bool = False,
+    exclude_platforms: tuple[str, ...] = (),
 ) -> list:
     from apps.authorship.models import AuthorDB
 
     query = db.query(AuthorDB)
     if platform:
         query = query.filter(AuthorDB.platform == platform)
+    if unowned_only:
+        query = query.filter(AuthorDB.user_id.is_(None))
+    if exclude_platforms:
+        query = query.filter(AuthorDB.platform.notin_(list(exclude_platforms)))
     return query.order_by(AuthorDB.last_seen.desc()).limit(limit).all()

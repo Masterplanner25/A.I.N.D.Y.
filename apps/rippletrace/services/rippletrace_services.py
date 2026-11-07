@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 def add_drop_point(db: Session, dp, user_id: str = None):
     user_uuid = uuid.UUID(str(user_id)) if user_id else None
     db_dp = DropPointDB(
-        id=dp.id,
+        # Never the caller's: ingestion's ids are deterministic, so a chosen id could take
+        # another user's future drop point first. See the schema's note.
+        id=f"dp-manual-{uuid.uuid4().hex}",
         title=dp.title,
         platform=dp.platform,
         url=dp.url,
@@ -51,7 +53,7 @@ def add_ping(db: Session, pg, user_id: str = None):
     if strength is None:
         strength = 1.0
     db_pg = PingDB(
-        id=pg.id,
+        id=f"ping-manual-{uuid.uuid4().hex}",  # never the caller's; see add_drop_point
         drop_point_id=pg.drop_point_id,
         ping_type=pg.ping_type,
         source_platform=pg.source_platform,
@@ -70,7 +72,7 @@ def add_ping(db: Session, pg, user_id: str = None):
     try:
         analyze_drop_point(pg.drop_point_id, db)
     except Exception as exc:
-        logger.warning("ThreadWeaver analysis failed for ping %s: %s", pg.id, exc)
+        logger.warning("ThreadWeaver analysis failed for ping %s: %s", db_pg.id, exc)
     db.refresh(db_pg)
     return db_pg
 

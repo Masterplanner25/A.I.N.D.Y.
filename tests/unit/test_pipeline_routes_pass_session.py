@@ -129,9 +129,10 @@ def _scan():
 def test_the_scan_sees_the_whole_surface():
     wrappers, sites = _scan()
     assert len(sites) > 250, f"only {len(sites)} pipeline call sites found — did the call shape change?"
-    assert "_wrap_legacy" in wrappers and "_execute_agent" in wrappers
+    # (RippleTrace's legacy surface and its `_wrap_legacy` wrapper were retired 2026-11-07.)
+    assert "_execute_tasks" in wrappers and "_execute_agent" in wrappers
     routes = {s["route"] for s in sites}
-    assert {"agent.run.create", "rippletrace_record_citation", "rippletrace.legacy.top_drop_points", "scores_get_me"} <= routes
+    assert {"agent.run.create", "rippletrace_record_citation", "scores_get_me"} <= routes
 
 
 def test_every_pipeline_call_site_passes_a_session():
