@@ -8,10 +8,13 @@ loads our plugins itself, so this no longer does. What it still adds is the allo
 and the refusal of `AINDY_MCP_SERVER_ALLOW_WRITES`. Phase 2 of the release handoff adds the first write
 tool here, deliberately, one at a time.
 
-Every entry acts as the caller's identity and reads `ctx.user_id`. Since 2.28.0 (FR-53 b) the runtime
-also refuses an MCP call whose payload `user_id` names someone else, so exposing a syscall that reads a
-payload id is now safe at the transport. We still expose only `ctx.user_id` readers: in-process
-dispatch is not yet checked (`PAYLOAD-IDENTITY-DISPATCH-1`), and the rule costs nothing.
+Every entry acts as the caller's identity and reads `ctx.user_id`. The runtime refuses a payload
+`user_id` naming someone else, over MCP since 2.28.0 (FR-53 b) and in-process since 2.29.0 (DEC-103).
+We still expose only `ctx.user_id` readers, because the rule costs nothing.
+
+**The allowlist is assigned, never inherited.** Since 2.31.1 (DEC-112) the server grants each tool the
+capability its syscall declares, so any syscall named in `AINDY_MCP_SERVER_TOOLS` is really callable:
+an inherited value naming `sys.v1.memory.delete` would hard-delete. Add a tool to the list below.
 
 Claude Code, from the repo root:
 
@@ -43,7 +46,7 @@ READ_ONLY_TOOLS = (
 def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    os.environ.setdefault("AINDY_MCP_SERVER_TOOLS", ",".join(READ_ONLY_TOOLS))
+    os.environ["AINDY_MCP_SERVER_TOOLS"] = ",".join(READ_ONLY_TOOLS)
     if os.environ.get("AINDY_MCP_SERVER_ALLOW_WRITES", "").strip().lower() in {"1", "true", "yes"}:
         sys.exit("refusing: this launcher is read-only; AINDY_MCP_SERVER_ALLOW_WRITES must be unset")
 

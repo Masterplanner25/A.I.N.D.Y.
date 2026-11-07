@@ -2,13 +2,14 @@
 
 Owner, 2026-10-14: the Infinity Algorithm is the product, and other AIs are access to its state. The
 properties: an outside AI can read the Works and everything known about one; what it reads is the
-CALLER's (since 2.28.0 the MCP transport refuses a payload `user_id` naming someone else, but in-process
-dispatch does not, so an exposed syscall still reads `ctx.user_id`); and the launcher exposes reads only.
+CALLER's (the runtime refuses a payload `user_id` naming someone else, but an exposed syscall still reads
+`ctx.user_id`); and the launcher exposes reads only.
 """
 from __future__ import annotations
 
 import importlib.util
 import inspect
+import os
 import pathlib
 import uuid
 
@@ -70,12 +71,21 @@ def test_every_app_syscall_the_launcher_exposes_is_registered_read_only_and_call
     assert ours == ["sys.v1.work.context", "sys.v1.work.facts"]
     for name in ours:
         entry = SYSCALL_REGISTRY[name]
-        # Over MCP a syscall is granted exactly the capability its name names (probed 2026-10-14:
-        # masterplan.read was refused with "caller has ['work.context']").
-        assert entry.capability == name.removeprefix("sys.v1."), name
         source = inspect.getsource(entry.handler)
         assert 'payload["user_id"]' not in source and "payload.get(\"user_id\")" not in source, (
             f"{name} reads user_id from the payload; over MCP that is whoever the outside AI names")
+
+
+def test_an_inherited_tool_list_cannot_replace_the_launchers(monkeypatch):
+    """Since 2.31.1 (DEC-112) any syscall named in the list is really callable, delete included."""
+    import AINDY.platform_layer.mcp_server as runtime_server
+
+    monkeypatch.setenv("AINDY_MCP_SERVER_TOOLS", "sys.v1.memory.delete")
+    monkeypatch.delenv("AINDY_MCP_SERVER_ALLOW_WRITES", raising=False)
+    monkeypatch.setattr(runtime_server, "serve_stdio", lambda: None)
+    launcher = _launcher()
+    launcher.main()
+    assert os.environ["AINDY_MCP_SERVER_TOOLS"] == ",".join(launcher.READ_ONLY_TOOLS)
 
 
 def test_the_launcher_refuses_writes(monkeypatch):

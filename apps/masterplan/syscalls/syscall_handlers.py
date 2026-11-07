@@ -607,8 +607,7 @@ def _handle_work_context(payload: dict, ctx: SyscallContext) -> dict:
     serves, success in their words, how AI search resolves it).
 
     For an outside AI over MCP (owner, 2026-10-14: other AIs are access to the algorithm's state).
-    Acts as the CALLER's identity only: the dispatcher never compares a payload `user_id` with the
-    caller, so this reads none."""
+    Acts as the CALLER's identity only, so this reads no payload `user_id`."""
     from apps.masterplan.services.work_service import work_context
 
     db, owns_session = _session_from_context(ctx)
@@ -656,8 +655,8 @@ def register_masterplan_syscall_handlers() -> None:
     register_syscall(
         name="sys.v1.work.context",
         handler=_handle_work_context,
-        # The MCP server grants a syscall exactly the capability its name names (as
-        # sys.v1.memory.read → memory.read), so this must match the name, not masterplan.read.
+        # Named for the syscall because MCP once required it. Since runtime 2.31.1 (DEC-112) MCP grants
+        # the capability a syscall declares, so this could be masterplan.read. Kept: nothing needs it to move.
         capability="work.context",
         description=(
             "The user's Works (projects, series, practices) as they stated or confirmed them: how "
@@ -674,8 +673,8 @@ def register_masterplan_syscall_handlers() -> None:
     register_syscall(
         name="sys.v1.work.facts",
         handler=_handle_work_facts,
-        # The MCP server grants a syscall exactly the capability its name names (as
-        # sys.v1.memory.read → memory.read), so this must match the name, not masterplan.read.
+        # Named for the syscall because MCP once required it. Since runtime 2.31.1 (DEC-112) MCP grants
+        # the capability a syscall declares, so this could be masterplan.read. Kept: nothing needs it to move.
         capability="work.facts",
         description=(
             "Everything the user stated or confirmed about one Work (summary, connections, links, "
