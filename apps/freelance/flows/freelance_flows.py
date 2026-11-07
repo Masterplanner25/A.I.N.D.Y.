@@ -129,7 +129,7 @@ def freelance_metrics_latest_node(state, context):
         from apps.freelance.services import freelance_service
 
         db = context.get("db")
-        metric = freelance_service.get_latest_metrics(db)
+        metric = freelance_service.get_latest_metrics(db, str(context.get("user_id")))
         if not metric:
             return {"status": "FAILURE", "error": "HTTP_404:No revenue metrics found"}
         return {"status": "SUCCESS", "output_patch": {"freelance_metrics_latest_result":

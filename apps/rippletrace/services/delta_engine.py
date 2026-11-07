@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -127,10 +128,20 @@ def compute_deltas(drop_point_id: str, db: Session) -> dict:
     )
 
 
-def drop_point_ids_with_history(db: Session) -> List[str]:
+def drop_point_ids_with_history(db: Session, user_id=None) -> List[str]:
     from apps.analytics.public import list_score_snapshot_drop_point_ids
+    from apps.rippletrace.models import DropPointDB
 
-    return list_score_snapshot_drop_point_ids(db, min_count=2)
+    ids = list_score_snapshot_drop_point_ids(db, min_count=2)
+    if user_id is None:
+        return ids
+    owned = {
+        row[0]
+        for row in db.query(DropPointDB.id)
+        .filter(DropPointDB.id.in_(ids), DropPointDB.user_id == UUID(str(user_id)))
+        .all()
+    }
+    return [drop_point_id for drop_point_id in ids if drop_point_id in owned]
 
 
 def _delta_stats_for_drop(

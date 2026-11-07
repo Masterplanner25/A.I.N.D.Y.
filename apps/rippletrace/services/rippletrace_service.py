@@ -239,6 +239,15 @@ def generate_trace_insights(db, trace_id: str) -> dict[str, Any]:
     }
 
 
+def user_owns_event(db, event_id, user_id: str) -> bool:
+    return (
+        db.query(SystemEvent.id)
+        .filter(SystemEvent.id == event_id, SystemEvent.user_id == uuid.UUID(str(user_id)))
+        .first()
+        is not None
+    )
+
+
 def count_trace_events(db, trace_id: str, user_id: str) -> int:
     """Return the number of SystemEvent rows matching trace_id for user_id."""
     return (

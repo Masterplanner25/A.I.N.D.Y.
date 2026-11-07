@@ -158,8 +158,8 @@ def predict_drop_point(
     )
 
 
-def scan_drop_point_predictions(db: Session, limit: int = 50) -> List[dict]:
-    candidate_ids = drop_point_ids_with_history(db)
+def scan_drop_point_predictions(db: Session, limit: int = 50, user_id=None) -> List[dict]:
+    candidate_ids = drop_point_ids_with_history(db, user_id)
     predictions: List[dict] = []
     for drop_point_id in candidate_ids[:limit]:
         prediction = predict_drop_point(drop_point_id, db, record_learning=False)
@@ -169,8 +169,8 @@ def scan_drop_point_predictions(db: Session, limit: int = 50) -> List[dict]:
     return predictions
 
 
-def prediction_summary(db: Session, limit: int = 50) -> dict:
-    predictions = scan_drop_point_predictions(db, limit=limit)
+def prediction_summary(db: Session, limit: int = 50, user_id=None) -> dict:
+    predictions = scan_drop_point_predictions(db, limit=limit, user_id=user_id)
     summary = {
         "total_predicted_spikes": 0,
         "total_declining": 0,

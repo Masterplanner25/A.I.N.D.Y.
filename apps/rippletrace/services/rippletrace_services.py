@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 
 import uuid
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from apps.rippletrace.models import DropPointDB, PingDB
@@ -31,6 +32,20 @@ def add_drop_point(db: Session, dp, user_id: str = None):
 
 def add_ping(db: Session, pg, user_id: str = None):
     user_uuid = uuid.UUID(str(user_id)) if user_id else None
+    # A ping moves its drop point's scores, so only that drop point's owner can add one.
+    owned = (
+        db.query(DropPointDB.id)
+        .filter(
+            DropPointDB.id == pg.drop_point_id,
+            DropPointDB.user_id == user_uuid if user_uuid else DropPointDB.user_id.is_(None),
+        )
+        .first()
+    )
+    if owned is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "drop_point_not_found", "message": "Drop point not found"},
+        )
     strength = getattr(pg, "strength", None)
     connection_type = classify_connection_type(pg.connection_summary)
     if strength is None:
@@ -92,6 +107,8 @@ def log_ripple_event(db: Session, event: dict, user_id: str = None):
 
     # Ensure referenced DropPoint exists before inserting Ping
     existing_dp = db.query(DropPointDB).filter_by(id=drop_id).first()
+    if existing_dp and user_id and existing_dp.user_id and str(existing_dp.user_id) != str(user_id):
+        raise ValueError(f"DropPoint {drop_id} not found")
     if not existing_dp:
         new_dp = DropPointDB(
             id=drop_id,

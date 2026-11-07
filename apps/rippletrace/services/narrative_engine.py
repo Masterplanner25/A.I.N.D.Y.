@@ -9,6 +9,7 @@ from apps.rippletrace.services.engine_registry import call_with_engine_breaker
 from apps.rippletrace.models import DropPointDB, PingDB
 from apps.rippletrace.services.causal_engine import get_causal_chain
 from apps.rippletrace.services.delta_engine import compute_deltas
+from apps.rippletrace.services.influence_graph import query_drops
 from apps.rippletrace.services.prediction_engine import predict_drop_point
 from apps.rippletrace.services.recommendation_engine import recommend_for_drop_point
 
@@ -77,7 +78,7 @@ def _generate_narrative_internal(drop_point_id: str, db: Session) -> Dict:
     delta_info = compute_deltas(drop_point_id, db)
     prediction = predict_drop_point(drop_point_id, db, record_learning=False)
     recommendation = recommend_for_drop_point(drop_point_id, db, log_prediction=False)
-    causal_chain = get_causal_chain(drop_point_id, db)
+    causal_chain = get_causal_chain(drop_point_id, db, user_id=drop_point.user_id)
 
     timeline: List[Dict] = []
     if drop_point.date_dropped:
@@ -261,9 +262,9 @@ def generate_narrative(drop_point_id: str, db: Session) -> Dict:
     )
 
 
-def narrative_summary(db: Session, limit: int = 3) -> List[Dict]:
+def narrative_summary(db: Session, limit: int = 3, user_id=None) -> List[Dict]:
     drop_points = (
-        db.query(DropPointDB)
+        query_drops(db, user_id)
         .order_by(DropPointDB.narrative_score.desc().nulls_last())
         .limit(limit)
         .all()

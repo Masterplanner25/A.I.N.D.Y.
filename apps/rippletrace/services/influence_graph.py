@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Dict, List, Set
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -22,12 +23,20 @@ def _collect_platforms(pings: List[PingDB]) -> Dict[str, Set[str]]:
     return platform_map
 
 
-def build_influence_graph(db: Session) -> Dict[str, List[Dict]]:
-    drops = db.query(DropPointDB).all()
+def query_drops(db: Session, user_id=None):
+    """One user's drop points. Only the operator's API-key surface passes no user, and reads them all."""
+    query = db.query(DropPointDB)
+    if user_id is not None:
+        query = query.filter(DropPointDB.user_id == UUID(str(user_id)))
+    return query
+
+
+def build_influence_graph(db: Session, user_id=None) -> Dict[str, List[Dict]]:
+    drops = query_drops(db, user_id).all()
     if not drops:
         return {"nodes": [], "edges": []}
 
-    pings = db.query(PingDB).all()
+    pings = db.query(PingDB).filter(PingDB.drop_point_id.in_([dp.id for dp in drops])).all()
     platform_map = _collect_platforms(pings)
 
     nodes = [
