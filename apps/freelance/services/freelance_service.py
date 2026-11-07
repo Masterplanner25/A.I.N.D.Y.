@@ -24,7 +24,7 @@ from apps.freelance.models.freelance import (
     RevenueMetrics,
     WebhookEvent,
 )
-from apps.freelance.services.idempotency import check_or_create
+from apps.freelance.services.idempotency import check_or_create, scoped_idempotency_key
 
 # Pydantic schemas (validation layer)
 from apps.freelance.schemas.freelance import (
@@ -65,6 +65,7 @@ def create_order(
     """
     Creates a new freelance order and logs it to the Memory Bridge.
     """
+    idempotency_key = scoped_idempotency_key(user_id, idempotency_key)
     try:
         user_uuid = uuid.UUID(str(user_id)) if user_id else None
         delivery_type = str(order_data.delivery_type or "manual").strip().lower()
@@ -1040,6 +1041,8 @@ def issue_refund(
     Issue a Stripe refund for a confirmed payment order.
     """
     import uuid as _uuid
+
+    idempotency_key = scoped_idempotency_key(user_id, idempotency_key)
 
     order = (
         db.query(FreelanceOrder)
