@@ -8,6 +8,32 @@ from sqlalchemy.orm import Session
 
 ModelT = TypeVar("ModelT")
 
+# The idempotency columns are String(255) with one GLOBAL unique index each.
+_KEY_WIDTH = 255
+
+
+def scoped_idempotency_key(user_id, key: str | None) -> str | None:
+    """Namespace a CALLER-SUPPLIED Idempotency-Key by its user: ``<user_id>:<key>``.
+
+    The lookup in :func:`check_or_create` and the unique indexes are global. With a raw
+    header key, a second user who sent the first user's key got the first user's order back
+    (client, price, deliverable), and the intake paths then re-pointed it to their own client;
+    the same key also blocked the first user's refund. With the owner in the key, two users
+    can never share one, and the global indexes still hold.
+
+    Keys made by the server (Stripe event and payment ids) are not caller-chosen and are not
+    passed through here. A key too long to fit with its prefix is replaced by its SHA-256.
+    """
+    if not key:
+        return key
+    owner = str(user_id) if user_id else "anonymous"
+    scoped = f"{owner}:{key}"
+    if len(scoped) > _KEY_WIDTH:
+        import hashlib
+
+        scoped = f"{owner}:sha256:{hashlib.sha256(key.encode('utf-8')).hexdigest()}"
+    return scoped
+
 
 def check_or_create(
     db: Session,
