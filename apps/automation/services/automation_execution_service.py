@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
-import smtplib
 from email.message import EmailMessage
 from typing import Any
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
+
+from apps.automation.services import egress as _egress
+
+# Every endpoint below that comes from `automation_config` is the caller's choice, so it goes
+# through the egress module: http(s) only, public addresses only, checked at connect time.
+# Module attributes so tests can fake the wire without faking the guard's callers.
+_open_user_url = _egress.public_urlopen
+_SMTP = _egress.PublicSMTP
 
 
 # Outbound connectors are registered with the runtime (FR-1 /
@@ -104,7 +111,7 @@ def _http_json(endpoint: str, body: Any, headers: dict[str, str], method: str) -
         headers=headers,
         method=method,
     )
-    with urllib_request.urlopen(req, timeout=15) as resp:
+    with _open_user_url(req, timeout=15) as resp:
         return {
             "status_code": getattr(resp, "status", 200),
             "body": resp.read().decode("utf-8", errors="ignore")[:2000],
@@ -260,7 +267,7 @@ def _email_connector(action: dict[str, Any], ctx) -> dict[str, Any]:
         message.set_content(body)
 
         def _send_smtp():
-            with smtplib.SMTP(str(smtp_host), smtp_port, timeout=15) as smtp:
+            with _SMTP(str(smtp_host), smtp_port, timeout=15) as smtp:
                 if smtp_starttls:
                     smtp.starttls()
                 if smtp_username:
@@ -294,7 +301,7 @@ def _email_connector(action: dict[str, Any], ctx) -> dict[str, Any]:
                 headers=headers,
                 method="POST",
             )
-            with urllib_request.urlopen(req, timeout=15) as resp:
+            with _open_user_url(req, timeout=15) as resp:
                 return {
                     "transport": "api",
                     "status_code": getattr(resp, "status", 200),
@@ -346,7 +353,7 @@ def _webhook_connector(action: dict[str, Any], ctx) -> dict[str, Any]:
             headers=headers,
             method=method,
         )
-        with urllib_request.urlopen(req, timeout=15) as resp:
+        with _open_user_url(req, timeout=15) as resp:
             return {
                 "status_code": getattr(resp, "status", 200),
                 "body": resp.read().decode("utf-8", errors="ignore")[:2000],
@@ -366,12 +373,50 @@ def _webhook_connector(action: dict[str, Any], ctx) -> dict[str, Any]:
     }
 
 
+def _is_operator(ctx) -> bool:
+    """True when the automation's owner is an admin. Fails closed: no user or no db is False."""
+    user_id = getattr(ctx, "user_id", None)
+    db = getattr(ctx, "db", None)
+    if not user_id or db is None:
+        return False
+    from AINDY.db.models.user import User
+    from AINDY.platform_layer.user_ids import parse_user_id
+
+    uid = parse_user_id(user_id)
+    if uid is None:
+        return False
+    row = db.query(User.is_admin).filter(User.id == uid).first()
+    return bool(row and row[0])
+
+
+def _stripe_key(config: dict[str, Any], ctx) -> str | None:
+    """The automation's own key, else the server's, and the server's only for an operator.
+
+    `STRIPE_SECRET_KEY` is the operator's Stripe account. Any signed-in user writes
+    `automation_config`, so falling back to it for everyone would let a stranger create
+    customers, products, payment links and subscriptions on that account.
+    """
+    own_key = config.get("stripe_secret_key")
+    if own_key:
+        return str(own_key)
+    from AINDY.config import settings
+
+    server_key = settings.STRIPE_SECRET_KEY
+    if not server_key:
+        return None
+    if not _is_operator(ctx):
+        raise PermissionError(
+            "stripe_secret_key_required: the server's Stripe key is used only for an "
+            "operator's automations; provide stripe_secret_key in the automation config"
+        )
+    return server_key
+
+
 def _stripe_connector(action: dict[str, Any], ctx) -> dict[str, Any]:
     payload = action["payload"]
     config = action["config"]
-    from AINDY.config import settings
 
-    stripe_key = config.get("stripe_secret_key") or settings.STRIPE_SECRET_KEY
+    stripe_key = _stripe_key(config, ctx)
     if not stripe_key:
         raise ValueError(
             "stripe_secret_key not configured. Set STRIPE_SECRET_KEY in environment "
@@ -477,9 +522,8 @@ def _subscription_connector(action: dict[str, Any], ctx) -> dict[str, Any]:
     """Create a Stripe customer + recurring subscription."""
     payload = action["payload"]
     config = action["config"]
-    from AINDY.config import settings as _settings
 
-    stripe_key = config.get("stripe_secret_key") or _settings.STRIPE_SECRET_KEY
+    stripe_key = _stripe_key(config, ctx)
     if not stripe_key:
         raise ValueError(
             "stripe_secret_key not configured. Set STRIPE_SECRET_KEY "
