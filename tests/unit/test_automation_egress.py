@@ -68,7 +68,10 @@ def test_non_public_addresses_are_refused(address):
 
 @pytest.mark.parametrize(
     "address",
-    ["93.184.215.14", "8.8.8.8", "2606:4700:4700::1111", "64:ff9b::808:808", "2002:808:808::1"],
+    # No 6to4 (2002::/16) case here: Python 3.11.10+ marks the whole prefix non-global, so even a
+    # 6to4 address carrying a public IPv4 is refused on the deployed 3.11.18. Older 3.11 read it as
+    # global, which is why the embedded-address check exists; refusing it is the safe outcome on both.
+    ["93.184.215.14", "8.8.8.8", "2606:4700:4700::1111", "64:ff9b::808:808"],
 )
 def test_public_addresses_are_allowed(address):
     assert egress.is_public_address(address) is True
