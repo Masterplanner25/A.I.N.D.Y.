@@ -174,6 +174,45 @@ def test_revenue_metrics_belong_to_one_user(db_session):
     assert freelance_service.get_latest_metrics(db_session, str(other)) is None
 
 
+def test_an_idempotency_key_is_the_callers_alone(db_session, monkeypatch):
+    """Another user's Idempotency-Key makes a new order for the caller, never returns theirs."""
+    from apps.freelance.schemas.freelance import FreelanceOrderCreate
+
+    monkeypatch.setattr(freelance_service, "_finalize_created_order", lambda *a, **k: None)
+    owner, other = uuid.uuid4(), uuid.uuid4()
+    order = FreelanceOrderCreate(client_name="Owner's client", client_email="c@example.com", service_type="web")
+
+    first, created = freelance_service.create_order(
+        db_session, order, user_id=str(owner), idempotency_key="shared-key", return_created=True
+    )
+    assert created and first.user_id == owner
+
+    theirs, created = freelance_service.create_order(
+        db_session,
+        FreelanceOrderCreate(client_name="Mine", client_email="m@example.com", service_type="web"),
+        user_id=str(other),
+        idempotency_key="shared-key",
+        return_created=True,
+    )
+    assert created and theirs.id != first.id and theirs.user_id == other
+
+    replay, created = freelance_service.create_order(
+        db_session, order, user_id=str(owner), idempotency_key="shared-key", return_created=True
+    )
+    assert not created and replay.id == first.id
+
+
+def test_a_scoped_idempotency_key_fits_its_column():
+    from apps.freelance.services.idempotency import scoped_idempotency_key
+
+    owner = str(uuid.uuid4())
+    assert scoped_idempotency_key(owner, "k") == f"{owner}:k"
+    assert scoped_idempotency_key(owner, "k") != scoped_idempotency_key(str(uuid.uuid4()), "k")
+    assert scoped_idempotency_key(owner, None) is None
+    long_key = scoped_idempotency_key(owner, "x" * 400)
+    assert len(long_key) <= 255 and long_key.startswith(f"{owner}:sha256:")
+
+
 # ── Social ──────────────────────────────────────────────────────────────────────────────────
 
 
@@ -265,3 +304,61 @@ def test_a_post_is_authored_by_the_caller_whatever_the_body_says(app, client):
         json={"author_id": str(uuid.uuid4()), "author_username": "someone", "content": "hello"},
     )
     assert [doc["author_id"] for doc in posts.inserted] == [str(caller)]
+
+
+def test_a_posts_identity_time_name_and_counters_are_the_servers(app, client):
+    posts = FakePosts()
+    _mongo(app, posts)
+    _as_user(app)
+
+    client.post(
+        "/apps/social/post",
+        json={
+            "id": "someone-elses-post",
+            "author_id": "x",
+            "author_username": "the_owner",
+            "content": "hello",
+            "created_at": "2099-01-01T00:00:00",
+            "likes": 999999,
+            "boosts": 5,
+            "impressions": 7,
+            "engagement_score": 99.0,
+        },
+    )
+    [doc] = posts.inserted
+    assert doc["id"] != "someone-elses-post"
+    assert doc["created_at"].year < 2099
+    assert doc["author_username"] == "anonymous"  # no canonical name, no profile: not the body's
+    assert doc["likes"] == doc["boosts"] == doc["impressions"] == 0
+    assert doc["engagement_score"] == 0.0
+
+
+def test_one_interaction_counts_once_whatever_the_body_says(app, client, monkeypatch):
+    posts = FakePosts({"id": "public", "user_id": str(uuid.uuid4())})
+    _mongo(app, posts)
+    _as_user(app)
+    deltas = []
+    monkeypatch.setattr(social_router, "record_metric_deltas", lambda **kw: deltas.append(kw["deltas"]))
+    monkeypatch.setattr(social_router, "_maybe_capture_performance_signal", lambda *a, **k: (a[0], []), raising=False)
+
+    client.post("/apps/social/posts/public/interact", json={"action": "like", "amount": 1_000_000_000})
+    assert posts.updates == [({"id": "public"}, {"$inc": {"likes": 1}})]
+    assert deltas == [{"likes": 1}]
+
+
+def test_a_profile_cannot_set_its_own_metrics(app, client):
+    from AINDY.db.mongo_setup import get_optional_mongo_db
+
+    profiles = FakePosts()
+    app.dependency_overrides[get_optional_mongo_db] = lambda: {
+        "posts": FakePosts(), "comments": FakePosts(), "profiles": profiles
+    }
+    _as_user(app)
+
+    client.post(
+        "/apps/social/profile",
+        json={"username": "newcomer", "metrics_snapshot": {"trust_score": 100.0, "twr_score": 9.9}},
+    )
+    [doc] = profiles.inserted
+    assert doc["metrics_snapshot"]["trust_score"] == 50.0
+    assert doc["metrics_snapshot"]["twr_score"] == 0.0

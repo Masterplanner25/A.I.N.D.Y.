@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import math
 from typing import Optional
+import uuid
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -364,7 +365,8 @@ def upsert_profile(
                     },
                 )
 
-            update_data = profile_data.dict(exclude={"id", "joined_at"})
+            # metrics_snapshot is the server's (trust score, TWR, velocity): never the body's.
+            update_data = profile_data.dict(exclude={"id", "joined_at", "metrics_snapshot"})
             update_data["username"] = effective_username
             update_data["username_verified"] = is_canonical
             update_data["user_id"] = user_id
@@ -376,6 +378,8 @@ def upsert_profile(
 
             new_profile = profile_data.dict()
             new_profile.update(update_data)
+            new_profile["id"] = str(uuid.uuid4())
+            new_profile["metrics_snapshot"] = SocialProfile(username=effective_username).metrics_snapshot
             db["profiles"].insert_one(new_profile)
             return _project_profile_metrics(new_profile, sql_db)
         except ServerSelectionTimeoutError:
@@ -458,14 +462,27 @@ def create_post(
         post_data["author_id"] = user_id  # the caller, never what the body claims
         # Bind the denormalized author_username to the canonical users.username
         # when the user has one, so feed labels match the account identity.
+        # The author's name is never the body's: the canonical username, else the caller's own
+        # social profile, else "anonymous". The body could name anyone.
         canonical, is_canonical = resolve_canonical_username(sql_db, user_id)
         if is_canonical:
             post_data["author_username"] = canonical
-        author_username = post_data.get("author_username") or ""
-        post_data["impressions"] = int(post_data.get("impressions", 0) or 0)
-        post_data["clicks"] = int(post_data.get("clicks", 0) or 0)
-        post_data["engagement_score"] = float(post_data.get("engagement_score", 0.0) or 0.0)
-        post_data["conversion_signal"] = float(post_data.get("conversion_signal", 0.0) or 0.0)
+        else:
+            try:
+                own_profile = db["profiles"].find_one({"user_id": user_id}) or {}
+            except PyMongoError:
+                own_profile = {}
+            post_data["author_username"] = str(own_profile.get("username") or "anonymous")
+        author_username = post_data["author_username"]
+        # Identity, time and counters are the server's. A body-chosen `id` could merge with
+        # another post, a future `created_at` pinned a post to the top of every feed, and
+        # counters started wherever the body said.
+        post_data["id"] = str(uuid.uuid4())
+        post_data["created_at"] = _now_utc()
+        for counter in ("likes", "boosts", "comments_count", "impressions", "clicks"):
+            post_data[counter] = 0
+        post_data["engagement_score"] = 0.0
+        post_data["conversion_signal"] = 0.0
         try:
             db["posts"].insert_one(post_data)
         except ServerSelectionTimeoutError:
@@ -636,7 +653,10 @@ def record_post_interaction(
             "boost": "boosts",
             "comment": "comments_count",
         }[action]
-        amount = max(1, int(body.amount or 1))
+        # One interaction per request. `amount` was taken from the body unbounded, so one call
+        # could add a billion likes to someone else's post, and those numbers are attributed to
+        # the post's owner in their metric history. The field stays in the schema for old clients.
+        amount = 1
         posts = db["posts"]
         try:
             post_doc = posts.find_one({"id": post_id})
