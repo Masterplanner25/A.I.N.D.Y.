@@ -67,6 +67,8 @@ def capture_http(monkeypatch):
 
     # ctx.call imports authorized_external_call from this module at call time.
     monkeypatch.setattr(ecs, "authorized_external_call", fake_authorized)
+    # User-chosen URLs go through the egress guard's opener; Stripe's fixed host through urlopen.
+    monkeypatch.setattr(aes, "_open_user_url", fake_urlopen)
     monkeypatch.setattr(aes.urllib_request, "urlopen", fake_urlopen)
     return calls
 
@@ -305,7 +307,7 @@ class _FakeSMTP:
 @pytest.fixture
 def fake_smtp(monkeypatch):
     _FakeSMTP.sent = []
-    monkeypatch.setattr(aes.smtplib, "SMTP", _FakeSMTP)
+    monkeypatch.setattr(aes, "_SMTP", _FakeSMTP)
     return _FakeSMTP
 
 
