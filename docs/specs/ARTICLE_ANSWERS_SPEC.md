@@ -86,14 +86,35 @@ the outside view of the same thing, and are shown beside it rather than mixed in
 
 ---
 
-## 4. Source validation
+## 4. Source validation: "What does this claim?" (decided 2026-11-08, §8 decisions 5–8)
 
-An article's claims, checked against what the owner has already settled:
-- A sentence that **contradicts a denied claim** (the NEVER SAY list) is a warning. This is the check
-  that would have caught "part of A.I.N.D.Y." in the Nodus draft.
-- A claim about a Work that **is not in its confirmed facts** is information, not an error. It may be
-  new, and it may become a confirmed claim.
-- **Cited sources:** links out to other sites, listed so the writer can see what each claim leans on.
+**Where:** the SEO tool, on draft text only, on a button, **What does this claim?** It is information for the writer
+before publication, like "What does this answer?" (§6). Nothing blocks and nothing runs on published pieces.
+
+**What a claim is (decision 6): a checkable fact.** A statement presented as fact that could be checked:
+- numbers and statistics;
+- dates and events;
+- attributions ("X found", "Y said");
+- statements about named products, people or organisations, the owner's own Works included;
+- causes or comparisons stated as fact.
+
+Not claims: opinions marked as opinion, questions, hypotheticals, advice, and the writer's own experience framed as
+experience ("I found…").
+
+**What each claim is checked against:**
+- **About one of the owner's Works:**
+  - A claim that **contradicts a denied claim** (the NEVER SAY list) is a warning. This is the check that would have
+    caught "part of A.I.N.D.Y." in the Nodus draft.
+  - A claim that **is in its confirmed facts** is shown as confirmed.
+  - A claim that **is in neither** is information, not an error. It may be new, and it may become a confirmed claim.
+- **About anything else (decision 7): sourced or not.** Each claim is listed with the link in the draft that backs
+  it, or marked *no source in the draft*. It says what a claim leans on, not whether it is true. No web check.
+- **Cited sources:** every link out to another site, listed with the claims that lean on it.
+
+**A warning is information only (decision 8).** It is shown; it never blocks or changes the draft.
+
+**The reader:** one gpt-5.5 call per press, as §8 decision 1 (about 25–50 s, low reasoning effort), paid with the
+writer's own key (FR-59). Its output is checked like §2's answers: every claim must be found in the text.
 
 ---
 
@@ -126,11 +147,12 @@ The owner's chat on 2026-10-25 described two workflow families:
 | **A** ✅ **built 2026-11-08** | In the SEO tool, on draft text: **What does this answer?** (§2, without the Resolution tie), outbound links to own pieces, and missing own pieces (§3). `POST /apps/seo/answers` (`apps/search/services/article_answers.py`), `POST /apps/seo/own_links` (`apps/rippletrace/services/own_links.py`) | none |
 | **B** | Per published piece, once per content hash: answers and links stored. Ingestion keeps link targets. Inbound links and series navigation. **B1 built 2026-11-08:** ingestion keeps link targets (`drop_points.content_links`, migration `rt2links0001`; `services/links.py`), and `content_archive.backfill_links` recovers them for stored pieces (DEV from its markdown text, Substack and Medium by one re-fetch). **B2 built 2026-11-08:** `piece_answers` (one reading per piece and `content_hash`) and `drop_points.answers` (migration `rt3answers0001`, every stored piece `skipped`: decision 3), written by `piece_answers_v1.nd` behind `AINDY_PIECE_ANSWERS_NODUS` with a recorded Python fallback; queue or read one at `/apps/rippletrace/drop_points/{id}/answers`. **B3 built 2026-11-08:** `GET /apps/rippletrace/drop_points/{id}/links` (`services/piece_links.py`): links to, linked from, series neighbours and whether each pair links; RippleTrace's "Answers & links" panel shows it with the stored answers. B1's backfill now re-fetches DEV pieces whose text came from the feed (19 had lost their links) | a links column on `drop_points`, and a table for answers |
 | **C** ✅ **built 2026-11-08** | The tie to resolution: answers matched against the Resolution Check's questions per Work. Shown on the Work card, and offered to the planner as one line. As built (`masterplan/services/resolution_writing.py`): for each question the engines did not fully resolve, the owner's pieces that answer questions **about** its subject (the subject named in the answered question, kind fitting). Name matching cannot tell an answer to "What is A.I.N.D.Y.?" from one about A.I.N.D.Y.'s history (found live), so it never claims a piece answers the engines' exact question. In the Resolution section and as a clause on the Work's planner line | none beyond B |
-| **D** | Source validation (§4), then style (§5) | none expected |
+| **D1** | **What does this claim?** (§4, decided 2026-11-08): claims in a draft, checked against the owner's facts and denied claims, and the rest marked sourced or not | none expected |
+| **D2** | Style (§5), later | not scoped |
 
 ---
 
-## 8. Decisions: the owner's, **all four taken 2026-11-08, as recommended**
+## 8. Decisions: the owner's, **1–4 taken 2026-11-08 as recommended; 5–8 (phase D) the same day**
 
 1. **Which model reads for answers? DECIDED: gpt-5.5**, the drafter's model, at low reasoning effort.
    - It follows instructions where gpt-4o did not.
@@ -148,6 +170,20 @@ The owner's chat on 2026-10-25 described two workflow families:
 4. **Does any of this feed the Infinity score? DECIDED: no, not yet**, until it has been measured for a while,
    as with Resolution Check decision 5.
    - It is shown on the Work card and to the planner only.
+
+**Phase D, decided 2026-11-08 (owner):**
+
+5. **Where does source validation run? DECIDED: only in the SEO tool, on a draft**, as information for the writer
+   before publishing. Not on published pieces. The button is **What does this claim?**
+6. **What is a claim? DECIDED: a checkable fact** (§4): numbers, dates and events, attributions, statements about named
+   products, people or organisations (the owner's included), causes or comparisons stated as fact. Not opinions marked
+   as opinion, questions, hypotheticals, advice, or experience framed as experience.
+   - Not chosen: also opinions stated as fact (more results, noisier); only numbers and attributions (misses causal and
+     comparative claims).
+   - The owner widened the scope from claims about their own work to claims overall.
+7. **How far is a claim about anything else checked? DECIDED: sourced or not**, from the draft's own links. No web check.
+   - Not chosen: asking Perplexity whether each claim holds up (paid per claim, slower, only as good as the search).
+8. **What does a warning do? DECIDED: information only.** It never blocks.
 
 **Context the owner gave the same day.** Disambiguation comes from many signals across the body of work, never
 from one or two articles. That is why §2 and §3 measure each piece *in relation to the rest of the catalogue*
