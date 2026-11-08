@@ -157,6 +157,7 @@
     "/apps/search/history/:p",
     "/apps/seo/analyze_seo",
     "/apps/seo/answers",
+    "/apps/seo/claims",
     "/apps/seo/drafts",
     "/apps/seo/generate_meta",
     "/apps/seo/own_links",

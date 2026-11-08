@@ -135,6 +135,19 @@ export function getArticleAnswers(content, title) {
   });
 }
 
+// What the draft claims, and what each claim leans on (ARTICLE_ANSWERS_SPEC §4, phase D1). Claims about
+// your Works are checked against your facts and denied claims; the rest are sourced or not by the
+// draft's own links. Information only. A gpt-5.5 call, so the same long timeout as the answers.
+export function getArticleClaims(content, title) {
+  const body = { text: content };
+  if (title) body.title = title;
+  return authRequest("/apps/seo/claims", {
+    method: "POST",
+    body: JSON.stringify(body),
+    timeoutMs: ARTICLE_ANSWERS_TIMEOUT_MS,
+  });
+}
+
 export function getOwnLinks(content, title) {
   const body = { text: content };
   if (title) body.title = title;

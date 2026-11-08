@@ -6,6 +6,7 @@ import {
   generateMeta as apiGenerateMeta,
   generateTitles as apiGenerateTitles,
   getArticleAnswers as apiGetArticleAnswers,
+  getArticleClaims as apiGetArticleClaims,
   getOwnLinks as apiGetOwnLinks,
   getDraft as apiGetDraft,
   listDrafts as apiListDrafts,
@@ -29,6 +30,31 @@ function countWords(text) {
   return matches ? matches.length : 0;
 }
 
+// The statuses decided for "What does this claim?" (ARTICLE_ANSWERS_SPEC §8 decisions 6-8).
+const CLAIM_STATUS = {
+  contradicts: { label: "says what you denied", tone: "text-red-400" },
+  confirmed: { label: "matches your facts", tone: "text-[#00ffaa]" },
+  new: { label: "new about your work", tone: "text-sky-300" },
+  sourced: { label: "sourced", tone: "text-gray-300" },
+  unsourced: { label: "no source in the draft", tone: "text-amber-300" },
+};
+const CLAIM_ORDER = ["contradicts", "new", "confirmed", "sourced", "unsourced"];
+
+// The sentence the server sent with a failure (a 402 says "Add it in Settings"), if any.
+function serverSentence(error) {
+  let body = error?.data ?? error?.body;
+  if (typeof body === "string") {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      body = null;
+    }
+  }
+  const detail = body?.detail ?? body;
+  if (typeof detail === "string") return detail;
+  return detail?.message || body?.message || "";
+}
+
 export default function AiSeoTool() {
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
@@ -36,6 +62,7 @@ export default function AiSeoTool() {
   const [meta, setMeta] = useState(null);
   const [titleOptions, setTitleOptions] = useState(null);
   const [answers, setAnswers] = useState(null);
+  const [claims, setClaims] = useState(null);
   const [ownLinks, setOwnLinks] = useState(null);
   const [targets, setTargets] = useState("");
   const [drafts, setDrafts] = useState([]);
@@ -194,6 +221,19 @@ export default function AiSeoTool() {
     } catch (error) {
       console.error("Article Answers Error: ", error);
       setAnswers({ answers: [], raised: [], reason: "the answers service could not be reached" });
+    }
+    setLoading(false);
+  };
+
+  // What the draft claims (§4, phase D1): each claim and what it leans on. Information only.
+  // A failure shows the server's own sentence (e.g. a missing key: "Add it in Settings").
+  const findClaims = async () => {
+    setLoading(true);
+    try {
+      setClaims(await apiGetArticleClaims(content, title));
+    } catch (error) {
+      console.error("Article Claims Error: ", error);
+      setClaims({ claims: [], sources: [], reason: serverSentence(error) || "the claims service could not be reached" });
     }
     setLoading(false);
   };
@@ -389,6 +429,14 @@ export default function AiSeoTool() {
                     What does this answer?
                 </button>
                 <button
+          className="px-6 py-2 bg-amber-700 hover:bg-amber-800 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
+          onClick={findClaims}
+          disabled={loading || !content}
+          title="Reads the whole draft with a model: about 20 to 50 seconds">
+
+                    What does this claim?
+                </button>
+                <button
           className="px-6 py-2 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
           onClick={findOwnLinks}
           disabled={loading || !content}
@@ -532,6 +580,52 @@ export default function AiSeoTool() {
                               }
                           </> :
                           <p className="text-sm text-gray-400">No answers listed: {answers.reason || "nothing was returned"}.</p>
+                        }
+                    </div>
+        }
+
+                {/* WHAT THE DRAFT CLAIMS (ARTICLE_ANSWERS_SPEC §4, phase D1). Information only: a claim that
+                    says what you denied is a warning, never a block; the rest shows what each claim leans on,
+                    not whether it is true. */}
+                {claims &&
+        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg md:col-span-2" data-testid="article-claims">
+                        <h2 className="text-xl font-bold mb-1 text-amber-400 border-b border-zinc-800 pb-2">What this claims</h2>
+                        {claims.claims?.length ?
+                          <>
+                              <p className="mt-2 text-xs text-gray-400" data-testid="claims-counts">
+                                  {safeMap(CLAIM_ORDER.filter((s) => claims.counts?.[s] > 0),
+                                    (s) => CLAIM_STATUS[s].label + " " + claims.counts[s]).join(" · ")}
+                              </p>
+                              <ul className="mt-3 space-y-3">
+                                  {safeMap(claims.claims, (c, i) =>
+                                    <li key={"c-" + i} className="text-sm">
+                                        <p className="text-white">
+                                            <span className={"text-xs mr-2 " + (CLAIM_STATUS[c.status]?.tone || "text-gray-400")}>
+                                                {CLAIM_STATUS[c.status]?.label || c.status}{c.work ? " · " + c.work : ""}
+                                            </span>
+                                            "{c.claim}"
+                                            {!c.found && <span className="text-xs text-amber-400"> (not found word for word in the text)</span>}
+                                        </p>
+                                        {c.denied && <p className="mt-1 text-xs text-red-300">You denied: {c.denied}</p>}
+                                        {c.fact && <p className="mt-1 text-xs text-gray-400">Matches: {c.fact}</p>}
+                                        {c.source && <p className="mt-1 text-xs text-gray-400 break-all">Source: {c.source}</p>}
+                                    </li>
+                                  )}
+                              </ul>
+                          </> :
+                          <p className="text-sm text-gray-400">No claims listed: {claims.reason || "nothing was returned"}.</p>
+                        }
+                        {claims.sources?.length > 0 &&
+                          <>
+                              <h3 className="font-bold text-white text-sm mt-5">Links in the draft ({claims.sources.length})</h3>
+                              <ul className="mt-2 space-y-1">
+                                  {safeMap(claims.sources, (src, i) =>
+                                    <li key={"s-" + i} className="text-xs text-gray-400 break-all">
+                                        {src.url}{src.own ? " (yours)" : ""} · {src.claims?.length === 1 ? "1 claim leans on it" : (src.claims?.length || 0) + " claims lean on it"}
+                                    </li>
+                                  )}
+                              </ul>
+                          </>
                         }
                     </div>
         }

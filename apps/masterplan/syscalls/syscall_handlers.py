@@ -646,6 +646,29 @@ def _handle_work_facts(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_work_get_claim_truth(payload: dict, ctx: SyscallContext) -> dict:
+    """sys.v1.work.get_claim_truth — the caller's Works as numbered facts and denied claims, for checking
+    a draft's claims (ARTICLE_ANSWERS_SPEC §4, phase D1). Facts are what the Resolution Check judges
+    against (`_facts_for`) plus each Work's connections; denied claims are the owner's NEVER SAY list.
+    Caller's identity only; read-only. Its name infers `work.read`, which it declares."""
+    from apps.masterplan.services.resolution_service import _facts_for, ground_truth
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        truth = ground_truth(db, _as_uuid(ctx.user_id))
+        works = []
+        for work_id, entity in truth["entities"].items():
+            facts = _facts_for(entity) + [
+                link["text"] for link in truth["links"] if work_id in (link["a"], link["b"])
+            ]
+            works.append({"name": entity["name"], "kind": entity["kind"], "facts": facts,
+                          "denied": list(entity.get("denied_claims") or [])})
+        return {"works": works, "own_hosts": list(truth.get("own_hosts") or [])}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_masterplan_syscall_handlers() -> None:
     """Register all masterplan domain syscall handlers.
 
@@ -667,6 +690,21 @@ def register_masterplan_syscall_handlers() -> None:
         output_schema={
             "required": ["block", "works"],
             "properties": {"block": {"type": "string"}, "works": {"type": "array"}},
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.work.get_claim_truth",
+        handler=_handle_work_get_claim_truth,
+        capability="work.read",
+        description=(
+            "The user's Works as numbered facts (what they stated or confirmed) and the claims they denied, "
+            "for checking a draft's claims. Read-only."
+        ),
+        input_schema={"required": [], "properties": {}},
+        output_schema={
+            "required": ["works", "own_hosts"],
+            "properties": {"works": {"type": "array"}, "own_hosts": {"type": "array"}},
         },
         stable=False,
     )

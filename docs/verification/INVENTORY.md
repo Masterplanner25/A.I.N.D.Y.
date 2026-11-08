@@ -17,15 +17,15 @@ the audit's question. Live row counts are not here (they change): `python script
 | | ours | runtime's |
 |---|---|---|
 | Domains | 16 (3 core) | |
-| `/apps` routes | 285 (187 called by the client, 98 not) | 35 (mounted under `/apps`) |
-| Syscalls | 86 | 23 |
+| `/apps` routes | 286 (188 called by the client, 98 not) | 35 (mounted under `/apps`) |
+| Syscalls | 87 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 16 | 0 |
 | Registered jobs | 34 | 0 |
 | Python flow graphs | 82 | 1 |
 | Tables | 88 | 37 |
 | Nodus workflows (`.nd`) | 5 | |
-| `AINDY_*` flags read by our code | 49 | |
+| `AINDY_*` flags read by our code | 51 | |
 
 ## Domains
 
@@ -40,11 +40,11 @@ the audit's question. Live row counts are not here (they change): `python script
 | dashboard |  |  | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | freelance |  | automation, search, tasks | 22 | 18 | 3 | 2 | 0 | 1 | 16 | 0 | 9 |
 | identity | yes |  | 6 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 1 |
-| masterplan |  | identity | 76 | 14 | 16 | 3 | 3 | 14 | 16 | 0 | 23 |
+| masterplan |  | identity | 76 | 14 | 17 | 3 | 3 | 14 | 16 | 0 | 23 |
 | memory |  |  | 8 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | network_bridge |  | authorship, automation | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | rippletrace |  | analytics, automation | 50 | 4 | 11 | 0 | 5 | 1 | 0 | 3 | 8 |
-| search |  | analytics, rippletrace | 32 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
+| search |  | analytics, rippletrace | 33 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
 | social |  | analytics, automation | 8 | 2 | 4 | 0 | 0 | 0 | 0 | 0 | 0 |
 | tasks | yes |  | 7 | 2 | 18 | 2 | 5 | 7 | 8 | 0 | 1 |
 | (runtime) | | | 35 | 23 | 23 | 0 | 0 | 0 | 1 | 0 | 37 |
@@ -332,7 +332,7 @@ the audit's question. Live row counts are not here (they change): `python script
 - `PUT /apps/works/{work_id}/objectives`
 - `POST /apps/works/{work_id}/presence`
 
-**Syscalls (16):** `sys.v1.content.draft` (content.draft), `sys.v1.genesis.call_llm` (genesis.execute_llm), `sys.v1.genesis.execute_llm` (genesis.execute_llm), `sys.v1.genesis.import_plan` (genesis.execute_llm), `sys.v1.genesis.message` (genesis.message), `sys.v1.goal.create` (goal.create), `sys.v1.market.propose` (market.propose), `sys.v1.masterplan.assert_owned` (masterplan.read), `sys.v1.masterplan.cascade_activate` (masterplan.cascade_activate), `sys.v1.masterplan.get_active` (masterplan.read), `sys.v1.masterplan.get_eta` (masterplan.read), `sys.v1.masterplan.get_objective_attainment` (masterplan.read), `sys.v1.masterplan.recalculate_wcu` (masterplan.read), `sys.v1.masterplan.resolve_phase` (masterplan.read), `sys.v1.work.context` (work.context), `sys.v1.work.facts` (work.facts)
+**Syscalls (17):** `sys.v1.content.draft` (content.draft), `sys.v1.genesis.call_llm` (genesis.execute_llm), `sys.v1.genesis.execute_llm` (genesis.execute_llm), `sys.v1.genesis.import_plan` (genesis.execute_llm), `sys.v1.genesis.message` (genesis.message), `sys.v1.goal.create` (goal.create), `sys.v1.market.propose` (market.propose), `sys.v1.masterplan.assert_owned` (masterplan.read), `sys.v1.masterplan.cascade_activate` (masterplan.cascade_activate), `sys.v1.masterplan.get_active` (masterplan.read), `sys.v1.masterplan.get_eta` (masterplan.read), `sys.v1.masterplan.get_objective_attainment` (masterplan.read), `sys.v1.masterplan.recalculate_wcu` (masterplan.read), `sys.v1.masterplan.resolve_phase` (masterplan.read), `sys.v1.work.context` (work.context), `sys.v1.work.facts` (work.facts), `sys.v1.work.get_claim_truth` (work.read)
 
 **Agent tools (3):** `content.draft` (risk low), `genesis.message` (risk high), `market.propose` (risk low)
 
@@ -432,7 +432,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 ## search
 
-**Routes (32).** — = no client code calls it.
+**Routes (33).** — = no client code calls it.
 
 - `GET /apps/leadgen/`
 - `POST /apps/leadgen/`
@@ -453,6 +453,7 @@ the audit's question. Live row counts are not here (they change): `python script
 - — `POST /apps/seo/analyze`
 - `POST /apps/seo/analyze_seo/`
 - `POST /apps/seo/answers`
+- `POST /apps/seo/claims`
 - `GET /apps/seo/drafts`
 - `POST /apps/seo/drafts`
 - — `DELETE /apps/seo/drafts/{draft_id}`
@@ -576,6 +577,8 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_AUTHORITY_NEGOTIATION` | (runtime) | `""` |
 | `AINDY_BOOTSTRAP_RECONCILE` | (runtime) | `false` |
 | `AINDY_BOOT_MODE` | (runtime) | `app-profile` |
+| `AINDY_CLAIMS_MODEL` | search |  |
+| `AINDY_CLAIMS_REASONING_EFFORT` | search |  |
 | `AINDY_CLAUDE_PLANNER_MODEL` | agent | `""` |
 | `AINDY_DRAFT_MODEL` | masterplan |  |
 | `AINDY_DRAFT_REASONING_EFFORT` | masterplan |  |

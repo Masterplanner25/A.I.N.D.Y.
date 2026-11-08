@@ -73,7 +73,13 @@ def _sampling(model: str) -> dict:
 
 def _fold(text: str) -> str:
     """For matching a quoted passage against the article: case, whitespace and quote styles aside."""
-    text = (text or "").lower()
+    text = text or ""
+    # A link reads as its words: `[found](https://…)` and `<a href="…">found</a>` are "found" to a reader,
+    # so a quote of the sentence must match. Images go entirely; other tags drop.
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = text.lower()
     text = text.translate(str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"',
                                          "–": "-", "—": "-", "…": "..."}))
     text = re.sub(r"[*_`#>]", "", text)  # markdown emphasis and headings

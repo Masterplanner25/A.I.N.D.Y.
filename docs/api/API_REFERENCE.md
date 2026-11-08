@@ -2174,6 +2174,24 @@ a spread, not a score. `reason` is non-null exactly when nothing usable came bac
 
 **Response 200:** answers: [{question, passage, kind (what_is | how | why | compared_with | who | other), passage_found}], raised: [{question, passage, passage_found}], range: object, model: string, reason: string | null, truncated_input: boolean
 
+#### POST /apps/seo/claims
+Article Claims Route
+
+**Body:** text: string (required), title: string | null
+
+What a draft claims, and what each claim leans on (`ARTICLE_ANSWERS_SPEC` §4, phase D1; decided 2026-11-08). A claim is
+a checkable fact: a number, a date or event, an attribution, a statement about a named product, person or organisation,
+or a cause or comparison stated as fact. One gpt-5.5 call at low reasoning effort (`AINDY_CLAIMS_MODEL`,
+`AINDY_CLAIMS_REASONING_EFFORT`), paid with the caller's own key (402 without one), about 20 to 50 s, so 6/min and run on
+a button. Claims about the caller's Works (read through `sys.v1.work.get_claim_truth`) are `contradicts` (says what the
+caller denied), `confirmed` (matches a fact) or `new`; any other claim is `sourced` (a link in the draft backs it) or
+`unsourced`. The model only points into the lists it is given; a pointer is kept only when the Work exists, the fact or
+denial is that Work's, and the link is in the draft. `found` is false when a quoted claim is not in the text word for
+word. Information only: it never judges truth or suggests wording. `reason` is non-null exactly when nothing usable came
+back; `sources` still lists the draft's links then.
+
+**Response 200:** claims: [{claim, kind (number | date_event | attribution | named | cause_comparison), found, work: string | null, status (contradicts | confirmed | new | sourced | unsourced), fact: string | null, denied: string | null, source: string | null}], counts: object, sources: [{url, own, claims: [index]}], works_checked: integer, model: string, reason: string | null, truncated_input: boolean
+
 #### POST /apps/seo/own_links
 Own Links Route
 

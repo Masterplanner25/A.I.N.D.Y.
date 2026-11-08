@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { mockListDrafts, mockGetArticleAnswers, mockGetOwnLinks } = vi.hoisted(() => ({
+const { mockListDrafts, mockGetArticleAnswers, mockGetOwnLinks, mockGetArticleClaims } = vi.hoisted(() => ({
+  mockGetArticleClaims: vi.fn(),
   mockListDrafts: vi.fn(),
   mockGetArticleAnswers: vi.fn(),
   mockGetOwnLinks: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("../api/search.js", () => ({
   analyzeDraft: vi.fn(),
   pruneDraftAnalyses: vi.fn(),
   getArticleAnswers: mockGetArticleAnswers,
+  getArticleClaims: mockGetArticleClaims,
   getOwnLinks: mockGetOwnLinks,
 }));
 
@@ -98,3 +100,65 @@ describe("SEO tool: what the article answers, and links to your work", () => {
     expect(panel.textContent).toContain("https://example.com/x");
   });
 });
+
+/**
+ * ARTICLE_ANSWERS_SPEC phase D1: What does this claim? Information only. A claim that says what the writer
+ * denied is shown as such, never blocked; the rest shows what it leans on, not whether it is true.
+ */
+describe("SEO tool: what the draft claims", () => {
+  beforeEach(() => {
+    mockListDrafts.mockReset();
+    mockListDrafts.mockResolvedValue({ drafts: [] });
+    mockGetArticleClaims.mockReset();
+  });
+
+  function typeDraft() {
+    render(<AiSeoTool />);
+    fireEvent.change(screen.getByPlaceholderText(/Paste your article/i), {
+      target: { value: "Nodus is part of A.I.N.D.Y. Gartner found that 40% of agent projects fail." },
+    });
+  }
+
+  it("shows each claim with its status, what it matches or contradicts, and the draft's links", async () => {
+    mockGetArticleClaims.mockResolvedValue({
+      claims: [
+        { claim: "Nodus is part of A.I.N.D.Y.", kind: "named", found: true, work: "Nodus", status: "contradicts",
+          fact: null, denied: "Nodus is part of A.I.N.D.Y.", source: null },
+        { claim: "Gartner found that 40% of agent projects fail", kind: "attribution", found: true, work: null,
+          status: "sourced", fact: null, denied: null, source: "https://gartner.example/agents" },
+        { claim: "It ships with forty plugins", kind: "number", found: false, work: null, status: "unsourced",
+          fact: null, denied: null, source: null },
+      ],
+      counts: { contradicts: 1, confirmed: 0, new: 0, sourced: 1, unsourced: 1 },
+      sources: [{ url: "https://gartner.example/agents", own: false, claims: [1] }],
+      reason: null,
+    });
+    typeDraft();
+    fireEvent.click(screen.getByRole("button", { name: /What does this claim\?/i }));
+
+    const panel = await screen.findByTestId("article-claims");
+    expect(panel).toHaveTextContent("says what you denied · Nodus");
+    expect(panel).toHaveTextContent("You denied: Nodus is part of A.I.N.D.Y.");
+    expect(panel).toHaveTextContent("Source: https://gartner.example/agents");
+    expect(panel).toHaveTextContent("no source in the draft");
+    expect(panel).toHaveTextContent("(not found word for word in the text)");
+    expect(screen.getByTestId("claims-counts")).toHaveTextContent("says what you denied 1 · sourced 1 · no source in the draft 1");
+    expect(panel).toHaveTextContent("1 claim leans on it");
+  });
+
+  it("shows the server's sentence when the writer has no key", async () => {
+    const err = Object.assign(new Error("API Error (402)"), {
+      status: 402,
+      data: JSON.stringify({ detail: "This needs your own OpenAI API key. Add it in Settings." }),
+    });
+    mockGetArticleClaims.mockRejectedValue(err);
+    typeDraft();
+    fireEvent.click(screen.getByRole("button", { name: /What does this claim\?/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId("article-claims")).toHaveTextContent(
+        "No claims listed: This needs your own OpenAI API key. Add it in Settings.",
+      ),
+    );
+  });
+});
+
