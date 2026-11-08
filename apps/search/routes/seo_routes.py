@@ -9,6 +9,8 @@ from apps.search.schemas.seo import (
     SEOInput,
     MetaInput,
     TitleInput,
+    ArticleAnswersInput,
+    OwnLinksInput,
     DraftCreateInput,
     DraftUpdateInput,
     DraftAnalyzeInput,
@@ -144,6 +146,55 @@ def generate_meta(
 
     return _with_execution_envelope(
         _execute_seo(request, "seo.meta", handler, db=db, user_id=user_id)
+    )
+
+
+@router.post("/answers")
+@limiter.limit("6/minute")
+def article_answers_route(
+    request: Request,
+    data: ArticleAnswersInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """What questions the article answers, and which it raises (ARTICLE_ANSWERS_SPEC §2, phase A).
+
+    One gpt-5.5 call, about 25 to 50 s, so the tool runs it on a button, and the limit is low."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.search.services.article_answers import article_answers
+
+        return article_answers(data.text, title=data.title, user_id=user_id, db=db)
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.answers", handler, db=db, user_id=user_id)
+    )
+
+
+@router.post("/own_links")
+@limiter.limit("15/minute")
+def own_links_route(
+    request: Request,
+    data: OwnLinksInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """The caller's own pieces this draft links to, relevant ones it does not, and its other links
+    (ARTICLE_ANSWERS_SPEC §3, phase A). Only the caller's pieces are ever read."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.rippletrace.public import own_piece_links
+
+        limit = max(1, min(int(data.limit or 8), 20))
+        return own_piece_links(
+            db, user_id=user_id, text=data.text, title=data.title,
+            exclude_url=data.exclude_url, missing_limit=limit,
+        )
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.own_links", handler, db=db, user_id=user_id)
     )
 
 

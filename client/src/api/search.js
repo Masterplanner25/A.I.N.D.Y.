@@ -118,6 +118,33 @@ export function generateTitles(content, currentTitle, targetKeywords) {
   });
 }
 
+// ── What the article answers, and links to your own pieces (ARTICLE_ANSWERS_SPEC phase A) ──
+//
+// App-owned routes not in ui-kit's ROUTES, so the full /apps path is written directly. Both run a
+// model or several embedding calls (18-30 s measured on 2026-11-08), past ui-kit's default 30 s, so
+// each asks for its own timeout (FR-47). They run on a button, never on typing.
+export const ARTICLE_ANSWERS_TIMEOUT_MS = 150_000;
+
+export function getArticleAnswers(content, title) {
+  const body = { text: content };
+  if (title) body.title = title;
+  return authRequest("/apps/seo/answers", {
+    method: "POST",
+    body: JSON.stringify(body),
+    timeoutMs: ARTICLE_ANSWERS_TIMEOUT_MS,
+  });
+}
+
+export function getOwnLinks(content, title) {
+  const body = { text: content };
+  if (title) body.title = title;
+  return authRequest("/apps/seo/own_links", {
+    method: "POST",
+    body: JSON.stringify(body),
+    timeoutMs: ARTICLE_ANSWERS_TIMEOUT_MS,
+  });
+}
+
 export function suggestSeoImprovements(content, title, targetKeywords) {
   const body = { content };
   if (title) body.title = title;

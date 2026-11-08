@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import logging
 
-BOOTSTRAP_DEPENDS_ON: list[str] = ["analytics"]
-APP_DEPENDS_ON: list[str] = ["analytics"]
+BOOTSTRAP_DEPENDS_ON: list[str] = ["analytics", "rippletrace"]
+APP_DEPENDS_ON: list[str] = ["analytics", "rippletrace"]
 
 logger = logging.getLogger(__name__)
 
