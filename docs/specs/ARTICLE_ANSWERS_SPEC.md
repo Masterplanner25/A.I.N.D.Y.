@@ -124,7 +124,7 @@ The owner's chat on 2026-10-25 described two workflow families:
 | Phase | What | Schema |
 |---|---|---|
 | **A** ✅ **built 2026-11-08** | In the SEO tool, on draft text: **What does this answer?** (§2, without the Resolution tie), outbound links to own pieces, and missing own pieces (§3). `POST /apps/seo/answers` (`apps/search/services/article_answers.py`), `POST /apps/seo/own_links` (`apps/rippletrace/services/own_links.py`) | none |
-| **B** | Per published piece, once per content hash: answers and links stored. Ingestion keeps link targets. Inbound links and series navigation | a links column on `drop_points`, and a table for answers |
+| **B** | Per published piece, once per content hash: answers and links stored. Ingestion keeps link targets. Inbound links and series navigation. **B1 built 2026-11-08:** ingestion keeps link targets (`drop_points.content_links`, migration `rt2links0001`; `services/links.py`), and `content_archive.backfill_links` recovers them for stored pieces (DEV from its markdown text, Substack and Medium by one re-fetch). B2 (stored answers) and B3 (inbound links, series navigation) follow | a links column on `drop_points`, and a table for answers |
 | **C** | The tie to resolution: answers matched against the Resolution Check's questions per Work. Shown on the Work card, and offered to the planner as one line | none beyond B |
 | **D** | Source validation (§4), then style (§5) | none expected |
 

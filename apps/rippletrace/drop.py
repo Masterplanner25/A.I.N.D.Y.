@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, Float, ForeignKey
+from sqlalchemy import JSON, Column, String, DateTime, Text, Float, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from AINDY.db.database import Base
 
@@ -33,6 +33,11 @@ class DropPointDB(Base):
     content_hash = Column(String(64), nullable=True)
     # The content_hash the memory chunks were written from; differs from content_hash when they are due.
     content_memory_hash = Column(String(64), nullable=True)
+    # The links the writer made in the piece, as written: kept from the raw body when it is fetched,
+    # because `to_text` strips HTML and the `href`s with it (ARTICLE_ANSWERS_SPEC §3, decision 2).
+    # None = not read yet; [] = read, and it links to nothing.
+    # none_as_null: Python None must be SQL NULL ("not read yet"), never the JSON value null.
+    content_links = Column(JSON(none_as_null=True), nullable=True)
     # Its share drafts (`share_drafts.py`): None = due, made, failed, cross_post (a copy: the earliest
     # one gets them), skipped (stored before the feature shipped: new pieces only, owner 2026-10-25).
     share_drafts = Column(String(16), nullable=True)
