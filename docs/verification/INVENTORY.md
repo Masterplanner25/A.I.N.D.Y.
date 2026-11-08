@@ -606,6 +606,7 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_PASSWORD_RESET_URL_TEMPLATE` | (runtime) | `""` |
 | `AINDY_PIECE_ANSWERS_NODUS` | rippletrace | `1` |
 | `AINDY_PLAN_STEP_REFERENCES` | (runtime) | `""` |
+| `AINDY_PROVIDER_KEYS` | (runtime) | `per_user` |
 | `AINDY_REASONING_NODUS_NATIVE` | analytics | `1` |
 | `AINDY_REGISTRATION` | (runtime) | `closed` |
 | `AINDY_RELEASE_NOTIFY_TO` | automation | `""` |

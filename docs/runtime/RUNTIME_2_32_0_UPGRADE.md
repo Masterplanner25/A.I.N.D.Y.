@@ -175,3 +175,21 @@ plain pipeline route, and Genesis through its flow and syscall).
 DeepSeek, each with what it pays for, set or replace (a password field, cleared after saving), and remove. It shows only
 `key_hint` and the date; a stored key never reaches the page. A 503 reads *"Provider keys aren't switched on for this
 server yet."*, since no master key is set here until part 3. Azure OpenAI is left off: nothing of ours calls it.
+
+## 10. Phase 3, part 3: the master key, the runtime's review, and the switch
+
+- **Master key (#569):** `AINDY_SECRET_PROVIDER_KEY_ENCRYPTION_KEYS` passes through compose; the value is in `.env` only,
+  appended by the owner and never shown. Live 2026-11-08 19:16:01Z: the api loads one master key. A round trip on the
+  test account: `PUT` answered 200 with the hint only, the stored ciphertext does not contain the key, the account still
+  resolved to the server's key (mode `server`), `DELETE` answered 204, no rows left.
+- **The runtime's review of #566 (2026-11-08):** sound, nothing blocks turning it on. Each of the 23 sites takes the paying
+  user from the signed-in request, the syscall's verified identity, a run's owner or a job row's owner, never a request
+  body; no client is shared across users (user keys use the runtime's per-key clients and breakers); a refused key on a
+  raw HTTP call becomes a 402 before any other failure path and is not retried; scheduled jobs skip a user who cannot
+  pay; the two knowing uses of the server's key (owner notices; the Anthropic planner for a run with no user) are
+  intended, and real agent runs always carry their creator.
+- **The switch:** `AINDY_PROVIDER_KEYS: "${AINDY_PROVIDER_KEYS:-per_user}"` in compose. On this stack the owner is the
+  only operator (`is_admin`) and keeps the server's keys; the other three accounts need their own keys for paid
+  features, and scheduled jobs skip them until they have one. `server` in `.env` turns it back. Live check owed after the
+  merge (§11).
+
