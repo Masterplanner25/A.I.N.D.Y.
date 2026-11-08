@@ -62,10 +62,34 @@ review reached us before this handoff did, and the `RETRY` mapping is fixed in t
 rebuild, a refused key inside a flow could have been tried three times. On this stack only the owner pays, and the owner
 uses the server's key, so it could not happen here.
 
-## 6. Live, after the merge
+## 6. Live, 2026-11-08
 
-1. Read the counters, rebuild, recreate. No reconcile.
-2. The handoff's check: `2.34.0 0.5.1 [...site-packages/AINDY]`.
-3. `aindy-runtime events backfill-call-users`, then `--yes`: what it filled and skipped.
-4. `aindy-runtime memory backfill-paths --yes`.
-5. Re-read `d534a3fd…` scoped to its owner (unscoped on 2.32.0: 584 nodes, 583 edges; scoped: 582 and 291, depth 1).
+From #574's merge (`2a4dee5`), image `ff06d67fe91c`, up healthy at **21:51:02Z**, no restarts.
+
+1. **Counters before the recreate** (21:47Z): 0 identity mismatches, 0 `tenant_mismatch`; 2 OpenAI calls, both
+   `key_source="server"` (the owner). Schema head `0021`; 0 stranded `executing` agent runs.
+2. **The handoff's check:** `2.34.0 0.5.1 ['/usr/local/lib/python3.11/site-packages/AINDY']`.
+3. **`events backfill-call-users`:**
+   - **Before:** 28,600 userless `external.call.*` events.
+   - **Dry run:** 10,966 would get their trace's user; 859 traces left alone with no user, 0 with more than one.
+   - **`--yes`:** gave 10,966 events their trace's user in 13 batches.
+   - **A second dry run finds nothing.**
+   - **17,634 stay userless,** all in the 859 traces with no user at all (system work).
+4. **`memory backfill-paths --yes`** now runs (FR-62): 0 to store, since we had filled all 1,721 on 2.32.0; 1,903 with
+   no owner left alone.
+5. **Trace `d534a3fd…`, re-read scoped to its owner:**
+
+   | | Nodes | Edges | Depth |
+   |---|---|---|---|
+   | Unscoped | 584 | 583 | |
+   | Scoped, on 2.32.0 | 582 | 291 | 1 |
+   | Scoped, now | **584** | **293** | 1 |
+
+   - **The nodes are fixed.** The trace has 0 userless events now; the two model-call events are kept.
+   - **The edges are not, and the cause is narrower than FR-61.** The 290 edges still dropped are all `async_child`
+     edges whose child is an `execution.started` event **in another trace**, and every one of those 290 events belongs to
+     the same owner.
+   - The unscoped graph keeps those edges, but not their far ends as nodes, so 290 of its 583 edges dangle. The scoped
+     graph applies FR-60's rule, "edges whose ends both remain", and drops them.
+   - **For the runtime:** should a scoped graph keep an edge to the caller's own event outside the trace (as a dangling
+     edge, like the unscoped one, or with that event as a node)? Not filed as a request; reported here as asked.
