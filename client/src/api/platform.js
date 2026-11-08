@@ -11,14 +11,6 @@ export function getHealthDetails() {
   return authRequest(ROUTES.PLATFORM.HEALTH_DETAILS, { method: "GET" });
 }
 
-export function getInfluenceGraph() {
-  return authRequest(ROUTES.PLATFORM.INFLUENCE_GRAPH, { method: "GET" });
-}
-
-export function getCausalGraph() {
-  return authRequest(ROUTES.PLATFORM.CAUSAL_GRAPH, { method: "GET" });
-}
-
-export function getNarrative(dropPointId) {
-  return authRequest(ROUTES.PLATFORM.NARRATIVE(dropPointId), { method: "GET" });
-}
+// getInfluenceGraph / getCausalGraph / getNarrative were removed 2026-11-08: they called
+// RippleTrace's legacy shared-key routes, retired server-side in #548. The graph view uses the
+// user-scoped versions in ./rippletrace.js.

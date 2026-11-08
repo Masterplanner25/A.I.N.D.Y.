@@ -50,20 +50,25 @@ describe("client API ownership boundaries", () => {
   it("routes platform UI APIs through the platform module", () => {
     platformApi.getDashboardOverview();
     platformApi.getHealthDetails();
-    platformApi.getNarrative("drop-1");
 
-    // PLATFORM is a mixed domain map: /dashboard/overview and /narrative/* are app-domain
-    // (so they carry the /apps mount), while /health/details is runtime-owned and does not.
+    // PLATFORM is a mixed domain map: /dashboard/overview is app-domain (so it carries the
+    // /apps mount), while /health/details is runtime-owned and does not.
     expect(authRequest).toHaveBeenNthCalledWith(1, "/apps/dashboard/overview", { method: "GET" });
     expect(authRequest).toHaveBeenNthCalledWith(2, "/health/details", { method: "GET" });
-    expect(authRequest).toHaveBeenNthCalledWith(3, "/apps/narrative/drop-1", { method: "GET" });
   });
 
   it("exposes platform UI calls from platform.js alongside operator re-exports", () => {
     expect(platformApi.getFlowRuns).toBeTypeOf("function");
     expect(platformApi.getObservabilityDashboard).toBeTypeOf("function");
     expect(platformApi.getDashboardOverview).toBeTypeOf("function");
-    expect(platformApi.getNarrative).toBeTypeOf("function");
+    expect(platformApi.getHealthDetails).toBeTypeOf("function");
+  });
+
+  it("no longer exports the wrappers for RippleTrace's retired legacy routes", () => {
+    // Retired server-side in #548; the graph view uses ./rippletrace.js.
+    expect(platformApi.getInfluenceGraph).toBeUndefined();
+    expect(platformApi.getCausalGraph).toBeUndefined();
+    expect(platformApi.getNarrative).toBeUndefined();
   });
 
   it("preserves backward-compatible flat exports while exposing explicit categories", () => {

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
-// Use the canonical, user-authable rippletrace routes — NOT platform.js's getInfluenceGraph/
-// getCausalGraph/getNarrative, which hit the deprecated legacy surface behind an admin API key.
+// Use the canonical, user-authable rippletrace routes. (platform.js's getInfluenceGraph/
+// getCausalGraph/getNarrative hit the legacy surface behind an admin API key; that surface was
+// retired in #548 and the wrappers removed 2026-11-08.)
 // Those 401 for a normal user, and a 401 trips the client's global session-expired logout, so
 // simply opening the Graph tab bounced the user back to sign-in.
 import {
