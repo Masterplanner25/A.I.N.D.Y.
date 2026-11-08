@@ -33,7 +33,15 @@ def record_prediction(
     velocity_at_prediction: float,
     narrative_at_prediction: float,
 ):
-    from apps.automation.public import create_learning_record
+    from apps.automation.public import create_learning_record, get_latest_learning_record
+
+    # One open prediction per drop point. `evaluate_outcome` judges only the latest pending
+    # record, so stacking more never improved learning, and `GET /predictions/{id}` (with
+    # `record_learning` on, the default) let any user add one per call to the records
+    # `adjust_thresholds` reads for every user (2026-11-08).
+    pending = get_latest_learning_record(db, drop_point_id=drop_point_id, pending_only=True)
+    if pending:
+        return pending
 
     return create_learning_record(
         db,

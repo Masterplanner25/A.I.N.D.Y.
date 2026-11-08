@@ -97,22 +97,18 @@ def analyze_seo(
     from apps.analytics.public import save_calculation
     user_id = str(current_user["sub"])
 
-    results = analyze_seo_content(
-        data.text, data.top_n, db=db, user_id=user_id, title=data.title,
-        target_keywords=data.target_keywords,
-    )
-
-    # Save key SEO metrics
-    save_calculation(db, "seo_readability", results["readability"])
-    save_calculation(db, "seo_word_count", results["word_count"])
-
-    # Optionally save average density
-    avg_density = 0.0
-    if results["keyword_densities"]:
-        avg_density = sum(results["keyword_densities"].values()) / len(results["keyword_densities"])
-        save_calculation(db, "seo_avg_keyword_density", round(avg_density, 2))
-
     def handler(_ctx):
+        # Inside the pipeline (it ran before entry, so a failure there was an opaque 500), and
+        # every row saved with its owner: it was saved with no user_id, an ownerless row per call.
+        results = analyze_seo_content(
+            data.text, data.top_n, db=db, user_id=user_id, title=data.title,
+            target_keywords=data.target_keywords,
+        )
+        save_calculation(db, "seo_readability", results["readability"], user_id=user_id)
+        save_calculation(db, "seo_word_count", results["word_count"], user_id=user_id)
+        if results["keyword_densities"]:
+            avg_density = sum(results["keyword_densities"].values()) / len(results["keyword_densities"])
+            save_calculation(db, "seo_avg_keyword_density", round(avg_density, 2), user_id=user_id)
         return results
     return _with_execution_envelope(
         _execute_seo(request, "seo.analyze", handler, db=db, user_id=user_id)

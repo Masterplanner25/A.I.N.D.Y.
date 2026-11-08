@@ -665,12 +665,20 @@ def _execute_content_generation(payload: dict[str, Any], config: dict[str, Any])
 
 def get_automation_log(db, log_id: str, user_id: str) -> Any | None:
     """
-    Fetch an AutomationLog row by id.
+    Fetch the caller's AutomationLog row by id; None when it is missing or someone else's.
 
-    Returns the row if it exists (ownership is not enforced at the DB level —
-    the replay endpoint validates the execution_token instead).
-    Returns None when no row matches log_id.
+    It used to fetch by id alone and leave ownership to the replay's token check, which
+    answered 403 for another user's log and 404 for a missing one, so the answer told a
+    caller which ids existed. Another user's log now reads as missing (2026-11-08).
     """
     from apps.automation.models import AutomationLog
+    from AINDY.platform_layer.user_ids import parse_user_id
 
-    return db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+    owner = parse_user_id(user_id)
+    if owner is None:
+        return None
+    return (
+        db.query(AutomationLog)
+        .filter(AutomationLog.id == log_id, AutomationLog.user_id == owner)
+        .first()
+    )

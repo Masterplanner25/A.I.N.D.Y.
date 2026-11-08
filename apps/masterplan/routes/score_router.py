@@ -107,7 +107,7 @@ async def get_score_history(
 ):
     def handler(ctx):
         from apps._shared.flow import run_flow_or_raise
-        result = run_flow_or_raise("score_history", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
+        result = run_flow_or_raise("score_history", {"limit": max(1, min(int(limit), 500))}, db=db, user_id=str(current_user["sub"]))
         return result.get("data")
 
     return await execute_with_pipeline(
@@ -166,7 +166,7 @@ async def get_score_feedback(
 ):
     def handler(ctx):
         from apps._shared.flow import run_flow_or_raise
-        result = run_flow_or_raise("score_feedback_list", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
+        result = run_flow_or_raise("score_feedback_list", {"limit": max(1, min(int(limit), 500))}, db=db, user_id=str(current_user["sub"]))
         return result.get("data")
 
     return await execute_with_pipeline(
