@@ -10,6 +10,7 @@ from apps.search.schemas.seo import (
     MetaInput,
     TitleInput,
     ArticleAnswersInput,
+    ArticleClaimsInput,
     OwnLinksInput,
     DraftCreateInput,
     DraftUpdateInput,
@@ -169,6 +170,30 @@ def article_answers_route(
 
     return _with_execution_envelope(
         _execute_seo(request, "seo.answers", handler, db=db, user_id=user_id)
+    )
+
+
+@router.post("/claims")
+@limiter.limit("6/minute")
+def article_claims_route(
+    request: Request,
+    data: ArticleClaimsInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """What a draft claims, and what each claim leans on (ARTICLE_ANSWERS_SPEC §4, phase D1).
+
+    Claims about the caller's Works are checked against their facts and denied claims; the rest are marked
+    sourced or unsourced by the draft's own links. Information only. One gpt-5.5 call, about 25 to 50 s."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.search.services.article_claims import article_claims
+
+        return article_claims(data.text, title=data.title, user_id=user_id, db=db)
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.claims", handler, db=db, user_id=user_id)
     )
 
 

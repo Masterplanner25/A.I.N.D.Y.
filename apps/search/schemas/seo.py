@@ -26,6 +26,12 @@ class ArticleAnswersInput(BaseModel):
     title: Optional[str] = None
 
 
+class ArticleClaimsInput(BaseModel):
+    """What a draft claims, and what each claim leans on (ARTICLE_ANSWERS_SPEC §4, phase D1)."""
+    text: str
+    title: Optional[str] = None
+
+
 class OwnLinksInput(BaseModel):
     """The owner's pieces a draft links to and could link to (ARTICLE_ANSWERS_SPEC §3).
 
