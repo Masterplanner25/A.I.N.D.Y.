@@ -253,7 +253,8 @@ def backfill_links(
 ) -> dict:
     """Keep the links of pieces stored before `content_links` existed (ARTICLE_ANSWERS_SPEC decision 2).
 
-    * **DEV**: its stored text is markdown and kept its links, so they are read from it. No fetch.
+    * **DEV, text from its API**: markdown that kept its links, so they are read from it. No fetch.
+    * **DEV, text from the feed**: HTML that lost its links, so the raw body is fetched like Substack.
     * **Substack and Medium**: their text was stored from HTML, which `to_text` stripped. The raw body
       is fetched once more through the same platform fetchers ingestion uses. Medium's text comes only
       from its feed, which carries recent posts, so an older Medium piece can be ``unavailable``.
@@ -273,7 +274,10 @@ def backfill_links(
     for row in rows:
         platform = row.platform or "other"
         tally = out.setdefault(platform, {"from_text": 0, "fetched": 0, "unavailable": 0, "failed": 0})
-        if platform == "DEV":
+        # Only DEV text that came from its API is markdown with its links intact. DEV text kept from
+        # the feed was HTML, and `to_text` stripped its links (found 2026-11-08: 19 pieces), so it is
+        # re-fetched like Substack.
+        if platform == "DEV" and row.content_source == "api":
             row.content_links = piece_links(row.content_text)
             tally["from_text"] += 1
             continue

@@ -8,9 +8,12 @@ import {
   getContainerCandidates,
   getContainerPerformance,
   getContentSources,
+  getPieceAnswers,
+  getPieceLinks,
   getRippleDropPoints,
   ingestContentUrl,
   pollContentSource,
+  queuePieceAnswers,
   queueShareDrafts,
   recordCitation,
   setContentSourceActive,
@@ -37,6 +40,14 @@ function unwrap(response, key) {
   if (response[key] !== undefined) return response[key];
   if (response.data && response.data[key] !== undefined) return response.data[key];
   return undefined;
+}
+
+// The whole result of a call, whether or not it arrived inside a `data` envelope. Both piece calls
+// answer with `found`, so that is how the result is recognised.
+function wholeResult(response) {
+  if (!response) return null;
+  if (response.found !== undefined) return response;
+  return response.data && response.data.found !== undefined ? response.data : response;
 }
 
 function asList(value) {
@@ -77,6 +88,9 @@ export default function RippleTrace() {
   // What happened to a share-drafts request, shown beside the piece: the page notice sits above
   // the list, out of sight from the button (2026-11-02).
   const [shareNote, setShareNote] = useState(null);
+  // The open "Answers & links" panel: one piece at a time.
+  const [detailFor, setDetailFor] = useState(null);
+  const [detail, setDetail] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -242,6 +256,37 @@ export default function RippleTrace() {
       const text = detail?.error === "no_text" ? detail.message : err.message || "Could not queue share drafts";
       setError(text);
       setShareNote({ id: dropPointId, text, failed: true });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // What a piece answers (B2) and how it connects to your other pieces (B3). Both are read on
+  // opening, never in the list itself: the list stays one request.
+  async function toggleDetail(dropPointId) {
+    if (detailFor === dropPointId) {
+      setDetailFor(null);
+      setDetail(null);
+      return;
+    }
+    setDetailFor(dropPointId);
+    setDetail({ loading: true });
+    const [answers, links] = await Promise.allSettled([getPieceAnswers(dropPointId), getPieceLinks(dropPointId)]);
+    setDetail({
+      answers: answers.status === "fulfilled" ? wholeResult(answers.value) : null,
+      links: links.status === "fulfilled" ? wholeResult(links.value) : null,
+      failed: answers.status === "rejected" && links.status === "rejected",
+    });
+  }
+
+  async function handleQueueAnswers(dropPointId) {
+    setBusy(true);
+    try {
+      await queuePieceAnswers(dropPointId);
+      setDetail((current) => ({ ...current, queued: true }));
+    } catch (err) {
+      const message = err?.data?.detail?.message || err.message || "Could not ask for answers";
+      setDetail((current) => ({ ...current, queueError: message }));
     } finally {
       setBusy(false);
     }
@@ -648,6 +693,14 @@ export default function RippleTrace() {
                   )}
                   <button
                     type="button"
+                    onClick={() => toggleDetail(point.id)}
+                    className="text-xs text-cyan-400 hover:text-cyan-300"
+                    data-testid={`detail-toggle-${point.id}`}
+                  >
+                    {detailFor === point.id ? "Hide" : "Answers & links"}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleDetect(point.id)}
                     disabled={busy}
                     className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-40"
@@ -656,6 +709,72 @@ export default function RippleTrace() {
                   </button>
                 </div>
               </div>
+              {detailFor === point.id && detail && (
+                <div className="mt-3 border-t border-zinc-800 pt-3 text-xs" data-testid={`piece-detail-${point.id}`}>
+                  {detail.loading && <div className="text-zinc-500">Loading…</div>}
+                  {detail.failed && <div className="text-red-400">Could not load this piece's answers or links.</div>}
+                  {detail.answers && (
+                    <div data-testid="piece-answers">
+                      <div className="font-semibold text-zinc-200">What it answers</div>
+                      {detail.answers.answers?.length ? (
+                        <>
+                          <div className="text-zinc-500 mt-1">
+                            {detail.answers.answers.length} answered · {detail.answers.raised?.length || 0} raised, not answered
+                            {detail.answers.stale ? " · read from an earlier version of the text" : ""}
+                          </div>
+                          <ul className="mt-1 space-y-1 text-zinc-300">
+                            {safeMap(detail.answers.answers.slice(0, 8), (a, i) => (
+                              <li key={`pa-${i}`}>{a.question}</li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : (
+                        <div className="text-zinc-500 mt-1">
+                          {detail.answers.status === "failed" ? "Reading it failed. " : "Not read yet. "}
+                          {detail.queued ? (
+                            <span className="text-emerald-400">Queued: answers within about ten minutes.</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleQueueAnswers(point.id)}
+                              disabled={busy}
+                              className="text-cyan-400 hover:text-cyan-300 disabled:opacity-40"
+                            >
+                              Read what it answers
+                            </button>
+                          )}
+                          {detail.queueError && <span className="text-red-400"> {detail.queueError}</span>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {detail.links && (
+                    <div className="mt-3" data-testid="piece-links">
+                      <div className="font-semibold text-zinc-200">Links</div>
+                      <div className="text-zinc-400 mt-1">
+                        Links to {detail.links.links_to?.length || 0} of your pieces · linked from{" "}
+                        {detail.links.linked_from?.length || 0} · {detail.links.other_links || 0} other links
+                        {detail.links.unread_copies > 0 ? ` · links of ${detail.links.unread_copies} cop${detail.links.unread_copies === 1 ? "y" : "ies"} unknown` : ""}
+                      </div>
+                      {safeMap(detail.links.series, (s, i) => (
+                        <div key={`ps-${i}`} className="mt-1 text-zinc-400" data-testid="piece-series">
+                          {s.name}: {s.position} of {s.of}
+                          {s.previous && (
+                            <div>
+                              ← {s.previous.title}: {s.previous.this_links_to_it ? "linked" : "not linked from here"}
+                            </div>
+                          )}
+                          {s.next && (
+                            <div>
+                              → {s.next.title}: {s.next.this_links_to_it ? "linked" : "not linked from here"}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {citingFor === point.id && (
                 <form
                   className="mt-2 flex items-center gap-2"

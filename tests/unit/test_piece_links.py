@@ -36,11 +36,11 @@ def test_html_takes_hrefs_and_text_urls_never_tag_attributes():
 # ── Keeping them ──────────────────────────────────────────────────────────────────────
 
 
-def _row(db, owner, platform, url, text=None, links=None):
+def _row(db, owner, platform, url, text=None, links=None, source="api"):
     row = DropPointDB(id=f"dp-{uuid.uuid4().hex[:10]}", title="A piece", platform=platform, url=url,
                       core_themes="", tagged_entities="", intent="published", user_id=owner)
     if text is not None:
-        content_archive.store_content(row, text, "api")
+        content_archive.store_content(row, text, source)
     row.content_links = links
     db.add(row)
     db.commit()
@@ -74,6 +74,8 @@ def test_backfill_reads_dev_from_text_and_fetches_the_rest(db_session):
     broken = _row(db_session, owner, "Substack", "https://me.substack.com/p/broken", text="More. " * 30)
     done = _row(db_session, owner, "Substack", "https://me.substack.com/p/done", text="Done. " * 30, links=["https://x"])
     theirs = _row(db_session, other, "DEV", "https://dev.to/them/t", text="[x](https://dev.to/them/u) " * 30)
+    # DEV text kept from the feed was HTML and lost its links: it is fetched again, not read.
+    dev_feed = _row(db_session, owner, "DEV", "https://dev.to/me/f", text="Stripped text. " * 30, source="feed")
 
     fetched = []
 
@@ -85,9 +87,10 @@ def test_backfill_reads_dev_from_text_and_fetches_the_rest(db_session):
 
     out = content_archive.backfill_links(
         db_session, user_id=owner, pause=0,
-        fetchers={"Substack": substack_fetch, "Medium": lambda row: None},
+        fetchers={"Substack": substack_fetch, "Medium": lambda row: None,
+                  "DEV": lambda row: "Text [the next part](https://dev.to/me/next) here. " * 30},
     )
-    for row in (dev, substack, medium, broken, done, theirs):
+    for row in (dev, substack, medium, broken, done, theirs, dev_feed):
         db_session.refresh(row)
 
     assert dev.content_links == ["https://dev.to/me/b"]
@@ -97,6 +100,7 @@ def test_backfill_reads_dev_from_text_and_fetches_the_rest(db_session):
     assert done.content_links == ["https://x"]  # already had links: not touched
     assert theirs.content_links is None  # another user's piece is never read
     assert done.id not in fetched
-    assert out["DEV"]["from_text"] == 1
+    assert dev_feed.content_links == ["https://dev.to/me/next"]
+    assert out["DEV"]["from_text"] == 1 and out["DEV"]["fetched"] == 1
     assert out["Substack"] == {"from_text": 0, "fetched": 1, "unavailable": 0, "failed": 1}
     assert out["Medium"]["unavailable"] == 1

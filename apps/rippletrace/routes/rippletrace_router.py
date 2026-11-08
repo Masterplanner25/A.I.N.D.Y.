@@ -427,6 +427,33 @@ async def get_piece_answers_route(
     )
 
 
+@router.get("/drop_points/{drop_point_id}/links")
+@limiter.limit("60/minute")
+async def get_piece_links_route(
+    request: Request,
+    drop_point_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """How a piece connects to the caller's other pieces (ARTICLE_ANSWERS_SPEC §3, B3): the pieces it
+    links to, the pieces linking to it, and its series neighbours with whether each pair links. Only
+    the caller's pieces are read."""
+    def handler(ctx):
+        from apps.rippletrace.services.piece_links import piece_link_report
+
+        result = piece_link_report(db, str(current_user["sub"]), drop_point_id)
+        if not result.get("found"):
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "drop_point_not_found", "message": "Drop point not found"},
+            )
+        return result
+
+    return await execute_with_pipeline(
+        request, "rippletrace_piece_links", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+
+
 @router.post("/drop_points/{drop_point_id}/citations")
 @limiter.limit("10/minute")
 async def record_citation(
