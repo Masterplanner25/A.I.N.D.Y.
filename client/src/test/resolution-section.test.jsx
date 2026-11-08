@@ -101,3 +101,35 @@ describe("The resolution check", () => {
     expect(screen.getByRole("button", { name: /run a check/i })).toBeDisabled();
   });
 });
+
+describe("What the engines missed, and what your writing says (ARTICLE_ANSWERS_SPEC phase C)", () => {
+  it("lists your pieces that answer questions about a missed subject, with the question each answers", async () => {
+    api.getResolution.mockResolvedValue({
+      ...DONE,
+      answered_in_writing: {
+        "direct:n": {
+          question: "What is Nodus?", kind: "direct", subjects: ["Nodus"],
+          engines: "not yet among the name's meanings on 3 of 3 engines",
+          pieces: [{ title: "Building Nodus", url: "https://dev.to/me/nodus", drop_point_id: "dp-1",
+                     question: "What is Nodus built to do?", passage: "Nodus is a workflow language." }],
+        },
+        "direct:a": {
+          question: "What is A.I.N.D.Y.?", kind: "direct", subjects: ["A.I.N.D.Y."],
+          engines: "resolved on 0 of 3 engines", pieces: [],
+        },
+      },
+    });
+    renderSection();
+    const block = await screen.findByTestId("answered-in-writing");
+    expect(block).toHaveTextContent("What is Nodus?");
+    expect(block).toHaveTextContent("Building Nodus answers “What is Nodus built to do?”");
+    expect(block).toHaveTextContent("None of your pieces with stored answers takes this on yet.");
+  });
+
+  it("shows nothing when the engines missed nothing", async () => {
+    api.getResolution.mockResolvedValue({ ...DONE, answered_in_writing: {} });
+    renderSection();
+    await screen.findByText(/“Helping you get found in AI Search”/);
+    expect(screen.queryByTestId("answered-in-writing")).toBeNull();
+  });
+});

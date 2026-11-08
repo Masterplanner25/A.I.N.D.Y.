@@ -149,7 +149,7 @@ def register() -> None:
     # number), so 74 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
     # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`; +1 on
     # 09-28: `sys.v1.market.propose`; +2 on 09-30: `sys.v1.leadgen.search_segment`, `sys.v1.content.draft`, so 77 of 100;
-    # +2 on 10-14: `sys.v1.work.context`, `sys.v1.work.facts`, the MCP read access, so 79 of 102; +4 on 10-22: the archive steps for `archive_published_work_v1.nd`, so 83 of 106; +1 on 10-25: `sys.v1.rippletrace.create_share_drafts` for `share_drafts_v1.nd`, so 84 of 107; +1 on 11-08: `sys.v1.rippletrace.create_piece_answers` for `piece_answers_v1.nd`, so 85 of 108 — re-derived 11-08). The previous
+    # +2 on 10-14: `sys.v1.work.context`, `sys.v1.work.facts`, the MCP read access, so 79 of 102; +4 on 10-22: the archive steps for `archive_published_work_v1.nd`, so 83 of 106; +1 on 10-25: `sys.v1.rippletrace.create_share_drafts` for `share_drafts_v1.nd`, so 84 of 107; +1 on 11-08: `sys.v1.rippletrace.create_piece_answers` for `piece_answers_v1.nd`, so 85 of 108; +1 the same day: `sys.v1.rippletrace.get_answered_pieces`, masterplan's call-time read for ARTICLE_ANSWERS phase C, so 86 of 109 — re-derived 11-08). The previous
     # figure of 90 was stale, which is the same failure the runtime-floor lines above had —
     # a number nobody re-derives is a number that drifts. To re-derive: boot the app profile,
     # then `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())`.

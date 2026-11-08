@@ -18,7 +18,7 @@ the audit's question. Live row counts are not here (they change): `python script
 |---|---|---|
 | Domains | 16 (3 core) | |
 | `/apps` routes | 285 (187 called by the client, 98 not) | 35 (mounted under `/apps`) |
-| Syscalls | 85 | 23 |
+| Syscalls | 86 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 16 | 0 |
 | Registered jobs | 34 | 0 |
@@ -43,7 +43,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | masterplan |  | identity | 76 | 14 | 16 | 3 | 3 | 14 | 16 | 0 | 23 |
 | memory |  |  | 8 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | network_bridge |  | authorship, automation | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| rippletrace |  | analytics, automation | 50 | 4 | 10 | 0 | 5 | 1 | 0 | 3 | 8 |
+| rippletrace |  | analytics, automation | 50 | 4 | 11 | 0 | 5 | 1 | 0 | 3 | 8 |
 | search |  | analytics, rippletrace | 32 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
 | social |  | analytics, automation | 8 | 2 | 4 | 0 | 0 | 0 | 0 | 0 | 0 |
 | tasks | yes |  | 7 | 2 | 18 | 2 | 5 | 7 | 8 | 0 | 1 |
@@ -420,7 +420,7 @@ the audit's question. Live row counts are not here (they change): `python script
 - `GET /apps/rippletrace/strategies/{strategy_id}`
 - `GET /apps/rippletrace/{trace_id}`
 
-**Syscalls (10):** `sys.v1.rippletrace.create_piece_answers` (rippletrace.write), `sys.v1.rippletrace.create_share_drafts` (rippletrace.write), `sys.v1.rippletrace.get_goal_metric` (rippletrace.read), `sys.v1.rippletrace.get_performance_signals` (rippletrace.read), `sys.v1.rippletrace.list_recent_pings` (rippletrace.read), `sys.v1.rippletrace.log_ripple_event` (rippletrace.write), `sys.v1.rippletrace.store_published_text` (rippletrace.write), `sys.v1.rippletrace.update_cross_posts` (rippletrace.write), `sys.v1.rippletrace.update_stored_text` (rippletrace.write), `sys.v1.rippletrace.write_published_memory` (rippletrace.write)
+**Syscalls (11):** `sys.v1.rippletrace.create_piece_answers` (rippletrace.write), `sys.v1.rippletrace.create_share_drafts` (rippletrace.write), `sys.v1.rippletrace.get_answered_pieces` (rippletrace.read), `sys.v1.rippletrace.get_goal_metric` (rippletrace.read), `sys.v1.rippletrace.get_performance_signals` (rippletrace.read), `sys.v1.rippletrace.list_recent_pings` (rippletrace.read), `sys.v1.rippletrace.log_ripple_event` (rippletrace.write), `sys.v1.rippletrace.store_published_text` (rippletrace.write), `sys.v1.rippletrace.update_cross_posts` (rippletrace.write), `sys.v1.rippletrace.update_stored_text` (rippletrace.write), `sys.v1.rippletrace.write_published_memory` (rippletrace.write)
 
 **Scheduled jobs (5):** `rippletrace_archive_published_work` (interval minutes=10), `rippletrace_detect_mentions` (interval minutes=360), `rippletrace_piece_answers` (interval minutes=10), `rippletrace_poll_content_sources` (interval minutes=60), `rippletrace_share_drafts` (interval minutes=10)
 

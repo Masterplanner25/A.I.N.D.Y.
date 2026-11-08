@@ -364,6 +364,15 @@ def planner_lines(db: Session, uid, *, now: datetime | None = None) -> dict[str,
     if when and (now or datetime.now(timezone.utc)) - when > timedelta(days=PLANNER_STALE_DAYS):
         dated += f", over {PLANNER_STALE_DAYS // 7} weeks old"
     subjects = {q["subject"] for q in run.questions or [] if q.get("kind") in dict(_PLANNER_KINDS)}
+    # ARTICLE_ANSWERS_SPEC phase C: the owner's pieces that answer what the engines missed. Best-effort:
+    # the line stands without it.
+    try:
+        from apps.masterplan.services.resolution_writing import answered_in_writing, writing_clause
+
+        answered = answered_in_writing(db, uid)
+    except Exception as exc:
+        logger.warning("[resolution] published answers not added to the planner line: %s", exc)
+        answered, writing_clause = {}, None
     lines: dict[str, str] = {}
     for subject in subjects:
         parts = []
@@ -373,7 +382,9 @@ def planner_lines(db: Session, uid, *, now: datetime | None = None) -> dict[str,
                 phrase = _resolved_phrase(scores)
                 parts.append(f"{label}: {phrase}" if label else phrase)
         if parts:
-            lines[subject] = f"AI search ({dated}; rechecked automatically every Monday): {'; '.join(parts)}"
+            line = f"AI search ({dated}; rechecked automatically every Monday): {'; '.join(parts)}"
+            clause = writing_clause(answered, subject) if writing_clause else None
+            lines[subject] = f"{line}; {clause}" if clause else line
     return lines
 
 

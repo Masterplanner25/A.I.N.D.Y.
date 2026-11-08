@@ -123,6 +123,38 @@ function Trend({ trend }) {
   );
 }
 
+// ARTICLE_ANSWERS_SPEC phase C: for each question the engines did not get, your published pieces that
+// answer questions ABOUT its subject, with the question each answers. Never a claim that a piece closes
+// the gap: you read the question and judge. Pieces get answers when published, or when you ask (RippleTrace).
+function WhatYourWritingSays({ answered }) {
+  const entries = Object.values(answered || {});
+  if (entries.length === 0) return null;
+  return (
+    <div className="space-y-2" data-testid="answered-in-writing">
+      <p className="text-[10px] uppercase tracking-wider text-zinc-600">What the engines missed, and what your writing says</p>
+      {safeMap(entries, (entry, i) => (
+        <div key={i} className="text-[11px]">
+          <p className="text-zinc-300">
+            {entry.question} <span className="text-zinc-500">({entry.engines})</span>
+          </p>
+          {entry.pieces?.length ? (
+            <ul className="mt-1 space-y-1">
+              {safeMap(entry.pieces, (p, j) => (
+                <li key={j} className="text-zinc-400">
+                  <a className="text-cyan-300 hover:underline" href={p.url} target="_blank" rel="noreferrer">{p.title}</a>
+                  {p.question && <span> answers “{p.question}”</span>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-zinc-600">None of your pieces with stored answers takes this on yet.</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ResolutionSection() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -203,6 +235,7 @@ export default function ResolutionSection() {
 
       <ClaimsToSettle claims={data?.claims} onDecide={decide} busy={busy} />
       <Trend trend={data?.trend} />
+      <WhatYourWritingSays answered={data?.answered_in_writing} />
 
       {data?.self_descriptions?.length > 0 && (
         <div className="space-y-1">
