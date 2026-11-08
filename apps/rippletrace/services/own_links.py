@@ -26,40 +26,17 @@ from sqlalchemy.orm import Session
 from apps.rippletrace.drop import DropPointDB
 from apps.rippletrace.services.content_archive import MEMORY_SOURCE
 from apps.rippletrace.services.content_fetch import normalize_url
+from apps.rippletrace.services.links import extract_links
 from apps.rippletrace.services.container_service import _normalize as _normalize_title
 
 logger = logging.getLogger(__name__)
 
-# Markdown links, HTML hrefs, then bare URLs. Trailing punctuation is trimmed from bare ones.
-_MD_LINK = re.compile(r"\[[^\]]*\]\((https?://[^)\s]+)\)")
-_HREF = re.compile(r"""href\s*=\s*["'](https?://[^"']+)["']""", re.IGNORECASE)
-_BARE = re.compile(r"https?://[^\s<>\"'()\[\]]+")
-_TRAILING = ".,;:!?*_"
 
 DRAFT_PART_CHARS = 2500  # each part of the draft is embedded on its own
 MAX_DRAFT_PARTS = 4
 CANDIDATES_PER_PART = 60
 DEFAULT_MISSING_LIMIT = 8
 PASSAGE_CHARS = 320
-
-
-def extract_links(text: str) -> list[str]:
-    """Every http(s) link in ``text``, in order of first appearance, without duplicates."""
-    found: list[str] = []
-    seen: set[str] = set()
-    body = text or ""
-    for pattern in (_MD_LINK, _HREF):
-        for match in pattern.finditer(body):
-            url = match.group(1).rstrip(_TRAILING)
-            if url not in seen:
-                seen.add(url)
-                found.append(url)
-    for match in _BARE.finditer(body):
-        url = match.group(0).rstrip(_TRAILING)
-        if url not in seen and not any(url in known for known in seen):
-            seen.add(url)
-            found.append(url)
-    return found
 
 
 def _uid(user_id) -> uuid.UUID:

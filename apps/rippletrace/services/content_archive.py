@@ -104,8 +104,14 @@ def _hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def store_content(row: DropPointDB, text: str, source: str) -> bool:
-    """Keep a piece's text on its drop point. Returns whether it changed. Does not commit."""
+def store_content(row: DropPointDB, text: str, source: str, links: list[str] | None = None) -> bool:
+    """Keep a piece's text on its drop point. Returns whether the TEXT changed. Does not commit.
+
+    ``links`` are the links read from the raw body before it became text (`piece_links`). They are
+    kept whenever given, even when the text is unchanged: a re-fetch made only to recover links must
+    still store them."""
+    if links is not None:
+        row.content_links = list(links)
     text = (text or "").strip()[:CONTENT_MAX_CHARS]
     if not text:
         return False
@@ -119,12 +125,19 @@ def store_content(row: DropPointDB, text: str, source: str) -> bool:
     return True
 
 
+def piece_links(raw: str | None) -> list[str]:
+    """The links the writer made, read from a piece's raw body (HTML or markdown), as written."""
+    from apps.rippletrace.services.links import extract_links
+
+    return extract_links(raw or "")
+
+
 def keep_feed_content(row: DropPointDB, raw: str | None) -> bool:
-    """Step 1: keep a feed body when it is the article, not an excerpt."""
+    """Step 1: keep a feed body when it is the article, not an excerpt, with its links."""
     text = to_text(raw)
     if len(text) < FEED_MIN_CHARS:
         return False
-    return store_content(row, text, "feed")
+    return store_content(row, text, "feed", links=piece_links(raw))
 
 
 # ── Step 2: backfill from each platform ───────────────────────────────────────────────────
@@ -224,11 +237,64 @@ def backfill_content(
         finally:
             if pause:
                 time.sleep(pause)
-        if store_content(row, to_text(raw), "api" if row.platform != "Medium" else "feed"):
+        if store_content(row, to_text(raw), "api" if row.platform != "Medium" else "feed", links=piece_links(raw)):
             out["fetched"] += 1
         else:
             row.content_source = "none"
             out["none"] += 1
+    db.commit()
+    return out
+
+
+def backfill_links(
+    db: Session, *, user_id,
+    fetchers: dict[str, Callable[[DropPointDB], str | None]] | None = None,
+    pause: float = REQUEST_PAUSE_SECONDS,
+) -> dict:
+    """Keep the links of pieces stored before `content_links` existed (ARTICLE_ANSWERS_SPEC decision 2).
+
+    * **DEV**: its stored text is markdown and kept its links, so they are read from it. No fetch.
+    * **Substack and Medium**: their text was stored from HTML, which `to_text` stripped. The raw body
+      is fetched once more through the same platform fetchers ingestion uses. Medium's text comes only
+      from its feed, which carries recent posts, so an older Medium piece can be ``unavailable``.
+
+    Only pieces with stored text and no links yet. A piece whose raw body cannot be fetched is left
+    NULL and counted, never given an empty list it did not earn. Commits.
+    """
+    user_id = _uid(user_id)
+    rows = (
+        db.query(DropPointDB)
+        .filter(DropPointDB.user_id == user_id, DropPointDB.content_hash.isnot(None),
+                DropPointDB.content_links.is_(None))
+        .all()
+    )
+    out: dict[str, dict[str, int]] = {}
+    fetchers = fetchers if fetchers is not None else _platform_fetchers(db, user_id)
+    for row in rows:
+        platform = row.platform or "other"
+        tally = out.setdefault(platform, {"from_text": 0, "fetched": 0, "unavailable": 0, "failed": 0})
+        if platform == "DEV":
+            row.content_links = piece_links(row.content_text)
+            tally["from_text"] += 1
+            continue
+        fetch = fetchers.get(platform)
+        if fetch is None:
+            tally["unavailable"] += 1
+            continue
+        try:
+            raw = fetch(row)
+        except Exception as exc:
+            tally["failed"] += 1
+            logger.info("[content_archive] links for %s not fetched: %s", row.url, exc)
+            continue
+        finally:
+            if pause:
+                time.sleep(pause)
+        if not raw:
+            tally["unavailable"] += 1
+            continue
+        store_content(row, to_text(raw), row.content_source or "api", links=piece_links(raw))
+        tally["fetched"] += 1
     db.commit()
     return out
 
