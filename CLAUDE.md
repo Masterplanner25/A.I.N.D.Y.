@@ -149,7 +149,7 @@ def register() -> None:
     # number), so 74 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
     # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`; +1 on
     # 09-28: `sys.v1.market.propose`; +2 on 09-30: `sys.v1.leadgen.search_segment`, `sys.v1.content.draft`, so 77 of 100;
-    # +2 on 10-14: `sys.v1.work.context`, `sys.v1.work.facts`, the MCP read access, so 79 of 102; +4 on 10-22: the archive steps for `archive_published_work_v1.nd`, so 83 of 106; +1 on 10-25: `sys.v1.rippletrace.create_share_drafts` for `share_drafts_v1.nd`, so 84 of 107 — re-derived). The previous
+    # +2 on 10-14: `sys.v1.work.context`, `sys.v1.work.facts`, the MCP read access, so 79 of 102; +4 on 10-22: the archive steps for `archive_published_work_v1.nd`, so 83 of 106; +1 on 10-25: `sys.v1.rippletrace.create_share_drafts` for `share_drafts_v1.nd`, so 84 of 107; +1 on 11-08: `sys.v1.rippletrace.create_piece_answers` for `piece_answers_v1.nd`, so 85 of 108 — re-derived 11-08). The previous
     # figure of 90 was stale, which is the same failure the runtime-floor lines above had —
     # a number nobody re-derives is a number that drifts. To re-derive: boot the app profile,
     # then `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())`.
@@ -215,7 +215,7 @@ only underneath us, in the agent backend (`nodus_vm`), and the one `.nd` we had 
 **A new workflow goes in `apps/<domain>/nodus/<name>.nd`, not in a new Python flow graph.** Existing
 Python flows stay as they are until one is deliberately ported.
 
-- **Ours so far, four:**
+- **Ours so far, five:**
   - `apps/analytics/nodus/reasoning_apply_v1.nd`: the reasoning flow.
   - `apps/analytics/nodus/infinity_recalc_v1.nd`: the daily Infinity recalculation for one user (#487).
   - `apps/rippletrace/nodus/archive_published_work_v1.nd`: four steps chained with `after`, each
@@ -224,9 +224,12 @@ Python flows stay as they are until one is deliberately ported.
     LinkedIn post, a short post, a meta description, the previous piece's What's Next? footer), into
     the Drafts section (owner, 2026-10-25). Its step is idempotent: the drafts and the piece's mark
     are one transaction.
+  - `apps/rippletrace/nodus/piece_answers_v1.nd`: what one newly published piece answers, stored per
+    version of its text (`ARTICLE_ANSWERS_SPEC` B2, owner 2026-11-08). Same shape and idempotence as
+    share drafts.
 
   Each has a flag: `AINDY_REASONING_NODUS_NATIVE`, `AINDY_INFINITY_RECALC_NODUS`,
-  `AINDY_ARCHIVE_NODUS` and `AINDY_SHARE_DRAFTS_NODUS`. The flags are off in code and on in compose, and any VM failure falls back
+  `AINDY_ARCHIVE_NODUS`, `AINDY_SHARE_DRAFTS_NODUS` and `AINDY_PIECE_ANSWERS_NODUS`. The flags are off in code and on in compose, and any VM failure falls back
   to Python.
 - **The pattern:**
   - **Source:** `apps/<domain>/nodus/*.nd`.

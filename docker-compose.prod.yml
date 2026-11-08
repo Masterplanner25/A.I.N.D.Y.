@@ -213,6 +213,7 @@ services:
       # Share drafts for each newly published piece run through share_drafts_v1.nd, one piece a
       # run, only when one is due. ON since 2026-10-25; "" writes them in Python.
       AINDY_SHARE_DRAFTS_NODUS: "${AINDY_SHARE_DRAFTS_NODUS:-1}"
+      AINDY_PIECE_ANSWERS_NODUS: "${AINDY_PIECE_ANSWERS_NODUS:-1}"
       # Attainment (MASTERPLAN_GOAL_ATTAINMENT_SPEC §6). The shadow records and moves nothing;
       # it defaults ON in code, so leaving this unset keeps recording. The live flag is the
       # Phase 3 flip, default off; set it only after the shadow ledger has said something.

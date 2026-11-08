@@ -20,7 +20,7 @@ def register() -> None:
 
 
 def _register_nodus_workflows() -> None:
-    """Register ``apps/rippletrace/nodus/*.nd``: archiving published work, and share drafts."""
+    """Register ``apps/rippletrace/nodus/*.nd``: archiving published work, share drafts, piece answers."""
     from apps._shared.nodus import register_domain_nodus_workflows
 
     register_domain_nodus_workflows(__file__, "rippletrace")
@@ -149,6 +149,16 @@ def _register_scheduled_jobs() -> None:
         name="Write share drafts for new pieces",
         trigger="interval",
         trigger_kwargs={"minutes": SHARE_INTERVAL},
+    )
+    # What each newly published piece answers (ARTICLE_ANSWERS_SPEC B2, owner 2026-11-08), one per owner a run.
+    from apps.rippletrace.services.answers_nodus import JOB_INTERVAL_MINUTES as ANSWERS_INTERVAL, write_piece_answers
+
+    register_scheduled_job(
+        "rippletrace_piece_answers",
+        write_piece_answers,
+        name="Store what each new piece answers",
+        trigger="interval",
+        trigger_kwargs={"minutes": ANSWERS_INTERVAL},
     )
     register_scheduled_job(
         "rippletrace_detect_mentions",

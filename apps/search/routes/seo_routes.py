@@ -163,7 +163,7 @@ def article_answers_route(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from apps.search.services.article_answers import article_answers
+        from apps.rippletrace.public import article_answers
 
         return article_answers(data.text, title=data.title, user_id=user_id, db=db)
 

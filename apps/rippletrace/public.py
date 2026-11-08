@@ -25,6 +25,14 @@ from apps.rippletrace.services.rippletrace_services import (
     log_ripple_event,
 )
 
+def article_answers(text, *, title=None, user_id=None, db=None):
+    """What questions an article answers, and which it raises (ARTICLE_ANSWERS_SPEC §2). Imported
+    lazily: it is a model call, not needed at boot."""
+    from apps.rippletrace.services.article_answers import article_answers as _article_answers
+
+    return _article_answers(text, title=title, user_id=user_id, db=db)
+
+
 def own_piece_links(db, *, user_id, text, title=None, exclude_url=None, missing_limit=8):
     """The owner's pieces a draft links to, relevant ones it does not, and its other links
     (ARTICLE_ANSWERS_SPEC §3). Imported lazily: the archive it reads is not needed at boot."""
@@ -44,6 +52,7 @@ __all__ = [
     "StrategyDB",
     "add_drop_point",
     "add_ping",
+    "article_answers",
     "build_trace_graph",
     "generate_trace_insights",
     "get_all_drop_points",

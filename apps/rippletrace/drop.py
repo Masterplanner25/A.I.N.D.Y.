@@ -41,6 +41,10 @@ class DropPointDB(Base):
     # Its share drafts (`share_drafts.py`): None = due, made, failed, cross_post (a copy: the earliest
     # one gets them), skipped (stored before the feature shipped: new pieces only, owner 2026-10-25).
     share_drafts = Column(String(16), nullable=True)
+    # Its stored answers (`services/piece_answers.py`, ARTICLE_ANSWERS_SPEC phase B2): None = due, made,
+    # failed, cross_post (a copy: the earliest one gets them), skipped (stored before B2: new pieces only,
+    # owner 2026-11-08; an older piece gets answers when the owner asks).
+    answers = Column(String(16), nullable=True)
 
 
 class PingDB(Base):

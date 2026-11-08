@@ -369,6 +369,64 @@ async def queue_share_drafts(
     )
 
 
+@router.post("/drop_points/{drop_point_id}/answers")
+@limiter.limit("10/minute")
+async def queue_piece_answers_route(
+    request: Request,
+    drop_point_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Ask for what a piece answers: an older piece (new ones get it automatically), or one again.
+    Queued, not read here: the `rippletrace_piece_answers` job reads it within about ten minutes
+    (ARTICLE_ANSWERS_SPEC B2). A copy of a cross-posted piece queues its earliest copy."""
+    def handler(ctx):
+        from apps.rippletrace.services.piece_answers import queue_piece_answers
+
+        result = queue_piece_answers(db, str(current_user["sub"]), drop_point_id)
+        if result.get("reason") == "not_found":
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "drop_point_not_found", "message": "Drop point not found"},
+            )
+        if result.get("reason") == "no_text":
+            raise HTTPException(
+                status_code=409,
+                detail={"error": "no_text", "message": "This piece has no stored text to read yet."},
+            )
+        return result
+
+    return await execute_with_pipeline(
+        request, "rippletrace_queue_answers", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+
+
+@router.get("/drop_points/{drop_point_id}/answers")
+@limiter.limit("60/minute")
+async def get_piece_answers_route(
+    request: Request,
+    drop_point_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """What a piece answers, as stored (ARTICLE_ANSWERS_SPEC B2). Read from its current text when that
+    reading exists; ``stale`` says it was read from older text. Only the caller's pieces."""
+    def handler(ctx):
+        from apps.rippletrace.services.piece_answers import get_piece_answers
+
+        result = get_piece_answers(db, str(current_user["sub"]), drop_point_id)
+        if not result.get("found"):
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "drop_point_not_found", "message": "Drop point not found"},
+            )
+        return result
+
+    return await execute_with_pipeline(
+        request, "rippletrace_piece_answers", materialized(handler), user_id=str(current_user["sub"]), metadata={"db": db}
+    )
+
+
 @router.post("/drop_points/{drop_point_id}/citations")
 @limiter.limit("10/minute")
 async def record_citation(

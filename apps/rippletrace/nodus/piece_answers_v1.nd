@@ -1,0 +1,10 @@
+workflow piece_answers_v1 {
+  step read with { retries: 1 } {
+    let result = sys("sys.v1.rippletrace.create_piece_answers", input_payload["args"])
+    set_state("answers_result", result)
+    if (result["status"] != "success") {
+      throw "piece answers step failed"
+    }
+    return result["data"]
+  }
+}

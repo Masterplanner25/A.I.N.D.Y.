@@ -3,6 +3,7 @@
 from apps.rippletrace.container import ContainerDB
 from apps.rippletrace.content_source import ContentSourceDB
 from apps.rippletrace.drop import DropPointDB, PingDB
+from apps.rippletrace.piece_answers import PieceAnswersDB
 from apps.rippletrace.playbook import PlaybookDB
 from apps.rippletrace.ripple_edge import RippleEdge
 from apps.rippletrace.strategy import StrategyDB
@@ -11,6 +12,7 @@ __all__ = [
     "ContainerDB",
     "ContentSourceDB",
     "DropPointDB",
+    "PieceAnswersDB",
     "PingDB",
     "PlaybookDB",
     "RippleEdge",

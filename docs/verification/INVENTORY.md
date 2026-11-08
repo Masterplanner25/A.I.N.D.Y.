@@ -17,15 +17,15 @@ the audit's question. Live row counts are not here (they change): `python script
 | | ours | runtime's |
 |---|---|---|
 | Domains | 16 (3 core) | |
-| `/apps` routes | 282 (184 called by the client, 98 not) | 35 (mounted under `/apps`) |
-| Syscalls | 84 | 23 |
+| `/apps` routes | 284 (184 called by the client, 100 not) | 35 (mounted under `/apps`) |
+| Syscalls | 85 | 23 |
 | Agent tools | 17 | 0 |
-| Scheduled jobs | 15 | 0 |
+| Scheduled jobs | 16 | 0 |
 | Registered jobs | 34 | 0 |
 | Python flow graphs | 82 | 1 |
-| Tables | 87 | 36 |
-| Nodus workflows (`.nd`) | 4 | |
-| `AINDY_*` flags read by our code | 48 | |
+| Tables | 88 | 36 |
+| Nodus workflows (`.nd`) | 5 | |
+| `AINDY_*` flags read by our code | 49 | |
 
 ## Domains
 
@@ -43,7 +43,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | masterplan |  | identity | 76 | 14 | 16 | 3 | 3 | 14 | 16 | 0 | 23 |
 | memory |  |  | 8 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | network_bridge |  | authorship, automation | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| rippletrace |  | analytics, automation | 47 | 4 | 9 | 0 | 4 | 1 | 0 | 2 | 7 |
+| rippletrace |  | analytics, automation | 49 | 6 | 10 | 0 | 5 | 1 | 0 | 3 | 8 |
 | search |  | analytics, rippletrace | 32 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
 | social |  | analytics, automation | 8 | 2 | 4 | 0 | 0 | 0 | 0 | 0 | 0 |
 | tasks | yes |  | 7 | 2 | 18 | 2 | 5 | 7 | 8 | 0 | 1 |
@@ -367,7 +367,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 ## rippletrace
 
-**Routes (47).** — = no client code calls it.
+**Routes (49).** — = no client code calls it.
 
 - `GET /apps/rippletrace/causal/chain/{drop_point_id}`
 - `GET /apps/rippletrace/causal/graph`
@@ -382,6 +382,8 @@ the audit's question. Live row counts are not here (they change): `python script
 - `POST /apps/rippletrace/detect`
 - — `POST /apps/rippletrace/drop_point`
 - `GET /apps/rippletrace/drop_points`
+- — `GET /apps/rippletrace/drop_points/{drop_point_id}/answers`
+- — `POST /apps/rippletrace/drop_points/{drop_point_id}/answers`
 - `POST /apps/rippletrace/drop_points/{drop_point_id}/citations`
 - `POST /apps/rippletrace/drop_points/{drop_point_id}/detect`
 - `POST /apps/rippletrace/drop_points/{drop_point_id}/share_drafts`
@@ -417,15 +419,15 @@ the audit's question. Live row counts are not here (they change): `python script
 - `GET /apps/rippletrace/strategies/{strategy_id}`
 - `GET /apps/rippletrace/{trace_id}`
 
-**Syscalls (9):** `sys.v1.rippletrace.create_share_drafts` (rippletrace.write), `sys.v1.rippletrace.get_goal_metric` (rippletrace.read), `sys.v1.rippletrace.get_performance_signals` (rippletrace.read), `sys.v1.rippletrace.list_recent_pings` (rippletrace.read), `sys.v1.rippletrace.log_ripple_event` (rippletrace.write), `sys.v1.rippletrace.store_published_text` (rippletrace.write), `sys.v1.rippletrace.update_cross_posts` (rippletrace.write), `sys.v1.rippletrace.update_stored_text` (rippletrace.write), `sys.v1.rippletrace.write_published_memory` (rippletrace.write)
+**Syscalls (10):** `sys.v1.rippletrace.create_piece_answers` (rippletrace.write), `sys.v1.rippletrace.create_share_drafts` (rippletrace.write), `sys.v1.rippletrace.get_goal_metric` (rippletrace.read), `sys.v1.rippletrace.get_performance_signals` (rippletrace.read), `sys.v1.rippletrace.list_recent_pings` (rippletrace.read), `sys.v1.rippletrace.log_ripple_event` (rippletrace.write), `sys.v1.rippletrace.store_published_text` (rippletrace.write), `sys.v1.rippletrace.update_cross_posts` (rippletrace.write), `sys.v1.rippletrace.update_stored_text` (rippletrace.write), `sys.v1.rippletrace.write_published_memory` (rippletrace.write)
 
-**Scheduled jobs (4):** `rippletrace_archive_published_work` (interval minutes=10), `rippletrace_detect_mentions` (interval minutes=360), `rippletrace_poll_content_sources` (interval minutes=60), `rippletrace_share_drafts` (interval minutes=10)
+**Scheduled jobs (5):** `rippletrace_archive_published_work` (interval minutes=10), `rippletrace_detect_mentions` (interval minutes=360), `rippletrace_piece_answers` (interval minutes=10), `rippletrace_poll_content_sources` (interval minutes=60), `rippletrace_share_drafts` (interval minutes=10)
 
 **Registered jobs (1):** `rippletrace.confirmed_containers`
 
-**Nodus workflows (2):** `apps/rippletrace/nodus/archive_published_work_v1.nd`, `apps/rippletrace/nodus/share_drafts_v1.nd`
+**Nodus workflows (3):** `apps/rippletrace/nodus/archive_published_work_v1.nd`, `apps/rippletrace/nodus/piece_answers_v1.nd`, `apps/rippletrace/nodus/share_drafts_v1.nd`
 
-**Tables (7):** `drop_points`, `pings`, `playbooks`, `ripple_containers`, `ripple_content_sources`, `ripple_edges`, `strategies`
+**Tables (8):** `drop_points`, `piece_answers`, `pings`, `playbooks`, `ripple_containers`, `ripple_content_sources`, `ripple_edges`, `strategies`
 
 ## search
 
@@ -562,8 +564,8 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 |---|---|---|
 | `AINDY_AGENT_EXECUTION_BACKEND` | agent |  |
 | `AINDY_AGENT_PLANNER_BACKEND` | (runtime) | `runtime_local` |
-| `AINDY_ANSWERS_MODEL` | search |  |
-| `AINDY_ANSWERS_REASONING_EFFORT` | search |  |
+| `AINDY_ANSWERS_MODEL` | rippletrace |  |
+| `AINDY_ANSWERS_REASONING_EFFORT` | rippletrace |  |
 | `AINDY_APP_PLUGIN_MANIFEST` | (runtime) | `./aindy_plugins.json` |
 | `AINDY_ARCHIVE_NODUS` | rippletrace | `1` |
 | `AINDY_ARM_PROJECT_ROOT` | arm |  |
@@ -601,6 +603,7 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_OWNER_NOTICES` | automation | `1` |
 | `AINDY_PASSWORD_RESET_TTL_MINUTES` | (runtime) | `30` |
 | `AINDY_PASSWORD_RESET_URL_TEMPLATE` | (runtime) | `""` |
+| `AINDY_PIECE_ANSWERS_NODUS` | rippletrace | `1` |
 | `AINDY_PLAN_STEP_REFERENCES` | (runtime) | `""` |
 | `AINDY_REASONING_NODUS_NATIVE` | analytics | `1` |
 | `AINDY_RELEASE_NOTIFY_TO` | automation | `""` |
