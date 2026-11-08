@@ -11,6 +11,7 @@ from apps._shared.serialization import materialized
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 
+from apps.rippletrace.models import DropPointDB
 from apps.rippletrace.services import container_service
 from apps.rippletrace.services import content_ingest
 from apps.rippletrace.services import citation_record
@@ -522,6 +523,21 @@ async def log_ripple_event(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        # A drop point named here must be the caller's ("bridge" is a sentinel, not a row). The
+        # event lands in the caller's trace, and the trace view analyses the drop points its
+        # events name, so a foreign id would have read someone else's analysis.
+        dp_id = event.drop_point_id
+        if dp_id and dp_id != "bridge":
+            owned = (
+                db.query(DropPointDB.id)
+                .filter(DropPointDB.id == dp_id, DropPointDB.user_id == UUID(str(current_user["sub"])))
+                .first()
+            )
+            if owned is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"error": "drop_point_not_found", "message": "Drop point not found"},
+                )
         # convert direct event emission → execution_signals
         return {
             "data": {
@@ -1186,7 +1202,7 @@ async def get_trace_graph(
             "root_event": detect_root_event(db, trace_id),
             "terminal_events": detect_terminal_events(db, trace_id),
             "ripple_span": calculate_ripple_span(db, trace_id),
-            "insights": generate_trace_insights(db, trace_id),
+            "insights": generate_trace_insights(db, trace_id, user_id),
         }
 
     return await execute_with_pipeline(
