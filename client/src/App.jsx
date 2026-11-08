@@ -24,6 +24,7 @@ const RUNTIME_ONLY_HOME = "/memory";
 const APP_PROFILE_HOME = "/dashboard";
 
 const Dashboard = lazy(() => import("./components/app/Dashboard"));
+const Settings = lazy(() => import("./components/app/Settings"));
 const TaskDashboard = lazy(() => import("./components/app/TaskDashboard"));
 const Genesis = lazy(() => import("./components/app/Genesis"));
 const Assistant = lazy(() => import("./components/app/Assistant"));
@@ -281,6 +282,7 @@ export default function App() {
                     <Route path="/arm/config/metrics" element={<AppProfileRoute element={routeElement("ARM Metrics", <ARMMetrics />)} />} />
                     <Route path="/memory" element={routeElement("Memory", <MemoryBrowser />)} />
                     <Route path="/identity" element={routeElement("Identity", <IdentityDashboard />)} />
+                    <Route path="/settings" element={routeElement("Settings", <Settings />)} />
                     <Route path="/platform/*" element={<PlatformRedirect />} />
                     <Route path="*" element={<RuntimeAwareHomeRedirect />} />
                   </Route>

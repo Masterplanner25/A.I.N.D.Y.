@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 
 import ChangePasswordDialog from "./ChangePasswordDialog";
 import { useAuth } from "../../context/AuthContext";
@@ -255,6 +255,12 @@ export default function AppShell() {
                 >
                   Change password
                 </button>
+                <Link
+                  to="/settings"
+                  className="mt-1 block text-[10px] uppercase tracking-[0.18em] text-zinc-500 hover:text-zinc-300"
+                >
+                  Settings · API keys
+                </Link>
               </div>
               <button
                 type="button"

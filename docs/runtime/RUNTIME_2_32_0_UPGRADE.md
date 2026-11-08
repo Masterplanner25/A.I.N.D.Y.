@@ -168,3 +168,10 @@ plain pipeline route, and Genesis through its flow and syscall).
 `LLMCallError`, its cause chain a cycle) and FR-64 (a syscall that raises inside a flow node rolls back the flow's own
 `FlowRun`, so the route sees "FlowRun ... disappeared").
 
+
+## 9. Phase 3, part 2: the Settings card
+
+`/settings` (the account menu: *Settings · API keys*) holds `ProviderKeysCard`: OpenAI, Perplexity, Anthropic and
+DeepSeek, each with what it pays for, set or replace (a password field, cleared after saving), and remove. It shows only
+`key_hint` and the date; a stored key never reaches the page. A 503 reads *"Provider keys aren't switched on for this
+server yet."*, since no master key is set here until part 3. Azure OpenAI is left off: nothing of ours calls it.
