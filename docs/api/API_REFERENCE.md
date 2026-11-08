@@ -2192,6 +2192,36 @@ back; `sources` still lists the draft's links then.
 
 **Response 200:** claims: [{claim, kind (number | date_event | attribution | named | cause_comparison), found, work: string | null, status (contradicts | confirmed | new | sourced | unsourced), fact: string | null, denied: string | null, source: string | null}], counts: object, sources: [{url, own, claims: [index]}], works_checked: integer, model: string, reason: string | null, truncated_input: boolean
 
+#### POST /apps/seo/structure
+Structure Route
+
+**Body:** text: string (required), title: string | null, series: string | null
+
+The draft's structure, free (`ARTICLE_ANSWERS_SPEC` §5, phase D2; decided 2026-11-08): it reveals that there is a
+structure, never grades it. No model call; the SEO tool calls it after every analysis (30/min). `skeleton`: sections in
+order with their share of the words (markdown and HTML headings, and a short standalone line, which is how a platform feed
+keeps a heading), how the piece opens and closes. `openings`: sentences that start the same way (digits folded), every
+instance quoted, with the repeated phrases that live inside them. `repeats`: the rest of the repetition report
+(`editing_aid.repetition_report`) folded in. `series`: one of the caller's confirmed series, from `series` or the title's
+prefix, with `options` to pick from and `shape`, what its published pieces share (headings in at least half of them,
+recurring openings and closings, the usual closing heading and length), each shared heading marked `in_draft`. Only the
+caller's pieces are read.
+
+**Response 200:** skeleton: {sections: [{heading, words, paragraphs, share}], words, paragraphs, opening, closing, closing_heading}, openings: [{opening, count, instances, repeats}], repeats: {phrases, overused_words, single_word_openers}, series: {name: string | null, options: [string], shape: object | null, titles: [string]}
+
+#### POST /apps/seo/structure/patterns
+Structure Patterns Route
+
+**Body:** text: string (required), title: string | null
+
+What's the structure? (§5, phase D2): the draft's patterns named (contrast, list, naming sequence, refrain, parallel,
+question and answer, other), every instance quoted. One gpt-5.5 call at low reasoning effort (`AINDY_STRUCTURE_MODEL`,
+`AINDY_STRUCTURE_REASONING_EFFORT`), paid with the caller's own key (402 without one), about 20 to 50 s, so 6/min and run
+on a button. Each instance is checked against the text; a pattern with fewer than two instances found is dropped.
+`reason` is non-null exactly when nothing usable came back.
+
+**Response 200:** patterns: [{name, kind, instances: [string], dropped_instances}], model: string, reason: string | null, truncated_input: boolean
+
 #### POST /apps/seo/own_links
 Own Links Route
 

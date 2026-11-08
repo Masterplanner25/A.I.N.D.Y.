@@ -3,8 +3,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 const {
   mockAnalyzeSeo, mockGenerateMeta, mockGenerateTitles, mockSuggest, mockGetHistory,
   mockListDrafts, mockCreateDraft, mockGetDraft, mockUpdateDraft, mockDeleteDraft,
-  mockAnalyzeDraft, mockPruneDraft,
+  mockAnalyzeDraft, mockPruneDraft, mockGetStructure,
 } = vi.hoisted(() => ({
+  mockGetStructure: vi.fn(),
   mockAnalyzeSeo: vi.fn(),
   mockGenerateMeta: vi.fn(),
   mockGenerateTitles: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("../api/search.js", () => ({
   deleteDraft: mockDeleteDraft,
   analyzeDraft: mockAnalyzeDraft,
   pruneDraftAnalyses: mockPruneDraft,
+  getStructure: mockGetStructure,
 }));
 
 vi.mock("./SearchHistory", () => ({ default: () => null }));
@@ -430,41 +432,48 @@ describe("SEO tool title and character budgets", () => {
     expect(panel.textContent).toMatch(/no headings found/);
   });
 
-  it("reports repetition with position, and rewrites nothing", async () => {
-    mockAnalyzeSeo.mockResolvedValue({
-      word_count: 900, readability: 55, top_keywords: [], keyword_densities: {},
-      repetition: {
-        repeated_phrases: [
-          { phrase: "the runtime framework", occurrences: 4, words: 3, paragraphs: [0, 1], clustered: true },
-        ],
-        sentence_openers: [{ opener: "that", count: 6, share: 18.2 }],
-        overused_words: [],
+  // The repetition panel was folded into Structure (ARTICLE_ANSWERS_SPEC §5, decision 11): the same repeats, with
+  // position, and the same promise: points, never rewrites.
+  it("reports repetition with position inside the structure panel, and rewrites nothing", async () => {
+    mockAnalyzeSeo.mockResolvedValue({ word_count: 900, readability: 55, top_keywords: [], keyword_densities: {} });
+    mockGetStructure.mockResolvedValue({
+      skeleton: { sections: [{ heading: null, words: 900, share: 100 }], words: 900, paragraphs: 9,
+                  opening: "First line.", closing: "Last line.", closing_heading: null },
+      openings: [{ opening: "it could", count: 3, instances: ["It could run.", "It could stop.", "It could wait."],
+                   repeats: [{ phrase: "it could run", occurrences: 2 }] }],
+      repeats: {
+        phrases: [{ phrase: "the runtime framework", occurrences: 4, words: 3, paragraphs: [0, 1], clustered: true }],
+        single_word_openers: [{ opener: "that", count: 6, share: 18.2 }],
+        overused_words: [{ word: "runtime", occurrences: 9 }],
       },
+      series: { name: null, options: [], shape: null, titles: [] },
     });
     render(<AiSeoTool />);
     typeBody();
     fireEvent.click(screen.getByRole("button", { name: /Analyze SEO/i }));
 
-    const panel = await screen.findByTestId("repetition");
+    const panel = await screen.findByTestId("structure");
     expect(panel.textContent).toMatch(/the runtime framework/);
     expect(panel.textContent).toMatch(/4×/);
     // Position, not just count: three uses across an article is fine, three in a paragraph is not.
     expect(panel.textContent).toMatch(/close together/);
     expect(panel.textContent).toMatch(/6 sentences \(18.2%\)/);
+    // A repeat that belongs to a pattern is shown inside it.
+    expect(panel.textContent).toMatch(/repeats inside: “it could run” 2×/);
+    expect(panel.textContent).toMatch(/runtime 9×/);
     // ★ Points, never rewrites. No replacement wording anywhere in the panel.
     expect(panel.textContent).not.toMatch(/instead|try:|replace with/i);
   });
 
-  it("shows no repetition panel when there is nothing repeated", async () => {
-    mockAnalyzeSeo.mockResolvedValue({
-      word_count: 900, readability: 55, top_keywords: [], keyword_densities: {},
-      repetition: { repeated_phrases: [], sentence_openers: [], overused_words: [] },
-    });
+  it("shows no structure panel when the structure could not be read", async () => {
+    mockAnalyzeSeo.mockResolvedValue({ word_count: 900, readability: 55, top_keywords: [], keyword_densities: {} });
+    mockGetStructure.mockRejectedValue(new Error("down"));
     render(<AiSeoTool />);
     typeBody();
     fireEvent.click(screen.getByRole("button", { name: /Analyze SEO/i }));
 
     await screen.findByText(/Word Count/i);
-    expect(screen.queryByTestId("repetition")).toBeNull();
+    expect(screen.queryByTestId("structure")).toBeNull();
+    expect(screen.queryByTestId("repetition")).toBeNull(); // the old panel is gone
   });
 });

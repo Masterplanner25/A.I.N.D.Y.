@@ -17,7 +17,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | | ours | runtime's |
 |---|---|---|
 | Domains | 16 (3 core) | |
-| `/apps` routes | 286 (188 called by the client, 98 not) | 35 (mounted under `/apps`) |
+| `/apps` routes | 288 (190 called by the client, 98 not) | 35 (mounted under `/apps`) |
 | Syscalls | 87 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 16 | 0 |
@@ -25,7 +25,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | Python flow graphs | 82 | 1 |
 | Tables | 88 | 37 |
 | Nodus workflows (`.nd`) | 5 | |
-| `AINDY_*` flags read by our code | 51 | |
+| `AINDY_*` flags read by our code | 53 | |
 
 ## Domains
 
@@ -44,7 +44,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | memory |  |  | 8 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | network_bridge |  | authorship, automation | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | rippletrace |  | analytics, automation | 50 | 4 | 11 | 0 | 5 | 1 | 0 | 3 | 8 |
-| search |  | analytics, rippletrace | 33 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
+| search |  | analytics, rippletrace | 35 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
 | social |  | analytics, automation | 8 | 2 | 4 | 0 | 0 | 0 | 0 | 0 | 0 |
 | tasks | yes |  | 7 | 2 | 18 | 2 | 5 | 7 | 8 | 0 | 1 |
 | (runtime) | | | 35 | 23 | 23 | 0 | 0 | 0 | 1 | 0 | 37 |
@@ -432,7 +432,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 ## search
 
-**Routes (33).** — = no client code calls it.
+**Routes (35).** — = no client code calls it.
 
 - `GET /apps/leadgen/`
 - `POST /apps/leadgen/`
@@ -464,6 +464,8 @@ the audit's question. Live row counts are not here (they change): `python script
 - `POST /apps/seo/generate_meta/`
 - — `POST /apps/seo/meta`
 - `POST /apps/seo/own_links`
+- `POST /apps/seo/structure`
+- `POST /apps/seo/structure/patterns`
 - — `POST /apps/seo/suggest`
 - `POST /apps/seo/suggest_improvements/`
 - `POST /apps/seo/title`
@@ -640,5 +642,7 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_SMTP_PORT` | (runtime) | `587` |
 | `AINDY_SMTP_STARTTLS` | (runtime) | `true` |
 | `AINDY_SMTP_USER` | automation | `""` |
+| `AINDY_STRUCTURE_MODEL` | search |  |
+| `AINDY_STRUCTURE_REASONING_EFFORT` | search |  |
 | `AINDY_SYSCALL_IDEMPOTENCY_STRICT` | (runtime) | `""` |
 | `AINDY_TOOL_ARGS_VALIDATION` | (runtime) | `""` |

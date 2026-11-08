@@ -7,6 +7,8 @@ import {
   generateTitles as apiGenerateTitles,
   getArticleAnswers as apiGetArticleAnswers,
   getArticleClaims as apiGetArticleClaims,
+  getStructure as apiGetStructure,
+  getStructurePatterns as apiGetStructurePatterns,
   getOwnLinks as apiGetOwnLinks,
   getDraft as apiGetDraft,
   listDrafts as apiListDrafts,
@@ -14,6 +16,7 @@ import {
   updateDraft as apiUpdateDraft,
   suggestSeoImprovements as apiSuggestSeoImprovements,
 } from "../../api/search.js";
+import StructurePanel from "./StructurePanel";
 import { safeMap } from "../../utils/safe";
 import SearchHistory from "./SearchHistory";
 
@@ -63,6 +66,8 @@ export default function AiSeoTool() {
   const [titleOptions, setTitleOptions] = useState(null);
   const [answers, setAnswers] = useState(null);
   const [claims, setClaims] = useState(null);
+  const [structure, setStructure] = useState(null);
+  const [patterns, setPatterns] = useState(null);
   const [ownLinks, setOwnLinks] = useState(null);
   const [targets, setTargets] = useState("");
   const [drafts, setDrafts] = useState([]);
@@ -153,12 +158,43 @@ export default function AiSeoTool() {
     setSavingDraft(false);
   };
 
+  // The draft's structure (§5, phase D2): free, loaded after every analysis. A failure leaves the rest of the
+  // analysis standing; the structure panel just doesn't appear.
+  const loadStructure = async (series) => {
+    try {
+      setStructure(await apiGetStructure(content, title, series));
+    } catch (error) {
+      console.error("Structure Error: ", error);
+      setStructure(null);
+    }
+  };
+
+  const pickSeries = async (series) => {
+    setLoading(true);
+    await loadStructure(series || undefined);
+    setLoading(false);
+  };
+
+  // What's the structure? The patterns named (one gpt-5.5 call). A failure shows the server's sentence.
+  const findPatterns = async () => {
+    setLoading(true);
+    try {
+      setPatterns(await apiGetStructurePatterns(content, title));
+    } catch (error) {
+      console.error("Structure Patterns Error: ", error);
+      setPatterns({ patterns: [], reason: serverSentence(error) || "the structure service could not be reached" });
+    }
+    if (!structure) await loadStructure();
+    setLoading(false);
+  };
+
   const analyzeSavedDraft = async () => {
     setLoading(true);
     try {
       await apiUpdateDraft(draftId, { content, title, target_keywords: targetList });
       const data = await apiAnalyzeDraft(draftId);
       setSeoData(data.analysis);
+      await loadStructure();
       await refreshDraft(draftId);
       setHistoryRefresh((n) => n + 1);
     } catch (error) {
@@ -192,6 +228,7 @@ export default function AiSeoTool() {
     try {
       const data = await apiAnalyzeSeo(content, title, targetList);
       setSeoData(data);
+      await loadStructure();
       setHistoryRefresh((n) => n + 1); // the analysis was just saved — refresh the recent list
     } catch (error) {
       console.error("SEO Analysis Error: ", error);
@@ -435,6 +472,14 @@ export default function AiSeoTool() {
           title="Reads the whole draft with a model: about 20 to 50 seconds">
 
                     What does this claim?
+                </button>
+                <button
+          className="px-6 py-2 bg-purple-700 hover:bg-purple-800 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
+          onClick={findPatterns}
+          disabled={loading || !content}
+          title="Names the patterns your draft repeats: about 20 to 50 seconds">
+
+                    What's the structure?
                 </button>
                 <button
           className="px-6 py-2 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
@@ -798,52 +843,9 @@ export default function AiSeoTool() {
                     </div>
         }
 
-                {/* REPETITION — points, never rewrites. There is no suggested replacement
-                    text anywhere in this panel, on purpose: a "suggested phrasing" field is a
-                    rewrite with extra steps (SEO_EDITING_AID_SPEC §3). */}
-                {(seoData?.repetition?.repeated_phrases?.length > 0 ||
-                  seoData?.repetition?.sentence_openers?.length > 0) &&
-        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg" data-testid="repetition">
-                        <h2 className="text-xl font-bold mb-1 text-purple-400 border-b border-zinc-800 pb-2">Repetition</h2>
-                        <p className="text-xs text-gray-500 mb-4 mt-2">
-                            Hard to see in your own draft. Nothing here is rewritten for you.
-                        </p>
-                        {seoData.repetition.repeated_phrases?.length > 0 &&
-                          <>
-                              <h3 className="font-bold text-white text-sm">Repeated phrases</h3>
-                              <ul className="mt-2 space-y-1">
-                                  {safeMap(seoData.repetition.repeated_phrases.slice(0, 6), (phrase) =>
-                                    <li key={phrase.phrase} className="text-sm text-gray-300">
-                                        “{phrase.phrase}”
-                                        <span className="text-gray-500 text-xs">
-                                          {" "}— {phrase.occurrences}×
-                                          {/* Position, not just count: three uses across 4,000
-                                              words is fine; three in one paragraph is not, and
-                                              a count alone cannot tell them apart. */}
-                                          {phrase.clustered ? ", close together" : ""}
-                                        </span>
-                                    </li>)
-                                  }
-                              </ul>
-                          </>
-                        }
-                        {seoData.repetition.sentence_openers?.length > 0 &&
-                          <>
-                              <h3 className="font-bold text-white text-sm mt-4">Sentence openers</h3>
-                              <ul className="mt-2 space-y-1">
-                                  {safeMap(seoData.repetition.sentence_openers.slice(0, 5), (opener) =>
-                                    <li key={opener.opener} className="text-sm text-gray-300">
-                                        “{opener.opener}”
-                                        <span className="text-gray-500 text-xs">
-                                          {" "}— {opener.count} sentences ({opener.share}%)
-                                        </span>
-                                    </li>)
-                                  }
-                              </ul>
-                          </>
-                        }
-                    </div>
-        }
+                {/* STRUCTURE (ARTICLE_ANSWERS_SPEC §5, phase D2): the old repetition panel lives inside it now.
+                    Points, never rewrites: no suggested replacement text anywhere (SEO_EDITING_AID_SPEC §3). */}
+                <StructurePanel structure={structure} patterns={patterns} onPickSeries={pickSeries} busy={loading} />
 
                 {/* SUGGESTIONS — each finding beside the measurement that produced it, and a
                     readability finding names its sentences. They used to be one generic list

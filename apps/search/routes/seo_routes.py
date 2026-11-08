@@ -11,6 +11,7 @@ from apps.search.schemas.seo import (
     TitleInput,
     ArticleAnswersInput,
     ArticleClaimsInput,
+    StructureInput,
     OwnLinksInput,
     DraftCreateInput,
     DraftUpdateInput,
@@ -194,6 +195,51 @@ def article_claims_route(
 
     return _with_execution_envelope(
         _execute_seo(request, "seo.claims", handler, db=db, user_id=user_id)
+    )
+
+
+@router.post("/structure")
+@limiter.limit("30/minute")
+def structure_route(
+    request: Request,
+    data: StructureInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """The draft's structure, free (ARTICLE_ANSWERS_SPEC §5, phase D2): its skeleton, repeated sentence openings
+    and the repetition report folded in, beside the shape its series' published pieces share. No model call; only
+    the caller's pieces are read."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.search.services.structure import structure_with_series
+
+        return structure_with_series(data.text, title=data.title, series=data.series, user_id=user_id, db=db)
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.structure", handler, db=db, user_id=user_id)
+    )
+
+
+@router.post("/structure/patterns")
+@limiter.limit("6/minute")
+def structure_patterns_route(
+    request: Request,
+    data: ArticleAnswersInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """What's the structure? (§5, phase D2): the draft's patterns named, every instance quoted and checked against
+    the text. One gpt-5.5 call on the caller's key, about 20 to 50 s."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.search.services.structure import name_patterns
+
+        return name_patterns(data.text, title=data.title, user_id=user_id, db=db)
+
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.structure.patterns", handler, db=db, user_id=user_id)
     )
 
 

@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { mockListDrafts, mockGetArticleAnswers, mockGetOwnLinks, mockGetArticleClaims } = vi.hoisted(() => ({
+const { mockListDrafts, mockGetArticleAnswers, mockGetOwnLinks, mockGetArticleClaims, mockGetStructure, mockGetStructurePatterns } = vi.hoisted(() => ({
+  mockGetStructure: vi.fn(),
+  mockGetStructurePatterns: vi.fn(),
   mockGetArticleClaims: vi.fn(),
   mockListDrafts: vi.fn(),
   mockGetArticleAnswers: vi.fn(),
@@ -22,6 +24,8 @@ vi.mock("../api/search.js", () => ({
   pruneDraftAnalyses: vi.fn(),
   getArticleAnswers: mockGetArticleAnswers,
   getArticleClaims: mockGetArticleClaims,
+  getStructure: mockGetStructure,
+  getStructurePatterns: mockGetStructurePatterns,
   getOwnLinks: mockGetOwnLinks,
 }));
 
@@ -159,6 +163,85 @@ describe("SEO tool: what the draft claims", () => {
         "No claims listed: This needs your own OpenAI API key. Add it in Settings.",
       ),
     );
+  });
+});
+
+/**
+ * ARTICLE_ANSWERS_SPEC phase D2: What's the structure? It reveals that there is a structure: the patterns named with
+ * every instance, and the shape the series shares beside the draft. Never a score.
+ */
+describe("SEO tool: the draft's structure", () => {
+  const STRUCTURE = (seriesName) => ({
+    skeleton: { sections: [{ heading: "What's Next?", words: 120, share: 100 }], words: 120, paragraphs: 3,
+                opening: "Opening line.", closing: "Closing line.", closing_heading: "What's Next?" },
+    openings: [],
+    repeats: { phrases: [], single_word_openers: [], overused_words: [] },
+    series: {
+      name: seriesName,
+      options: ["2026 Agents Case Study Series", "2025 ChatGPT Case Study Series"],
+      titles: [],
+      shape: seriesName ? {
+        pieces: 12, median_words: 2400, median_sections: 14,
+        headings: [{ heading: "What's Next?", pieces: 11, in_draft: true },
+                   { heading: "Explore the Projects", pieces: 9, in_draft: false }],
+        closing_heading: { heading: "Previous Work", pieces: 10, in_draft: false },
+        openings: [], closings: [{ starts: "article N i", pieces: 8, example: "Article 1 — I Created" }],
+      } : null,
+    },
+  });
+
+  beforeEach(() => {
+    mockListDrafts.mockReset();
+    mockListDrafts.mockResolvedValue({ drafts: [] });
+    mockGetStructure.mockReset();
+    mockGetStructurePatterns.mockReset();
+  });
+
+  function typeDraft() {
+    render(<AiSeoTool />);
+    fireEvent.change(screen.getByPlaceholderText(/Paste your article/i), {
+      target: { value: "It could inspect. It could search. It could run." },
+    });
+  }
+
+  it("names the patterns with every instance, and shows the series' shape beside the draft", async () => {
+    mockGetStructurePatterns.mockResolvedValue({
+      patterns: [{ name: "the 'It could' run", kind: "list",
+                   instances: ["It could inspect.", "It could search.", "It could run.", "It could stop."] }],
+      reason: null,
+    });
+    mockGetStructure.mockResolvedValue(STRUCTURE("2026 Agents Case Study Series"));
+    typeDraft();
+    fireEvent.click(screen.getByRole("button", { name: /What's the structure\?/i }));
+
+    const patterns = await screen.findByTestId("structure-patterns");
+    expect(patterns).toHaveTextContent("list");
+    expect(patterns).toHaveTextContent("the 'It could' run");
+    expect(patterns).toHaveTextContent("and 1 more");
+    fireEvent.click(screen.getByRole("button", { name: "and 1 more" }));
+    expect(patterns).toHaveTextContent("It could stop.");
+
+    const series = await screen.findByTestId("structure-series");
+    expect(series).toHaveTextContent("12 published pieces");
+    expect(series).toHaveTextContent("What's Next? in 11 of 12 · in this draft");
+    expect(series).toHaveTextContent("Explore the Projects in 9 of 12 · not in this draft");
+    expect(series).toHaveTextContent("They close on Previous Work (10 of 12) · this draft doesn't");
+    expect(screen.getByTestId("structure").textContent).not.toMatch(/score|grade/i);
+  });
+
+  it("asks for a series when the title names none, and reloads with the one picked", async () => {
+    mockGetStructurePatterns.mockResolvedValue({ patterns: [], reason: "no patterns with two instances in the text were returned" });
+    mockGetStructure.mockResolvedValueOnce(STRUCTURE(null)).mockResolvedValueOnce(STRUCTURE("2025 ChatGPT Case Study Series"));
+    typeDraft();
+    fireEvent.click(screen.getByRole("button", { name: /What's the structure\?/i }));
+
+    const series = await screen.findByTestId("structure-series");
+    expect(series).toHaveTextContent("Pick one to see its shape");
+    expect(screen.getByTestId("structure-patterns")).toHaveTextContent("No patterns named");
+    fireEvent.change(screen.getByLabelText("Series"), { target: { value: "2025 ChatGPT Case Study Series" } });
+    await waitFor(() => expect(mockGetStructure).toHaveBeenLastCalledWith(
+      "It could inspect. It could search. It could run.", "", "2025 ChatGPT Case Study Series"));
+    await waitFor(() => expect(screen.getByTestId("structure-series")).toHaveTextContent("12 published pieces"));
   });
 });
 

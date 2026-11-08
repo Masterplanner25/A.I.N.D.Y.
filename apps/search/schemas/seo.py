@@ -32,6 +32,14 @@ class ArticleClaimsInput(BaseModel):
     title: Optional[str] = None
 
 
+class StructureInput(BaseModel):
+    """The draft's structure beside its series (ARTICLE_ANSWERS_SPEC §5, phase D2). ``series`` names one of the
+    writer's confirmed series; without it the series is taken from the title's prefix, when it has one."""
+    text: str
+    title: Optional[str] = None
+    series: Optional[str] = None
+
+
 class OwnLinksInput(BaseModel):
     """The owner's pieces a draft links to and could link to (ARTICLE_ANSWERS_SPEC §3).
 
