@@ -60,14 +60,34 @@ The local venv had drifted to **2.28.0** under the 2.31.3 pin, so it was reinsta
 Full `pytest tests -m app_profile` on 2.31.4: **1,823 passed, 292 skipped, 0 failed**. The log has **0**
 `TENANT_VIOLATION`, **0** `script_not_owned` or `workflow_not_owned`, and no 403 (ask 2).
 
-## 6. Rebuild: owed
+## 6. Rebuild: done 2026-11-08, **live on 2.31.4 since 00:29:36Z**
 
-Read identity window 15 first. It opened at the 21:52:53Z recreate on 11-07 (§9 of the 2.31.3 record), and
-the recreate resets the counter. Then rebuild the api image, recreate, and run the handoff's check:
+**We are on 2.31.4** (handoff §6: the advisory waits for this). The image was built from `main` at
+`908573b` (#551) and also carries the app's route-sweep fixes, #545 and #547 to #550.
 
-```bash
-docker exec <api-container> python -c "import AINDY, AINDY._version as v; print(v.__version__, list(AINDY.__path__))"
-# expect: 2.31.4 ['/usr/local/lib/python3.11/site-packages/AINDY']
-```
+1. **Identity counter, window 15** (2026-11-07 21:52:53Z → 2026-11-08 00:24Z): no samples, so 0 refused, over
+   **0** syscall outcomes. Nothing ran in it, so it says nothing either way. The recreate opened **window 16**.
+2. **Built** image `0a9d7d99712c`. Before the recreate, the image itself was checked: runtime 2.31.4,
+   `apps/_shared/egress.py` present, the RippleTrace legacy router absent, the trace-owner check present,
+   4 `.nd` files packaged.
+3. **Recreated at 00:29:36Z** with both compose files and both profiles. Healthy in about 60 s, 0 restarts,
+   port still `127.0.0.1:8000`.
+4. **The handoff's check:** `2.31.4 ['/usr/local/lib/python3.11/site-packages/AINDY']`. `/api/version`:
+   `default-apps`, 16 plugins. `/health` 200. Schema heads unchanged: runtime `0020`, app `fl1metrics0001`.
+   0 `ERROR` or traceback lines at boot. 0 `executing` agent runs after the restart (no `AgentContinuation`
+   line, with nothing in flight to resume).
+5. **The app's fixes, live** (designated test account, read-only requests):
+   - the retired legacy routes answer 404 even with the shared key;
+   - an event naming another user's drop point answers 404;
+   - the installed egress guard refuses `postgres` and `mailpit`;
+   - `GET /network_bridge/authors` with the shared key lists 0 authors, none of them a sign-in row.
 
-Then tell the runtime side we are on it. Their advisory waits for that (handoff §6).
+The two `APP_DEPENDS_ON ordering gap` warnings at boot (analytics and masterplan before identity) date from
+the repo extraction and are already recorded in `RUNTIME_2_19_0_UPGRADE.md`; not new.
+
+**Still owed:**
+
+- **After a day of normal traffic, from about 2026-11-09 00:30Z:** `aindy_payload_identity_mismatch_total` by
+  `syscall`, and the 2.31.3 record's §7 log lines. That read carries over from 2.31.3, whose own windows
+  13 to 15 were all too short or too quiet to count.
+- **#535:** a release gate opened before midnight local time. It needs a new approve token.
