@@ -35,7 +35,7 @@ REASONING_EFFORT = "low"
 REASONING_PREFIXES = ("gpt-5", "o1", "o3", "o4")
 REASONING_MAX_TOKENS = 16_000
 MAX_ARTICLE_CHARS_SENT = 60_000
-MAX_CLAIMS = 40
+MAX_CLAIMS = 25
 MAX_LINKS_SENT = 60
 KINDS = ("number", "date_event", "attribution", "named", "cause_comparison")
 STATUSES = ("contradicts", "confirmed", "new", "sourced", "unsourced")
@@ -50,13 +50,18 @@ A claim is a statement presented as fact that could be checked:
 - "named": a statement about a named product, project, person or organisation, including the writer's own;
 - "cause_comparison": a cause, effect or comparison stated as fact.
 NOT claims: opinions marked as opinion ("I think", "in my view"), questions, hypotheticals, advice or instructions,
-and the writer's own experience framed as experience ("I found", "when I tried").
+the writer's own experience framed as experience ("I found", "when I tried"), and the writer's NARRATION of their own
+work: what happened, in what order, what they or a tool did during it, what was said in a conversation ("Claude asked
+whether...", "That request started another audit.", "The work was divided into three phases."). A claim is something a
+reader could check against a source outside this article: what a named thing IS, DOES or HAS, a number, a date, who
+said or found what, or a cause stated as general fact.
 
 You are also given THE WRITER'S WORKS, each with numbered FACTS (F1, F2, ...) and DENIED claims (D1, D2, ...), and the
 draft's LINKS (L1, L2, ...). For each claim:
 - "claim": the sentence or clause from the draft that makes it, COPIED EXACTLY, word for word.
 - "kind": one of the five kinds above.
-- "work": the exact name of one of THE WRITER'S WORKS if the claim is about it, else null.
+- "work": the name of one of THE WRITER'S WORKS, exactly as written between the quotes (without the kind), if the
+  claim is about it, else null.
 - "fact": the id of that Work's fact the claim matches (same meaning, not just the same topic), else null.
 - "denied": the id of that Work's denied claim the claim says, or plainly implies, else null.
 - "source": the id of the link in the draft that backs the claim (the link in or next to it, or the one it cites),
@@ -65,7 +70,7 @@ draft's LINKS (L1, L2, ...). For each claim:
 Rules:
 - Do not judge whether a claim is true. Do not suggest changes. Do not invent claims, facts or links.
 - Only use ids from the lists you were given, and only a fact or denial of the Work you named.
-- At most 40 claims; prefer the most specific ones.
+- At most 25 claims; prefer the most specific and checkable ones.
 
 Return ONLY valid JSON:
 {"claims": [{"claim": "...", "kind": "...", "work": null, "fact": null, "denied": null, "source": null}]}"""
@@ -113,12 +118,20 @@ def build_context(truth: dict, links: list[str]) -> str:
     if not truth["works"]:
         lines.append("(none)")
     for work in truth["works"]:
-        lines.append(f"\nWORK: {work['name']} ({work.get('kind') or 'work'})")
+        lines.append(f"\nWORK \"{work['name']}\" (kind: {work.get('kind') or 'work'})")
         lines += [f"F{i}: {fact}" for i, fact in enumerate(work.get("facts") or [], start=1)]
         lines += [f"D{i}: {claim}" for i, claim in enumerate(work.get("denied") or [], start=1)]
     lines.append("\nLINKS IN THE DRAFT")
     lines += [f"L{i}: {url}" for i, url in enumerate(links[:MAX_LINKS_SENT], start=1)] or ["(none)"]
     return "\n".join(lines)
+
+
+def _work_key(name: Any) -> str:
+    """A Work's name for matching: case, spacing, quotes and a trailing "(kind)" aside. Live on 2026-11-08 the
+    model answered "A.I.N.D.Y. (project)", echoing the context's label, and an exact match dropped all 14 tags."""
+    text = str(name or "").strip().strip("\"'")
+    text = re.sub(r"\s*\((?:kind:\s*)?[a-z_ ]+\)\s*$", "", text, flags=re.IGNORECASE)
+    return " ".join(text.lower().split())
 
 
 def _pick(ref: Any, prefix: str, items: list) -> tuple[int, Any] | None:
@@ -146,7 +159,7 @@ def parse_response(content: str, article: str, truth: dict, links: list[str]) ->
         payload = {}
 
     folded = fold_text(article)
-    works = {" ".join(str(w["name"]).lower().split()): w for w in truth["works"]}
+    works = {_work_key(w["name"]): w for w in truth["works"]}
     own_hosts = {h.lower().removeprefix("www.") for h in truth.get("own_hosts") or []}
     sent_links = links[:MAX_LINKS_SENT]
     claims: list[dict] = []
@@ -157,7 +170,7 @@ def parse_response(content: str, article: str, truth: dict, links: list[str]) ->
         if not claim:
             continue
         kind = str(item.get("kind") or "").strip().lower().replace(" ", "_")
-        work = works.get(" ".join(str(item.get("work") or "").lower().split()))
+        work = works.get(_work_key(item.get("work")))
         fact = _pick(item.get("fact"), "F", work.get("facts") or []) if work else None
         denied = _pick(item.get("denied"), "D", work.get("denied") or []) if work else None
         source = _pick(item.get("source"), "L", sent_links)
