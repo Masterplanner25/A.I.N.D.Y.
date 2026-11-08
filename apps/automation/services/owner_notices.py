@@ -175,8 +175,11 @@ def probe_openai() -> None:
     from openai import OpenAI
 
     from AINDY.memory.embedding_service import EMBEDDING_MODEL
+    from apps._shared.provider_keys import provider_key
 
-    OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=20.0, max_retries=0).embeddings.create(
+    # The SERVER's key, on purpose (FR-59): this probe watches the operator's own balance.
+    key = provider_key(None, "openai", system=True).value
+    OpenAI(api_key=key, timeout=20.0, max_retries=0).embeddings.create(
         model=EMBEDDING_MODEL, input="ok")
 
 

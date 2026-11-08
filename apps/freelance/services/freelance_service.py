@@ -41,7 +41,8 @@ from AINDY.platform_layer.app_runtime import (
 from apps.freelance.events import FreelanceEventTypes as SystemEventTypes
 from AINDY.platform_layer.external_call_service import perform_external_call
 from AINDY.platform_layer.trace_context import is_pipeline_active
-from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
+from AINDY.platform_layer.openai_client import chat_completion
+from apps._shared.provider_keys import llm_client
 from AINDY.config import settings
 from AINDY.memory.memory_scoring_service import get_relevant_memories
 
@@ -256,6 +257,7 @@ def generate_deliverable(db: Session, order_id: int, user_id: str | None = None)
         raise ValueError(f"Order {order_id} not found")
     user_id = user_id or (str(order.user_id) if order.user_id else None)
     prompt = _build_delivery_prompt(order, db, user_id=user_id)
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59); a 402 before any call
     response = perform_external_call(
         service_name="openai",
         db=db,
@@ -265,7 +267,7 @@ def generate_deliverable(db: Session, order_id: int, user_id: str | None = None)
         method="openai.chat",
         extra={"purpose": "freelance_delivery_generation", "order_id": order.id},
         operation=lambda: chat_completion(
-            get_openai_client(),
+            client,
             model="gpt-4o-mini",
             messages=[
                 {

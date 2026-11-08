@@ -409,7 +409,7 @@ def search_leads(query: str, db=None, user_id: str | None = None, max_results: i
         try:
             from apps.search.services.research_engine import web_search
 
-            raw = web_search(query)
+            raw = web_search(query, user_id=user_id, db=db)
             parsed = None
             try:
                 parsed = json.loads(raw)
@@ -420,6 +420,9 @@ def search_leads(query: str, db=None, user_id: str | None = None, max_results: i
             if not leads:
                 leads = _extract_leads_from_text(raw, max_results=max_results)
         except Exception as exc:
+            from apps._shared.provider_keys import raise_key_problem
+
+            raise_key_problem(exc)  # FR-59: a missing key is a 402, not an "External Search" row
             logger.warning("search_leads external retrieval failed: %s", exc)
             retrieval_error = str(exc) or type(exc).__name__
 
@@ -476,15 +479,20 @@ def unified_query(
             _web_search = web_search_fn
             _ai_analyze = ai_analyze_fn
             if _web_search is None or _ai_analyze is None:
+                from functools import partial
+
                 from apps.search.services.research_engine import web_search, ai_analyze
 
-                _web_search = _web_search or web_search
-                _ai_analyze = _ai_analyze or ai_analyze
+                _web_search = _web_search or partial(web_search, user_id=user_id, db=db)
+                _ai_analyze = _ai_analyze or partial(ai_analyze, user_id=user_id, db=db)
 
             raw = _web_search(query)
             summary = _ai_analyze(raw)
             source = "external_search"
         except Exception as exc:
+            from apps._shared.provider_keys import raise_key_problem
+
+            raise_key_problem(exc)  # FR-59: a missing key is a 402, not an empty summary
             logger.warning("unified_query external analysis failed: %s", exc)
 
         search_score = score_research_result(

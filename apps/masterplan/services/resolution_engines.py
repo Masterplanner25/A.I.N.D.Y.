@@ -19,26 +19,44 @@ def _model(env: str, default: str) -> str:
     return (os.getenv(env) or "").strip() or default
 
 
-def _call(service: str, url: str, *, headers: dict, body: dict, purpose: str) -> dict:
+#: Whose key pays for each engine (FR-59): the run's user's own, or the server's for an operator.
+ENGINE_PROVIDERS = {"perplexity": "perplexity", "openai": "openai", "claude": "anthropic"}
+
+
+def _key(provider: str, user_id, db) -> object:
+    from apps._shared.provider_keys import provider_key
+
+    resolved = provider_key(user_id, provider, db=db)
+    if not resolved.value:
+        raise RuntimeError(f"no {provider} key is configured")
+    return resolved
+
+
+def _call(service: str, url: str, *, headers: dict, body: dict, purpose: str, resolved, user_id, db) -> dict:
     from AINDY.platform_layer.external_call_service import perform_external_call
+    from apps._shared.provider_keys import refused
 
     response = perform_external_call(
         service_name=service,
+        db=db,
+        user_id=str(user_id),
         endpoint=url,
         method="POST",
         model=body.get("model"),
         extra={"purpose": purpose},
         operation=lambda: requests.post(url, headers=headers, json=body, timeout=TIMEOUT_SECONDS),
     )
+    refused(resolved, response.status_code)  # a user's own key refused is theirs to replace: a 402
     if response.status_code >= 400:
         raise RuntimeError(f"{service} answered HTTP {response.status_code}: {response.text[:200]}")
     return response.json()
 
 
-def ask_perplexity(question: str) -> dict:
+def ask_perplexity(question: str, *, user_id, db=None) -> dict:
+    resolved = _key("perplexity", user_id, db)
     data = _call(
         "perplexity", "https://api.perplexity.ai/chat/completions",
-        headers={"Authorization": f"Bearer {os.environ['PERPLEXITY_API_KEY']}"},
+        headers={"Authorization": f"Bearer {resolved.value}"}, resolved=resolved, user_id=user_id, db=db,
         body={"model": _model("AINDY_RESOLUTION_PERPLEXITY_MODEL", "sonar"),
               "messages": [{"role": "user", "content": question}]},
         purpose="resolution_check",
@@ -47,10 +65,11 @@ def ask_perplexity(question: str) -> dict:
     return {"answer": data["choices"][0]["message"]["content"], "citations": [c for c in citations if c]}
 
 
-def ask_openai(question: str) -> dict:
+def ask_openai(question: str, *, user_id, db=None) -> dict:
+    resolved = _key("openai", user_id, db)
     data = _call(
         "openai", "https://api.openai.com/v1/responses",
-        headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"},
+        headers={"Authorization": f"Bearer {resolved.value}"}, resolved=resolved, user_id=user_id, db=db,
         body={"model": _model("AINDY_RESOLUTION_OPENAI_MODEL", "gpt-4.1"),
               "tools": [{"type": "web_search"}], "input": question},
         purpose="resolution_check",
@@ -65,10 +84,12 @@ def ask_openai(question: str) -> dict:
     return {"answer": "\n".join(t for t in texts if t), "citations": [c for c in citations if c]}
 
 
-def ask_claude(question: str) -> dict:
+def ask_claude(question: str, *, user_id, db=None) -> dict:
+    resolved = _key("anthropic", user_id, db)
     data = _call(
         "anthropic", "https://api.anthropic.com/v1/messages",
-        headers={"x-api-key": os.environ["ANTHROPIC_API_KEY"], "anthropic-version": "2023-06-01"},
+        headers={"x-api-key": resolved.value, "anthropic-version": "2023-06-01"},
+        resolved=resolved, user_id=user_id, db=db,
         body={"model": _model("AINDY_RESOLUTION_CLAUDE_MODEL", "claude-sonnet-5"), "max_tokens": 900,
               "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
               "messages": [{"role": "user", "content": question}]},
@@ -82,7 +103,7 @@ def ask_claude(question: str) -> dict:
     return {"answer": "".join(texts).strip(), "citations": list(dict.fromkeys(c for c in citations if c))}
 
 
-ENGINES: dict[str, Callable[[str], dict]] = {
+ENGINES: dict[str, Callable[..., dict]] = {
     "perplexity": ask_perplexity,
     "openai": ask_openai,
     "claude": ask_claude,

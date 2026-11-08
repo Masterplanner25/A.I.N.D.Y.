@@ -182,20 +182,24 @@ def _sampling(model: str) -> dict:
     return {"temperature": 0.4, "max_tokens": DRAFT_MAX_TOKENS}
 
 
-def _complete(brief: str, sources_text: str) -> str:
+def _complete(brief: str, sources_text: str, *, user_id: Any, db: Session | None = None) -> str:
     from AINDY.config import settings
     from AINDY.platform_layer.external_call_service import perform_external_call
-    from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
+    from AINDY.platform_layer.openai_client import chat_completion
+    from apps._shared.provider_keys import llm_client
 
     model = _draft_model()
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59)
     completion = perform_external_call(
         service_name="openai",
+        db=db,
+        user_id=str(user_id),
         endpoint="chat.completions.create",
         model=model,
         method="openai.chat",
         extra={"purpose": "content_draft"},
         operation=lambda: chat_completion(
-            get_openai_client(),
+            client,
             model=model,
             messages=[{"role": "system", "content": _SYSTEM},
                       {"role": "user", "content": f"BRIEF\n{brief}\n\nSOURCES\n{sources_text}"}],
@@ -282,7 +286,7 @@ def write_draft(db: Session, user_id: Any, *, brief: str, sources: Any = None, t
         searched = _engine_answers(db, uid, work_id)
         if searched:
             context += "\n\n" + searched
-    text = (complete or _complete)(brief, context)
+    text = complete(brief, context) if complete else _complete(brief, context, user_id=uid, db=db)
     if not text:
         raise RuntimeError("the drafting model returned nothing")
 

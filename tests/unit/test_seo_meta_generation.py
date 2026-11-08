@@ -69,7 +69,7 @@ def model(monkeypatch):
 
 
 def test_the_description_comes_back_with_the_point_it_was_built_on(model):
-    result = metagen.generate_meta_from_article(ARTICLE, title="What a version promises")
+    result = metagen.generate_meta_from_article(user_id="u-1", text=ARTICLE, title="What a version promises")
 
     assert result["meta_description"].startswith("What a version promises")
     assert result["central_point"] == "A version number is a promise the release has to keep."
@@ -103,7 +103,7 @@ def test_over_budget_is_kept_and_marked_not_trimmed(model):
     long = "A description that keeps going well past the line a search result shows, " * 4
     model["state"]["content"] = json.dumps({"central_point": "p", "meta_description": long})
 
-    result = metagen.generate_meta_from_article(ARTICLE)
+    result = metagen.generate_meta_from_article(user_id="u-1", text=ARTICLE)
 
     assert result["meta_description"] == " ".join(long.split())
     assert result["over_by"] == result["characters"] - 160 > 0
@@ -114,7 +114,7 @@ def test_over_budget_is_kept_and_marked_not_trimmed(model):
 def test_a_failed_call_returns_nothing_and_says_why(model):
     model["state"]["content"] = RuntimeError("boom")
 
-    result = metagen.generate_meta_from_article(ARTICLE)
+    result = metagen.generate_meta_from_article(user_id="u-1", text=ARTICLE)
 
     assert result["meta_description"] == ""
     assert result["reason"] == "the description service could not be reached"
@@ -124,7 +124,7 @@ def test_there_is_no_opening_lines_fallback(model):
     """An opening-lines description would look like one written from the whole piece."""
     model["state"]["content"] = RuntimeError("boom")
 
-    result = metagen.generate_meta_from_article(ARTICLE)
+    result = metagen.generate_meta_from_article(user_id="u-1", text=ARTICLE)
 
     assert "memory store" not in json.dumps(result)
 
@@ -132,14 +132,14 @@ def test_there_is_no_opening_lines_fallback(model):
 def test_unparseable_output_is_no_answer(model):
     model["state"]["content"] = "I think the article is about versions."
 
-    result = metagen.generate_meta_from_article(ARTICLE)
+    result = metagen.generate_meta_from_article(user_id="u-1", text=ARTICLE)
 
     assert result["meta_description"] == ""
     assert result["reason"] == "no usable description was returned"
 
 
 def test_an_empty_article_never_reaches_the_model(model):
-    result = metagen.generate_meta_from_article("   ")
+    result = metagen.generate_meta_from_article(user_id="u-1", text="   ")
 
     assert model["calls"] == []
     assert "no article text" in result["reason"]
@@ -148,7 +148,7 @@ def test_an_empty_article_never_reaches_the_model(model):
 def test_the_route_wrapper_passes_the_title_and_budget(model):
     from apps.search.services.search_service import generate_meta
 
-    result = generate_meta(ARTICLE, 150, title="What a version promises")
+    result = generate_meta(ARTICLE, 150, title="What a version promises", user_id="u-1")
 
     assert result["budget"] == 150
     assert result["central_point"]

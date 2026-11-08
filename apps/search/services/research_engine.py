@@ -1,7 +1,6 @@
-import os
-
 import requests
-from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
+from AINDY.platform_layer.openai_client import chat_completion
+from apps._shared.provider_keys import llm_client, provider_key, refused
 from AINDY.config import settings
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -15,6 +14,8 @@ RECENCY_VALUES = ("hour", "day", "week", "month", "year")
 def web_search_results(
     query: str,
     *,
+    user_id,
+    db=None,
     domains: list[str] | None = None,
     recency: str | None = None,
     max_results: int = 10,
@@ -31,7 +32,8 @@ def web_search_results(
     results even before a key existed. The endpoint takes a POST with the query in a
     JSON body and a Bearer token.
     """
-    key = (os.environ.get("PERPLEXITY_API_KEY") or "").strip()
+    resolved = provider_key(user_id, "perplexity", db=db)  # whose key pays (FR-59)
+    key = (resolved.value or "").strip()
     if not key:
         raise RuntimeError(
             "PERPLEXITY_API_KEY is not set; web research is unavailable."
@@ -50,6 +52,8 @@ def web_search_results(
         # detection. Both hit `/search`, both spend the same key, and both were labelled
         # `http`, so neither was countable against the other.
         service_name="perplexity",
+        db=db,
+        user_id=str(user_id),
         endpoint=url,
         method="POST",
         extra={"purpose": "research_web_search", "filtered": bool(domains or recency)},
@@ -60,6 +64,7 @@ def web_search_results(
             timeout=20,
         ),
     )
+    refused(resolved, resp.status_code)
     if resp.status_code >= 400:
         raise RuntimeError(f"Web search failed with HTTP {resp.status_code}.")
     return [
@@ -74,25 +79,28 @@ def web_search_results(
     ]
 
 
-def web_search(query: str) -> str:
+def web_search(query: str, *, user_id, db=None) -> str:
     """The open-web search as flattened text, because its callers (``ai_analyze``, the research
     tool) want prose to summarise."""
     rendered = "\n\n".join(
-        f"{row['title']}\n{row['url']}\n{row['snippet']}" for row in web_search_results(query)
+        f"{row['title']}\n{row['url']}\n{row['snippet']}" for row in web_search_results(query, user_id=user_id, db=db)
     )
     return rendered[:5000]  # limit content size
 
-def ai_analyze(content: str) -> str:
+def ai_analyze(content: str, *, user_id, db=None) -> str:
     """Summarize and extract next actions."""
     prompt = f"Summarize and extract 3 recommended actions:\n\n{content}"
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59)
     completion = perform_external_call(
         service_name="openai",
+        db=db,
+        user_id=str(user_id),
         endpoint="chat.completions.create",
         model="gpt-4o",
         method="openai.chat",
         extra={"purpose": "research_ai_analyze"},
         operation=lambda: chat_completion(
-            get_openai_client(),
+            client,
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,

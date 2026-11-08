@@ -147,7 +147,7 @@ def _handle_research_query(payload: dict, ctx: SyscallContext) -> dict:
     if not query:
         raise ValueError("sys.v1.research.query requires 'query'")
 
-    raw = web_search(query)
+    raw = web_search(query, user_id=ctx.user_id)
     return {"raw_result": _research_excerpt(raw)}
 
 

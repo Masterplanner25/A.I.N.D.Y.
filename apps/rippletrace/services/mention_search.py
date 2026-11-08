@@ -75,8 +75,12 @@ def search(
     and its quoted title, say) cost one call rather than several.
     """
     from AINDY.platform_layer.external_call_service import perform_external_call
+    from apps._shared.provider_keys import provider_key, refused
 
-    key = api_key()
+    # Whose key pays (FR-59): the piece owner's own Perplexity key, or the server's. A 402 when
+    # this owner has none in per-user mode.
+    resolved = provider_key(user_id, "perplexity", db=db)
+    key = (resolved.value or "").strip()
     if not key:
         raise MentionSearchUnavailable(
             f"{API_KEY_ENV} is not set; ripple detection needs a Perplexity key."
@@ -120,6 +124,7 @@ def search(
     except requests.RequestException as exc:
         raise MentionSearchUnavailable(f"Could not reach the search provider: {exc}") from exc
 
+    refused(resolved, response.status_code)  # the owner's own key refused: theirs to replace
     if response.status_code == 401:
         raise MentionSearchUnavailable("The Perplexity key was rejected (401).")
     if response.status_code == 429:

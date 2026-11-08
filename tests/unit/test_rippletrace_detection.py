@@ -213,7 +213,7 @@ def test_search_without_key_raises_unavailable(monkeypatch):
     """Not "found nothing" — the caller must be able to tell a failed search apart."""
     monkeypatch.delenv(mention_search.API_KEY_ENV, raising=False)
     with pytest.raises(mention_search.MentionSearchUnavailable):
-        mention_search.search(["anything"])
+        mention_search.search(["anything"], user_id="u-1")
 
 
 def test_detection_job_is_opt_in(monkeypatch):

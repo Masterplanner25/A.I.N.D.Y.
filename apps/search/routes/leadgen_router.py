@@ -107,7 +107,11 @@ def _do_generate_b2b_leads(db: Session, user_id: str, query: str):
         return payload
 
     from AINDY.runtime.flow_engine import run_flow
+    from apps._shared.provider_keys import require_key
 
+    # FR-59: the search (Perplexity) and the scoring (OpenAI) are paid with the caller's keys.
+    require_key(user_id, "perplexity", db=db)
+    require_key(user_id, "openai", db=db)
     result = run_flow(
         "leadgen_search",
         {"query": query},

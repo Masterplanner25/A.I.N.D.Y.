@@ -22,7 +22,8 @@ from apps.search.models.leadgen_model import LeadGenResult
 from AINDY.platform_layer.external_call_service import perform_external_call
 from apps.search.services.search_service import search_leads
 from AINDY.platform_layer.trace_context import is_pipeline_active
-from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
+from AINDY.platform_layer.openai_client import chat_completion
+from apps._shared.provider_keys import llm_client, raise_key_problem
 from AINDY.config import settings
 
 logger = logging.getLogger(__name__)
@@ -206,7 +207,7 @@ def run_ai_search(query: str, user_id: str = None, db=None):
     return example_results
 
 
-def score_lead(lead_data: dict):
+def score_lead(lead_data: dict, *, user_id, db=None):
     """
     Uses GPT-4o to generate structured lead quality scores with fallback parsing.
     """
@@ -220,15 +221,18 @@ Each score must be a number between 0 and 100.
     lead_summary = f"Company: {lead_data['company']}\nURL: {lead_data['url']}\nContext: {lead_data['context']}"
     logger.info("[LeadGen] Scoring lead: %s", lead_data["company"])
 
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59); a 402, never a zero score
     try:
         completion = perform_external_call(
             service_name="openai",
+            db=db,
+            user_id=str(user_id),
             endpoint="chat.completions.create",
             model="gpt-4o-mini",
             method="openai.chat",
             extra={"purpose": "lead_scoring", "company": lead_data["company"]},
             operation=lambda: chat_completion(
-                get_openai_client(),
+                client,
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt.strip()},
@@ -253,6 +257,7 @@ Each score must be a number between 0 and 100.
     except CircuitOpenError:
         raise
     except Exception as e:
+        raise_key_problem(e)
         logger.warning("[LeadGen] Scoring failed for %s: %s", lead_data["company"], e)
         return {
             "fit_score": 0,
@@ -310,7 +315,7 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
     logger.info("[LeadGen] Found %s potential leads", len(leads))
 
     for lead in leads:
-        score = score_lead(lead)
+        score = score_lead(lead, user_id=user_id, db=db)
         search_score = score_lead_result(
             overall_score=score.get("overall_score"),
             fit_score=score.get("fit_score"),

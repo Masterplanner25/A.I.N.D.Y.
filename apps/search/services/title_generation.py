@@ -29,7 +29,8 @@ import re
 from AINDY.config import settings
 from AINDY.kernel.circuit_breaker import CircuitOpenError
 from AINDY.platform_layer.external_call_service import perform_external_call
-from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
+from AINDY.platform_layer.openai_client import chat_completion
+from apps._shared.provider_keys import llm_client, raise_key_problem
 
 from apps.search.services.seo_services import TITLE_CHAR_BUDGET, TITLE_CHAR_MIN, analyze_title
 
@@ -156,6 +157,7 @@ def generate_title_candidates(
         return _empty("no article text supplied", existing_title)
 
     system_prompt = SYSTEM_PROMPT.format(budget=TITLE_CHAR_BUDGET, minimum=TITLE_CHAR_MIN)
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59); a 402, never a quiet empty result
     try:
         completion = perform_external_call(
             service_name="openai",
@@ -166,7 +168,7 @@ def generate_title_candidates(
             method="openai.chat",
             extra={"purpose": "seo_title_generation", "count": count},
             operation=lambda: chat_completion(
-                get_openai_client(),
+                client,
                 model=MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -189,6 +191,7 @@ def generate_title_candidates(
         logger.warning("[SEO] title generation unavailable — OpenAI circuit open")
         return _empty("the title service is temporarily unavailable", existing_title)
     except Exception as exc:
+        raise_key_problem(exc)
         logger.warning("[SEO] title generation failed: %s", exc)
         return _empty("the title service could not be reached", existing_title)
 

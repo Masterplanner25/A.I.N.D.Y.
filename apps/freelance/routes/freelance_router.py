@@ -188,6 +188,10 @@ def _do_create_freelance_order(
 
 
 def _do_deliver_order(db: Session, order_id: int, ai_output: str | None, user_id: str):
+    if not ai_output:  # no text given: the order's deliverable is generated, a paid call (FR-59)
+        from apps._shared.provider_keys import require_key
+
+        require_key(user_id, db=db)
     result = _run_flow_freelance(
         "freelance_order_deliver",
         {"order_id": order_id, "ai_output": ai_output},
@@ -228,6 +232,9 @@ def _do_update_metrics(db: Session, user_id: str):
 
 
 def _do_generate_delivery(db: Session, order_id: int, user_id: str):
+    from apps._shared.provider_keys import require_key
+
+    require_key(user_id, db=db)  # FR-59: the deliverable is written with the caller's OpenAI key
     return _run_flow_freelance("freelance_delivery_generate", {"order_id": order_id}, db, user_id)
 
 

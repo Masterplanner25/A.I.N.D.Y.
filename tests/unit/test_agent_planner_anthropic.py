@@ -61,7 +61,7 @@ def test_backend_parses_forced_tool_plan(monkeypatch):
         "overall_risk": "low",
     }
     capture: dict = {}
-    monkeypatch.setattr(pa, "_make_client", lambda: _FakeClient(_fake_message(plan), capture))
+    monkeypatch.setattr(pa, "_make_client", lambda **_: _FakeClient(_fake_message(plan), capture))
 
     result = pa.claude_planner_backend(_request())
 
@@ -76,7 +76,7 @@ def test_backend_parses_forced_tool_plan(monkeypatch):
 def test_backend_uses_default_model(monkeypatch):
     capture: dict = {}
     monkeypatch.delenv("AINDY_CLAUDE_PLANNER_MODEL", raising=False)
-    monkeypatch.setattr(pa, "_make_client", lambda: _FakeClient(_fake_message({"steps": []}), capture))
+    monkeypatch.setattr(pa, "_make_client", lambda **_: _FakeClient(_fake_message({"steps": []}), capture))
     pa.claude_planner_backend(_request())
     assert capture["model"] == "claude-opus-4-8"
 
@@ -84,20 +84,20 @@ def test_backend_uses_default_model(monkeypatch):
 def test_backend_honors_model_override(monkeypatch):
     capture: dict = {}
     monkeypatch.setenv("AINDY_CLAUDE_PLANNER_MODEL", "claude-sonnet-4-6")
-    monkeypatch.setattr(pa, "_make_client", lambda: _FakeClient(_fake_message({"steps": []}), capture))
+    monkeypatch.setattr(pa, "_make_client", lambda **_: _FakeClient(_fake_message({"steps": []}), capture))
     pa.claude_planner_backend(_request())
     assert capture["model"] == "claude-sonnet-4-6"
 
 
 def test_backend_requires_tools(monkeypatch):
-    monkeypatch.setattr(pa, "_make_client", lambda: pytest.fail("client should not be built"))
+    monkeypatch.setattr(pa, "_make_client", lambda **_: pytest.fail("client should not be built"))
     with pytest.raises(pa.AnthropicPlannerError):
         pa.claude_planner_backend(_request(tools=[]))
 
 
 def test_backend_raises_when_no_tool_use_block(monkeypatch):
     empty = types.SimpleNamespace(content=[types.SimpleNamespace(type="text", text="nope")])
-    monkeypatch.setattr(pa, "_make_client", lambda: _FakeClient(empty, {}))
+    monkeypatch.setattr(pa, "_make_client", lambda **_: _FakeClient(empty, {}))
     with pytest.raises(pa.AnthropicPlannerError):
         pa.claude_planner_backend(_request())
 
@@ -168,7 +168,7 @@ def test_a_provider_error_survives_the_seams_wrapper(monkeypatch):
         def call_method(self, *a, **k):
             raise wrapped
 
-    monkeypatch.setattr(pa, "_make_client", lambda: _Failing())
+    monkeypatch.setattr(pa, "_make_client", lambda **_: _Failing())
 
     with pytest.raises(pa.AnthropicPlannerError) as caught:
         pa.claude_planner_backend(_request())
@@ -185,7 +185,7 @@ def test_a_bare_error_is_still_reported(monkeypatch):
         def call_method(self, *a, **k):
             raise RuntimeError("socket exploded")
 
-    monkeypatch.setattr(pa, "_make_client", lambda: _Failing())
+    monkeypatch.setattr(pa, "_make_client", lambda **_: _Failing())
 
     with pytest.raises(pa.AnthropicPlannerError, match="socket exploded"):
         pa.claude_planner_backend(_request())
