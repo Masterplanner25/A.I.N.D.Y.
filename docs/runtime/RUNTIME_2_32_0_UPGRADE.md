@@ -91,13 +91,24 @@ was refused") without ever falling back to the server's key, add a Settings card
 
 The full app-profile suite and every CI check, locally on 2.32.0. Results in the PR body.
 
-## 7. Live, after the merge
+## 7. Live, 2026-11-08
 
-1. Read the identity counter and `tenant_mismatch` before the recreate.
-2. Rebuild, recreate; the first boot stops on exit 3; run `bootstrap-schema --reconcile` once; start again. Check
-   `alembic_version_runtime` reads `0021`.
-3. The handoff's check: `2.32.0 [...site-packages/AINDY]`.
-4. `memory backfill-paths`, then `--yes`; report both counts and the `memory.tree` size.
-5. A register request answers 202 and adds no `users` row.
-6. A trace graph for one of the owner's traces is unchanged in size.
-7. `aindy_llm_key_source_total` shows only `server`.
+From #564's merge (`c3df929`), image `1da692e4dab7`, up healthy at **17:06:42Z**.
+
+1. **Counters before the recreate** (16:34Z and 17:01Z): 0 identity mismatches, 0 `tenant_mismatch`. A new window opened
+   at 17:06:42Z.
+2. **Schema:** the first boot stopped on exit 3 as the handoff said (`state=upgrade_required`); `bootstrap-schema
+   --reconcile` stamped `0020` → `0021`, and `user_provider_keys` exists. The container's 8 restarts are that exit-3 loop
+   before the reconcile, not crashes. App head unchanged, `rt3answers0001`.
+3. **The handoff's check:** `2.32.0 ['/usr/local/lib/python3.11/site-packages/AINDY']`.
+4. **Memory paths:** dry run, 1,721 to fill and 1,903 with no owner. **`--yes` failed** on the `users` foreign key
+   (**FR-62**), writing nothing. The runtime's own `backfill_memory_paths` in-process, with the models imported, filled
+   1,721 in 4 batches, 0 not filled. Every owned node now has a stored path: the owner's 1,427 of 1,427 (29 before; the
+   handoff expected about 1,397), the test account's 170 of 170.
+5. **Registration:** `POST /auth/register` answered 202 and added no row (4 users before and after).
+6. **Trace scoping:** the owner's largest trace reads 584 nodes and 583 edges unscoped, but **582 nodes and 291 edges**
+   scoped, depth 1. The two dropped nodes are its `external.call.*` events, which the runtime writes with no user, and
+   every other event hangs off them. That is FR-60 working as specified; the gap is the userless events, **FR-61**.
+7. **Provider keys:** `AINDY_PROVIDER_KEYS` unset. `aindy_llm_key_source_total` has no series yet (no model call since
+   boot).
+8. **After the restart:** 0 stranded `executing` agent runs.
