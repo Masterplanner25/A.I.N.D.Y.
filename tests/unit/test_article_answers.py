@@ -80,7 +80,7 @@ def _fake_call(monkeypatch, content=None, error=None):
 
 def test_a_failed_call_is_reported_never_guessed(monkeypatch):
     _fake_call(monkeypatch, error=RuntimeError("quota"))
-    result = aa.article_answers(ARTICLE)
+    result = aa.article_answers(ARTICLE, user_id="u-1")
     assert result["answers"] == [] and result["reason"] == "the answers service could not be reached"
     assert aa.article_answers("   ")["reason"] == "no article text supplied"
 

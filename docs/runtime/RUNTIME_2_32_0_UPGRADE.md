@@ -112,3 +112,59 @@ From #564's merge (`c3df929`), image `1da692e4dab7`, up healthy at **17:06:42Z**
 7. **Provider keys:** `AINDY_PROVIDER_KEYS` unset. `aindy_llm_key_source_total` has no series yet (no model call since
    boot).
 8. **After the restart:** 0 stranded `executing` agent runs.
+
+## 8. Phase 3, part 1: every paid call routed (for the runtime to read before the flip)
+
+The handoff's ask 4. **`AINDY_PROVIDER_KEYS` stays unset**: in `server` mode every routed call returns exactly the
+client or key it used before (`test_server_mode_returns_the_same_client_as_before`). The Settings card and the flip
+are later steps.
+
+**One place decides whose key pays:** `apps/_shared/provider_keys.py`.
+
+| Helper | Wraps | For |
+|---|---|---|
+| `llm_client(user_id, provider)` | `get_llm_client_for_user` | the runtime's model clients (OpenAI, DeepSeek, Anthropic) |
+| `provider_key(user_id, provider)` + `refused(resolved, status)` | `resolve_provider_key` | raw HTTP calls: Perplexity, the Resolution Check's three engines |
+| `client_for_resolved(resolved, server_client)` | `user_key_client` | ARM, which keeps its own server client |
+| `can_pay(user_id, provider)` | `resolve_provider_key` | scheduled jobs skip a user without a key; their work stays due |
+| `require_key(user_id, provider)` | `can_pay` | routes whose paid call runs inside a flow or syscall: the 402 before it starts |
+
+**Rules the code follows:**
+- **The paying user is required.** A missing user is a `ValueError` in every mode, never a call with no user (which
+  the runtime pays with the server's key, D5). Only the operator's own calls say `system=True`: the owner-notices probe
+  and an Anthropic planner run with no user.
+- **A key problem is a 402 with a sentence** (`ProviderKeyProblem`, an `HTTPException`): *"This needs your own OpenAI API
+  key. Add it in Settings."* or *"OpenAI refused your API key (ending abcd). Replace it in Settings."* Never a 401, which
+  the client reads as signed out. Its `str()` is `HTTP_402:<sentence>`, so a flow node's error string keeps the status.
+- **No fallback hides it.** Every site that catches all model errors and returns a default (SEO answers, meta and
+  titles, lead scoring, the Genesis audit, segment judging, research) re-raises a key problem first. The one exception
+  is the outreach drafter, whose free template was already the designed "no key" fallback and spends nothing.
+- **A refused user key is never retried** (ARM's and Genesis's retry loops stop on it), and never retried on the
+  server's key.
+
+**The sites, 23 in 17 modules:** Genesis (message, import, synthesis, audit), content drafts, share drafts, article
+answers, SEO meta and titles, the Resolution Check's three engines and its judge, lead scoring, the outreach drafter,
+segment judging, research (Perplexity search and the OpenAI summary), RippleTrace's mention search, freelance
+deliverables, ARM (DeepSeek), the Anthropic planner backend, and the owner-notices probe (server, on purpose). Each
+call's `perform_external_call` now also carries the user, so these `external.call.*` events are no longer userless
+(FR-61's rows, from our side).
+
+**Routes that start a paid flow** check first (`require_key`): Genesis message, import and synthesis; the lead search;
+the research query; ARM analysis and generation; freelance delivery generation (and delivery with no text given).
+
+**Scheduled jobs:** share drafts, piece answers and the weekly Resolution Check skip a user who cannot pay; the
+Resolution Check also refuses to start (402) unless every engine's provider and the judge can be paid. Mention
+detection's all-owner sweep (retired, flag-off) charges each piece's owner and skips one without a key.
+
+**Agent runs** reach the same calls through syscalls in the Nodus worker. A user without a key there fails the step
+with the same sentence, prefixed `HTTP_402:`.
+
+**Guarded by `test_provider_key_routing.py`:** a scan that fails on any new direct server client or provider-key read
+in `apps/` outside a short allowlist; the helper's behaviour; each site, in per-user mode for a user with no key,
+stopping with the 402 before any network call; the piece-answers job skipping such a user; and two routes over HTTP (a
+plain pipeline route, and Genesis through its flow and syscall).
+
+**Two runtime findings from this work:** FR-63 (`chat_completion` hands back a refused user key as a plain
+`LLMCallError`, its cause chain a cycle) and FR-64 (a syscall that raises inside a flow node rolls back the flow's own
+`FlowRun`, so the route sees "FlowRun ... disappeared").
+

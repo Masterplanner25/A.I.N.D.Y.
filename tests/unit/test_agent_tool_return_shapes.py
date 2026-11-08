@@ -96,7 +96,9 @@ def test_research_query_returns_raw_result(monkeypatch):
     import apps.search.syscalls as syscalls
     import apps.search.services.research_engine as research_engine
 
-    monkeypatch.setattr(research_engine, "web_search", lambda q: "findings")
-    result = syscalls._handle_research_query({"query": "q"}, None)
+    monkeypatch.setattr(research_engine, "web_search", lambda q, **_: "findings")
+    from types import SimpleNamespace
+
+    result = syscalls._handle_research_query({"query": "q"}, SimpleNamespace(user_id="u-1"))
     assert set(result) == {"raw_result"}
     assert _stated_keys(_app_tools()["research.query"]["description"]) == {"raw_result"}

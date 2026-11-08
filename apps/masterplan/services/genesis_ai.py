@@ -5,7 +5,8 @@ from AINDY.core.execution_signal_helper import queue_memory_capture
 from AINDY.kernel.circuit_breaker import CircuitOpenError
 from AINDY.platform_layer.external_call_service import perform_external_call
 from AINDY.core.system_event_service import emit_error_event
-from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
+from AINDY.platform_layer.openai_client import chat_completion
+from apps._shared.provider_keys import llm_client, raise_key_problem
 from AINDY.config import settings
 
 logger = logging.getLogger(__name__)
@@ -228,6 +229,7 @@ def call_genesis_llm(
         + [{"role": "user", "content": message}]
     )
 
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59); a 402 before any call
     try:
         response = perform_external_call(
             service_name="openai",
@@ -238,7 +240,7 @@ def call_genesis_llm(
             method="openai.chat",
             extra={"purpose": "genesis_message", "history_turns": len(history)},
             operation=lambda: chat_completion(
-                get_openai_client(),
+                client,
                 model=MODEL,
                 messages=chat_messages,
                 temperature=0.4,
@@ -358,6 +360,7 @@ def call_genesis_import_llm(content: str, user_id: str = None, db=None) -> dict:
     Failure returns an empty-but-valid structure rather than raising: an import that
     extracts nothing still leaves the user with a usable session containing their text.
     """
+    client = llm_client(user_id, db=db)
     response = perform_external_call(
         service_name="openai",
         db=db,
@@ -367,7 +370,7 @@ def call_genesis_import_llm(content: str, user_id: str = None, db=None) -> dict:
         method="openai.chat",
         extra={"purpose": "genesis_import"},
         operation=lambda: chat_completion(
-            get_openai_client(),
+            client,
             model=MODEL,
             messages=[
                 {"role": "system", "content": IMPORT_SYSTEM_PROMPT},
@@ -453,6 +456,7 @@ def call_genesis_synthesis_llm(
         logger.warning("Genesis synthesis ARM context lookup failed: %s", exc)
 
     system_prompt = SYNTHESIS_SYSTEM_PROMPT + arm_insights
+    client = llm_client(user_id, db=db)
     response = perform_external_call(
         service_name="openai",
         db=db,
@@ -462,7 +466,7 @@ def call_genesis_synthesis_llm(
         method="openai.chat",
         extra={"purpose": "genesis_synthesis"},
         operation=lambda: chat_completion(
-            get_openai_client(),
+            client,
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -548,6 +552,7 @@ def validate_draft_integrity(draft: dict, user_id: str = None, db=None) -> dict:
     retry_limit = 3
     last_error = None
 
+    client = llm_client(user_id, db=db)
     for attempt in range(retry_limit):
         try:
             response = perform_external_call(
@@ -559,7 +564,7 @@ def validate_draft_integrity(draft: dict, user_id: str = None, db=None) -> dict:
                 method="openai.chat",
                 extra={"purpose": "genesis_draft_audit", "attempt": attempt + 1},
                 operation=lambda: chat_completion(
-                    get_openai_client(),
+                    client,
                     model="gpt-4o",
                     messages=[
                         {"role": "system", "content": AUDIT_SYSTEM_PROMPT},
@@ -582,6 +587,7 @@ Return only valid JSON.
             content = response.choices[0].message.content
             return json.loads(content)
         except Exception as e:
+            raise_key_problem(e)  # a missing or refused key is the person's to fix, not a retry
             last_error = e
             continue
 

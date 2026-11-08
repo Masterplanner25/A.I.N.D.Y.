@@ -197,10 +197,11 @@ def _judge_model() -> str:
     return (os.getenv("AINDY_RESOLUTION_JUDGE_MODEL") or "").strip() or JUDGE_MODEL
 
 
-def judge_answer(question: dict, answer: dict, truth: dict) -> dict:
+def judge_answer(question: dict, answer: dict, truth: dict, *, user_id, db: Session | None = None) -> dict:
     from AINDY.config import settings
     from AINDY.platform_layer.external_call_service import perform_external_call
-    from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
+    from AINDY.platform_layer.openai_client import chat_completion
+    from apps._shared.provider_keys import llm_client
 
     subject = truth["entities"][question["subject"]]
     facts = _facts_for(subject)
@@ -214,11 +215,12 @@ def judge_answer(question: dict, answer: dict, truth: dict) -> dict:
         + f"\n\nANSWER:\n{answer.get('answer') or ''}\n\nCITED: {', '.join(answer.get('citations') or []) or '(none)'}"
     )
     model = _judge_model()
+    client = llm_client(user_id, db=db)  # the run's user pays for the judgement too (FR-59)
     completion = perform_external_call(
-        service_name="openai", endpoint="chat.completions.create", model=model, method="openai.chat",
-        extra={"purpose": "resolution_judgement"},
+        service_name="openai", db=db, user_id=str(user_id), endpoint="chat.completions.create", model=model,
+        method="openai.chat", extra={"purpose": "resolution_judgement"},
         operation=lambda: chat_completion(
-            get_openai_client(), model=model, temperature=0, timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
+            client, model=model, temperature=0, timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
             messages=[{"role": "system", "content": _JUDGE_PROMPT}, {"role": "user", "content": user}]),
     )
     text = (completion.choices[0].message.content or "").strip()
@@ -321,6 +323,14 @@ def start_run(db: Session, user_id: Any, scope: str = "core") -> dict:
     from apps.masterplan.services.resolution_review import check_ceiling
 
     check_ceiling(db, uid, questions, engines)
+    # FR-59: every engine asked and the judge (OpenAI) are paid with this user's keys. A missing key
+    # is a 402 now, before a run starts, not an error row on every answer.
+    from apps._shared.provider_keys import ProviderKeyProblem, REQUIRED, can_pay
+    from apps.masterplan.services.resolution_engines import ENGINE_PROVIDERS
+
+    for provider in dict.fromkeys([ENGINE_PROVIDERS[e] for e in engines] + ["openai"]):
+        if not can_pay(uid, provider, db=db):
+            raise ProviderKeyProblem(provider, REQUIRED)
     run = ResolutionRun(user_id=uid, scope=scope, status="pending", questions=questions,
                         engines=engines, calls={})
     db.add(run)
@@ -381,8 +391,11 @@ def process_run(db: Session, run: ResolutionRun, *, limit: int = TICK_PAIRS,
     """Answer and judge up to `limit` outstanding (question, engine) pairs. Commits per answer."""
     from apps.masterplan.services.resolution_engines import ENGINES
 
-    ask = ask or ENGINES
-    judge = judge or judge_answer
+    from functools import partial
+
+    # The run's user pays (FR-59); injected test doubles keep their one-argument shape.
+    ask = ask or {name: partial(fn, user_id=run.user_id, db=db) for name, fn in ENGINES.items()}
+    judge = judge or partial(judge_answer, user_id=run.user_id, db=db)
     truth = ground_truth(db, run.user_id)
     done = {(a.question_key, a.engine) for a in db.query(ResolutionAnswer.question_key, ResolutionAnswer.engine)
             .filter(ResolutionAnswer.run_id == run.id)}
@@ -402,7 +415,10 @@ def process_run(db: Session, run: ResolutionRun, *, limit: int = TICK_PAIRS,
                 row.judgement = judgement
                 row.scores = score(judgement, row.citations, truth, question)
         except Exception as exc:  # one engine or judgement failing must not stop the check
-            row.error = str(exc)[:500]
+            from apps._shared.provider_keys import key_problem
+
+            problem = key_problem(exc)  # a key removed mid-run: the sentence, not the HTTP_402 prefix
+            row.error = (problem.detail if problem is not None else str(exc))[:500]
             logger.warning("[resolution] %s / %s failed: %s", engine, question["key"], exc)
         run.calls = calls
         db.add(row)

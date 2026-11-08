@@ -98,7 +98,7 @@ def write_piece_answers() -> dict:
     from AINDY.db.database import SessionLocal
 
     db = SessionLocal()
-    summary: dict[str, Any] = {"owners": 0, "answered": 0, "via_nodus": 0, "failed": 0, "skipped": False}
+    summary: dict[str, Any] = {"owners": 0, "answered": 0, "via_nodus": 0, "failed": 0, "no_key": 0, "skipped": False}
     try:
         owners = {
             row[0] for row in db.query(DropPointDB.user_id).filter(
@@ -106,7 +106,12 @@ def write_piece_answers() -> dict:
                 DropPointDB.content_hash.isnot(None),
             ).distinct()
         }
+        from apps._shared.provider_keys import can_pay
+
         for owner in owners:
+            if not can_pay(owner, db=db):  # FR-59: no key to pay with; the piece stays due
+                summary["no_key"] += 1
+                continue
             outcome, via = answers_owner(db, owner)
             if via == "none":
                 continue

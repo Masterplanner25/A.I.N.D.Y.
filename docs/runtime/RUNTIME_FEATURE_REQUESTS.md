@@ -64,6 +64,33 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-63 — `chat_completion` hands back a refused user key as a plain `LLMCallError`, not `ProviderKeyRejected` 🔴 OPEN — filed 2026-11-08, P3
+
+**apps-monolith ref:** FR-59 phase 3 routing (`RUNTIME_2_32_0_UPGRADE.md` §8). Read on 2.32.0.
+
+**What we see.** `UserKeyLLMClient.call_method` raises `ProviderKeyRejected` as designed. Through
+`openai_client.chat_completion`, which most callers use, the caller gets `LLMCallError("openai call failed")` instead:
+`_chat_completion_with_retry` wraps it and `_legacy_raise` re-raises along the cause chain. The `ProviderKeyRejected` is
+only in the chain, and the chain is a cycle (the error and its cause point at each other). It is not retried (one call,
+checked).
+
+**Ask.** Let `ProviderKeyRejected` (and `ProviderKeyRequired`) pass through `chat_completion` and
+`chat_completion_deepseek` as themselves. Meanwhile we walk the chain, bounded (`apps/_shared/provider_keys.key_problem`).
+
+## FR-64 — a syscall that raises inside a flow node rolls back the flow's own `FlowRun`; the route sees "FlowRun ... disappeared" 🔴 OPEN — filed 2026-11-08, P3
+
+**apps-monolith ref:** FR-59 phase 3 routing, the Genesis message route. Read on 2.32.0.
+
+**What we see.** `POST /apps/genesis/message` runs the `genesis_message` flow, whose node dispatches
+`sys.v1.genesis.message`. When that handler raises (here a missing key; any exception does it), the dispatcher's
+rollback (2.21.0) also discards the flow's uncommitted `FlowRun` in the same session, and `run_flow` returns
+`FlowRun <id> disappeared after node execution`. The handler's message, and any status in it, is lost, and the route
+answers a generic 500. We now check the key before the flow starts, which covers ours; any other handler error still
+reads this way.
+
+**Ask.** Keep the `FlowRun` (commit it before the first node, or use a savepoint around a syscall's work), and carry the
+handler's error text to the flow result.
+
 ## FR-61 — a scoped trace graph drops the userless `external.call.*` events in the caller's own trace, and every edge through them 🔴 OPEN — filed 2026-11-08, P3
 
 **apps-monolith ref:** found verifying the 2.32.0 adoption live (`RUNTIME_2_32_0_UPGRADE.md` §7). Read on 2.32.0.
@@ -92,7 +119,7 @@ batches 4`. Its report also said `would_fill: 0` on that same run, which looks w
 **Ask.** Import the models in the CLI branch (as `settle-stale-units` presumably does), and check `would_fill` on a
 writing run. A test that runs the command, not the function, would have caught the first.
 
-## FR-59 — provider keys cannot be per user: every account's model, embedding and search calls spend the operator's keys ✅ runtime half SHIPPED in 2.32.0 (#922, #923, DEC-121; off by default, `AINDY_PROVIDER_KEYS=server`) · 🟡 phase 3 (our ~25 paid call sites, the Settings card, the flip) is ours. Filed 2026-11-08, P2; adopted in `RUNTIME_2_32_0_UPGRADE.md`
+## FR-59 — provider keys cannot be per user: every account's model, embedding and search calls spend the operator's keys ✅ runtime half SHIPPED in 2.32.0 (#922, #923, DEC-121; off by default, `AINDY_PROVIDER_KEYS=server`) · 🟡 phase 3 is ours: the call sites are routed (`RUNTIME_2_32_0_UPGRADE.md` §8); the Settings card and the flip are next. Filed 2026-11-08, P2; adopted in `RUNTIME_2_32_0_UPGRADE.md`
 
 **apps-monolith ref:** the app's 11-07 route sweep, and the owner (2026-11-08): *"shouldn't people's API keys be scoped
 to their accounts (mine is admin, so I get that may be different)."* Read on runtime 2.31.5.

@@ -112,7 +112,7 @@ def test_create_lead_results_persists_and_sorts(monkeypatch, db_session, user_id
         ],
     )
 
-    def fake_score(lead):
+    def fake_score(lead, **_):
         overall = 90 if lead["company"] == "HighFit" else 30
         return {
             "fit_score": overall,
@@ -276,7 +276,7 @@ def test_search_leads_extracts_and_enriches(monkeypatch, db_session, user_id):
     )
     monkeypatch.setattr(
         research_engine, "web_search",
-        lambda q: '{"results": [{"title": "Acme", "url": "https://acme.io", "snippet": "hiring"}]}',
+        lambda q, **_: '{"results": [{"title": "Acme", "url": "https://acme.io", "snippet": "hiring"}]}',
     )
 
     out = search_service.search_leads("ai leads", db=db_session, user_id=user_id, max_results=3)
@@ -352,8 +352,8 @@ def test_research_query_node_end_to_end(monkeypatch, db_session, user_id):
             "items": [], "ids": [], "formatted": "", "count": 0
         },
     )
-    monkeypatch.setattr(research_engine, "web_search", lambda q: "raw research content")
-    monkeypatch.setattr(research_engine, "ai_analyze", lambda raw: "node summary")
+    monkeypatch.setattr(research_engine, "web_search", lambda q, **_: "raw research content")
+    monkeypatch.setattr(research_engine, "ai_analyze", lambda raw, **_: "node summary")
 
     out = search_flows.research_query_node(
         {"query": "edge AI trends"}, {"db": db_session, "user_id": user_id}
@@ -379,7 +379,7 @@ def test_leadgen_preview_search_node_end_to_end(monkeypatch, db_session, user_id
     )
     monkeypatch.setattr(
         research_engine, "web_search",
-        lambda q: '{"results": [{"title": "Lead Co", "url": "https://lead.co", "snippet": "x"}]}',
+        lambda q, **_: '{"results": [{"title": "Lead Co", "url": "https://lead.co", "snippet": "x"}]}',
     )
 
     out = search_flows.leadgen_preview_search_node(
@@ -402,7 +402,7 @@ def _two_leads(monkeypatch, leadgen_service):
     )
     monkeypatch.setattr(
         leadgen_service, "score_lead",
-        lambda lead: {
+        lambda lead, **_: {
             "fit_score": 70, "intent_score": 70, "data_quality_score": 70,
             "overall_score": 70, "reasoning": "ok",
         },
@@ -455,7 +455,7 @@ def test_a_lead_is_saved_once_per_url(monkeypatch, db_session, user_id):
 
     monkeypatch.setattr(
         leadgen_service, "score_lead",
-        lambda lead: {
+        lambda lead, **_: {
             "fit_score": 40, "intent_score": 40, "data_quality_score": 40,
             "overall_score": 40, "reasoning": "re-scored",
         },

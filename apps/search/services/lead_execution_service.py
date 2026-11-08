@@ -461,14 +461,16 @@ class LeadExecutionService:
         try:
             return self._llm_draft(item)
         except Exception as exc:  # no key / circuit open / parse error -> template
+            # FR-59: a user without their own key also gets the template. It costs nothing, so it
+            # stays the designed fallback here rather than a 402.
             logger.info("[lead_exec] LLM draft unavailable, using template: %s", exc)
             return self._template_draft(item)
 
-    @staticmethod
-    def _llm_draft(item: dict) -> dict:
+    def _llm_draft(self, item: dict) -> dict:
         from AINDY.config import settings
         from AINDY.platform_layer.external_call_service import perform_external_call
-        from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
+        from AINDY.platform_layer.openai_client import chat_completion
+        from apps._shared.provider_keys import llm_client
 
         company = item.get("company") or "the team"
         context = (item.get("context") or "").strip()
@@ -479,14 +481,17 @@ class LeadExecutionService:
         )
         user_prompt = f"Company: {company}\nWhy they're a fit: {context}\nKeep the body under 120 words."
 
+        client = llm_client(self.user_uuid, db=self.db)  # whose key pays (FR-59)
         completion = perform_external_call(
             service_name="openai",
+            db=self.db,
+            user_id=str(self.user_uuid),
             endpoint="chat.completions.create",
             model="gpt-4o-mini",
             method="openai.chat",
             extra={"purpose": "lead_outreach_draft", "company": company},
             operation=lambda: chat_completion(
-                get_openai_client(),
+                client,
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},

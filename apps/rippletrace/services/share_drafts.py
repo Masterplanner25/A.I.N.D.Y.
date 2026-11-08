@@ -202,9 +202,11 @@ def _sampling(model: str) -> dict:
 def _complete(prompt: str, *, db: Session, user_id: Any) -> str:
     from AINDY.config import settings
     from AINDY.platform_layer.external_call_service import perform_external_call
-    from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
+    from AINDY.platform_layer.openai_client import chat_completion
+    from apps._shared.provider_keys import llm_client
 
     model = _model()
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59)
     completion = perform_external_call(
         service_name="openai",
         db=db,
@@ -214,7 +216,7 @@ def _complete(prompt: str, *, db: Session, user_id: Any) -> str:
         method="openai.chat",
         extra={"purpose": "share_drafts"},
         operation=lambda: chat_completion(
-            get_openai_client(),
+            client,
             model=model,
             messages=[{"role": "system", "content": _SYSTEM}, {"role": "user", "content": prompt}],
             response_format={"type": "json_object"},

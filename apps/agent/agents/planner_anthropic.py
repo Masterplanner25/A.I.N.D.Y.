@@ -48,7 +48,7 @@ def _planner_model() -> str:
     return (os.environ.get("AINDY_CLAUDE_PLANNER_MODEL") or DEFAULT_PLANNER_MODEL).strip()
 
 
-def _make_client():
+def _make_client(*, user_id=None, db=None):
     """Return the runtime's Anthropic client through the LLM seam.
 
     ★ Was `anthropic.Anthropic()` — a raw SDK client the runtime could not see. Routing
@@ -68,6 +68,15 @@ def _make_client():
     Still isolated for test monkeypatching, and still checks the key here so a missing
     `ANTHROPIC_API_KEY` fails with a sentence rather than a provider error.
     """
+    # FR-59: the run's user pays with their own Anthropic key when they have one; an operator
+    # without one, and server mode, keep the server's client exactly as before. A run with no
+    # user is the server's, as the runtime's own planner treats it (DEC-121 D5).
+    from apps._shared.provider_keys import client_for_resolved, provider_key
+
+    resolved = provider_key(user_id, "anthropic", db=db, system=user_id is None)
+    if resolved.source == "user":
+        return client_for_resolved(resolved, None)
+
     if not (os.environ.get("ANTHROPIC_API_KEY") or "").strip():
         detail = "ANTHROPIC_API_KEY is not set; cannot use the anthropic_chat planner backend."
         logger.error("[AnthropicPlanner] %s", detail)
@@ -163,7 +172,7 @@ def claude_planner_backend(request) -> dict[str, Any]:
             "Anthropic planner backend requires at least one registered tool."
         )
 
-    client = _make_client()
+    client = _make_client(user_id=request.user_id)
     model = _planner_model()
     try:
         message = client.call_method(
@@ -177,6 +186,10 @@ def claude_planner_backend(request) -> dict[str, Any]:
         )
     except Exception as exc:  # surface the real cause — the runtime wraps this in a generic 500
         import anthropic
+
+        from apps._shared.provider_keys import raise_key_problem
+
+        raise_key_problem(exc)  # a refused user key: the person's to replace (FR-59)
 
         # ★ Read through the seam's wrapper. `CircuitBreakerLLMClient` raises
         # `LLMCallError(...) from exc`, so `exc` is no longer the SDK error — without this the

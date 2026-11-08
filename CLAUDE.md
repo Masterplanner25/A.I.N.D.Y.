@@ -633,6 +633,21 @@ does it feed the algorithm? Persist outcomes and references, not transcripts.
   first write tool here, and it only *records* a handoff: the api's watcher does the work, so no wait is
   ever registered outside the api (FR-44).
 
+### Every paid call names the user whose key pays (FR-59)
+
+**A model or search call goes through `apps/_shared/provider_keys.py`, never `get_openai_client()` or a provider key
+from the environment.** `llm_client(user_id, provider)` for a model client, `provider_key(user_id, provider)` for a raw
+HTTP call (then `refused(resolved, status)`). The user is required: a missing one is a `ValueError`, because the runtime
+pays a call with no user with the server's key. Only the operator's own calls pass `system=True`.
+
+- **A key problem is a 402 with a sentence** (`ProviderKeyProblem`). A site that catches every model error and falls
+  back must call `raise_key_problem(exc)` first, or a missing key becomes a quietly worse result.
+- **A route whose paid call runs inside a flow or syscall calls `require_key(...)` before it starts**: a raise inside a
+  flow's syscall loses the message (FR-64).
+- **A scheduled job asks `can_pay(user_id, provider)` before a user's work** and skips them; their work stays due.
+- `AINDY_PROVIDER_KEYS` is unset here (`server`), so all of this returns the old client today.
+  `test_provider_key_routing.py` fails on a new direct client or key read; add each new site to its per-site list.
+
 ### `content.draft` — what the drafter is given, and the model
 
 A draft about a Work (`work=` set) gets four things from `draft_service.write_draft`: the owner's

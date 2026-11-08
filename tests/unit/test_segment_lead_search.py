@@ -333,5 +333,5 @@ def test_the_judge_runs_at_temperature_zero_on_the_stronger_model(monkeypatch):
     monkeypatch.delenv("AINDY_SEGMENT_JUDGE_MODEL", raising=False)
 
     segment_search.judge_result({"title": "t", "url": "u", "snippet": "s"},
-                                {"name": "S", "buyer": "b", "works": [], "category_terms": []})
+                                {"name": "S", "buyer": "b", "works": [], "category_terms": []}, user_id="u-1")
     assert (seen["model"], seen["temperature"]) == ("gpt-4o", 0)

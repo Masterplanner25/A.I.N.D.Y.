@@ -29,6 +29,8 @@ _GENESIS_COMPAT_EXPORTS = (
     create_masterplan_from_genesis,
 )
 
+from apps._shared.provider_keys import raise_problem_in, require_key
+
 router = APIRouter(prefix="/genesis", tags=["Genesis"])
 
 
@@ -108,6 +110,7 @@ def _genesis_run_flow(flow_name: str, payload: dict, db, user_id: str):
 
     if result.get("status") == "FAILED":
         error = _extract_flow_error(result)
+        raise_problem_in(error)  # no key to pay with (FR-59): a 402 and the sentence
         if _is_circuit_open_error(error):
             raise HTTPException(status_code=503, detail=_ai_provider_unavailable_payload(error))
         if error.startswith("HTTP_"):
@@ -128,6 +131,7 @@ def _dispatch_genesis_syscall(name: str, payload: dict, *, db: Session, user_id:
     ctx.metadata["_db"] = db
     result = get_dispatcher().dispatch(name, payload, ctx)
     if result.get("status") != "success":
+        raise_problem_in(result.get("error"))  # no key to pay with (FR-59): a 402, not a ValueError
         raise ValueError(str(result.get("error") or f"{name} failed"))
     return result.get("data") or {}
 
@@ -232,6 +236,7 @@ def import_existing_plan(
                 status_code=400,
                 detail={"error": "content_required", "message": "content is required"},
             )
+        require_key(user_id, db=db)  # FR-59: the 402 before the syscall
         try:
             return _dispatch_genesis_syscall(
                 "sys.v1.genesis.import_plan",
@@ -308,6 +313,7 @@ def genesis_message(
                 detail={"error": "session_not_found", "message": "Genesis session not found"},
             )
         existing_ready = bool(session.synthesis_ready)
+        require_key(user_id, db=db)  # FR-59: the 402 before the flow, not a rolled-back FlowRun
 
         result = run_flow("genesis_message", {"session_id": session_id, "message": user_message}, db=db, user_id=user_id)
         if result.get("status") != "SUCCESS":
@@ -321,6 +327,7 @@ def genesis_message(
                 )
             except Exception as _obs_exc:
                 logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
+            raise_problem_in(error)  # no key to pay with (FR-59): a 402 and the sentence
             if _is_circuit_open_error(error):
                 raise HTTPException(status_code=503, detail=_ai_provider_unavailable_payload(error))
             raise HTTPException(status_code=500, detail="Genesis message execution failed")
@@ -427,6 +434,7 @@ def synthesize_genesis(
                 status_code=422,
                 detail={"error": "synthesis_not_ready", "message": "Session is not synthesis-ready"},
             )
+        require_key(user_id, db=db)  # FR-59: the 402 before the flow
 
         try:
             result = _genesis_run_flow("genesis_synthesize", {"session_id": session_id}, db, user_id)

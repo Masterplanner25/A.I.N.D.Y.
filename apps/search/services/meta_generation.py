@@ -27,7 +27,8 @@ import re
 from AINDY.config import settings
 from AINDY.kernel.circuit_breaker import CircuitOpenError
 from AINDY.platform_layer.external_call_service import perform_external_call
-from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
+from AINDY.platform_layer.openai_client import chat_completion
+from apps._shared.provider_keys import llm_client, raise_key_problem
 
 from apps.search.services.seo_services import (
     META_CHAR_BUDGET,
@@ -110,6 +111,7 @@ def generate_meta_from_article(
     if not article:
         return _empty("no article text supplied", budget)
 
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59); a 402, never a quiet empty result
     try:
         completion = perform_external_call(
             service_name="openai",
@@ -120,7 +122,7 @@ def generate_meta_from_article(
             method="openai.chat",
             extra={"purpose": "seo_meta_generation"},
             operation=lambda: chat_completion(
-                get_openai_client(),
+                client,
                 model=MODEL,
                 messages=[
                     {
@@ -138,6 +140,7 @@ def generate_meta_from_article(
         logger.warning("[SEO] meta generation unavailable — OpenAI circuit open")
         return _empty("the description service is temporarily unavailable", budget)
     except Exception as exc:
+        raise_key_problem(exc)
         logger.warning("[SEO] meta generation failed: %s", exc)
         return _empty("the description service could not be reached", budget)
 

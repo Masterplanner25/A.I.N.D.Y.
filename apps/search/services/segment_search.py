@@ -234,11 +234,12 @@ def _judge_model() -> str:
     return (os.getenv("AINDY_SEGMENT_JUDGE_MODEL") or "").strip() or JUDGE_MODEL
 
 
-def judge_result(result: dict, brief: dict) -> dict:
+def judge_result(result: dict, brief: dict, *, user_id, db: Session | None = None) -> dict:
     """One model call: the facts about a result (§5.3). `classify` turns them into a decision."""
     from AINDY.config import settings
     from AINDY.platform_layer.external_call_service import perform_external_call
-    from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
+    from AINDY.platform_layer.openai_client import chat_completion
+    from apps._shared.provider_keys import llm_client
 
     works = "; ".join(f"{w['name']}: {w['summary']}" for w in brief.get("works") or []) or "(none stated)"
     user = (
@@ -248,14 +249,17 @@ def judge_result(result: dict, brief: dict) -> dict:
         f"RESULT\nTitle: {result.get('title')}\nURL: {result.get('url')}\nSnippet: {result.get('snippet')}"
     )
     model = _judge_model()
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59)
     completion = perform_external_call(
         service_name="openai",
+        db=db,
+        user_id=str(user_id),
         endpoint="chat.completions.create",
         model=model,
         method="openai.chat",
         extra={"purpose": "segment_lead_judgement", "segment": brief["name"]},
         operation=lambda: chat_completion(
-            get_openai_client(),
+            client,
             model=model,
             messages=[{"role": "system", "content": _JUDGE_PROMPT}, {"role": "user", "content": user}],
             timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
@@ -333,9 +337,16 @@ def segment_lead_search(
 
     query = build_query(brief, where)
     domains = _domains(brief, where)
+    from functools import partial
+
+    from apps._shared.provider_keys import raise_key_problem
+
+    # The searching user pays (FR-59); injected test doubles keep their shapes.
     if search is None:
-        from apps.search.services.research_engine import web_search_results as search
-    judge = judge or judge_result
+        from apps.search.services.research_engine import web_search_results
+
+        search = partial(web_search_results, user_id=user_id, db=db)
+    judge = judge or partial(judge_result, user_id=user_id, db=db)
     propose = get_job("masterplan.market_propose")
 
     rows = search(query, domains=domains, recency=RECENCY, max_results=max_results)
@@ -349,6 +360,7 @@ def segment_lead_search(
         try:
             verdict = judge(row, brief)
         except Exception as exc:  # one bad judgement must not lose the rest of the search
+            raise_key_problem(exc)  # but a missing key loses all of them: say so (FR-59)
             failed += 1
             logger.warning("[segment_search] judgement failed for %s: %s", url, exc)
             continue
@@ -403,6 +415,7 @@ def segment_lead_search(
         try:
             verdict = judge({"title": company, "url": url, "snippet": context}, brief)
         except Exception as exc:
+            raise_key_problem(exc)
             failed += 1
             logger.warning("[segment_search] re-judgement failed for %s: %s", url, exc)
             continue

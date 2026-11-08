@@ -91,6 +91,11 @@ def _do_create_result(db: Session, result: ResearchResultCreate, user_id: str):
 
 
 def _do_run_research_query(db: Session, request: ResearchResultCreate, user_id: str):
+    from apps._shared.provider_keys import require_key
+
+    # FR-59: the search (Perplexity) and the summary (OpenAI) are paid with the caller's keys.
+    require_key(user_id, "perplexity", db=db)
+    require_key(user_id, "openai", db=db)
     data = _run_flow_research(
         "research_query",
         {"query": request.query, "summary": request.summary or ""},

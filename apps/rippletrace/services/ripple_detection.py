@@ -494,6 +494,11 @@ def detect_batch(
             summary["error"] = str(exc)
             break
         except Exception as exc:
+            if user_id:  # one person's check: a missing key is theirs to know about (FR-59)
+                from apps._shared.provider_keys import raise_key_problem
+
+                raise_key_problem(exc)
+            # The all-owner sweep skips an owner without a key and carries on with the rest.
             logger.warning("[rippletrace] detection failed for %s: %s", drop_point.id, exc)
             db.rollback()
             summary["errors"] += 1

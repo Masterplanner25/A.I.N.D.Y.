@@ -170,6 +170,11 @@ class DeepSeekCodeAnalyzer:
         retry_delay = self.config.get("retry_delay_seconds", 2)
         max_tokens = self.config.get("max_output_tokens", 2000)
 
+        # Whose key pays (FR-59): the user's own DeepSeek key, else this analyzer's server client
+        # exactly as before. A 402 here, before any call, when the user has none.
+        from apps._shared.provider_keys import client_for_resolved, provider_key, raise_key_problem
+
+        client = client_for_resolved(provider_key(user_id, "deepseek", db=db), self.client)
         last_exc = None
         for attempt in range(retry_limit):
             try:
@@ -182,7 +187,7 @@ class DeepSeekCodeAnalyzer:
                     method="deepseek.chat",
                     extra={"purpose": "arm_openai_call", "attempt": attempt + 1},
                     operation=lambda: chat_completion_deepseek(
-                        self.client,
+                        client,
                         model=model,
                         messages=[
                             {"role": "system", "content": system_prompt},
@@ -201,6 +206,7 @@ class DeepSeekCodeAnalyzer:
             except CircuitOpenError:
                 raise
             except Exception as exc:
+                raise_key_problem(exc)  # a refused key is not retried
                 last_exc = exc
                 if attempt < retry_limit - 1:
                     time.sleep(retry_delay)

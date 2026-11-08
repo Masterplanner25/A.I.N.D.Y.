@@ -83,7 +83,7 @@ def test_candidates_come_back_measured_like_any_other_title(model):
     scorecard than the title it is competing with.
     """
     _returns(model, ["A clear title about frameworks and runtimes"])
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     candidate = result["candidates"][0]
     assert candidate == seo.analyze_title("A clear title about frameworks and runtimes")
@@ -99,7 +99,7 @@ def test_over_budget_candidates_are_kept_and_marked_not_dropped(model):
     """
     long_title = "x" * (seo.TITLE_CHAR_BUDGET + 25)
     _returns(model, [long_title, "A short one"])
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     assert len(result["candidates"]) == 2
     over = [c for c in result["candidates"] if c["over_by"] > 0]
@@ -109,7 +109,7 @@ def test_over_budget_candidates_are_kept_and_marked_not_dropped(model):
 def test_within_budget_candidates_are_listed_first(model):
     """Ordering is a convenience, not a verdict — every candidate keeps its own measurement."""
     _returns(model, ["y" * 90, "A usable title about frameworks", "z" * 80])
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     over_flags = [c["over_by"] > 0 for c in result["candidates"]]
     assert over_flags == sorted(over_flags)
@@ -119,7 +119,7 @@ def test_exact_repeats_are_dropped(model):
     """Only exact repeats. Near-duplicate detection would be the tool deciding which of the
     writer's options are worth seeing."""
     _returns(model, ["Same Title", "same title", "  Same   Title  ", "A different one"])
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     assert [c["title"] for c in result["candidates"]] == ["Same Title", "A different one"]
 
@@ -127,12 +127,12 @@ def test_exact_repeats_are_dropped(model):
 def test_the_requested_count_is_bounded(model):
     _returns(model, [f"Candidate number {n} about frameworks" for n in range(20)])
 
-    assert titlegen.generate_title_candidates(ARTICLE, count=3)["count"] == 3
-    assert titlegen.generate_title_candidates(ARTICLE, count=99)["count"] <= titlegen.MAX_CANDIDATE_COUNT
-    assert titlegen.generate_title_candidates(ARTICLE, count=0)["count"] == 1
+    assert titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE, count=3)["count"] == 3
+    assert titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE, count=99)["count"] <= titlegen.MAX_CANDIDATE_COUNT
+    assert titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE, count=0)["count"] == 1
     # None means unspecified and takes the default; 0 is a number that was asked for, and
     # folding the two together would silently answer a different question.
-    assert titlegen.generate_title_candidates(ARTICLE, count=None)["count"] == titlegen.DEFAULT_CANDIDATE_COUNT
+    assert titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE, count=None)["count"] == titlegen.DEFAULT_CANDIDATE_COUNT
 
 
 # ── it never replaces ──────────────────────────────────────────────────────────────────
@@ -143,7 +143,7 @@ def test_the_writers_title_is_echoed_back_untouched(model):
     Returning it here is what lets a client show "yours" beside the options without ever
     having received a replacement for it.
     """
-    result = titlegen.generate_title_candidates(
+    result = titlegen.generate_title_candidates(user_id="u-1", text=
         ARTICLE, existing_title="2025 ChatGPT Case Study Series: Ethics"
     )
 
@@ -157,7 +157,7 @@ def test_there_is_no_recommended_candidate_and_no_single_title_field(model):
     which is the failure this whole feature is shaped around.
     """
     _returns(model, ["One title", "Another title"])
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     forbidden = {"title", "best", "best_title", "recommended", "suggested_title", "apply"}
     assert not (forbidden & set(result))
@@ -166,7 +166,7 @@ def test_there_is_no_recommended_candidate_and_no_single_title_field(model):
 
 def test_the_writers_title_is_sent_as_context_not_as_something_to_beat(model):
     """It goes into the prompt so candidates can keep a deliberate series prefix."""
-    titlegen.generate_title_candidates(ARTICLE, existing_title="Series: Part Four")
+    titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE, existing_title="Series: Part Four")
 
     sent = model["calls"][0]["operation"]
     # The operation is a closure over the messages; assert on the prompt the caller built.
@@ -183,7 +183,7 @@ def test_an_unavailable_model_returns_nothing_and_says_why(model):
     from AINDY.kernel.circuit_breaker import CircuitOpenError
 
     model["state"]["content"] = CircuitOpenError("openai")
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     assert result["candidates"] == []
     assert "unavailable" in result["reason"]
@@ -191,7 +191,7 @@ def test_an_unavailable_model_returns_nothing_and_says_why(model):
 
 def test_a_failed_call_returns_nothing_and_says_why(model):
     model["state"]["content"] = RuntimeError("connection reset")
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     assert result["candidates"] == []
     assert result["reason"]
@@ -205,7 +205,7 @@ def test_there_is_no_deterministic_fallback(model):
     would have no way to tell a suggestion from a failure. Silence is the honest answer.
     """
     model["state"]["content"] = RuntimeError("down")
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     assert result["count"] == 0
     # Nothing derived from the article may appear in the response.
@@ -215,7 +215,7 @@ def test_there_is_no_deterministic_fallback(model):
 def test_unparseable_output_is_treated_as_no_answer(model):
     """The same situation as unavailable, and it must end the same way."""
     model["state"]["content"] = "Sure! Here are some great titles for you."
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     assert result["candidates"] == []
     assert result["reason"]
@@ -224,21 +224,21 @@ def test_unparseable_output_is_treated_as_no_answer(model):
 def test_json_wrapped_in_prose_is_still_read(model):
     """Tolerant of a chatty model, without being tolerant of an empty one."""
     model["state"]["content"] = 'Here you go:\n{"titles": ["A good title here"]}\nHope that helps!'
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     assert [c["title"] for c in result["candidates"]] == ["A good title here"]
 
 
 def test_non_string_entries_are_discarded(model):
     model["state"]["content"] = json.dumps({"titles": ["Real title", None, 42, "", "  "]})
-    result = titlegen.generate_title_candidates(ARTICLE)
+    result = titlegen.generate_title_candidates(user_id="u-1", text=ARTICLE)
 
     assert [c["title"] for c in result["candidates"]] == ["Real title"]
 
 
 def test_an_empty_article_never_reaches_the_model(model):
     """No text, no call. Paying for a request that cannot succeed is its own defect."""
-    result = titlegen.generate_title_candidates("   ")
+    result = titlegen.generate_title_candidates(user_id="u-1", text="   ")
 
     assert model["calls"] == []
     assert result["candidates"] == []

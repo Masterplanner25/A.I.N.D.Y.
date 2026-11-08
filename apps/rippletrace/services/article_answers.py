@@ -141,7 +141,8 @@ def article_answers(text: str, *, title: str | None = None, user_id: str | None 
     from AINDY.config import settings
     from AINDY.kernel.circuit_breaker import CircuitOpenError
     from AINDY.platform_layer.external_call_service import perform_external_call
-    from AINDY.platform_layer.openai_client import chat_completion, get_openai_client
+    from AINDY.platform_layer.openai_client import chat_completion
+    from apps._shared.provider_keys import llm_client, raise_key_problem
 
     model = _model()
     article = (text or "").strip()
@@ -149,6 +150,7 @@ def article_answers(text: str, *, title: str | None = None, user_id: str | None 
         return _empty("no article text supplied", model)
 
     user = f'The writer\'s title: "{title}"\n\n---\n\n' if title else ""
+    client = llm_client(user_id, db=db)  # whose key pays (FR-59); a 402, never a quiet empty result
     try:
         completion = perform_external_call(
             service_name="openai",
@@ -159,7 +161,7 @@ def article_answers(text: str, *, title: str | None = None, user_id: str | None 
             method="openai.chat",
             extra={"purpose": "seo_article_answers"},
             operation=lambda: chat_completion(
-                get_openai_client(),
+                client,
                 model=model,
                 messages=[{"role": "system", "content": SYSTEM_PROMPT},
                           {"role": "user", "content": user + article[:MAX_ARTICLE_CHARS_SENT]}],
@@ -171,6 +173,7 @@ def article_answers(text: str, *, title: str | None = None, user_id: str | None 
         logger.warning("[SEO] article answers unavailable: OpenAI circuit open")
         return _empty("the answers service is temporarily unavailable", model)
     except Exception as exc:
+        raise_key_problem(exc)
         logger.warning("[SEO] article answers failed: %s", exc)
         return _empty("the answers service could not be reached", model)
 

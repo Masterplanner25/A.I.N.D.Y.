@@ -98,6 +98,9 @@ async def analyze_code(
         # Execution mode (INLINE vs ASYNC) is decided exclusively by
         # ExecutionDispatcher — not at the route level.
         from apps._shared.flow import run_flow_or_raise
+        from apps._shared.provider_keys import require_key
+
+        require_key(str(current_user["sub"]), "deepseek", db=db)  # FR-59: the caller's DeepSeek key pays
         result = run_flow_or_raise(
             "arm_analysis",
             {
@@ -147,6 +150,9 @@ async def generate_code(
         # Execution mode (INLINE vs ASYNC) is decided exclusively by
         # ExecutionDispatcher — not at the route level.
         from apps._shared.flow import run_flow_or_raise
+        from apps._shared.provider_keys import require_key
+
+        require_key(str(current_user["sub"]), "deepseek", db=db)  # FR-59: the caller's DeepSeek key pays
         result = run_flow_or_raise(
             "arm_generate",
             {
