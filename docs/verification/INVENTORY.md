@@ -17,7 +17,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | | ours | runtime's |
 |---|---|---|
 | Domains | 16 (3 core) | |
-| `/apps` routes | 284 (184 called by the client, 100 not) | 35 (mounted under `/apps`) |
+| `/apps` routes | 285 (187 called by the client, 98 not) | 35 (mounted under `/apps`) |
 | Syscalls | 85 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 16 | 0 |
@@ -43,7 +43,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | masterplan |  | identity | 76 | 14 | 16 | 3 | 3 | 14 | 16 | 0 | 23 |
 | memory |  |  | 8 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | network_bridge |  | authorship, automation | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| rippletrace |  | analytics, automation | 49 | 6 | 10 | 0 | 5 | 1 | 0 | 3 | 8 |
+| rippletrace |  | analytics, automation | 50 | 4 | 10 | 0 | 5 | 1 | 0 | 3 | 8 |
 | search |  | analytics, rippletrace | 32 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
 | social |  | analytics, automation | 8 | 2 | 4 | 0 | 0 | 0 | 0 | 0 | 0 |
 | tasks | yes |  | 7 | 2 | 18 | 2 | 5 | 7 | 8 | 0 | 1 |
@@ -367,7 +367,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 ## rippletrace
 
-**Routes (49).** — = no client code calls it.
+**Routes (50).** — = no client code calls it.
 
 - `GET /apps/rippletrace/causal/chain/{drop_point_id}`
 - `GET /apps/rippletrace/causal/graph`
@@ -382,10 +382,11 @@ the audit's question. Live row counts are not here (they change): `python script
 - `POST /apps/rippletrace/detect`
 - — `POST /apps/rippletrace/drop_point`
 - `GET /apps/rippletrace/drop_points`
-- — `GET /apps/rippletrace/drop_points/{drop_point_id}/answers`
-- — `POST /apps/rippletrace/drop_points/{drop_point_id}/answers`
+- `GET /apps/rippletrace/drop_points/{drop_point_id}/answers`
+- `POST /apps/rippletrace/drop_points/{drop_point_id}/answers`
 - `POST /apps/rippletrace/drop_points/{drop_point_id}/citations`
 - `POST /apps/rippletrace/drop_points/{drop_point_id}/detect`
+- `GET /apps/rippletrace/drop_points/{drop_point_id}/links`
 - `POST /apps/rippletrace/drop_points/{drop_point_id}/share_drafts`
 - — `POST /apps/rippletrace/event`
 - `GET /apps/rippletrace/event/{event_id}/downstream`

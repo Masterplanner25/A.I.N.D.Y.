@@ -89,6 +89,21 @@ export function queueShareDrafts(dropPointId) {
   });
 }
 
+// What a piece answers, as stored (ARTICLE_ANSWERS_SPEC B2). New pieces get answers on their own;
+// `queuePieceAnswers` asks for an older one (read within about ten minutes).
+export function getPieceAnswers(dropPointId) {
+  return authRequest(`/apps/rippletrace/drop_points/${dropPointId}/answers`, { method: "GET" });
+}
+
+export function queuePieceAnswers(dropPointId) {
+  return authRequest(`/apps/rippletrace/drop_points/${dropPointId}/answers`, { method: "POST" });
+}
+
+// How a piece connects to your other pieces (B3): links to, linked from, series neighbours.
+export function getPieceLinks(dropPointId) {
+  return authRequest(`/apps/rippletrace/drop_points/${dropPointId}/links`, { method: "GET" });
+}
+
 export function getCausalChain(dropPointId, depth = 3) {
   return authRequest(`${ROUTES.RIPPLETRACE.CAUSAL_CHAIN(dropPointId)}?depth=${depth}`);
 }

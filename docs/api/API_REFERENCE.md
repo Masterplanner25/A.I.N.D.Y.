@@ -1762,6 +1762,20 @@ for a piece that is not yours. 60/min.
 
 **Response 200:** found: boolean, drop_point_id: string, read_from: string, status: string | null, stale: boolean, answers: array, raised: array, range: object, model: string | null, read_at: string | null
 
+#### GET /apps/rippletrace/drop_points/{drop_point_id}/links
+Get Piece Links Route
+
+**Parameters:** drop_point_id (path): string
+
+How one of your pieces connects to your other pieces (`ARTICLE_ANSWERS_SPEC` §3, B3). `links_to` is
+your pieces it links to; `linked_from` is your pieces that link to it (inbound). A piece is every copy
+of it: a link to any copy counts. `series` gives, per confirmed series, its position and the previous
+and next piece, with whether each pair links (`this_links_to_it`, `it_links_here`). `unread_copies`
+counts copies whose links are unknown, so a gap is not read as "links to nothing". Computed on
+request from stored links; only your pieces are read. 404 for a piece that is not yours. 60/min.
+
+**Response 200:** found: boolean, drop_point_id: string, title: string, links_to: [{title, copies, published}], linked_from: [{title, copies, published}], other_links: integer, unread_copies: integer, series: [{name, position, of, previous, next}]
+
 #### POST /apps/rippletrace/drop_points/{drop_point_id}/citations
 Record Citation
 
