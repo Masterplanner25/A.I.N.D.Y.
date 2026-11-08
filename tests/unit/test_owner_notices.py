@@ -110,7 +110,8 @@ def test_every_nodus_caller_records_its_fallback():
 
     root = Path(__file__).resolve().parents[2] / "apps"
     for path in ("analytics/services/orchestration/nodus_recalc.py", "analytics/services/reasoning/nodus_apply.py",
-                 "rippletrace/services/archive_nodus.py", "rippletrace/services/share_nodus.py"):
+                 "rippletrace/services/archive_nodus.py", "rippletrace/services/share_nodus.py",
+                 "rippletrace/services/answers_nodus.py"):
         assert "record_nodus_fallback(" in (root / path).read_text(encoding="utf-8"), path
 
 

@@ -15,6 +15,9 @@ answer more (`SEO_EDITING_AID_SPEC`).
 
 Decided 2026-11-08 (§8): gpt-5.5 at low reasoning effort, run on a button, never on typing. It fails
 honestly: on any failure ``reason`` is set and the lists are empty, never a guess.
+
+Lives in RippleTrace (moved from search 2026-11-08, phase B2) because answers are stored per published
+piece here; the SEO tool reaches it through `apps.rippletrace.public`.
 """
 from __future__ import annotations
 

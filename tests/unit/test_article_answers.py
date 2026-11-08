@@ -10,7 +10,7 @@ import pytest
 
 from apps.rippletrace.models import DropPointDB
 from apps.rippletrace.services import own_links
-from apps.search.services import article_answers as aa
+from apps.rippletrace.services import article_answers as aa
 
 pytestmark = pytest.mark.app_profile
 

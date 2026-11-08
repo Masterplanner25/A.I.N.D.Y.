@@ -190,12 +190,37 @@ def _handle_create_share_drafts(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_create_piece_answers(payload: dict, ctx: SyscallContext) -> dict:
+    """Read one of the run user's pieces and store what it answers (ARTICLE_ANSWERS_SPEC B2).
+    Acts as ctx.user_id; a payload user_id is never read."""
+    if not ctx.user_id:
+        raise ValueError("piece answers need the run's user")
+    drop_point_id = str(payload.get("drop_point_id") or "").strip()
+    if not drop_point_id:
+        raise ValueError("sys.v1.rippletrace.create_piece_answers requires 'drop_point_id'")
+    from apps.rippletrace.services.piece_answers import make_piece_answers
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return make_piece_answers(db, ctx.user_id, drop_point_id)
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_rippletrace_syscall_handlers() -> None:
     register_syscall(
         name="sys.v1.rippletrace.create_share_drafts",
         handler=_handle_create_share_drafts,
         capability="rippletrace.write",
         description="Write the share drafts (LinkedIn post, short post, meta description, series footer) for one of the caller's published pieces.",
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.rippletrace.create_piece_answers",
+        handler=_handle_create_piece_answers,
+        capability="rippletrace.write",
+        description="Read one of the caller's published pieces and store what questions it answers.",
         stable=False,
     )
     for name, (_, description) in ARCHIVE_STEP_SYSCALLS.items():

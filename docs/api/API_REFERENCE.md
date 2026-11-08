@@ -1739,6 +1739,29 @@ stored text. New pieces get them without asking.
 
 **Response 200:** queued: boolean, drop_point_id: string
 
+#### POST /apps/rippletrace/drop_points/{drop_point_id}/answers
+Queue Piece Answers Route
+
+**Parameters:** drop_point_id (path): string
+
+Ask for what one of your pieces answers (`ARTICLE_ANSWERS_SPEC` B2). New pieces get answers
+automatically; this is for an older piece, or one again. It is queued, not read here: the
+`rippletrace_piece_answers` job reads it within about ten minutes. A copy of a cross-posted piece
+queues its earliest copy. 404 for a piece that is not yours, 409 when it has no stored text. 10/min.
+
+**Response 200:** queued: boolean, drop_point_id: string
+
+#### GET /apps/rippletrace/drop_points/{drop_point_id}/answers
+Get Piece Answers Route
+
+**Parameters:** drop_point_id (path): string
+
+What one of your pieces answers, as stored: read from its current text when that reading exists,
+else the newest one, with `stale: true`. A copy reads its earliest copy's answers (`read_from`). 404
+for a piece that is not yours. 60/min.
+
+**Response 200:** found: boolean, drop_point_id: string, read_from: string, status: string | null, stale: boolean, answers: array, raised: array, range: object, model: string | null, read_at: string | null
+
 #### POST /apps/rippletrace/drop_points/{drop_point_id}/citations
 Record Citation
 
