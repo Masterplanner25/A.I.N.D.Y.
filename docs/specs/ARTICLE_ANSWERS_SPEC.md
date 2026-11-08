@@ -1,6 +1,6 @@
 ---
 title: "What an article answers: AI-search readiness for the owner's writing"
-last_verified: "2026-10-25"
+last_verified: "2026-11-08"
 api_version: "1.0"
 status: draft
 owner: "app-team"
@@ -8,7 +8,7 @@ owner: "app-team"
 
 # What an article answers: AI-search readiness for the owner's writing
 
-**Status:** DRAFT, 2026-10-25. Nothing here is built. The fixes that came first (the meta description,
+**Status:** DRAFT, 2026-10-25. **§8 decided by the owner on 2026-11-08**, all four as recommended. Nothing here is built yet. The fixes that came first (the meta description,
 titles and suggestions now read the whole article) are #495.
 
 **Origin:** the owner used the AI SEO tool on the *2026 Agents Case Study Series* and asked how it
@@ -36,8 +36,8 @@ It sits beside two others:
 | Piece | What it gives this spec |
 |---|---|
 | **AI SEO tool** (pre-publication) | Draft text, title, target keywords, saved drafts. Since #495 its model calls read the whole article |
-| **RippleTrace** (post-publication) | 220 pieces. Stored text for 204: DEV 145, Substack 46, Medium 13. None for YouTube (15) or LinkedIn (1) |
-| **Link targets in stored text** | **DEV: 130 of 145** keep markdown links (`[text](url)`). **Substack and Medium: none.** `content_archive.to_text` strips HTML tags and their `href` with them, so 59 pieces have lost their link targets |
+| **RippleTrace** (post-publication) | 233 pieces (re-measured 2026-11-08). Stored text for 217: DEV 152, Substack 46, Medium 19, which is **178 distinct pieces** once cross-posts are merged. None for YouTube (15) or LinkedIn (1) |
+| **Link targets in stored text** | **DEV: 131 of 152** keep markdown links (`[text](url)`). **Substack and Medium: none.** `content_archive.to_text` strips HTML tags and their `href` with them, so **65** pieces (46 Substack, 19 Medium) have lost their link targets (59 on 10-25) |
 | **`published_work` recall** | Every stored piece is chunked into memory and recallable, with cross-posts collapsed (#453). This is how "your relevant pieces" are found |
 | **Work model** | The owner's Works, confirmed claims, and the denied claims (the NEVER SAY list) |
 | **Resolution Check** | Per Work, the questions asked, each engine's answer, its `citations` and the verdict (`resolution_answers`) |
@@ -130,22 +130,28 @@ The owner's chat on 2026-10-25 described two workflow families:
 
 ---
 
-## 8. Open decisions: the owner's
+## 8. Decisions: the owner's, **all four taken 2026-11-08, as recommended**
 
-1. **Which model reads for answers?**
-   - Recommended: **gpt-5.5**, the drafter's model, at low reasoning effort, which follows
-     instructions where gpt-4o did not. It takes about 25–50 s a call, so in the SEO tool it runs on
-     a button, never on typing.
-   - Alternative: gpt-4o-mini, the SEO tool's model, faster and weaker.
-2. **Keep link targets for Substack and Medium?**
-   - Recommended: **yes**. Store the links separately when a piece is fetched, and re-fetch the 59
-     pieces once through the platform APIs ingestion already uses.
-   - Without it, inbound authority covers DEV only.
-3. **Answers for the back catalogue?**
-   - Recommended: **new pieces automatically**, older ones only when the owner asks.
-   - The alternative is about 204 model calls, once.
-4. **Does any of this feed the Infinity score?**
-   - Recommended: **no**, until it has been measured for a while, as with Resolution Check decision 5.
+1. **Which model reads for answers? DECIDED: gpt-5.5**, the drafter's model, at low reasoning effort.
+   - It follows instructions where gpt-4o did not.
+   - It takes about 25–50 s a call, so in the SEO tool it runs on a button, never on typing.
+   - Not chosen: gpt-4o-mini, the SEO tool's model, which is faster and weaker.
+2. **Keep link targets for Substack and Medium? DECIDED: yes.**
+   - Store the links separately when a piece is fetched.
+   - Re-fetch the **65** pieces (46 Substack, 19 Medium) once, through the platform APIs ingestion already
+     uses.
+   - Without it, inbound authority would cover DEV only.
+   - Phase B's links column carries it.
+3. **Answers for the back catalogue? DECIDED: new pieces automatically**, older ones only when the owner asks
+   for a piece.
+   - Not chosen: the whole catalogue once, about 178 model calls (178 distinct pieces on 2026-11-08).
+4. **Does any of this feed the Infinity score? DECIDED: no, not yet**, until it has been measured for a while,
+   as with Resolution Check decision 5.
+   - It is shown on the Work card and to the planner only.
+
+**Context the owner gave the same day.** Disambiguation comes from many signals across the body of work, never
+from one or two articles. That is why §2 and §3 measure each piece *in relation to the rest of the catalogue*
+(which of your pieces it answers beside, links to, and is linked from), not as a standalone score.
 
 ---
 
