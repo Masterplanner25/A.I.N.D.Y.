@@ -148,6 +148,26 @@ export function getArticleClaims(content, title) {
   });
 }
 
+// The draft's structure (ARTICLE_ANSWERS_SPEC §5, phase D2). Free and fast: called after every analysis.
+// `series` names one of your confirmed series; without it the series comes from the title's prefix.
+export function getStructure(content, title, series) {
+  const body = { text: content };
+  if (title) body.title = title;
+  if (series) body.series = series;
+  return authRequest("/apps/seo/structure", { method: "POST", body: JSON.stringify(body) });
+}
+
+// What's the structure? The patterns named by a model (one gpt-5.5 call, 20-50 s), on a button.
+export function getStructurePatterns(content, title) {
+  const body = { text: content };
+  if (title) body.title = title;
+  return authRequest("/apps/seo/structure/patterns", {
+    method: "POST",
+    body: JSON.stringify(body),
+    timeoutMs: ARTICLE_ANSWERS_TIMEOUT_MS,
+  });
+}
+
 export function getOwnLinks(content, title) {
   const body = { text: content };
   if (title) body.title = title;

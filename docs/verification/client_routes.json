@@ -161,6 +161,8 @@
     "/apps/seo/drafts",
     "/apps/seo/generate_meta",
     "/apps/seo/own_links",
+    "/apps/seo/structure",
+    "/apps/seo/structure/patterns",
     "/apps/seo/suggest_improvements",
     "/apps/seo/title",
     "/apps/social/analytics",

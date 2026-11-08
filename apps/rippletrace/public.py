@@ -54,6 +54,14 @@ def fold_text(text):
     return _fold(text)
 
 
+def series_pieces(db, user_id, *, title=None, series=None, exclude_title=None):
+    """The draft's confirmed series and its published pieces' text, for the structure view
+    (ARTICLE_ANSWERS_SPEC §5). Only the caller's pieces; no model call."""
+    from apps.rippletrace.services.series_text import series_pieces as _series_pieces
+
+    return _series_pieces(db, user_id, title=title, series=series, exclude_title=exclude_title)
+
+
 def own_piece_links(db, *, user_id, text, title=None, exclude_url=None, missing_limit=8):
     """The owner's pieces a draft links to, relevant ones it does not, and its other links
     (ARTICLE_ANSWERS_SPEC §3). Imported lazily: the archive it reads is not needed at boot."""
@@ -87,5 +95,6 @@ __all__ = [
     "log_ripple_event",
     "own_piece_links",
     "passage_in",
+    "series_pieces",
     "update_strategy_score",
 ]

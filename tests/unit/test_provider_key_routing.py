@@ -182,12 +182,14 @@ def _sites(uid, db):
         meta_generation,
         research_engine,
         segment_search,
+        structure,
         title_generation,
     )
 
     return {
         "article_answers": lambda: article_answers.article_answers("Some text.", user_id=uid, db=db),
         "article_claims": lambda: article_claims.article_claims("Some text.", user_id=uid, db=db),
+        "structure_patterns": lambda: structure.name_patterns("Some text.", user_id=uid, db=db),
         "meta_generation": lambda: meta_generation.generate_meta_from_article("Some text.", user_id=uid, db=db),
         "title_generation": lambda: title_generation.generate_title_candidates("Some text.", user_id=uid, db=db),
         "score_lead": lambda: leadgen_service.score_lead(
