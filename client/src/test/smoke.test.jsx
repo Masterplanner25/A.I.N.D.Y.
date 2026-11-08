@@ -272,13 +272,11 @@ describe("frontend smoke tests", () => {
   it("reportClientError does not throw when fetch fails", async () => {
     const fetchSpy = vi.fn().mockRejectedValue(new Error("Network error"));
     vi.stubGlobal("fetch", fetchSpy);
-    // The ErrorBoundary tests above mock this module. Drop the mock and the module cache before importing,
-    // or a cached mock (whose reportClientError returns undefined) can be what this test gets: it did on
-    // CI on 2026-10-22, and passed locally and on main.
-    vi.doUnmock("../api/operator.js");
-    vi.resetModules();
-
-    const { reportClientError } = await import("../api/operator.js");
+    // The ErrorBoundary tests above mock this module with vi.doMock. Unmocking and resetting the cache was
+    // not enough: on CI a mock could still be what `import()` returned (2026-10-22: reportClientError
+    // returned undefined; 2026-11-08 on #562: it was not a function at all). `vi.importActual` loads the
+    // real module whatever is mocked, which is the only thing this test is about.
+    const { reportClientError } = await vi.importActual("../api/operator.js");
 
     await expect(reportClientError({ error_message: "test" })).resolves.toBeUndefined();
 
