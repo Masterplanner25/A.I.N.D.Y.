@@ -105,7 +105,7 @@ def test_junk_gives_an_empty_list():
 
 def test_the_context_numbers_facts_denials_and_links():
     context = ac.build_context(TRUTH, LINKS)
-    assert "WORK: Nodus (project)\nF1: Nodus is a project.\nF2: Nodus is the layer underneath aindy-runtime.\nD1: Nodus is part of A.I.N.D.Y." in context
+    assert 'WORK "Nodus" (kind: project)\nF1: Nodus is a project.\nF2: Nodus is the layer underneath aindy-runtime.\nD1: Nodus is part of A.I.N.D.Y.' in context
     assert "L1: https://gartner.example/agents" in context and "L2: https://shawn.dev.example/last" in context
     assert "(none)" in ac.build_context({"works": [], "own_hosts": []}, [])
 
@@ -211,3 +211,14 @@ def test_a_quoted_sentence_is_found_through_its_link_markup():
                     "![chart](https://i.example/c.png) Gartner found that 40% of agent projects fail."):
         result = ac.parse_response(_reply(claim), article, {"works": [], "own_hosts": []}, ["https://g.example/x"])
         assert result["claims"][0]["found"] is True, article
+
+
+def test_a_work_named_with_its_kind_or_quotes_still_matches():
+    """Live 2026-11-08: the model answered "A.I.N.D.Y. (project)", echoing the context's label."""
+    for tag in ("A.I.N.D.Y. (project)", '"A.I.N.D.Y."', "a.i.n.d.y.  (kind: project)"):
+        result = ac.parse_response(_reply(_claim("A.I.N.D.Y. runs on aindy-runtime.", work=tag, fact="F2")),
+                                   DRAFT, TRUTH, LINKS)
+        assert result["claims"][0]["work"] == "A.I.N.D.Y." and result["claims"][0]["status"] == "confirmed", tag
+    assert ac._work_key("Nodus (project)") == "nodus"
+    assert ac._work_key("30+ companion packages") == "30+ companion packages"
+
