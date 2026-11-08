@@ -208,12 +208,34 @@ def _handle_create_piece_answers(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_get_answered_pieces(payload: dict, ctx: SyscallContext) -> dict:
+    """The run user's pieces with answers read from their current text (ARTICLE_ANSWERS_SPEC phase C).
+    Read by masterplan's Resolution review as a call-time syscall. Acts as ctx.user_id only."""
+    if not ctx.user_id:
+        raise ValueError("answered pieces need the caller's user")
+    from apps.rippletrace.services.piece_answers import answered_pieces
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return {"pieces": answered_pieces(db, ctx.user_id)}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_rippletrace_syscall_handlers() -> None:
     register_syscall(
         name="sys.v1.rippletrace.create_share_drafts",
         handler=_handle_create_share_drafts,
         capability="rippletrace.write",
         description="Write the share drafts (LinkedIn post, short post, meta description, series footer) for one of the caller's published pieces.",
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.rippletrace.get_answered_pieces",
+        handler=_handle_get_answered_pieces,
+        capability="rippletrace.read",
+        description="List the caller's published pieces with what each answers, read from its current text.",
         stable=False,
     )
     register_syscall(

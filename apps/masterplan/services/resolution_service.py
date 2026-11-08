@@ -360,7 +360,20 @@ def resolution_overview(db: Session, user_id: Any) -> dict:
             # Phase B: what to settle, what it has cost this month, and how it is moving.
             "claims": pending_claims(db, uid),
             "spend": {"month_usd": month_spend(db, uid), "ceiling_usd": ceiling_usd(), "estimated": True},
-            "trend": trend(db, uid)}
+            "trend": trend(db, uid),
+            # ARTICLE_ANSWERS_SPEC phase C: which of your pieces answer what the engines missed.
+            "answered_in_writing": _answered_in_writing(db, uid)}
+
+
+def _answered_in_writing(db: Session, uid) -> dict:
+    """Best-effort: the overview stands without it."""
+    try:
+        from apps.masterplan.services.resolution_writing import answered_in_writing
+
+        return answered_in_writing(db, uid)
+    except Exception as exc:
+        logger.warning("[resolution] answered_in_writing failed: %s", exc)
+        return {}
 
 
 def process_run(db: Session, run: ResolutionRun, *, limit: int = TICK_PAIRS,

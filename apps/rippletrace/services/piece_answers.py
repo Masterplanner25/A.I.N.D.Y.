@@ -164,3 +164,18 @@ def get_piece_answers(db: Session, user_id: Any, drop_point_id: str) -> dict:
         "model": chosen.model if chosen else None,
         "read_at": chosen.created_at.isoformat() if chosen and chosen.created_at else None,
     }
+
+
+def answered_pieces(db: Session, user_id: Any) -> list[dict]:
+    """Every piece of the caller's with answers read from its CURRENT text: title, url and answers.
+
+    For phase C (the tie to the Resolution Check). One entry per piece: answers live on its earliest
+    copy, and a reading taken from older text is left out rather than presented as current."""
+    uid = _uid(user_id)
+    rows = (db.query(DropPointDB, PieceAnswersDB)
+            .join(PieceAnswersDB, (PieceAnswersDB.drop_point_id == DropPointDB.id)
+                  & (PieceAnswersDB.content_hash == DropPointDB.content_hash))
+            .filter(DropPointDB.user_id == uid, PieceAnswersDB.user_id == uid)
+            .all())
+    return [{"drop_point_id": drop.id, "title": drop.title, "url": drop.url, "platform": drop.platform,
+             "answers": list(reading.answers or [])} for drop, reading in rows]
