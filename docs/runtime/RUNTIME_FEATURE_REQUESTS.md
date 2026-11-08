@@ -64,7 +64,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-63 — `chat_completion` hands back a refused user key as a plain `LLMCallError`, not `ProviderKeyRejected` 🔴 OPEN — filed 2026-11-08, P3
+## FR-63 — `chat_completion` hands back a refused user key as a plain `LLMCallError`, not `ProviderKeyRejected` ✅ SHIPPED in 2.34.0 (#930): both chat helpers raise the key errors as themselves; our bounded walk stays as a fallback. Filed 2026-11-08, P3
 
 **apps-monolith ref:** FR-59 phase 3 routing (`RUNTIME_2_32_0_UPGRADE.md` §8). Read on 2.32.0.
 
@@ -77,7 +77,7 @@ checked).
 **Ask.** Let `ProviderKeyRejected` (and `ProviderKeyRequired`) pass through `chat_completion` and
 `chat_completion_deepseek` as themselves. Meanwhile we walk the chain, bounded (`apps/_shared/provider_keys.key_problem`).
 
-## FR-64 — a syscall that raises inside a flow node rolls back the flow's own `FlowRun`; the route sees "FlowRun ... disappeared" 🔴 OPEN — filed 2026-11-08, P3
+## FR-64 — a syscall that raises inside a flow node rolls back the flow's own `FlowRun`; the route sees "FlowRun ... disappeared" ✅ ANSWERED in 2.34.0 (#932, #933, DEC-124): live, the runner commits the run first, so it survives; the loss was our shared-transaction test fixture. Fixed: a node out of retries keeps its last error; runtime write handlers roll back to a savepoint. Ours: `_syscall_node` no longer retries a key problem (`RUNTIME_2_34_0_UPGRADE.md` §4). Filed 2026-11-08, P3
 
 **apps-monolith ref:** FR-59 phase 3 routing, the Genesis message route. Read on 2.32.0.
 
@@ -91,7 +91,7 @@ reads this way.
 **Ask.** Keep the `FlowRun` (commit it before the first node, or use a savepoint around a syscall's work), and carry the
 handler's error text to the flow result.
 
-## FR-61 — a scoped trace graph drops the userless `external.call.*` events in the caller's own trace, and every edge through them 🔴 OPEN — filed 2026-11-08, P3
+## FR-61 — a scoped trace graph drops the userless `external.call.*` events in the caller's own trace, and every edge through them ✅ SHIPPED in 2.34.0 (#931, DEC-123): outbound-call events record their user; `aindy-runtime events backfill-call-users` fills old ones from a one-user trace. Filed 2026-11-08, P3
 
 **apps-monolith ref:** found verifying the 2.32.0 adoption live (`RUNTIME_2_32_0_UPGRADE.md` §7). Read on 2.32.0.
 
@@ -106,7 +106,7 @@ records `key_source`, so it knows whose call it is), or keep an event with no us
 trace with the caller's events and no other user's. The first also fixes the 26,452 rows going forward; existing rows
 could take the user of their trace's other events.
 
-## FR-62 — `aindy-runtime memory backfill-paths --yes` fails: the CLI never loads the `users` model 🔴 OPEN — filed 2026-11-08, P3
+## FR-62 — `aindy-runtime memory backfill-paths --yes` fails: the CLI never loads the `users` model ✅ SHIPPED in 2.34.0 (#930): every database command loads the models; a writing run keeps `would_fill`. Filed 2026-11-08, P3
 
 **apps-monolith ref:** the 2.31.6 handoff's ask 2, run live on 2.32.0.
 
