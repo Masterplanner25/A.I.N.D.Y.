@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-11-07"
+last_verified: "2026-11-08"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -19,6 +19,10 @@ owner: "app-team"
 > **Numbering is the runtime's.** Its `CLAUDE.md` `APP-FR-*` ledger says *next available*; it also
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
+>
+> **Open as of 2026-11-08:** **FR-59 (P2: provider keys cannot be per user, so every account spends the operator's)**,
+> **FR-60 (P3: a trace graph returns every event once the caller owns one)**, FR-57, FR-58, FR-55, FR-14 recurrence
+> half, FR-6 items 2–3. 2.31.4 and 2.31.5 (adopted 11-08) answered neither FR-57 nor FR-58; both stay open.
 >
 > **Open as of 2026-11-07:** **FR-57 (P2: registration cannot be closed)**, **FR-58 (P3: `/db/verify` is not
 > operator-only)**, FR-55, FR-14 recurrence half, FR-6 items 2–3. The third runtime item from the app's 11-07 route
@@ -60,6 +64,67 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-59 — provider keys cannot be per user: every account's model, embedding and search calls spend the operator's keys 🔴 OPEN — filed 2026-11-08, P2
+
+**apps-monolith ref:** the app's 11-07 route sweep, and the owner (2026-11-08): *"shouldn't people's API keys be scoped
+to their accounts (mine is admin, so I get that may be different)."* Read on runtime 2.31.5.
+
+**What we see.**
+- **The secret broker is process-wide.** `AINDY/platform_layer/secret_broker.py` resolves process-wide secrets
+  (`EnvSecretBroker`, `FileSecretBroker`, `VaultSecretBroker`), gated by capability. It has no secret that belongs
+  to a user.
+- **The runtime's own paid calls use the server's keys:** the agent planner, and memory embeddings
+  (`memory/embedding_providers.py`, `embedding_jobs.py`).
+- **The app's paid calls do too.** About 25 app modules call OpenAI, DeepSeek or Perplexity with the server's
+  keys: drafts, Genesis, the Resolution Check, share drafts, SEO, lead search, research, ARM and RippleTrace's
+  mention search.
+- **So any account spends the operator's money.** Limits are per account (rate limits, the Resolution Check's
+  $10 a month), so N throwaway accounts get N allowances. `AINDY_QUOTA_MAX_TENANT_TOKENS` caps tokens, not whose
+  key pays.
+
+**Why it matters to us.** A.I.N.D.Y. is one person's system today, and every stranger who can sign up spends the
+operator's OpenAI, Perplexity and DeepSeek balance. FR-57 (closed registration) stops strangers arriving. This
+stops anyone who is let in from spending someone else's money, which is the right model even with signup open.
+
+**Ask.** Per-user provider credentials (bring your own key), owned by the runtime because both its calls and ours
+need them:
+
+1. **A per-user secret store.**
+   - It is encrypted at rest and write-only over the API: a user can set, replace and delete their key and see
+     that one is set (provider, last four characters, when set), but never read it back.
+   - It is keyed by user and provider (`openai`, `anthropic`, `deepseek`, `perplexity`, extensible).
+   - Values never enter the trace-logged syscall envelope, as with the secret broker today.
+2. **Resolution for the calling user.** For example, `resolve_provider_key(provider, user_id=ctx.user_id)` returns
+   the caller's own key. It returns the server's key **only when the caller is an operator**. Otherwise it raises
+   a typed `ProviderKeyRequired(provider)`, so an app can answer *"add your OpenAI key in Settings"* rather than
+   spend.
+3. **Used by the runtime's own paid paths:** the planner and embeddings resolve through it for the run's or the
+   write's user.
+4. **Default off** (`AINDY_PROVIDER_KEYS=per_user` to turn it on), so no deployment changes behaviour on upgrade.
+
+**What we would do with it.**
+- Route our ~25 call sites through it, so one place decides whose key pays.
+- Add a Settings card for keys, using the write-only API.
+- Turn it on, with the operator still on the server's keys.
+- Until then, the api stays loopback-bound (#544).
+
+## FR-60 — `build_trace_graph` returns every event in a trace once the caller owns any one of them 🔴 OPEN — filed 2026-11-08, P3 (defence in depth; no exploit found)
+
+**apps-monolith ref:** the outside review of the app's 11-07 fixes, second pass. Our `GET /apps/rippletrace/{trace_id}` and
+the runtime's `GET /observability/execution_graph/{trace_id}` both check that the caller has at least one event in
+the trace, then call `AINDY/platform_layer/event_trace_service.build_trace_graph(db, trace_id)`. That function filters
+by trace only.
+
+**What we see.** Trace ids are random and made by the server, and neither the review nor we found code that writes
+two users' events into one trace. So nothing leaks today. But the graph's only guard is "nothing ever mixes
+tenants in a trace", which nothing enforces. The app fixed the one place it could see, trace insights reading a foreign
+drop point (#550), at the app layer.
+
+**Ask.** Give `build_trace_graph` (and `detect_root_event`, `detect_terminal_events`, `calculate_trace_span`) an optional
+`user_id` that keeps only that user's system events and memory nodes. Pass it from `/observability/execution_graph`.
+We would pass it from our trace route. Low priority; a test that two users' events in one trace stay apart would be
+enough to close it.
+
 ## FR-57 — registration cannot be closed: `POST /auth/register` is always public, and nothing limits who may sign up 🔴 OPEN — filed 2026-11-07, P2
 
 **apps-monolith ref:** the app's 11-07 route sweep. Read on runtime 2.31.3 (installed) and on runtime `main` at
