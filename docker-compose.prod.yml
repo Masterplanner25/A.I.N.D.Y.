@@ -74,6 +74,11 @@ services:
       # `aindy-runtime bootstrap-schema` before it ever serves. The default must stay
       # a parseable boolean, never "".
       AINDY_REQUIRE_VERIFIED_LOGIN: "${AINDY_REQUIRE_VERIFIED_LOGIN:-false}"
+      # Registration is closed (runtime 2.31.6, FR-57): POST /auth/register still answers 202 with the
+      # same body and timing, but creates no account and sends nothing. A.I.N.D.Y. is one person's
+      # system, and every account is a share of the owner's paid keys. Login, password reset and
+      # existing accounts are unchanged. `open` reopens it; any other value counts as closed.
+      AINDY_REGISTRATION: "${AINDY_REGISTRATION:-closed}"
       # Opt in to additive runtime-schema reconciles at boot. Default OFF: a schema
       # change should be a decision, not a side effect of a container restart. Set it
       # (e.g. in .env) on a local/dev stack, where an unattended additive upgrade beats

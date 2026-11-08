@@ -64,7 +64,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-59 — provider keys cannot be per user: every account's model, embedding and search calls spend the operator's keys 🔴 OPEN — filed 2026-11-08, P2
+## FR-59 — provider keys cannot be per user: every account's model, embedding and search calls spend the operator's keys ✅ runtime half SHIPPED in 2.32.0 (#922, #923, DEC-121; off by default, `AINDY_PROVIDER_KEYS=server`) · 🟡 phase 3 (our ~25 paid call sites, the Settings card, the flip) is ours. Filed 2026-11-08, P2; adopted in `RUNTIME_2_32_0_UPGRADE.md`
 
 **apps-monolith ref:** the app's 11-07 route sweep, and the owner (2026-11-08): *"shouldn't people's API keys be scoped
 to their accounts (mine is admin, so I get that may be different)."* Read on runtime 2.31.5.
@@ -108,7 +108,7 @@ need them:
 - Turn it on, with the operator still on the server's keys.
 - Until then, the api stays loopback-bound (#544).
 
-## FR-60 — `build_trace_graph` returns every event in a trace once the caller owns any one of them 🔴 OPEN — filed 2026-11-08, P3 (defence in depth; no exploit found)
+## FR-60 — `build_trace_graph` returns every event in a trace once the caller owns any one of them ✅ SHIPPED in 2.31.6 (#918, DEC-120): the helpers take `user_id`, and our trace route passes it since the 2.32.0 adoption. Filed 2026-11-08, P3
 
 **apps-monolith ref:** the outside review of the app's 11-07 fixes, second pass. Our `GET /apps/rippletrace/{trace_id}` and
 the runtime's `GET /observability/execution_graph/{trace_id}` both check that the caller has at least one event in
@@ -125,7 +125,7 @@ drop point (#550), at the app layer.
 We would pass it from our trace route. Low priority; a test that two users' events in one trace stay apart would be
 enough to close it.
 
-## FR-57 — registration cannot be closed: `POST /auth/register` is always public, and nothing limits who may sign up 🔴 OPEN — filed 2026-11-07, P2
+## FR-57 — registration cannot be closed: `POST /auth/register` is always public, and nothing limits who may sign up ✅ SHIPPED in 2.31.6 (#918, DEC-120): `AINDY_REGISTRATION=closed`, set in our compose since the 2.32.0 adoption (invites not built). Filed 2026-11-07, P2
 
 **apps-monolith ref:** the app's 11-07 route sweep. Read on runtime 2.31.3 (installed) and on runtime `main` at
 `a71fe29` (2.31.4 + docs), where it is unchanged.
@@ -152,7 +152,7 @@ upgrade.
 **What we would do with it.** Set `closed` in compose, and keep the loopback bind until the remaining sweep items
 are done.
 
-## FR-58 — `GET /db/verify` returns the whole database schema to any holder of the shared service key; it is not operator-only 🔴 OPEN — filed 2026-11-07, P3
+## FR-58 — `GET /db/verify` returns the whole database schema to any holder of the shared service key; it is not operator-only ✅ SHIPPED in 2.31.6 (#918, DEC-120): the router needs an admin session or a `platform.admin` key; we keep the mount, nothing of ours calls it. Filed 2026-11-07, P3
 
 **apps-monolith ref:** the app's 11-07 route sweep. `AINDY/routes/db_verify_router.py` on runtime 2.31.3 and on `main`
 at `a71fe29`: the router depends on `verify_api_key` alone. Our RippleTrace bootstrap mounts it at the legacy root.

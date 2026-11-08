@@ -18,8 +18,10 @@ from AINDY.db.models.system_event import SystemEvent
 logger = logging.getLogger(__name__)
 
 
-def get_trace_graph(db, trace_id: str) -> dict[str, list[dict[str, Any]]]:
-    return build_trace_graph(db, trace_id)
+# Every trace helper takes the caller's user_id (runtime 2.31.6, FR-60): with it the runtime keeps only
+# that user's events and memory nodes, and the edges whose ends both remain. None means unscoped.
+def get_trace_graph(db, trace_id: str, user_id: str | None = None) -> dict[str, list[dict[str, Any]]]:
+    return build_trace_graph(db, trace_id, user_id=user_id)
 
 
 def get_upstream_causes(db, event_id):
@@ -28,21 +30,21 @@ def get_upstream_causes(db, event_id):
     return get_upstream_relationships(db, event_id)
 
 
-def calculate_ripple_span(db, trace_id):
+def calculate_ripple_span(db, trace_id, user_id: str | None = None):
     from AINDY.platform_layer.event_trace_service import calculate_trace_span
 
-    return calculate_trace_span(db, trace_id)
+    return calculate_trace_span(db, trace_id, user_id=user_id)
 
 
-def detect_dominant_path(db, trace_id: str) -> list[dict[str, Any]]:
-    graph = build_trace_graph(db, trace_id)
+def detect_dominant_path(db, trace_id: str, user_id: str | None = None) -> list[dict[str, Any]]:
+    graph = build_trace_graph(db, trace_id, user_id=user_id)
     if not graph["nodes"]:
         return []
     node_map = {node["id"]: node for node in graph["nodes"]}
     outgoing: dict[str, list[dict[str, Any]]] = {}
     for edge in graph["edges"]:
         outgoing.setdefault(edge["source"], []).append(edge)
-    root = detect_root_event(db, trace_id)
+    root = detect_root_event(db, trace_id, user_id=user_id)
     if not root:
         return []
 
@@ -71,8 +73,8 @@ def detect_dominant_path(db, trace_id: str) -> list[dict[str, Any]]:
     return [node_map[node_id] for node_id in best_path if node_id in node_map]
 
 
-def detect_failure_clusters(db, trace_id: str) -> list[dict[str, Any]]:
-    graph = build_trace_graph(db, trace_id)
+def detect_failure_clusters(db, trace_id: str, user_id: str | None = None) -> list[dict[str, Any]]:
+    graph = build_trace_graph(db, trace_id, user_id=user_id)
     failures = [
         node
         for node in graph["nodes"]
@@ -157,11 +159,11 @@ def _owned_drop_point_ids(db, events: list[dict[str, Any]], user_id: str | None 
 
 
 def generate_trace_insights(db, trace_id: str, user_id: str | None = None) -> dict[str, Any]:
-    root_event = detect_root_event(db, trace_id)
-    terminal_events = detect_terminal_events(db, trace_id)
-    dominant_path = detect_dominant_path(db, trace_id)
-    failure_clusters = detect_failure_clusters(db, trace_id)
-    ripple_span = calculate_ripple_span(db, trace_id)
+    root_event = detect_root_event(db, trace_id, user_id=user_id)
+    terminal_events = detect_terminal_events(db, trace_id, user_id=user_id)
+    dominant_path = detect_dominant_path(db, trace_id, user_id=user_id)
+    failure_clusters = detect_failure_clusters(db, trace_id, user_id=user_id)
+    ripple_span = calculate_ripple_span(db, trace_id, user_id=user_id)
 
     # Only drop points owned by the event's user (and the caller, when given); see above.
     drop_point_ids = _owned_drop_point_ids(

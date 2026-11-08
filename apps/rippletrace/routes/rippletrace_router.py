@@ -1278,15 +1278,16 @@ async def get_trace_graph(
                 },
             }
 
-        graph = build_trace_graph(db, trace_id)
+        # Scoped to the caller (FR-60): a trace that touches another user's events shows only yours.
+        graph = build_trace_graph(db, trace_id, user_id=user_id)
 
         return {
             "trace_id": trace_id,
             "nodes": graph["nodes"],
             "edges": graph["edges"],
-            "root_event": detect_root_event(db, trace_id),
-            "terminal_events": detect_terminal_events(db, trace_id),
-            "ripple_span": calculate_ripple_span(db, trace_id),
+            "root_event": detect_root_event(db, trace_id, user_id=user_id),
+            "terminal_events": detect_terminal_events(db, trace_id, user_id=user_id),
+            "ripple_span": calculate_ripple_span(db, trace_id, user_id=user_id),
             "insights": generate_trace_insights(db, trace_id, user_id),
         }
 
