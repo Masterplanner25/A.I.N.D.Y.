@@ -205,3 +205,11 @@ def test_the_routes(app, client, monkeypatch):
     body = response.json()
     body = body.get("data", body)
     assert body["patterns"][0]["kind"] == "list"
+
+
+def test_an_empty_result_says_which_kind_of_empty_it_was():
+    assert st.empty_reason("") == "the model returned nothing; press again"
+    assert st.empty_reason("Sorry, here are some thoughts") == "the model's answer could not be read; press again"
+    assert st.empty_reason('{"patterns": []}') == "the model found no repeated patterns"
+    assert st.empty_reason(_reply({"name": "x", "kind": "list", "instances": ["not there", "nor this"]})) ==         "no pattern had two instances found word for word in the text"
+

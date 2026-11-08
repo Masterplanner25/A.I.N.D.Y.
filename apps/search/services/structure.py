@@ -379,7 +379,30 @@ def name_patterns(text: str, *, title: str | None = None, user_id: Any = None, d
         raise_key_problem(exc)
         logger.warning("[SEO] structure patterns failed: %s", exc)
         return {"patterns": [], "model": model, "reason": "the structure service could not be reached"}
-    patterns = parse_patterns(completion.choices[0].message.content, article)
-    return {"patterns": patterns, "model": model,
-            "reason": None if patterns else "no patterns with two instances in the text were returned",
+    content = completion.choices[0].message.content or ""
+    patterns = parse_patterns(content, article)
+    reason = None if patterns else empty_reason(content)
+    if reason:
+        # Seen once live on 2026-11-08: an empty result where the same draft gave 8 to 11 patterns on the next two
+        # presses. Say which kind of empty it was, and keep enough of the answer in the log to tell.
+        logger.warning("[SEO] structure patterns empty (%s): %d chars, starts %r", reason, len(content), content[:200])
+    return {"patterns": patterns, "model": model, "reason": reason,
             "truncated_input": len(article) > MAX_ARTICLE_CHARS_SENT}
+
+
+def empty_reason(content: str) -> str:
+    """Why nothing usable came back: no answer, an answer that is not the JSON asked for, or patterns whose quotes are
+    not in the text. The three call for different things (press again; report it; check the quotes)."""
+    text = (content or "").strip()
+    if not text:
+        return "the model returned nothing; press again"
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    try:
+        payload = json.loads(match.group(0)) if match else None
+    except json.JSONDecodeError:
+        payload = None
+    if not isinstance(payload, dict) or not isinstance(payload.get("patterns"), list):
+        return "the model's answer could not be read; press again"
+    if not payload["patterns"]:
+        return "the model found no repeated patterns"
+    return "no pattern had two instances found word for word in the text"
