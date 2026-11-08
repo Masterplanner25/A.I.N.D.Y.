@@ -53,17 +53,30 @@ Full `pytest tests -m app_profile` on 2.31.5: **1,823 passed, 292 skipped, 0 fai
 - **Watcher:** `watcher_signals` has 0 rows, so nobody runs a watcher and there is no key to rotate.
 - **Nodus upload and flow ownership:** nothing of ours calls those routes.
 
-## 5. Rebuild: owed
+## 5. Rebuild: done 2026-11-08, **live on 2.31.5 since 00:57:50Z**
 
-After merge: read identity window 16 (opened at the 2.31.4 recreate, 2026-11-08 00:29:36Z), rebuild the api
-image, recreate, and run the handoff's check:
+**We are on 2.31.5.** This is the report the runtime's advisory for 2.31.4's fixes waits for (handoff §4). The
+image was built from `main` at `4ca3353` (#553). It carries everything the 2.31.4 image did (the app's
+route-sweep fixes #545 and #547 to #550), plus the 2.31.4 rebuild record (#552).
 
-```bash
-docker exec <api-container> python -c "import AINDY, AINDY._version as v, importlib.metadata as m; print(v.__version__, m.version('nodus-lang'), list(AINDY.__path__))"
-# expect: 2.31.5 5.15.1 ['/usr/local/lib/python3.11/site-packages/AINDY']
-```
+1. **Identity counter, window 16** (2026-11-08 00:29:36Z → 00:53Z): no samples, so 0 refused, over **0**
+   syscall outcomes. It ran 23 minutes with no traffic. The recreate opened **window 17**.
+2. **Built** image `9cba83fc2392` and checked it before the recreate: `2.31.5 5.15.1` from site-packages,
+   `apps/_shared/egress.py` present, 4 `.nd` files packaged.
+3. **Recreated at 00:57:50Z** with both compose files and both profiles. Healthy in about 90 s, 0 restarts,
+   port still `127.0.0.1:8000`.
+4. **The handoff's check:** `2.31.5 5.15.1 ['/usr/local/lib/python3.11/site-packages/AINDY']` (ask 1).
+   `/api/version`: `default-apps`, 16 plugins. `/health` 200. Schema heads unchanged: runtime `0020`, app
+   `fl1metrics0001`. 0 `ERROR` or traceback lines at boot. 0 `executing` agent runs. `NODUS_RUN_STATE_ROOT`
+   is still `/var/lib/aindy/nodus-state`.
+5. **2.31.5's change, live** (designated test account, read-only):
+   - `GET /apps/agent/runs/{id}` on one of the owner's runs answers **404**, the same as a made-up run id.
+   - The 2.31.4-image checks still hold: an event naming another user's drop point answers 404, and a
+     retired legacy route answers 404 with the shared key.
+6. `aindy_effect_gate_outcomes_total` has no samples yet, as expected right after a restart.
 
-Then record it here. The runtime's advisory for 2.31.4's fixes waits for that.
+**Still owed, after a day of normal traffic (from about 2026-11-09 01:00Z):**
 
-**After a day of normal traffic (ask 4):** `tenant_mismatch` from `/metrics`, together with the identity
-read carried from 2.31.3 and 2.31.4.
+- `tenant_mismatch` from `/metrics` (ask 4). It should read 0.
+- `aindy_payload_identity_mismatch_total` by `syscall`, and the 2.31.3 record's §7 log lines. This read has
+  carried over from 2.31.3, whose windows 13 to 16 were all too short or quiet to count.
