@@ -80,3 +80,27 @@ export async function changePassword({ currentPassword, newPassword }) {
   }
   return token;
 }
+
+/**
+ * Your own provider API keys (aindy-runtime >= 2.32.0, FR-59). Write-only: the runtime never
+ * returns a stored key, only `{provider, key_hint, updated_at}` (the hint is the last four
+ * characters). A signed-in session only; an API key gets 403.
+ */
+export async function listProviderKeys() {
+  const response = await authRequest("/auth/provider-keys");
+  const body = response?.keys ? response : response?.data ?? response;
+  return Array.isArray(body?.keys) ? body.keys : [];
+}
+
+/** Store or replace your key for one provider. 503 when the server has no encryption key set. */
+export async function setProviderKey(provider, key) {
+  return authRequest(`/auth/provider-keys/${encodeURIComponent(provider)}`, {
+    method: "PUT",
+    body: JSON.stringify({ key }),
+  });
+}
+
+/** Remove your key for one provider (204; 404 when none is set). */
+export async function deleteProviderKey(provider) {
+  await authRequest(`/auth/provider-keys/${encodeURIComponent(provider)}`, { method: "DELETE" });
+}
