@@ -1,6 +1,6 @@
 ---
 title: "Inventory — what A.I.N.D.Y. contains"
-last_verified: "2026-11-07"
+last_verified: "2026-11-08"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -23,7 +23,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | Scheduled jobs | 16 | 0 |
 | Registered jobs | 34 | 0 |
 | Python flow graphs | 82 | 1 |
-| Tables | 88 | 36 |
+| Tables | 88 | 37 |
 | Nodus workflows (`.nd`) | 5 | |
 | `AINDY_*` flags read by our code | 49 | |
 
@@ -47,7 +47,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | search |  | analytics, rippletrace | 32 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
 | social |  | analytics, automation | 8 | 2 | 4 | 0 | 0 | 0 | 0 | 0 | 0 |
 | tasks | yes |  | 7 | 2 | 18 | 2 | 5 | 7 | 8 | 0 | 1 |
-| (runtime) | | | 35 | 23 | 23 | 0 | 0 | 0 | 1 | 0 | 36 |
+| (runtime) | | | 35 | 23 | 23 | 0 | 0 | 0 | 1 | 0 | 37 |
 
 ## agent
 
@@ -607,6 +607,7 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_PIECE_ANSWERS_NODUS` | rippletrace | `1` |
 | `AINDY_PLAN_STEP_REFERENCES` | (runtime) | `""` |
 | `AINDY_REASONING_NODUS_NATIVE` | analytics | `1` |
+| `AINDY_REGISTRATION` | (runtime) | `closed` |
 | `AINDY_RELEASE_NOTIFY_TO` | automation | `""` |
 | `AINDY_RELEASE_NO_RUN_MINUTES` | automation | `30` |
 | `AINDY_RELEASE_REPLY_IMAP_HOST` | automation | `""` |

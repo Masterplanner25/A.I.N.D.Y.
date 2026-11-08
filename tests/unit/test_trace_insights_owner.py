@@ -67,11 +67,11 @@ def test_insights_never_run_engines_on_a_foreign_drop_point(db_session, monkeypa
     trace = f"trace-{uuid.uuid4().hex}"
     event = _event(db_session, me, trace, theirs.id)
 
-    monkeypatch.setattr(rippletrace_service, "detect_root_event", lambda db, trace_id: None)
-    monkeypatch.setattr(rippletrace_service, "detect_terminal_events", lambda db, trace_id: [event])
-    monkeypatch.setattr(rippletrace_service, "detect_dominant_path", lambda db, trace_id: [])
-    monkeypatch.setattr(rippletrace_service, "detect_failure_clusters", lambda db, trace_id: [])
-    monkeypatch.setattr(rippletrace_service, "calculate_ripple_span", lambda db, trace_id: {})
+    monkeypatch.setattr(rippletrace_service, "detect_root_event", lambda db, trace_id, user_id=None: None)
+    monkeypatch.setattr(rippletrace_service, "detect_terminal_events", lambda db, trace_id, user_id=None: [event])
+    monkeypatch.setattr(rippletrace_service, "detect_dominant_path", lambda db, trace_id, user_id=None: [])
+    monkeypatch.setattr(rippletrace_service, "detect_failure_clusters", lambda db, trace_id, user_id=None: [])
+    monkeypatch.setattr(rippletrace_service, "calculate_ripple_span", lambda db, trace_id, user_id=None: {})
 
     called = []
     import apps.rippletrace.services.prediction_engine as prediction_engine

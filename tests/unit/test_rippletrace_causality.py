@@ -133,6 +133,16 @@ def test_single_trace_reconstructs_event_and_memory_causality(db_session):
     assert rt.count_trace_events(db, trace_id, user_id) == 4
     assert rt.count_trace_events(db, trace_id, str(uuid.uuid4())) == 0
 
+    # The graph helpers are user-scoped too (runtime 2.31.6, FR-60): the owner sees the whole
+    # graph, anyone else sees nothing of it.
+    mine = rt.get_trace_graph(db, trace_id, user_id=user_id)
+    assert len(mine["nodes"]) == len(graph["nodes"]) and len(mine["edges"]) == len(graph["edges"])
+    stranger = str(uuid.uuid4())
+    assert rt.get_trace_graph(db, trace_id, user_id=stranger)["nodes"] == []
+    assert rt.detect_root_event(db, trace_id, user_id=stranger) is None
+    assert rt.calculate_ripple_span(db, trace_id, user_id=stranger)["node_count"] == 0
+    assert rt.detect_dominant_path(db, trace_id, user_id=stranger) == []
+
 
 def test_emit_and_capture_round_trip_is_reconstructable(db_session):
     from AINDY.core.system_event_service import emit_system_event
