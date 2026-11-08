@@ -8,7 +8,7 @@ owner: "app-team"
 
 # What an article answers: AI-search readiness for the owner's writing
 
-**Status:** DRAFT, 2026-10-25. **§8 decided by the owner on 2026-11-08**, all four as recommended. Nothing here is built yet. The fixes that came first (the meta description,
+**Status:** DRAFT, 2026-10-25. **§8 decided by the owner on 2026-11-08**, all four as recommended. **Phase A built the same day** (§7). The fixes that came first (the meta description,
 titles and suggestions now read the whole article) are #495.
 
 **Origin:** the owner used the AI SEO tool on the *2026 Agents Case Study Series* and asked how it
@@ -123,7 +123,7 @@ The owner's chat on 2026-10-25 described two workflow families:
 
 | Phase | What | Schema |
 |---|---|---|
-| **A** | In the SEO tool, on draft text: **What does this answer?** (§2, without the Resolution tie), outbound links to own pieces, and missing own pieces (§3) | none |
+| **A** ✅ **built 2026-11-08** | In the SEO tool, on draft text: **What does this answer?** (§2, without the Resolution tie), outbound links to own pieces, and missing own pieces (§3). `POST /apps/seo/answers` (`apps/search/services/article_answers.py`), `POST /apps/seo/own_links` (`apps/rippletrace/services/own_links.py`) | none |
 | **B** | Per published piece, once per content hash: answers and links stored. Ingestion keeps link targets. Inbound links and series navigation | a links column on `drop_points`, and a table for answers |
 | **C** | The tie to resolution: answers matched against the Resolution Check's questions per Work. Shown on the Work card, and offered to the planner as one line | none beyond B |
 | **D** | Source validation (§4), then style (§5) | none expected |

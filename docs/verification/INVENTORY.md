@@ -17,7 +17,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | | ours | runtime's |
 |---|---|---|
 | Domains | 16 (3 core) | |
-| `/apps` routes | 280 (182 called by the client, 98 not) | 35 (mounted under `/apps`) |
+| `/apps` routes | 282 (184 called by the client, 98 not) | 35 (mounted under `/apps`) |
 | Syscalls | 84 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 15 | 0 |
@@ -25,7 +25,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | Python flow graphs | 82 | 1 |
 | Tables | 87 | 36 |
 | Nodus workflows (`.nd`) | 4 | |
-| `AINDY_*` flags read by our code | 46 | |
+| `AINDY_*` flags read by our code | 48 | |
 
 ## Domains
 
@@ -44,7 +44,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | memory |  |  | 8 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | network_bridge |  | authorship, automation | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | rippletrace |  | analytics, automation | 47 | 4 | 9 | 0 | 4 | 1 | 0 | 2 | 7 |
-| search |  | analytics | 30 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
+| search |  | analytics, rippletrace | 32 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
 | social |  | analytics, automation | 8 | 2 | 4 | 0 | 0 | 0 | 0 | 0 | 0 |
 | tasks | yes |  | 7 | 2 | 18 | 2 | 5 | 7 | 8 | 0 | 1 |
 | (runtime) | | | 35 | 23 | 23 | 0 | 0 | 0 | 1 | 0 | 36 |
@@ -429,7 +429,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 ## search
 
-**Routes (30).** — = no client code calls it.
+**Routes (32).** — = no client code calls it.
 
 - `GET /apps/leadgen/`
 - `POST /apps/leadgen/`
@@ -449,6 +449,7 @@ the audit's question. Live row counts are not here (they change): `python script
 - `GET /apps/search/history/{history_id}`
 - — `POST /apps/seo/analyze`
 - `POST /apps/seo/analyze_seo/`
+- `POST /apps/seo/answers`
 - `GET /apps/seo/drafts`
 - `POST /apps/seo/drafts`
 - — `DELETE /apps/seo/drafts/{draft_id}`
@@ -458,6 +459,7 @@ the audit's question. Live row counts are not here (they change): `python script
 - — `POST /apps/seo/drafts/{draft_id}/prune`
 - `POST /apps/seo/generate_meta/`
 - — `POST /apps/seo/meta`
+- `POST /apps/seo/own_links`
 - — `POST /apps/seo/suggest`
 - `POST /apps/seo/suggest_improvements/`
 - `POST /apps/seo/title`
@@ -560,6 +562,8 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 |---|---|---|
 | `AINDY_AGENT_EXECUTION_BACKEND` | agent |  |
 | `AINDY_AGENT_PLANNER_BACKEND` | (runtime) | `runtime_local` |
+| `AINDY_ANSWERS_MODEL` | search |  |
+| `AINDY_ANSWERS_REASONING_EFFORT` | search |  |
 | `AINDY_APP_PLUGIN_MANIFEST` | (runtime) | `./aindy_plugins.json` |
 | `AINDY_ARCHIVE_NODUS` | rippletrace | `1` |
 | `AINDY_ARM_PROJECT_ROOT` | arm |  |

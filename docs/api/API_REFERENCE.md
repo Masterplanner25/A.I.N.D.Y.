@@ -2124,6 +2124,33 @@ call, so 15/min. Over budget is kept and marked, never trimmed. `reason` is non-
 
 **Response 200:** meta_description: string, central_point: string, characters: integer, budget: integer, over_by: integer, serp_preview: string, truncated: boolean, reason: string | null
 
+#### POST /apps/seo/answers
+Article Answers Route
+
+**Body:** text: string (required), title: string | null
+
+What questions the article answers, and which it raises and leaves open (`ARTICLE_ANSWERS_SPEC` §2,
+phase A). One gpt-5.5 call at low reasoning effort (`AINDY_ANSWERS_MODEL`, `AINDY_ANSWERS_REASONING_EFFORT`),
+about 20 to 50 s, so 6/min and run on a button. Each passage is checked against the text: `passage_found`
+is false when the model's quote is not in the article word for word. `range` counts answers by kind; it is
+a spread, not a score. `reason` is non-null exactly when nothing usable came back. Never suggests wording.
+
+**Response 200:** answers: [{question, passage, kind (what_is | how | why | compared_with | who | other), passage_found}], raised: [{question, passage, passage_found}], range: object, model: string, reason: string | null, truncated_input: boolean
+
+#### POST /apps/seo/own_links
+Own Links Route
+
+**Body:** text: string (required), title: string | null, exclude_url: string | null, limit: integer | null (1 to 20, default 8)
+
+Authority as the owner defines it: links back to the caller's own pieces (`ARTICLE_ANSWERS_SPEC` §3,
+phase A). `linked` is the caller's pieces the draft links to, any copy of a cross-posted piece counting
+as the piece. `missing` is relevant pieces it does not link to, ranked by semantic similarity over the
+caller's `published_work` memory, each with the passage that makes it relevant. `other_links` is
+everything else. `title` and `exclude_url` keep the draft itself out of `missing`. Only the caller's
+pieces are read. Nothing is fetched or inserted. 15/min.
+
+**Response 200:** linked: [{title, copies, linked_urls}], missing: [{title, copies, similarity, passage}], other_links: [string], pieces_known: integer, reason: string | null
+
 #### POST /apps/seo/drafts
 Create Seo Draft
 

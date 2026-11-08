@@ -20,6 +20,23 @@ class MetaInput(BaseModel):
     # The writer's title: its framing is what the description keeps (`meta_generation`).
     title: Optional[str] = None
 
+class ArticleAnswersInput(BaseModel):
+    """What questions an article answers (ARTICLE_ANSWERS_SPEC §2). The writer's title is context."""
+    text: str
+    title: Optional[str] = None
+
+
+class OwnLinksInput(BaseModel):
+    """The owner's pieces a draft links to and could link to (ARTICLE_ANSWERS_SPEC §3).
+
+    ``title`` and ``exclude_url`` name the draft itself when it is already published, so it is
+    never offered as a link to itself."""
+    text: str
+    title: Optional[str] = None
+    exclude_url: Optional[str] = None
+    limit: Optional[int] = 8
+
+
 class TitleInput(BaseModel):
     text: str
     count: Optional[int] = 5

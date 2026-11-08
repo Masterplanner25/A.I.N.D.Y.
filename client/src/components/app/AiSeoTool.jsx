@@ -5,6 +5,8 @@ import {
   createDraft as apiCreateDraft,
   generateMeta as apiGenerateMeta,
   generateTitles as apiGenerateTitles,
+  getArticleAnswers as apiGetArticleAnswers,
+  getOwnLinks as apiGetOwnLinks,
   getDraft as apiGetDraft,
   listDrafts as apiListDrafts,
   pruneDraftAnalyses as apiPruneDraftAnalyses,
@@ -33,6 +35,8 @@ export default function AiSeoTool() {
   const [seoData, setSeoData] = useState(null);
   const [meta, setMeta] = useState(null);
   const [titleOptions, setTitleOptions] = useState(null);
+  const [answers, setAnswers] = useState(null);
+  const [ownLinks, setOwnLinks] = useState(null);
   const [targets, setTargets] = useState("");
   const [drafts, setDrafts] = useState([]);
   const [draftId, setDraftId] = useState(null);
@@ -177,6 +181,31 @@ export default function AiSeoTool() {
       // Never a local fallback: the opening lines would look like a description written from
       // the whole article, which is the confusion the server-side change ended.
       setMeta({ meta_description: "", reason: "the description service could not be reached" });
+    }
+    setLoading(false);
+  };
+
+  // What the article answers (ARTICLE_ANSWERS_SPEC §2). A gpt-5.5 call, 20-50 s, so it runs on
+  // the button only. A failure is shown as a failure: never an empty list that reads as "nothing".
+  const findAnswers = async () => {
+    setLoading(true);
+    try {
+      setAnswers(await apiGetArticleAnswers(content, title));
+    } catch (error) {
+      console.error("Article Answers Error: ", error);
+      setAnswers({ answers: [], raised: [], reason: "the answers service could not be reached" });
+    }
+    setLoading(false);
+  };
+
+  // Links to your own pieces (§3): what it links to, relevant pieces it does not, other links.
+  const findOwnLinks = async () => {
+    setLoading(true);
+    try {
+      setOwnLinks(await apiGetOwnLinks(content, title));
+    } catch (error) {
+      console.error("Own Links Error: ", error);
+      setOwnLinks({ linked: [], missing: [], other_links: [], reason: "the links check could not be reached" });
     }
     setLoading(false);
   };
@@ -351,6 +380,22 @@ export default function AiSeoTool() {
           
                     Get Suggestions
                 </button>
+                <button
+          className="px-6 py-2 bg-cyan-700 hover:bg-cyan-800 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
+          onClick={findAnswers}
+          disabled={loading || !content}
+          title="Reads the whole article with a model: about 20 to 50 seconds">
+
+                    What does this answer?
+                </button>
+                <button
+          className="px-6 py-2 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-md transition-colors disabled:opacity-50"
+          onClick={findOwnLinks}
+          disabled={loading || !content}
+          title="Checks your published pieces: about 20 to 30 seconds">
+
+                    Links to my work
+                </button>
             </div>
 
             {/* LOADING INDICATOR */}
@@ -443,6 +488,91 @@ export default function AiSeoTool() {
                           <p className="text-sm text-gray-400">
                               No description — {meta.reason || "nothing was returned"}.
                           </p>
+                        }
+                    </div>
+        }
+
+                {/* WHAT THE ARTICLE ANSWERS (ARTICLE_ANSWERS_SPEC §2). Each answer shows the passage the
+                    model quoted and whether that passage is really in the text, so the writer checks it
+                    rather than trusting a count. Information only: no suggested wording. */}
+                {answers &&
+        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg md:col-span-2" data-testid="article-answers">
+                        <h2 className="text-xl font-bold mb-1 text-cyan-400 border-b border-zinc-800 pb-2">What this answers</h2>
+                        {(answers.answers?.length || answers.raised?.length) ?
+                          <>
+                              {answers.range &&
+                                <p className="mt-2 text-xs text-gray-400" data-testid="answers-range">
+                                    Range: {safeMap(Object.entries(answers.range).filter(([, n]) => n > 0),
+                                      ([kind, n]) => kind.replace("_", " ") + " " + n).join(" · ") || "none"}
+                                </p>
+                              }
+                              <ul className="mt-3 space-y-3">
+                                  {safeMap(answers.answers, (a, i) =>
+                                    <li key={"a-" + i} className="text-sm">
+                                        <p className="text-white"><span className="text-xs text-cyan-500 mr-2">{(a.kind || "other").replace("_", " ")}</span>{a.question}</p>
+                                        {a.passage &&
+                                          <p className="mt-1 text-xs text-gray-400 italic">
+                                              "{a.passage}"
+                                              {!a.passage_found && <span className="not-italic text-amber-400"> (not found word for word in the text)</span>}
+                                          </p>
+                                        }
+                                    </li>
+                                  )}
+                              </ul>
+                              {answers.raised?.length > 0 &&
+                                <>
+                                    <h3 className="font-bold text-white text-sm mt-5">Raised, not answered</h3>
+                                    <p className="text-xs text-gray-500">Some may be deliberate, such as setting up the next part. Your call.</p>
+                                    <ul className="mt-2 space-y-2">
+                                        {safeMap(answers.raised, (r, i) =>
+                                          <li key={"r-" + i} className="text-sm text-gray-300">{r.question}</li>
+                                        )}
+                                    </ul>
+                                </>
+                              }
+                          </> :
+                          <p className="text-sm text-gray-400">No answers listed: {answers.reason || "nothing was returned"}.</p>
+                        }
+                    </div>
+        }
+
+                {/* LINKS TO YOUR OWN PIECES (ARTICLE_ANSWERS_SPEC §3): authority as the owner defines
+                    it. A missing link is a candidate with the passage that makes it relevant; it is
+                    never inserted for the writer. */}
+                {ownLinks &&
+        <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg md:col-span-2" data-testid="own-links">
+                        <h2 className="text-xl font-bold mb-1 text-teal-400 border-b border-zinc-800 pb-2">Links to your work</h2>
+                        {ownLinks.reason &&
+                          <p className="mt-2 text-sm text-amber-400">Relevant pieces could not be checked: {ownLinks.reason}.</p>
+                        }
+                        <h3 className="font-bold text-white text-sm mt-4">Already links to ({ownLinks.linked?.length || 0})</h3>
+                        <ul className="mt-1 space-y-1">
+                            {safeMap(ownLinks.linked, (p, i) =>
+                              <li key={"l-" + i} className="text-sm text-gray-300">{p.title}</li>
+                            )}
+                        </ul>
+                        <h3 className="font-bold text-white text-sm mt-4">Relevant pieces it does not link to</h3>
+                        {ownLinks.missing?.length ?
+                          <ul className="mt-1 space-y-3">
+                              {safeMap(ownLinks.missing, (m, i) =>
+                                <li key={"m-" + i} className="text-sm">
+                                    <a className="text-teal-300 hover:underline" href={m.copies?.[0]?.url} target="_blank" rel="noreferrer">{m.title}</a>
+                                    <span className="ml-2 text-xs text-gray-500">{safeMap(m.copies, (c) => c.platform).filter(Boolean).join(", ")}</span>
+                                    {m.passage && <p className="mt-1 text-xs text-gray-400 italic">"{m.passage}"</p>}
+                                </li>
+                              )}
+                          </ul> :
+                          <p className="text-xs text-gray-500 mt-1">None found.</p>
+                        }
+                        {ownLinks.other_links?.length > 0 &&
+                          <>
+                              <h3 className="font-bold text-white text-sm mt-4">Other links ({ownLinks.other_links.length})</h3>
+                              <ul className="mt-1 space-y-1">
+                                  {safeMap(ownLinks.other_links, (u, i) =>
+                                    <li key={"o-" + i} className="text-xs text-gray-400 break-all">{u}</li>
+                                  )}
+                              </ul>
+                          </>
                         }
                     </div>
         }
