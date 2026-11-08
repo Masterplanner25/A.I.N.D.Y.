@@ -645,7 +645,9 @@ pays a call with no user with the server's key. Only the operator's own calls pa
 - **A route whose paid call runs inside a flow or syscall calls `require_key(...)` before it starts**: a raise inside a
   flow's syscall loses the message (FR-64).
 - **A scheduled job asks `can_pay(user_id, provider)` before a user's work** and skips them; their work stays due.
-- `AINDY_PROVIDER_KEYS` is unset here (`server`), so all of this returns the old client today.
+- **This stack runs `AINDY_PROVIDER_KEYS=per_user` since 2026-11-08** (compose; the master key is in `.env`, and
+  startup refuses per_user without it). The owner is the only operator and stays on the server's keys; any other
+  account pays with its own key from Settings or gets the 402.
   `test_provider_key_routing.py` fails on a new direct client or key read; add each new site to its per-site list.
 
 ### `content.draft` — what the drafter is given, and the model

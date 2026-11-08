@@ -143,6 +143,11 @@ services:
       # rotate --yes` after putting a new key first. Lose it and every stored key is unreadable, so keep a copy.
       # Unset, saving a key answers 503. This alone changes nobody's spend: that is AINDY_PROVIDER_KEYS (unset = server).
       AINDY_SECRET_PROVIDER_KEY_ENCRYPTION_KEYS: "${AINDY_SECRET_PROVIDER_KEY_ENCRYPTION_KEYS:-}"
+      # Whose key pays (FR-59, on since 2026-11-08 after the runtime reviewed #566): each user's own key; an operator
+      # (is_admin) without one, and a call with no user, use the server's. Anyone else without a key gets a 402,
+      # "Add it in Settings", before any call. Startup REFUSES per_user without the master key above, so a stack
+      # without one must set AINDY_PROVIDER_KEYS=server in .env. `server` puts every call back on the server's keys.
+      AINDY_PROVIDER_KEYS: "${AINDY_PROVIDER_KEYS:-per_user}"
       # Phase 3b: with the approve token set, the gate email's subject carries a code and the watcher
       # reads the SMTP account's Sent Mail over IMAP (same app password) for an APPROVE/REJECT reply.
       # Empty host = derived from AINDY_SMTP_HOST (smtp.gmail.com -> imap.gmail.com).

@@ -119,7 +119,7 @@ batches 4`. Its report also said `would_fill: 0` on that same run, which looks w
 **Ask.** Import the models in the CLI branch (as `settle-stale-units` presumably does), and check `would_fill` on a
 writing run. A test that runs the command, not the function, would have caught the first.
 
-## FR-59 — provider keys cannot be per user: every account's model, embedding and search calls spend the operator's keys ✅ runtime half SHIPPED in 2.32.0 (#922, #923, DEC-121; off by default, `AINDY_PROVIDER_KEYS=server`) · 🟡 phase 3 is ours: the call sites are routed (`RUNTIME_2_32_0_UPGRADE.md` §8); the Settings card and the flip are next. Filed 2026-11-08, P2; adopted in `RUNTIME_2_32_0_UPGRADE.md`
+## FR-59 — provider keys cannot be per user: every account's model, embedding and search calls spend the operator's keys ✅ runtime half SHIPPED in 2.32.0 (#922, #923, DEC-121; off by default, `AINDY_PROVIDER_KEYS=server`) · ✅ app side done 2026-11-08: call sites routed (#566, reviewed by the runtime), Settings card (#567), master key (#569), `AINDY_PROVIDER_KEYS=per_user` in compose (`RUNTIME_2_32_0_UPGRADE.md` §8–§10). Filed 2026-11-08, P2; adopted in `RUNTIME_2_32_0_UPGRADE.md`
 
 **apps-monolith ref:** the app's 11-07 route sweep, and the owner (2026-11-08): *"shouldn't people's API keys be scoped
 to their accounts (mine is admin, so I get that may be different)."* Read on runtime 2.31.5.
