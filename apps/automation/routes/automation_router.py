@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from AINDY.services.auth_service import get_current_user
+from AINDY.services.auth_service import get_current_user, require_admin_principal
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,13 @@ async def replay_automation_log(
         from apps.automation.services.automation_execution_service import get_automation_log
 
         log = get_automation_log(db, log_id, user_id)
-        if log and getattr(log, "payload", None):
+        if log is None:
+            # Missing and someone else's read the same, and nothing is attached to the id.
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "automation_log_not_found", "message": "Automation log not found"},
+            )
+        if getattr(log, "payload", None):
             payload = log.payload if isinstance(log.payload, dict) else {}
             if payload.get("execution_token"):
                 validation = validate_token(
@@ -149,7 +155,8 @@ async def replay_automation_log(
 async def get_scheduler_status(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    # Operator only: it lists every scheduler job, including other users' per-user job ids.
+    current_user: dict = Depends(require_admin_principal),
 ):
     def handler(_ctx):
         from AINDY.platform_layer.scheduler_service import get_scheduler

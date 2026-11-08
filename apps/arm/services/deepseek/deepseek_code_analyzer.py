@@ -538,6 +538,18 @@ class DeepSeekCodeAnalyzer:
                     analysis_uuid = uuid.UUID(analysis_id)
                 except ValueError as exc:
                     logger.warning("[ARM] Invalid analysis_id '%s': %s", analysis_id, exc)
+            if analysis_uuid is not None:
+                # Link only the caller's own analysis: the id was stored as given, so a
+                # generation could point at another user's analysis.
+                from apps.arm.models import AnalysisResult
+
+                owned = (
+                    db.query(AnalysisResult.id)
+                    .filter(AnalysisResult.id == analysis_uuid, AnalysisResult.user_id == uuid.UUID(str(user_id)))
+                    .first()
+                )
+                if owned is None:
+                    analysis_uuid = None
 
             # Persist to DB
             db_record = CodeGeneration(

@@ -206,6 +206,19 @@ def create_strategy(
         raise ValueError("a strategy needs a name")
     if origin not in VALID_STRATEGY_ORIGINS:
         raise ValueError(f"origin must be one of {sorted(VALID_STRATEGY_ORIGINS)}")
+    # The same check `set_strategy_objective` makes: an objective on another plan (another
+    # user's included) is refused, never stored as given.
+    if objective_id is not None:
+        home = (
+            db.query(PlanObjective)
+            .filter(
+                PlanObjective.id == str(objective_id),
+                PlanObjective.masterplan_id == int(masterplan_id),
+            )
+            .first()
+        )
+        if home is None:
+            raise ValueError(f"objective {objective_id} is not on plan {masterplan_id}")
 
     row = PlanStrategy(
         masterplan_id=int(masterplan_id),

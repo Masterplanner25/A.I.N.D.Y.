@@ -240,6 +240,21 @@ async def update_config(
         user_id = str(current_user["sub"])
         current = _arm_config_to_dict(arm_config_dao.get_config(db, user_id=user_id))
         filtered = {k: v for k, v in body.updates.items() if k in _UPDATABLE_KEYS}
+        # The same bounds auto-tune keeps to. Only the key names were filtered, so retry_limit,
+        # retry_delay_seconds or max_output_tokens could be set to anything. Harmless today (the
+        # analyzer reads the "default" row), a cost and wait hole the day it reads per-user config.
+        from apps.arm.services.arm_autotune_service import AUTO_TUNE_BOUNDS, _clamp
+
+        for key in list(filtered):
+            if key not in AUTO_TUNE_BOUNDS:
+                continue
+            try:
+                number = float(filtered[key])
+            except (TypeError, ValueError):
+                filtered.pop(key)
+                continue
+            clamped = _clamp(key, number)
+            filtered[key] = int(clamped) if isinstance(AUTO_TUNE_BOUNDS[key][0], int) else clamped
         if filtered:
             current.update(filtered)
             updated = arm_config_dao.upsert_config(db, user_id=user_id, **current)

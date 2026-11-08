@@ -1045,8 +1045,9 @@ def check_reminders():
     _check_reminders_once()
 
 
-def handle_recurrence():
-    _handle_recurrence_once()
+def handle_recurrence(user_id=None):
+    """All users from the scheduled job; one user when a person asks (`POST /tasks/recurrence/check`)."""
+    _handle_recurrence_once(user_id=user_id)
 
 
 def is_background_leader() -> bool:

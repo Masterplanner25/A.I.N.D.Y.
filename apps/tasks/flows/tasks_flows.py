@@ -51,9 +51,18 @@ def tasks_list_node(state, context):
 def tasks_recurrence_check_node(state, context):
     try:
         import threading
+        import uuid
         from apps.tasks.services.task_service import handle_recurrence
 
-        t = threading.Thread(target=handle_recurrence, daemon=True)
+        # The caller's tasks only; a person's request no longer starts a scan of every user's.
+        # With no user on the run, there is nothing to scan.
+        raw_user = context.get("user_id")
+        if not raw_user:
+            return {"status": "SUCCESS", "output_patch": {"tasks_recurrence_check_result": {
+                "message": "No user; nothing to check."
+            }}}
+        user_id = uuid.UUID(str(raw_user))
+        t = threading.Thread(target=handle_recurrence, kwargs={"user_id": user_id}, daemon=True)
         t.start()
         return {"status": "SUCCESS", "output_patch": {"tasks_recurrence_check_result": {
             "message": "Recurrence job started in background."

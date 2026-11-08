@@ -63,6 +63,14 @@ def record_feedback(
     if uid is None:
         raise ValueError("a valid user_id is required")
 
+    # Keep a history_id only if it is the caller's own search: it was stored as given, so a row
+    # could point at another user's search history.
+    if history_id:
+        from apps.search.services.search_service import get_search_history_item
+
+        if get_search_history_item(db, str(uid), history_id) is None:
+            history_id = None
+
     nq = _normalized_query(query)
     kind = _kind(signal)
     weight = SIGNAL_WEIGHTS[signal]

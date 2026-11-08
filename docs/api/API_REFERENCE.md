@@ -227,6 +227,8 @@ Replay Automation Log
 #### GET /apps/automation/scheduler/status
 Get Scheduler Status
 
+**Access:** operator only: an admin session or a `platform.admin` key. Anyone else gets 403 (2026-11-08).
+
 **Response 200:** unspecified
 
 #### POST /apps/automation/tasks/{task_id}/trigger
@@ -825,7 +827,9 @@ Check Readiness
 #### GET /apps/dashboard/health
 Get Health Logs
 
-**Parameters:** limit (query): integer
+**Access:** operator only: an admin session or a `platform.admin` key. Anyone else gets 403 (2026-11-08).
+
+**Parameters:** limit (query): integer, 1 to 500
 
 **Response 200:** unspecified
 
