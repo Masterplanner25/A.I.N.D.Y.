@@ -118,11 +118,30 @@ writer's own key (FR-59). Its output is checked like §2's answers: every claim 
 
 ---
 
-## 5. Style (later)
+## 5. Structure: "What's the structure?" (decided 2026-11-08, §8 decisions 9–11)
 
-The repetition panel counts, and it cannot tell a rhetorical device from an accident. The owner's
-published pieces are the reference: a structure the owner repeats across a series is a device. This
-is the least defined part of the spec and comes last.
+**The goal (owner, 2026-11-08): reveal that there is a structure in the first place.** It does not judge a structure
+deliberate or accidental, and it never grades the draft. The repetition panel counts repeats; this shows the patterns
+they belong to. Like §4, it is information for the writer before publication, in the SEO tool, on a draft.
+
+**What is shown, free, on every analysis (no model, decision 10):**
+- **The skeleton:** the sections in order with their relative lengths, how the piece opens and how it closes.
+- **Repeated sentence openings:** sentences that start the same way ("It could …", "Phase 1 — … Phase 2 — …"), with
+  every instance quoted.
+- **The repeats from the old repetition panel** (repeated 2–4-word phrases, overused words), folded in (decision 11):
+  a repeat that belongs to a pattern is shown as part of it, and the rest stand on their own.
+
+**On a button, What's the structure? (one gpt-5.5 call, about 20–50 s, the writer's key):** the model names the
+patterns, such as contrast ("It wasn't X. It was Y."), lists, naming sequences and refrains. It quotes every instance,
+including ones whose words differ, which the free pass cannot see. As in §2 and §4, every quoted instance is checked
+against the text.
+
+**Against the draft's series (decision 9):** beside the draft, the shape its series' published pieces share: the
+skeleton they have in common, and openings and closings that recur across them, such as the article list and *What's
+Next?* footer. Shown side by side, never as a score.
+- **Which series:** one of the owner's confirmed series in RippleTrace. It is taken from the draft's title when the
+  title starts with the series name ("2026 Agents Case Study Series: …"); otherwise the writer picks one, or none.
+- **Its pieces:** the series' published pieces with stored text (phase B), read from the database at no model cost.
 
 ---
 
@@ -148,11 +167,11 @@ The owner's chat on 2026-10-25 described two workflow families:
 | **B** | Per published piece, once per content hash: answers and links stored. Ingestion keeps link targets. Inbound links and series navigation. **B1 built 2026-11-08:** ingestion keeps link targets (`drop_points.content_links`, migration `rt2links0001`; `services/links.py`), and `content_archive.backfill_links` recovers them for stored pieces (DEV from its markdown text, Substack and Medium by one re-fetch). **B2 built 2026-11-08:** `piece_answers` (one reading per piece and `content_hash`) and `drop_points.answers` (migration `rt3answers0001`, every stored piece `skipped`: decision 3), written by `piece_answers_v1.nd` behind `AINDY_PIECE_ANSWERS_NODUS` with a recorded Python fallback; queue or read one at `/apps/rippletrace/drop_points/{id}/answers`. **B3 built 2026-11-08:** `GET /apps/rippletrace/drop_points/{id}/links` (`services/piece_links.py`): links to, linked from, series neighbours and whether each pair links; RippleTrace's "Answers & links" panel shows it with the stored answers. B1's backfill now re-fetches DEV pieces whose text came from the feed (19 had lost their links) | a links column on `drop_points`, and a table for answers |
 | **C** ✅ **built 2026-11-08** | The tie to resolution: answers matched against the Resolution Check's questions per Work. Shown on the Work card, and offered to the planner as one line. As built (`masterplan/services/resolution_writing.py`): for each question the engines did not fully resolve, the owner's pieces that answer questions **about** its subject (the subject named in the answered question, kind fitting). Name matching cannot tell an answer to "What is A.I.N.D.Y.?" from one about A.I.N.D.Y.'s history (found live), so it never claims a piece answers the engines' exact question. In the Resolution section and as a clause on the Work's planner line | none beyond B |
 | **D1** ✅ **built 2026-11-08** | **What does this claim?** (§4, decided 2026-11-08): claims in a draft, checked against the owner's facts and denied claims, and the rest marked sourced or not. As built: `POST /apps/seo/claims` (`apps/search/services/article_claims.py`), the owner's Works read through `sys.v1.work.get_claim_truth` (masterplan, `work.read`); the model points at numbered facts, denials and links and only real pointers are kept; the SEO tool's button and panel | none |
-| **D2** | Style (§5), later | not scoped |
+| **D2** | **What's the structure?** (§5, decided 2026-11-08): the draft's skeleton and repeated openings (free), its patterns named on a button (one model call), beside its series' shared shape; the repetition panel folded in | none expected |
 
 ---
 
-## 8. Decisions: the owner's, **1–4 taken 2026-11-08 as recommended; 5–8 (phase D) the same day**
+## 8. Decisions: the owner's, **1–4 taken 2026-11-08 as recommended; 5–8 (phase D1) and 9–11 (phase D2) the same day**
 
 1. **Which model reads for answers? DECIDED: gpt-5.5**, the drafter's model, at low reasoning effort.
    - It follows instructions where gpt-4o did not.
@@ -184,6 +203,21 @@ The owner's chat on 2026-10-25 described two workflow families:
 7. **How far is a claim about anything else checked? DECIDED: sourced or not**, from the draft's own links. No web check.
    - Not chosen: asking Perplexity whether each claim holds up (paid per claim, slower, only as good as the search).
 8. **What does a warning do? DECIDED: information only.** It never blocks.
+
+**Phase D2, decided 2026-11-08 (owner).** The goal was reframed first: D2 reveals that a structure exists. It does
+not tell a deliberate structure from an accidental one, which is what §5 said before.
+
+9. **What is the draft's structure shown against? DECIDED: the draft and its series**, side by side: the shape the
+   series' published pieces share, from their stored text, at no model cost. Never as a grade.
+   - Not chosen: the draft alone (says nothing about how it sits among the owner's pieces); the whole catalogue
+     (broadest, but noisier, since different series have different shapes).
+10. **How is the structure found? DECIDED: free, plus a naming button.**
+    - Always shown, with no model: the skeleton and repeated sentence openings.
+    - A button makes one gpt-5.5 call to name the patterns, quoting every instance.
+    - Not chosen: free only (cannot see a pattern whose words differ); model only (shows nothing until pressed).
+11. **What happens to the repetition panel? DECIDED: folded in.** Its repeated phrases and overused words become part of
+    the structure view: as instances of a pattern where they belong to one, on their own where they don't.
+    - Not chosen: keeping it separate; retiring it.
 
 **Context the owner gave the same day.** Disambiguation comes from many signals across the body of work, never
 from one or two articles. That is why §2 and §3 measure each piece *in relation to the rest of the catalogue*
