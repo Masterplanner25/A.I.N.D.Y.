@@ -29,7 +29,12 @@ def _syscall_node(name: str, state: dict, context: dict, capability: str) -> dic
     # branch would report a half-applied effect as a completed flow node. `.get("error")`
     # because only an `error` envelope is guaranteed to carry that key.
     if result["status"] != "success":
-        return {"status": "RETRY", "error": result.get("error") or f"syscall {name} returned {result['status']}"}
+        error = result.get("error") or f"syscall {name} returned {result['status']}"
+        from apps._shared.provider_keys import is_key_problem_text
+
+        if is_key_problem_text(error):  # no key, or a refused one: retrying cannot help (FR-59)
+            return {"status": "FAILURE", "error": error}
+        return {"status": "RETRY", "error": error}
     return {"status": "SUCCESS", "output_patch": result["data"]}
 
 

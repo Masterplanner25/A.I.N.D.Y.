@@ -295,3 +295,32 @@ def test_genesis_through_its_syscall_answers_402(app, client, per_user, stranger
     response = client.post("/apps/genesis/message", json={"session_id": session_id, "message": "Hello"})
     assert response.status_code == 402, response.text[:400]
     assert "Add it in Settings" in _message(response)
+
+
+@pytest.mark.parametrize("module", [
+    "apps.automation.flows.flow_definitions",
+    "apps.automation.flows.system_flows",
+    "apps.tasks.flows.tasks_flows",
+])
+def test_a_flow_node_fails_a_key_problem_instead_of_retrying_it(module, monkeypatch):
+    """Runtime 2.34.0 handoff §4: `_syscall_node` turned every syscall error into RETRY, so a refused key was
+    tried three times. A key problem is FAILURE (one attempt); anything else still retries."""
+    import importlib
+
+    import AINDY.kernel.syscall_dispatcher as dispatcher_module
+
+    errors = iter([
+        "HTTP_402:OpenAI refused your API key (ending abcd). Replace it in Settings.",
+        "connection reset",
+    ])
+
+    class _Dispatcher:
+        def dispatch(self, name, payload, ctx):
+            return {"status": "error", "error": next(errors)}
+
+    monkeypatch.setattr(dispatcher_module, "get_dispatcher", lambda: _Dispatcher())
+    node = importlib.import_module(module)._syscall_node
+    context = {"user_id": str(uuid.uuid4()), "trace_id": "t", "execution_unit_id": "eu"}
+    first = node("sys.v1.example.write", {}, context, "example.write")
+    assert first["status"] == "FAILURE" and first["error"].startswith("HTTP_402:")
+    assert node("sys.v1.example.write", {}, context, "example.write")["status"] == "RETRY"

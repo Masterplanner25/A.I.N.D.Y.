@@ -137,7 +137,7 @@ def llm_client(user_id: Any, provider: str = "openai", *, db=None, system: bool 
 def provider_key(user_id: Any, provider: str, *, db=None, system: bool = False):
     """The resolved key for a raw HTTP call: `.value` (may be None or empty when unset),
     `.source` (`user` or `server`), `.key_hint`. Counted in `aindy_llm_key_source_total`."""
-    from AINDY.platform_layer.llm_client import _count_key_source
+    from AINDY.platform_layer.llm_client import count_key_source  # public since 2.34.0
     from AINDY.platform_layer.provider_keys import ProviderKeyError, resolve_provider_key
 
     uid = _paying_user(user_id, system)
@@ -145,7 +145,7 @@ def provider_key(user_id: Any, provider: str, *, db=None, system: bool = False):
         resolved = resolve_provider_key(provider, uid, db=db)
     except ProviderKeyError as exc:
         raise as_problem(exc) from exc
-    _count_key_source(resolved.provider, resolved.source)
+    count_key_source(resolved.provider, resolved.source)
     return resolved
 
 
@@ -207,3 +207,9 @@ def require_key(user_id: Any, provider: str = "openai", *, db=None) -> None:
     also cheaper: nothing starts for a person who cannot pay."""
     if not can_pay(user_id, provider, db=db):
         raise ProviderKeyProblem(provider, REQUIRED)
+
+
+def is_key_problem_text(text: Any) -> bool:
+    """A key problem that crossed a syscall boundary as text. A flow node that sees one returns FAILURE, never
+    RETRY: a refused key retried is the same refusal, three paid attempts (runtime 2.34.0 handoff §4)."""
+    return f"HTTP_{KEY_PROBLEM_STATUS}:" in str(text or "")
