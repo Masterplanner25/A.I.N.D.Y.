@@ -626,6 +626,7 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_SEARCH_EMBEDDING_RANKING` | search | `""` |
 | `AINDY_SEARCH_OUTCOME_WEIGHTING` | search | `""` |
 | `AINDY_SEARCH_OUTREACH_SEND` | agent, search | `""` |
+| `AINDY_SECRET_PROVIDER_KEY_ENCRYPTION_KEYS` | (runtime) | `""` |
 | `AINDY_SEGMENT_JUDGE_MODEL` | search |  |
 | `AINDY_SHARE_DRAFTS_MODEL` | rippletrace |  |
 | `AINDY_SHARE_DRAFTS_NODUS` | rippletrace | `1` |
