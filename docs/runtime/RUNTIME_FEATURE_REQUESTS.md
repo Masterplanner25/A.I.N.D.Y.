@@ -64,6 +64,34 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-61 — a scoped trace graph drops the userless `external.call.*` events in the caller's own trace, and every edge through them 🔴 OPEN — filed 2026-11-08, P3
+
+**apps-monolith ref:** found verifying the 2.32.0 adoption live (`RUNTIME_2_32_0_UPGRADE.md` §7). Read on 2.32.0.
+
+**What we see.** FR-60's scoping keeps the caller's events and the edges whose ends both remain. But the runtime writes
+`external.call.started`, `.completed` and `.failed` with `user_id` NULL: 26,452 such rows here, in 5,279 traces that also
+hold the owner's events. The owner's largest trace (`d534a3fd…`, one embedding batch) reads unscoped 584 nodes, 583 edges;
+scoped to the owner, 582 nodes, **291 edges, depth 1**. The model call was the hub, so the chain falls apart.
+`GET /apps/rippletrace/{trace_id}` now shows that.
+
+**Ask.** Either stamp the caller's `user_id` on `external.call.*` events when the call has one (the planner already
+records `key_source`, so it knows whose call it is), or keep an event with no user in a scoped graph when it shares the
+trace with the caller's events and no other user's. The first also fixes the 26,452 rows going forward; existing rows
+could take the user of their trace's other events.
+
+## FR-62 — `aindy-runtime memory backfill-paths --yes` fails: the CLI never loads the `users` model 🔴 OPEN — filed 2026-11-08, P3
+
+**apps-monolith ref:** the 2.31.6 handoff's ask 2, run live on 2.32.0.
+
+**What we see.** The dry run works (`1721 node(s) would get a stored path; left alone: 1903 with no owner`). With `--yes`:
+`error: backfilling memory paths failed: Foreign key associated with column 'memory_nodes.user_id' could not find table
+'users' with which to generate a foreign key to target column 'id'`, and nothing is written. Calling
+`backfill_memory_paths(db, dry_run=False)` in-process after `import AINDY.db.models` worked: `filled 1721, not_filled 0,
+batches 4`. Its report also said `would_fill: 0` on that same run, which looks wrong.
+
+**Ask.** Import the models in the CLI branch (as `settle-stale-units` presumably does), and check `would_fill` on a
+writing run. A test that runs the command, not the function, would have caught the first.
+
 ## FR-59 — provider keys cannot be per user: every account's model, embedding and search calls spend the operator's keys ✅ runtime half SHIPPED in 2.32.0 (#922, #923, DEC-121; off by default, `AINDY_PROVIDER_KEYS=server`) · 🟡 phase 3 (our ~25 paid call sites, the Settings card, the flip) is ours. Filed 2026-11-08, P2; adopted in `RUNTIME_2_32_0_UPGRADE.md`
 
 **apps-monolith ref:** the app's 11-07 route sweep, and the owner (2026-11-08): *"shouldn't people's API keys be scoped
