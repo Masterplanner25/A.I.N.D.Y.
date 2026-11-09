@@ -97,6 +97,10 @@ So today only local stdio clients can read A.I.N.D.Y.: Claude Code and Claude De
 - Nothing about exposure: we would put it behind our own HTTPS (the stack binds to `127.0.0.1`; the owner decides when
   and how it is reachable).
 
+**Side note, found on the first Claude Desktop session (stdio, 2026-11-09).** A memory read with path `/` was
+refused correctly, since paths must start with `/memory`. But the refusal took 5.6 s and came back labelled transient. A
+bad input should fail at once and as not retryable; the label invites a client to retry a call that can never succeed.
+
 **What we do meanwhile.** Claude Code and Claude Desktop over stdio. ChatGPT and claude.ai wait for this.
 
 ## FR-65 — the `aindy-sdk` watcher cannot count for a user: it sends a per-user key in the wrong header, sends no user, and a session ends only on a screen lock 🔴 OPEN — filed 2026-11-08, P2
