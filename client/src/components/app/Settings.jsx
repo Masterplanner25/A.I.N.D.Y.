@@ -1,6 +1,7 @@
 import ProviderKeysCard from "./ProviderKeysCard";
+import WatcherKeysCard from "./WatcherKeysCard";
 
-// Account settings. For now, one card: your own provider API keys (FR-59).
+// Account settings: your own provider API keys (FR-59) and your watcher key (audit D1).
 export default function Settings() {
   return (
     <div className="max-w-3xl space-y-6">
@@ -9,6 +10,7 @@ export default function Settings() {
         <h1 className="text-lg text-zinc-100">Your account</h1>
       </div>
       <ProviderKeysCard />
+      <WatcherKeysCard />
     </div>
   );
 }

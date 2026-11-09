@@ -650,6 +650,21 @@ pays a call with no user with the server's key. Only the operator's own calls pa
   account pays with its own key from Settings or gets the 402.
   `test_provider_key_routing.py` fails on a new direct client or key read; add each new site to its per-site list.
 
+### The watcher feeds `focus_quality` (audit D1, owner 2026-11-08)
+
+`focus_quality` is 15% of the score and read 50 in every row until a watcher reported. The runtime ships the watcher:
+`/watcher` routes with per-user keys (DEC-117), and a Windows client in `aindy-sdk`. As shipped, its signals can't count
+for anyone (FR-65).
+
+- **Run it with `scripts/watcher.py`, never the SDK directly.** The launcher sends the key as `X-Platform-Key` and ends
+  a session after `AINDY_WATCHER_IDLE_MINUTES` (default 5) of keyboard and mouse idle. The SDK alone ends one only on a
+  screen lock.
+- **The key:** a watcher key from Settings (Watcher key), in `AINDY_WATCHER_KEY` or `~/.aindy/watcher_key`. Never the
+  shared `AINDY_API_KEY`, which must not live on a laptop.
+- **Only `session_ended` moves the score.** `focus_quality` reads `session_ended`, `distraction_detected` and
+  `focus_achieved` over 14 days.
+- **The watcher had never been used before** (owner). Expect to find its edges, and file them on FR-65.
+
 ### `content.draft` — what the drafter is given, and the model
 
 A draft about a Work (`work=` set) gets four things from `draft_service.write_draft`: the owner's
