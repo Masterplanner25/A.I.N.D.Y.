@@ -243,7 +243,10 @@ def _apply_goal_weighting(
         adjusted_payload["next_action"] = next_action
         return decision_type, adjusted_payload
 
-    if float(top_goal.get("ranked_priority") or 0.0) >= 0.70:
+    # Only a goal with a measure and a reading may override the next action (GOALS_LAYER_SPEC decision 4, 2026-11-09):
+    # a declared goal could otherwise steer the loop on priority alone. A goal without the key is treated as measured,
+    # the behaviour before the goals layer.
+    if float(top_goal.get("ranked_priority") or 0.0) >= 0.70 and top_goal.get("measured", True):
         adjusted_payload["goal_adjustment"] = {
             "reason": "low_goal_alignment",
             "goal_id": top_goal.get("id"),

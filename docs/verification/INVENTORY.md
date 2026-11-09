@@ -17,13 +17,13 @@ the audit's question. Live row counts are not here (they change): `python script
 | | ours | runtime's |
 |---|---|---|
 | Domains | 16 (3 core) | |
-| `/apps` routes | 288 (190 called by the client, 98 not) | 35 (mounted under `/apps`) |
+| `/apps` routes | 292 (196 called by the client, 96 not) | 35 (mounted under `/apps`) |
 | Syscalls | 87 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 16 | 0 |
-| Registered jobs | 35 | 0 |
+| Registered jobs | 36 | 0 |
 | Python flow graphs | 82 | 1 |
-| Tables | 88 | 37 |
+| Tables | 89 | 37 |
 | Nodus workflows (`.nd`) | 5 | |
 | `AINDY_*` flags read by our code | 53 | |
 
@@ -32,7 +32,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | Domain | Core | Declared imports | Routes | Not called | Syscalls | Tools | Sched. jobs | Jobs | Flows | `.nd` | Tables |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | agent |  |  | 15 | 4 | 0 | 2 | 0 | 1 | 0 | 0 | 0 |
-| analytics | yes | arm, identity | 35 | 20 | 9 | 1 | 1 | 7 | 7 | 2 | 25 |
+| analytics | yes | arm, identity | 35 | 20 | 9 | 1 | 1 | 8 | 7 | 2 | 25 |
 | arm |  | analytics | 10 | 3 | 4 | 3 | 0 | 1 | 6 | 0 | 4 |
 | authorship |  |  | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 |
 | automation |  |  | 9 | 4 | 9 | 0 | 2 | 1 | 21 | 0 | 8 |
@@ -40,7 +40,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | dashboard |  |  | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | freelance |  | automation, search, tasks | 22 | 18 | 3 | 2 | 0 | 1 | 16 | 0 | 9 |
 | identity | yes |  | 6 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 1 |
-| masterplan |  | identity | 76 | 14 | 17 | 3 | 3 | 14 | 16 | 0 | 23 |
+| masterplan |  | identity | 80 | 12 | 17 | 3 | 3 | 14 | 16 | 0 | 24 |
 | memory |  |  | 8 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | network_bridge |  | authorship, automation | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | rippletrace |  | analytics, automation | 50 | 4 | 11 | 0 | 5 | 1 | 0 | 3 | 8 |
@@ -119,7 +119,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 **Scheduled jobs (1):** `daily_infinity_score_recalculation` (cron hour=7)
 
-**Registered jobs (7):** `analytics.expectation_model_train`, `analytics.infinity_execute`, `analytics.kpi_snapshot`, `analytics.latest_adjustment`, `analytics.latest_adjustment_payload`, `analytics.reasoning_recommendation`, `scheduler.infinity_scores`
+**Registered jobs (8):** `analytics.expectation_model_train`, `analytics.infinity_execute`, `analytics.kpi_snapshot`, `analytics.latest_adjustment`, `analytics.latest_adjustment_payload`, `analytics.reasoning_recommendation`, `analytics.resolve_goal_attainment`, `scheduler.infinity_scores`
 
 **Python flow graphs (7):** `analytics_linkedin_ingest` (1 nodes), `analytics_masterplan_get` (1 nodes), `analytics_masterplan_summary` (1 nodes), `reasoning_apply` (1 nodes), `score_feedback_list` (1 nodes), `score_get` (1 nodes), `score_history` (1 nodes)
 
@@ -255,7 +255,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 ## masterplan
 
-**Routes (76).** — = no client code calls it.
+**Routes (80).** — = no client code calls it.
 
 - `POST /apps/genesis/audit`
 - `GET /apps/genesis/draft/{session_id}`
@@ -266,9 +266,13 @@ the audit's question. Live row counts are not here (they change): `python script
 - `GET /apps/genesis/session/{session_id}`
 - `POST /apps/genesis/synthesize`
 - — `POST /apps/genesis/{plan_id}/activate`
-- — `GET /apps/goals`
-- — `POST /apps/goals`
+- `GET /apps/goals`
+- `POST /apps/goals`
+- `GET /apps/goals/overview`
 - — `GET /apps/goals/state`
+- `PATCH /apps/goals/{goal_id}`
+- `POST /apps/goals/{goal_id}/confirm`
+- `POST /apps/goals/{goal_id}/drop`
 - `GET /apps/market`
 - `POST /apps/market/entities`
 - `DELETE /apps/market/entities/{entity_id}`
@@ -344,7 +348,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 **Python flow graphs (16):** `genesis_activate` (1 nodes), `genesis_audit` (1 nodes), `genesis_draft_get` (1 nodes), `genesis_lock` (1 nodes), `genesis_session_create` (1 nodes), `genesis_session_get` (1 nodes), `genesis_synthesize` (1 nodes), `goals_list` (1 nodes), `goals_state` (1 nodes), `masterplan_activate` (1 nodes), `masterplan_anchor` (1 nodes), `masterplan_get` (1 nodes), `masterplan_list` (1 nodes), `masterplan_lock` (1 nodes), `masterplan_lock_from_genesis` (1 nodes), `masterplan_projection` (1 nodes)
 
-**Tables (23):** `genesis_sessions`, `goal_states`, `goals`, `market_entities`, `market_evidence`, `market_proposals`, `market_revisions`, `market_segments`, `master_plans`, `plan_objectives`, `plan_phases`, `plan_strategies`, `resolution_answers`, `resolution_claims`, `resolution_runs`, `segment_works`, `work_drafts`, `work_links`, `work_objectives`, `work_presence`, `work_proposal_dismissals`, `work_revisions`, `works`
+**Tables (24):** `genesis_sessions`, `goal_objectives`, `goal_states`, `goals`, `market_entities`, `market_evidence`, `market_proposals`, `market_revisions`, `market_segments`, `master_plans`, `plan_objectives`, `plan_phases`, `plan_strategies`, `resolution_answers`, `resolution_claims`, `resolution_runs`, `segment_works`, `work_drafts`, `work_links`, `work_objectives`, `work_presence`, `work_proposal_dismissals`, `work_revisions`, `works`
 
 ## memory
 

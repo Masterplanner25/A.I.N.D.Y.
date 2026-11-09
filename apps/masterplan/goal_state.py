@@ -12,7 +12,8 @@ class GoalState(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     goal_id = Column(UUID(as_uuid=True), ForeignKey("goals.id"), nullable=False, unique=True, index=True)
-    progress = Column(Float, nullable=False, default=0.0, server_default="0")
+    # Null for a declared goal, which has no progress number (GOALS_LAYER_SPEC §4, decision 2).
+    progress = Column(Float, nullable=True, default=0.0, server_default="0")
     last_update = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

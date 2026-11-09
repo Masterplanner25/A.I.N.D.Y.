@@ -158,6 +158,21 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
             user_id=user_id,
             masterplan_id=getattr(masterplan, "id", None),
         )
+    # GOALS_LAYER_SPEC §5: the plan's anchor and success criteria, proposed as goals the person confirms. Proposals act
+    # on nothing until confirmed. Non-fatal, like the strategy layer above.
+    try:
+        from apps.masterplan.services.goal_seeding import propose_goals
+
+        propose_goals(db, user_id, plan=masterplan)
+    except Exception:
+        db.rollback()
+        emit_observability_event(
+            logger,
+            event="masterplan_goal_proposals_failed",
+            session_id=session_id,
+            user_id=user_id,
+            masterplan_id=getattr(masterplan, "id", None),
+        )
 
     # Capture lock event to memory (fire-and-forget)
     if user_id:

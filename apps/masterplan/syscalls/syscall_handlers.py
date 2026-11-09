@@ -430,6 +430,10 @@ def _handle_goal_create(payload: dict, ctx: SyscallContext) -> dict:
             priority=payload.get("priority", 0.5),
             status=payload.get("status", "active"),
             success_metric=payload.get("success_metric", {}),
+            # GOALS_LAYER_SPEC §5: a stated goal, measured by the objectives it links to, else declared.
+            source="stated",
+            measure="objectives" if payload.get("objective_ids") else "declared",
+            objective_ids=list(payload.get("objective_ids") or []),
         )
         return {"goal_create_result": goal}
     finally:

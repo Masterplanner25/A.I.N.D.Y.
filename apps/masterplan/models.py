@@ -1,7 +1,7 @@
 """Masterplan app ORM models."""
 
 from apps.masterplan.goal_state import GoalState
-from apps.masterplan.goals import Goal
+from apps.masterplan.goals import Goal, GoalObjective
 from apps.masterplan.masterplan import GenesisSessionDB, MasterPlan
 from apps.masterplan.strategy_layer import PlanObjective, PlanPhase, PlanStrategy
 from apps.masterplan.work_model import (
@@ -28,6 +28,7 @@ from apps.masterplan.market_model import (
 __all__ = [
     "GenesisSessionDB",
     "Goal",
+    "GoalObjective",
     "GoalState",
     "MarketEntity",
     "MarketEvidence",

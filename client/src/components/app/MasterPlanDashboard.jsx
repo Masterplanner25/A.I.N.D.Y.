@@ -13,6 +13,7 @@ import { EmptyState } from "../shared/EmptyState";
 import { safeMap } from "../../utils/safe";
 import { useToast } from "../../utils/useToast";
 import { useMasterplanProjection } from "../../context/MasterplanProjectionContext.jsx";
+import GoalsPanel from "./GoalsPanel.jsx";
 import PhasePanel from "./PhasePanel.jsx";
 import PacePanel from "./PacePanel.jsx";
 import PlanStructure from "./PlanStructure.jsx";
@@ -427,6 +428,9 @@ export default function MasterPlanDashboard() {
 
                 {/* Pace — the ETA drift read against the plan's posture, as a proposal */}
                 {(plan.is_active || plan.status === "locked") && <PacePanel planId={plan.id} />}
+
+                {/* Goals — what you are working toward, above any one plan (GOALS_LAYER_SPEC §6) */}
+                {(plan.is_active || plan.status === "locked") && <GoalsPanel />}
 
                 {/* Phases and the phase-advance proposal — any plan with a strategy layer */}
                 {(plan.is_active || plan.status === "locked") && <PhasePanel planId={plan.id} />}
