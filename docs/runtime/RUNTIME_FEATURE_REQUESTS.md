@@ -64,6 +64,42 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-65 — the `aindy-sdk` watcher cannot count for a user: it sends a per-user key in the wrong header, sends no user, and a session ends only on a screen lock 🔴 OPEN — filed 2026-11-08, P2
+
+**apps-monolith ref:** the owner's audit decision D1 (`AUDIT_2026-11-01.md` §4, 2026-11-08). Read on runtime 2.34.0 and
+`aindy-sdk` 1.0.0, installed in our venv. The owner: this hookup is the watcher's first real use; little work has gone
+into it since it was created.
+
+**What we see.**
+1. **The header.** `signal_emitter.py:167-170` always sends the key as `X-API-Key`. A per-user watcher key (DEC-117,
+   minted at `POST /watcher/keys`) is accepted only as `X-Platform-Key`; as `X-API-Key` it fails the shared-secret check
+   with 401 (`auth_service.py:885-889`).
+2. **No user.** `SessionEvent` has no `user_id` (`session_tracker.py:43-52`). With the shared key the rows land with
+   `user_id` NULL, and every per-user reader (our `focus_quality`, scored from `session_ended`, `distraction_detected`
+   and `focus_achieved`) skips them. DEC-117 also says the shared key must not live on a user's machine. So as shipped,
+   no configuration makes the client's signals count for anyone.
+3. **A session ends only on a screen lock.** `session_ended` is emitted only when the activity is classed `idle`
+   (`session_tracker.py:181-184`), which on Windows means no foreground window, or LockApp, LogonUI or a screensaver in
+   front (`classifier.py:42-50, 213-237`). There is no keyboard or mouse idle detection, and stopping the watcher sends
+   no `session_ended` (`watcher.py:109-112`). A working day without a lock never reaches the score.
+4. **Smaller:**
+   - `_focused_seconds += elapsed` adds the whole time in the current state on every poll (`session_tracker.py:202`),
+     so the client's `focus_score` is inflated;
+   - the work, distraction and browser app lists are hard-coded (`classifier.py`);
+   - there is no console script, and the README's `examples/watcher_demo.py` is not in the package;
+   - the runtime's `watcher_service.py:10-17` lists different signal types from `AINDY/watcher/constants.py:4-13`, so
+     filtering `GET /watcher/signals` by `focus_achieved` answers 422.
+
+**Ask.**
+- Send a per-user key as `X-Platform-Key` (the server takes the user from it).
+- Real idle detection (`GetLastInputInfo` on Windows) with a configurable threshold, ending the session after it.
+- `session_ended` on a clean stop.
+- Fix the focused-seconds sum.
+- Configurable app lists, and a console script.
+
+**What we do meanwhile.** A small launcher in this repo runs the SDK's watcher with the emitter's header overridden to
+`X-Platform-Key`, and a way to mint a watcher key. Sessions still end only on a lock until the idle detection ships.
+
 ## FR-63 — `chat_completion` hands back a refused user key as a plain `LLMCallError`, not `ProviderKeyRejected` ✅ SHIPPED in 2.34.0 (#930): both chat helpers raise the key errors as themselves; our bounded walk stays as a fallback. Filed 2026-11-08, P3
 
 **apps-monolith ref:** FR-59 phase 3 routing (`RUNTIME_2_32_0_UPGRADE.md` §8). Read on 2.32.0.
