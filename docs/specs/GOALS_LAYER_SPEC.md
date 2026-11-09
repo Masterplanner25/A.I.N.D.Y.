@@ -183,7 +183,9 @@ than only through the loop's recommendation.
   - `POST …/confirm`, `…/drop`, `PATCH /apps/goals/{id}` (marks a declared goal done);
   - plan lock calls `propose_goals`;
   - `POST /apps/goals` takes `objective_ids` | none beyond A |
-| **C** | The Goals panel (§6) and the planner line | none |
+| **C** ✅ **built 2026-11-09** | The Goals panel (§6) and the planner line. As built:
+  - `GoalsPanel.jsx`, above Phases on the MasterPlan page: proposals with objective checkboxes, confirm or drop; each goal's measure and progress, or *no measurement yet* / *declared*; mark done (declared only), reopen, drop; add your own;
+  - the planner block lists the active goals, one line each, from `masterplan.planning_context` (`goal_lines`), with or without a plan | none |
 | **D** | Watch the readers act on real goals for a while (§3); then the score question (decision 6) | none |
 
 Each phase is one PR. A reaches nothing until B writes the first goal, so A ships behind no flag and changes no

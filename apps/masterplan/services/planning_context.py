@@ -21,8 +21,26 @@ from sqlalchemy.orm import Session
 OPEN_STRATEGY_STATUSES = ("proposed", "active")
 
 
+def goal_lines(*, user_id: Any, db: Session) -> list[dict[str, Any]]:
+    """The person's active goals for the planner, one each (GOALS_LAYER_SPEC §6, decision 5): name, how it is measured,
+    and its progress, or why it has none."""
+    from apps.masterplan.services.goal_seeding import _view
+    from apps.masterplan.models import Goal
+
+    rows = (db.query(Goal).filter(Goal.user_id == user_id, Goal.status == "active")
+            .order_by(Goal.priority.desc(), Goal.created_at.asc()).all())
+    goals = []
+    for goal in rows:
+        view = _view(db, goal)
+        goals.append({"name": view["name"], "measure": view["measure"], "progress": view["progress"],
+                      "objectives": [o["name"] for o in view["objectives"]], "target_value": view["target_value"],
+                      "unit": view["unit"], "target_date": (view["target_date"] or "")[:10] or None})
+    return goals
+
+
 def build_planning_context(*, user_id: Any, db: Session) -> dict[str, Any] | None:
-    """The active plan, its current phase, and its open strategies — or None with no active plan."""
+    """The active plan, its current phase, its open strategies and the person's active goals. Goals belong to the
+    person, not the plan, so they are listed without an active plan too. None when there is neither."""
     from apps.masterplan.models import MasterPlan
     from apps.masterplan.services import strategy_layer_service as layer
     from apps.masterplan.services.phase_advance import frontier_phase, strategy_task_counts
@@ -33,8 +51,9 @@ def build_planning_context(*, user_id: Any, db: Session) -> dict[str, Any] | Non
         .filter(MasterPlan.user_id == user_id, MasterPlan.is_active.is_(True))
         .first()
     )
+    goals = goal_lines(user_id=user_id, db=db)
     if plan is None:
-        return None
+        return {"masterplan_id": None, "current_phase": None, "strategies": [], "goals": goals} if goals else None
 
     phases = layer.list_phases(db, masterplan_id=plan.id)
     phase_names = {p["id"]: p["name"] for p in phases}
@@ -69,4 +88,5 @@ def build_planning_context(*, user_id: Any, db: Session) -> dict[str, Any] | Non
         "masterplan_id": plan.id,
         "current_phase": {"id": current.id, "name": current.name} if current else None,
         "strategies": strategies,
+        "goals": goals,
     }
