@@ -8,7 +8,7 @@ owner: "app-team"
 
 # Goals layer: what the person is working toward, above any one plan
 
-**Status:** scoped 2026-11-09, not built. The decisions in §8 are the owner's.
+**Status:** scoped 2026-11-09; §8 decided the same day (all six as recommended). Not built.
 
 **Origin.** The 2026-11-01 audit found Goals to be a dead twin (finding 6), and the owner decided on 2026-11-08 (D2) to
 **wire it up as a separate user-level layer**, the model `STRATEGY_LAYER_SPEC` §6 Q1 and Q6 preserved. The owner asked
@@ -148,26 +148,23 @@ than only through the loop's recommendation.
 - **It does not link strategies to goals** (Q1).
 - **It does not invent progress** for a goal nothing measures.
 
-## 8. Decisions: the owner's
+## 8. Decisions: the owner's, **all six taken 2026-11-09, as recommended**
 
-1. **Seeding: proposed, or written?**
-   - **Recommended:** proposed at lock and once for the existing plan; the person confirms each.
-   - Alternative: written directly from the anchor and criteria.
-2. **Qualitative goals:**
-   - **Recommended:** `declared`, with no progress number, and the person marks one done.
-   - Alternative: give each a proxy measure, which risks a number that means nothing.
-3. **Keyword-overlap progress:**
-   - **Recommended:** retire it.
-   - Alternative: keep it only for `declared` goals, as a "related work" list with no progress.
-4. **The loop's `review_plan` override at `ranked_priority` ≥ 0.70:**
-   - **Recommended:** keep it, but only for goals with a measure.
-   - Alternative: keep it as is (a declared goal could then steer the loop by priority alone); or remove it.
-5. **A planner block for goals:**
-   - **Recommended:** yes, one line per active goal.
-   - Alternative: no, the loop's recommendation only.
-6. **Score effect:**
-   - **Recommended:** none until measured.
-   - Alternative: blend goal progress into the score now.
+1. **Seeding: DECIDED, proposed.** At plan lock and once for the existing plan, each goal is proposed with suggested
+   objective links; the person confirms, edits or drops each.
+   - Not chosen: written directly.
+2. **Qualitative goals: DECIDED, declared.** No progress number; recent related work is listed; the person marks one done.
+   - Not chosen: a proxy measure each, which risks a number that means nothing.
+3. **Keyword-overlap progress: DECIDED, retired.** Progress comes only from the anchor resolver and objective attainment.
+   - Not chosen: keeping it as a related-work list.
+4. **The loop's `review_plan` override: DECIDED, measured goals only.** It stays at `ranked_priority` ≥ 0.70, for goals
+   with a measure (`anchor` or `objectives`), so a declared goal cannot steer the loop on priority alone.
+   - Not chosen: keeping it for any goal; removing it.
+5. **A planner block: DECIDED, yes.** One line per active goal, with its measure and progress, beside the plan block.
+   - Not chosen: the loop's recommendation only.
+6. **Score effect: DECIDED, none yet.** Goal progress stays information until it has been measured for a while; the
+   question comes back in phase D.
+   - Not chosen: blending it in now.
 
 ## 9. Phases
 
