@@ -408,7 +408,8 @@ def _handle_analytics_score_updated(context: dict):
 
 
 def _scheduler_recalculate_all_etas() -> None:
-    from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
+    from AINDY.agents.autonomous_controller import record_decision
+    from apps._shared.autonomy import gate
     from AINDY.db.database import SessionLocal
     from apps.masterplan.services.eta_service import recalculate_all_etas
     from apps.masterplan.services.wcu_service import recalculate_all_wcu
@@ -419,9 +420,11 @@ def _scheduler_recalculate_all_etas() -> None:
         logger.warning("[ETA Scheduler] DB unavailable: %s", exc)
         return
     try:
-        trigger = {"trigger_type": "schedule", "source": "scheduler.masterplan_eta", "goal": "daily_eta_recalculation"}
-        context = {"goal": "daily_eta_recalculation", "importance": 0.55, "goal_alignment": 0.65}
-        decision = evaluate_live_trigger(db=db, trigger=trigger, context=context)
+        # `importance` in the trigger, where the evaluator reads it; in `context` it was ignored (D3).
+        trigger = {"trigger_type": "schedule", "source": "scheduler.masterplan_eta", "goal": "daily_eta_recalculation",
+                   "importance": 0.55}
+        context = {"goal": "daily_eta_recalculation", "goal_alignment": 0.65}
+        decision = gate(db, trigger=trigger, context=context)
         record_decision(db=db, trigger=trigger, evaluation=decision, trace_id=str(uuid.uuid4()), context=context)
         if decision["decision"] != "execute":
             logger.info("[ETA Scheduler] Deferred by autonomy controller: %s", decision["reason"])
