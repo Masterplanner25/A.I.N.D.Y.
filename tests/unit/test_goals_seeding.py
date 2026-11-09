@@ -112,15 +112,19 @@ def test_a_dropped_proposal_is_never_proposed_again(db_session, owner, plan):
     assert all(g["name"] != CRITERIA[3] for g in seeding.goals_overview(db_session, owner)["proposed"])
 
 
-def test_a_declared_goal_is_marked_done_and_a_measured_one_is_not(db_session, owner, plan):
+def test_a_declared_or_objectives_goal_is_marked_done_and_an_anchor_is_not(db_session, owner, plan):
     proposals = seeding.propose_goals(db_session, owner)
     funding = next(p for p in proposals if p["name"] == CRITERIA[4])
     anchor = next(p for p in proposals if p["source"] == "anchor")
     seeding.confirm_goal(db_session, owner, funding["id"])
     seeding.confirm_goal(db_session, owner, anchor["id"])
     assert seeding.update_goal(db_session, owner, funding["id"], {"status": "completed"})["status"] == "completed"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError):  # an anchor completes from its number
         seeding.update_goal(db_session, owner, anchor["id"], {"status": "completed"})
+    platforms = next(p for p in proposals if p["name"] == CRITERIA[1])
+    seeding.confirm_goal(db_session, owner, platforms["id"])
+    # an objectives goal is the person's to mark done (owner, 2026-11-09)
+    assert seeding.update_goal(db_session, owner, platforms["id"], {"status": "completed"})["status"] == "completed"
 
 
 def test_another_persons_goal_is_not_found(db_session, owner, plan):

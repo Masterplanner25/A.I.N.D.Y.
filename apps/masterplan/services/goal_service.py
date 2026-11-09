@@ -93,6 +93,10 @@ def measure_goal(db, goal: Goal) -> dict[str, Any]:
                          masterplan_id=goal.masterplan_id) or {}
         if not result.get("supported") or result.get("attainment_pct") is None:
             return {"progress": None, "reason": result.get("reason") or "unmeasured"}
+        # A value of 0 means nothing has been recorded toward it (live 2026-11-09: USD read 0.000, since freelance
+        # revenue has never held a row). That is "no measurement yet", never 0% (§4, audit D4).
+        if float(result.get("value") or 0.0) <= 0.0:
+            return {"progress": None, "reason": "nothing_recorded_yet"}
         return {"progress": round(float(result["attainment_pct"]), 4), "reason": None}
     if measure == MEASURE_OBJECTIVES:
         from apps.masterplan.services.phase_advance import objective_attainment
@@ -116,12 +120,18 @@ def measure_goal(db, goal: Goal) -> dict[str, Any]:
 
 
 def _apply_measure(db, goal: Goal, state: GoalState) -> bool:
-    """Store the measured progress on the goal's state. A measured goal at 0.999 or more completes; a declared goal
-    never completes by itself (decision 2). Returns whether the status changed."""
+    """Store the measured progress on the goal's state. Only an ANCHOR goal completes by itself, at 0.999 or more.
+    Returns whether the status changed.
+
+    Owner, 2026-11-09: an objectives goal never completes by itself. Its percentage is planned work done out of planned
+    work, so one finished task under an objective read 100% and "Formation of strategic partnerships" completed itself
+    the moment it was confirmed. At 100% it reads "all planned work done", and the person marks it done, as with a
+    declared goal (decision 2)."""
     reading = measure_goal(db, goal)
     state.progress = reading["progress"]
     state.last_update = datetime.now(timezone.utc)
-    if reading["progress"] is not None and reading["progress"] >= 0.999 and goal.status == "active":
+    if (goal.measure == MEASURE_ANCHOR and reading["progress"] is not None and reading["progress"] >= 0.999
+            and goal.status == "active"):
         goal.status = "completed"
         goal.updated_at = datetime.now(timezone.utc)
         return True

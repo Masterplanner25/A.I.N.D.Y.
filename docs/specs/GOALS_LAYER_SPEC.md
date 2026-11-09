@@ -166,6 +166,14 @@ than only through the loop's recommendation.
    question comes back in phase D.
    - Not chosen: blending it in now.
 
+**Found live, decided 2026-11-09 (owner):**
+- **An objectives goal never completes by itself.** Its percentage is planned work done out of planned work: *Partnership
+  Development* had one task, done, so "Formation of strategic partnerships" read 100% and completed the moment it was
+  confirmed. At 100% it reads "all planned work done", and the person marks it done. Only an anchor completes from its
+  number. The partnerships goal was reopened.
+- **An anchor whose value is 0 reads "no measurement yet"**, as §4 said. The USD resolver reported 0, since freelance
+  revenue has never held a row, and the goal read 0.000.
+
 ## 9. Phases
 
 | Phase | What | Schema |
