@@ -170,7 +170,12 @@ than only through the loop's recommendation.
 
 | Phase | What | Schema |
 |---|---|---|
-| **A** | Measures (§4): progress from the anchor resolver and objective attainment; keyword overlap retired (per decision 3); the readers in §3 unchanged | columns on `goals`, the `goal_objectives` table |
+| **A** ✅ **built 2026-11-09** | Measures (§4): progress from the anchor resolver and objective attainment; keyword overlap retired (per decision 3); the readers in §3 unchanged. As built:
+  - `goal_service.measure_goal` / `refresh_goal_states`;
+  - the anchor goes through the `analytics.resolve_goal_attainment` job (masterplan imports no analytics);
+  - `update_goals_from_execution` recomputes from the measures;
+  - a goal's `measured` flag gates the loop's `review_plan` override (decision 4);
+  - migration `gl1layer0001` (`goal_states.progress` nullable) | columns on `goals`, the `goal_objectives` table |
 | **B** | Seeding and proposals (§5): at lock and once for the existing plan; confirm, edit, drop; stated goals | none beyond A |
 | **C** | The Goals panel (§6) and the planner line | none |
 | **D** | Watch the readers act on real goals for a while (§3); then the score question (decision 6) | none |
