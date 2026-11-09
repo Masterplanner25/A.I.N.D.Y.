@@ -41,6 +41,13 @@ Add a note when something cost time to learn. Delete one when it stops being tru
 - **A minted token lasts about a day.**
 - **To manufacture an authority denial,** mint the token in a `docker exec` under
   `mint_token(capability_ceiling=[…])` without `external_api_call`, then `execute_run`.
+- **The Vite dev server can keep a stale `vite.config.ts` after a branch switch.** On 2026-11-09 a checkout reverted the
+  file for a moment, Vite reloaded that version and missed the pull that restored it, so `/watcher` answered 404 through
+  the dev server while the api answered 401. `touch client/vite.config.ts` makes it reload. Check a proxied prefix
+  through `localhost:5173` after switching branches.
+- **A route test makes one request.** Under the shared test transaction a request's commit is not a real commit, so a
+  second request in the same test sees none of the first one's writes (runtime 2.34.0 handoff §4). Test a lifecycle at
+  the service level, and each route on its own.
 
 ## Testing on this host
 

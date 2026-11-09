@@ -66,6 +66,8 @@ class GoalCreateRequest(BaseModel):
     priority: float = 0.5
     status: str = "active"
     success_metric: dict = Field(default_factory=dict)
+    # GOALS_LAYER_SPEC §5: a goal the person states. Measured by the objectives it links to, or declared.
+    objective_ids: list[str] = Field(default_factory=list)
 
 
 def _do_create_goal(db: Session, body: GoalCreateRequest, user_id: str):
@@ -80,6 +82,7 @@ def _do_create_goal(db: Session, body: GoalCreateRequest, user_id: str):
             "priority": body.priority,
             "status": body.status,
             "success_metric": body.success_metric,
+            "objective_ids": body.objective_ids,
         },
         db=db,
         user_id=user_id,
@@ -137,4 +140,106 @@ def list_goal_state(
         result = run_flow_or_raise("goals_state", {}, db=db, user_id=user_id)
         return result.get("data")
     return _execute_goals(request, "goals.state", handler, db=db, user_id=user_id)
+
+
+# ── GOALS_LAYER_SPEC phase B: proposals and the person's say (decided 2026-11-09) ──────────────────────────────
+
+
+class GoalEdit(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    priority: float | None = Field(default=None, ge=0.0, le=1.0)
+    objective_ids: list[str] | None = None
+
+
+class GoalUpdate(GoalEdit):
+    status: str | None = None  # "completed" marks a declared goal done; "active" reopens one
+
+
+def _goal_call(fn):
+    """Map the seeding service's refusals onto statuses: not yours or missing → 404, not allowed → 422."""
+    try:
+        return fn()
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/overview")
+@limiter.limit("60/minute")
+def goals_overview_route(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Proposals from the active plan (made once), the person's goals, and the objectives they can link to."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.masterplan.services.goal_seeding import goals_overview
+
+        return goals_overview(db, user_id)
+
+    return _execute_goals(request, "goals.overview", handler, db=db, user_id=user_id)
+
+
+@router.post("/{goal_id}/confirm")
+@limiter.limit("30/minute")
+def confirm_goal_route(
+    request: Request,
+    goal_id: str,
+    body: GoalEdit | None = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Accept a proposed goal, with any edits. It becomes active and is measured from now on."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.masterplan.services.goal_seeding import confirm_goal
+
+        edits = body.model_dump(exclude_none=True) if body else {}
+        return _goal_call(lambda: confirm_goal(db, user_id, goal_id, edits))
+
+    return _execute_goals(request, "goals.confirm", handler, db=db, user_id=user_id)
+
+
+@router.post("/{goal_id}/drop")
+@limiter.limit("30/minute")
+def drop_goal_route(
+    request: Request,
+    goal_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Drop a proposal or a goal. A dropped proposal is never proposed again."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.masterplan.services.goal_seeding import drop_goal
+
+        return _goal_call(lambda: drop_goal(db, user_id, goal_id))
+
+    return _execute_goals(request, "goals.drop", handler, db=db, user_id=user_id)
+
+
+@router.patch("/{goal_id}")
+@limiter.limit("30/minute")
+def update_goal_route(
+    request: Request,
+    goal_id: str,
+    body: GoalUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Edit a goal: its name, description, priority or objective links; `status: completed` marks a declared goal done."""
+    user_id = str(current_user["sub"])
+
+    def handler(_ctx):
+        from apps.masterplan.services.goal_seeding import update_goal
+
+        return _goal_call(lambda: update_goal(db, user_id, goal_id, body.model_dump(exclude_none=True)))
+
+    return _execute_goals(request, "goals.update", handler, db=db, user_id=user_id)
 
