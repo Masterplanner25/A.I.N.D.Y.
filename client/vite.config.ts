@@ -198,6 +198,10 @@ export default defineConfig(({ mode }) => {
         "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
         "/auth": { target: "http://127.0.0.1:8000", changeOrigin: true },
         "/apps": { target: "http://127.0.0.1:8000", changeOrigin: true },
+        // The runtime's watcher routes (Settings, Watcher key). Missing until 2026-11-09: the card's request went to
+        // Vite, came back as the SPA's HTML, and read "Could not make a key". `proxy-covers-client-paths.test.js`
+        // now checks every prefix the client calls.
+        "/watcher": { target: "http://127.0.0.1:8000", changeOrigin: true },
         // `/platform` is BOTH the SPA mount and the backend's operator API namespace
         // (51 routes). The split has to happen here rather than in a plugin middleware:
         // Vite installs the proxy ahead of plugin middlewares, so the proxy sees these
