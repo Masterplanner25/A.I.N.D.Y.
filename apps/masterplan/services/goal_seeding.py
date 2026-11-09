@@ -171,16 +171,17 @@ def drop_goal(db, user_id, goal_id) -> dict:
 
 
 def update_goal(db, user_id, goal_id, edits: dict[str, Any]) -> dict:
-    """Edit a goal. ``status: completed`` is how the person marks a declared goal done (decision 2); a measured goal
-    completes from its measure. ``status: active`` reopens one."""
+    """Edit a goal. ``status: completed`` is how the person marks a goal done: a declared one (decision 2) or one measured
+    through objectives (owner, 2026-11-09). Only an anchor goal completes from its number. ``status: active`` reopens
+    one."""
     goal = _owned(db, user_id, goal_id)
     _edit(db, goal, edits)
     wanted = edits.get("status")
     if wanted is not None:
         if wanted not in (ACTIVE, COMPLETED):
             raise ValueError("status can be set to active or completed")
-        if wanted == COMPLETED and goal.measure != MEASURE_DECLARED:
-            raise ValueError("a measured goal completes from its measure; only a declared goal is marked done")
+        if wanted == COMPLETED and goal.measure == MEASURE_ANCHOR:
+            raise ValueError("an anchor goal completes from its number; any other goal is marked done")
         goal.status = wanted
     if goal.status == ACTIVE:
         _apply_measure(db, goal, _get_or_create_goal_state(db, goal.id))

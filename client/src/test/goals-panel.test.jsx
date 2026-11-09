@@ -75,7 +75,11 @@ describe("GoalsPanel", () => {
     expect(goals[0].textContent).not.toMatch(/0% attained/);
     expect(screen.getByTestId("goals-panel").textContent).not.toMatch(/score/i);
 
-    fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
+    // Mark done on the declared goal and on the objectives one, never on the anchor (owner, 2026-11-09).
+    expect(goals[0].querySelector("button")?.textContent).not.toBe("Mark done");
+    const markDone = screen.getAllByRole("button", { name: "Mark done" });
+    expect(markDone).toHaveLength(2);
+    fireEvent.click(markDone[1]);
     await waitFor(() => expect(updateGoal).toHaveBeenCalledWith("c", { status: "completed" }));
   });
 
@@ -87,5 +91,16 @@ describe("GoalsPanel", () => {
     fireEvent.change(await screen.findByLabelText("New goal"), { target: { value: "Ship the runtime" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => expect(createGoal).toHaveBeenCalledWith({ name: "Ship the runtime", objectiveIds: [] }));
+  });
+
+  it("reads an objectives goal at 100% as all planned work done", async () => {
+    const getGoalsOverview = vi.fn().mockResolvedValue({
+      proposed: [],
+      goals: [{ id: "p", name: "Formation of strategic partnerships", source: "success_criterion", measure: "objectives",
+                progress: 1, status: "active", objectives: [{ id: "o3", name: "Partnership Development" }] }],
+      objectives: OBJECTIVES,
+    });
+    await renderPanel({ getGoalsOverview });
+    expect(await screen.findByTestId("goal")).toHaveTextContent("all planned work done");
   });
 });

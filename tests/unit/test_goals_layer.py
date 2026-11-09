@@ -25,7 +25,7 @@ def anchor_job(monkeypatch):
     """The analytics anchor resolver, swapped for a controllable one."""
     import AINDY.platform_layer.registry as registry
 
-    answers = {"value": {"supported": True, "attainment_pct": 0.25, "reason": None}}
+    answers = {"value": {"supported": True, "attainment_pct": 0.25, "value": 250000.0, "reason": None}}
     real_get_job = registry.get_job
 
     def get_job(name):
@@ -77,10 +77,10 @@ def test_a_measured_goal_completes_and_a_declared_one_never_does_by_itself(db_se
     events = []
     monkeypatch.setattr(gs, "emit_event", lambda event_type, payload: events.append(payload))
     gs.create_goal(db_session, user_id=owner, name="Declared one", measure="declared")
-    anchor_job["value"] = {"supported": True, "attainment_pct": 0.5, "reason": None}
+    anchor_job["value"] = {"supported": True, "attainment_pct": 0.5, "value": 50.0, "reason": None}
     gs.create_goal(db_session, user_id=owner, name="Anchor", source="anchor", measure="anchor",
                    target_value=100, unit="USD")
-    anchor_job["value"] = {"supported": True, "attainment_pct": 1.0, "reason": None}
+    anchor_job["value"] = {"supported": True, "attainment_pct": 1.0, "value": 100.0, "reason": None}
     remaining = gs.refresh_goal_states(db_session, owner)
     assert [g["name"] for g in remaining] == ["Declared one"]  # the anchor completed and left the active list
     assert events and events[0]["status"] == "completed"
@@ -116,3 +116,28 @@ def test_only_a_measured_goal_overrides_the_loops_next_action(measured, expected
     decision, payload = engine._apply_goal_weighting(
         "continue_highest_priority_task", {"next_action": {"title": "Write the next piece"}}, goals=[top])
     assert decision == expected
+
+
+def test_an_anchor_with_nothing_recorded_reads_unmeasured_not_zero(db_session, owner, anchor_job):
+    """Live 2026-11-09: the USD resolver reported 0 (freelance revenue has never held a row) and the goal read 0.000."""
+    anchor_job["value"] = {"supported": True, "attainment_pct": 0.0, "value": 0.0, "reason": None}
+    goal = gs.create_goal(db_session, user_id=owner, name="Financial Freedom", source="anchor", measure="anchor",
+                          target_value=1_000_000, unit="USD")
+    assert goal["progress"] is None and goal["measured"] is False
+
+
+def test_an_objectives_goal_at_100_percent_stays_active(db_session, owner, monkeypatch):
+    """Owner 2026-11-09: one finished task under Partnership Development read 100% and completed the goal."""
+    from apps.masterplan.services import phase_advance
+    from apps.masterplan.strategy_layer import PlanObjective
+
+    objective = PlanObjective(masterplan_id=9102, user_id=uuid.UUID(owner), name="Partnership Development", ordinal=1)
+    db_session.add(objective)
+    db_session.commit()
+    monkeypatch.setattr(phase_advance, "objective_attainment",
+                        lambda db, masterplan_id, user_id: {"objectives": [{"id": objective.id, "attainment_pct": 1.0}]})
+    goal = gs.create_goal(db_session, user_id=owner, name="Formation of strategic partnerships",
+                          source="success_criterion", measure="objectives", objective_ids=[objective.id])
+    assert goal["progress"] == 1.0 and goal["status"] == "active"
+    assert [g["name"] for g in gs.refresh_goal_states(db_session, owner)] == ["Formation of strategic partnerships"]
+

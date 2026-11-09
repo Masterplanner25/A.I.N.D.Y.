@@ -34,6 +34,8 @@ function progressText(goal) {
   if (goal.progress === null || goal.progress === undefined) {
     return goal.measure === "anchor" ? "no measurement yet" : "no work planned yet";
   }
+  // An objectives goal at 100% has done all its planned work; it is still the person's to call done (owner, 2026-11-09).
+  if (goal.measure === "objectives" && goal.progress >= 0.999) return "all planned work done";
   return `${Math.round(goal.progress * 100)}% attained`;
 }
 
@@ -105,7 +107,7 @@ function Goal({ goal, busy, onDone, onReopen, onDrop }) {
         </div>
       }
       <div className="flex gap-2 pt-1">
-        {goal.status === "active" && goal.measure === "declared" &&
+        {goal.status === "active" && goal.measure !== "anchor" &&
           <button type="button" className={QUIET} disabled={busy} onClick={() => onDone(goal.id)}>Mark done</button>}
         {done && <button type="button" className={QUIET} disabled={busy} onClick={() => onReopen(goal.id)}>Reopen</button>}
         <button type="button" className={QUIET} disabled={busy} onClick={() => onDrop(goal.id)}>Drop</button>
