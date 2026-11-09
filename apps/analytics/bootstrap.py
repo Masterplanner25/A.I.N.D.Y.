@@ -123,6 +123,15 @@ def _register_jobs() -> None:
     register_job("analytics.reasoning_recommendation", _reasoning_recommendation)
     register_job("scheduler.infinity_scores", _scheduler_recalculate_all_scores)
     register_job("analytics.expectation_model_train", _train_expectation_model)
+    # GOALS_LAYER_SPEC §4: an anchor goal's progress, resolved the way the attainment shadow resolves the plan's anchor.
+    # Masterplan reads it through the registry; it imports no analytics code.
+    register_job("analytics.resolve_goal_attainment", _resolve_goal_attainment)
+
+
+def _resolve_goal_attainment(db, **kwargs):
+    from apps.analytics.services.integration.goal_attainment import resolve_goal_attainment
+
+    return resolve_goal_attainment(db, **kwargs)
 
 
 def _register_async_jobs() -> None:

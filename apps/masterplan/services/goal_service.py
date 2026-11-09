@@ -7,10 +7,19 @@ import logging
 from AINDY.core.system_event_types import SystemEventTypes
 from AINDY.platform_layer.registry import emit_event
 from apps.masterplan.models import GoalState
-from apps.masterplan.models import Goal
+from apps.masterplan.models import Goal, GoalObjective
 from AINDY.utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
+
+# GOALS_LAYER_SPEC §4 (decided 2026-11-09): a goal's progress follows from how it is measured.
+MEASURE_ANCHOR = "anchor"          # a number, a unit and a date: resolved like the plan's anchor
+MEASURE_OBJECTIVES = "objectives"  # the attainment of the linked plan objectives
+MEASURE_DECLARED = "declared"      # qualitative: no progress number; the person marks it done (decision 2)
+MEASURES = (MEASURE_ANCHOR, MEASURE_OBJECTIVES, MEASURE_DECLARED)
+SOURCES = ("anchor", "success_criterion", "stated")
+# A declared goal has no progress, so ranking reads its gap as neither done nor untouched.
+UNMEASURED_GAP = 0.5
 
 
 def create_goal(
@@ -23,7 +32,20 @@ def create_goal(
     priority: float = 0.5,
     status: str = "active",
     success_metric: dict[str, Any] | None = None,
+    source: str = "stated",
+    measure: str = MEASURE_DECLARED,
+    masterplan_id: int | None = None,
+    target_value: float | None = None,
+    unit: str | None = None,
+    target_date: datetime | None = None,
+    objective_ids: list[str] | None = None,
 ) -> dict[str, Any]:
+    measure = str(measure or MEASURE_DECLARED).strip().lower()
+    if measure not in MEASURES:
+        raise ValueError(f"measure must be one of: {', '.join(MEASURES)}")
+    source = str(source or "stated").strip().lower()
+    if source not in SOURCES:
+        raise ValueError(f"source must be one of: {', '.join(SOURCES)}")
     goal = Goal(
         user_id=normalize_uuid(user_id),
         name=str(name).strip(),
@@ -32,15 +54,101 @@ def create_goal(
         priority=float(priority or 0.5),
         status=str(status or "active").strip().lower(),
         success_metric=success_metric or {},
+        source=source,
+        measure=measure,
+        masterplan_id=masterplan_id,
+        target_value=target_value,
+        unit=unit,
+        target_date=target_date,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
     db.add(goal)
+    db.flush()
+    for objective_id in dict.fromkeys(objective_ids or []):
+        db.add(GoalObjective(goal_id=goal.id, objective_id=str(objective_id)))
     db.commit()
     db.refresh(goal)
     state = _get_or_create_goal_state(db, goal.id)
+    _apply_measure(db, goal, state)
+    db.commit()
     db.refresh(goal)
+    db.refresh(state)
     return _serialize_goal(goal, state)
+
+
+def measure_goal(db, goal: Goal) -> dict[str, Any]:
+    """A goal's progress by its measure (GOALS_LAYER_SPEC §4): ``{"progress": 0..1 | None, "reason": str | None}``.
+
+    ``None`` is never 0: an anchor whose unit nothing measures, or objectives with no planned work, are *unmeasured*,
+    and a declared goal has no number by design. Nothing is manufactured (audit D4)."""
+    measure = goal.measure or MEASURE_DECLARED
+    if measure == MEASURE_ANCHOR:
+        from AINDY.platform_layer.registry import get_job
+
+        resolve = get_job("analytics.resolve_goal_attainment")
+        if resolve is None:
+            return {"progress": None, "reason": "no_resolver"}
+        result = resolve(db, user_id=str(goal.user_id), goal_unit=goal.unit, goal_value=goal.target_value,
+                         masterplan_id=goal.masterplan_id) or {}
+        if not result.get("supported") or result.get("attainment_pct") is None:
+            return {"progress": None, "reason": result.get("reason") or "unmeasured"}
+        return {"progress": round(float(result["attainment_pct"]), 4), "reason": None}
+    if measure == MEASURE_OBJECTIVES:
+        from apps.masterplan.services.phase_advance import objective_attainment
+        from apps.masterplan.strategy_layer import PlanObjective
+
+        linked = (db.query(PlanObjective.id, PlanObjective.masterplan_id)
+                  .join(GoalObjective, GoalObjective.objective_id == PlanObjective.id)
+                  .filter(GoalObjective.goal_id == goal.id).all())
+        if not linked:
+            return {"progress": None, "reason": "no_linked_objectives"}
+        wanted = {str(oid) for oid, _ in linked}
+        values: list[float] = []
+        for plan_id in {pid for _, pid in linked}:
+            reading = objective_attainment(db, masterplan_id=plan_id, user_id=goal.user_id)
+            values += [float(o["attainment_pct"]) for o in reading.get("objectives") or []
+                       if str(o.get("id")) in wanted and o.get("attainment_pct") is not None]
+        if not values:
+            return {"progress": None, "reason": "no_work_planned"}
+        return {"progress": round(sum(values) / len(values), 4), "reason": None}
+    return {"progress": None, "reason": "declared"}
+
+
+def _apply_measure(db, goal: Goal, state: GoalState) -> bool:
+    """Store the measured progress on the goal's state. A measured goal at 0.999 or more completes; a declared goal
+    never completes by itself (decision 2). Returns whether the status changed."""
+    reading = measure_goal(db, goal)
+    state.progress = reading["progress"]
+    state.last_update = datetime.now(timezone.utc)
+    if reading["progress"] is not None and reading["progress"] >= 0.999 and goal.status == "active":
+        goal.status = "completed"
+        goal.updated_at = datetime.now(timezone.utc)
+        return True
+    return False
+
+
+def refresh_goal_states(db, user_id: str | None) -> list[dict[str, Any]]:
+    """Recompute every active goal's progress from its measure. This replaced the keyword-overlap nudge on each
+    execution (decision 3, retired 2026-11-09)."""
+    if not user_id:
+        return []
+    goals = (db.query(Goal).filter(Goal.user_id == normalize_uuid(user_id), Goal.status == "active").all())
+    if not goals:
+        return []
+    changed = []
+    for goal in goals:
+        state = _get_or_create_goal_state(db, goal.id)
+        if _apply_measure(db, goal, state):
+            changed.append(goal)
+    db.commit()
+    for goal in changed:
+        emit_event(
+            SystemEventTypes.MASTERPLAN_GOAL_STATE_CHANGED,
+            {"user_id": str(goal.user_id), "goal_id": str(goal.id), "status": str(goal.status),
+             "updated_at": goal.updated_at.isoformat() if goal.updated_at else datetime.now(timezone.utc).isoformat()},
+        )
+    return get_active_goals(db, user_id)
 
 
 def get_active_goals(db, user_id: str | None) -> list[dict[str, Any]]:
@@ -73,7 +181,8 @@ def rank_goals(
 
     ranked = []
     for goal in goals:
-        progress_gap = max(0.0, 1.0 - float(goal.get("progress") or 0.0))
+        progress = goal.get("progress")
+        progress_gap = UNMEASURED_GAP if progress is None else max(0.0, 1.0 - float(progress))
         success_signal = float(goal.get("success_signal") or 0.0)
         base_priority = float(goal.get("priority") or 0.0)
         score = base_priority * 0.45 + progress_gap * 0.30 + max(0.0, success_signal) * 0.15
@@ -136,8 +245,9 @@ def detect_goal_drift(db, user_id: str | None) -> list[dict[str, Any]]:
     drift: list[dict[str, Any]] = []
     for goal in get_active_goals(db, user_id):
         success_signal = float(goal.get("success_signal") or 0.0)
-        progress = float(goal.get("progress") or 0.0)
-        if success_signal < -0.35 or (progress < 0.15 and len(goal.get("recent_actions") or []) >= 5):
+        progress = goal.get("progress")
+        low = progress is not None and float(progress) < 0.15  # a declared goal has no progress to be low
+        if success_signal < -0.35 or (low and len(goal.get("recent_actions") or []) >= 5):
             drift.append(
                 {
                     "goal_id": goal["id"],
@@ -175,43 +285,17 @@ def update_goals_from_execution(
     db,
     *,
     user_id: str | None,
-    workflow_type: str | None,
-    execution_result: Any,
-    success: bool,
+    workflow_type: str | None = None,
+    execution_result: Any = None,
+    success: bool = True,
 ) -> list[dict[str, Any]]:
-    goals = rank_goals(db, user_id)
-    if not goals:
-        return []
+    """After an execution: recompute the person's goals from their measures (GOALS_LAYER_SPEC §4).
 
-    text = _result_text(workflow_type, execution_result)
-    if not text:
-        return []
-
-    updates = []
-    for goal in goals[:5]:
-        alignment = calculate_goal_alignment([goal], text)
-        if alignment < 0.15:
-            continue
-        progress_delta = alignment * (0.08 if success else -0.03)
-        success_delta = alignment * (0.12 if success else -0.18)
-        updated = update_goal_progress(
-            db,
-            goal["id"],
-            {
-                "progress_delta": progress_delta,
-                "success_signal_delta": success_delta,
-                "action": {
-                    "workflow_type": workflow_type,
-                    "success": success,
-                    "alignment": alignment,
-                    "text": text[:200],
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                },
-            },
-        )
-        if updated:
-            updates.append(updated)
-    return updates
+    Until 2026-11-09 this nudged the top 5 goals' progress by keyword overlap between the run's text and each goal's
+    name, the measure the strategy layer had deliberately not repeated. The owner retired it (decision 3): progress now
+    moves only when the anchor's value or the linked objectives' attributed work moves. The run's arguments are kept
+    for the callers' sake and no longer read."""
+    return refresh_goal_states(db, user_id)
 
 
 def get_goal_states(db, user_id: str | None) -> list[dict[str, Any]]:
@@ -261,7 +345,7 @@ def _get_or_create_goal_state(db, goal_id) -> GoalState:
     state = db.query(GoalState).filter(GoalState.goal_id == goal_id).first()
     if state:
         return state
-    state = GoalState(goal_id=goal_id, progress=0.0, recent_actions=[], success_signal=0.0)
+    state = GoalState(goal_id=goal_id, progress=None, recent_actions=[], success_signal=0.0)
     db.add(state)
     db.commit()
     db.refresh(state)
@@ -280,7 +364,17 @@ def _serialize_goal(goal: Goal, state: GoalState | None) -> dict[str, Any]:
         "success_metric": goal.success_metric or {},
         "created_at": goal.created_at.isoformat() if goal.created_at else None,
         "updated_at": goal.updated_at.isoformat() if goal.updated_at else None,
-        "progress": float(getattr(state, "progress", 0.0) or 0.0),
+        # None for a declared or unmeasured goal; never shown as 0 (GOALS_LAYER_SPEC §4).
+        "progress": None if state is None or state.progress is None else float(state.progress),
+        "source": goal.source,
+        "measure": goal.measure or MEASURE_DECLARED,
+        # Decision 4: only a goal with a measure AND a reading may override the loop's next action.
+        "measured": (goal.measure in (MEASURE_ANCHOR, MEASURE_OBJECTIVES)
+                     and state is not None and state.progress is not None),
+        "masterplan_id": goal.masterplan_id,
+        "target_value": goal.target_value,
+        "unit": goal.unit,
+        "target_date": goal.target_date.isoformat() if goal.target_date else None,
         "last_update": state.last_update.isoformat() if state and state.last_update else None,
         "recent_actions": list(getattr(state, "recent_actions", []) or []),
         "success_signal": float(getattr(state, "success_signal", 0.0) or 0.0),
@@ -295,25 +389,3 @@ def _extract_terms(text: str | None) -> list[str]:
         for term in str(text).lower().replace(".", " ").replace("_", " ").replace("-", " ").split()
         if len(term) > 2
     ]
-
-
-def _result_text(workflow_type: str | None, execution_result: Any) -> str:
-    parts = [workflow_type or ""]
-    if isinstance(execution_result, dict):
-        for key in ("task_result", "goal", "message", "title", "suggested_goal"):
-            value = execution_result.get(key)
-            if isinstance(value, str):
-                parts.append(value)
-        orchestration = execution_result.get("orchestration")
-        if isinstance(orchestration, dict):
-            next_action = orchestration.get("next_action")
-            if isinstance(next_action, dict):
-                for key in ("title", "task_name", "suggested_goal", "type"):
-                    value = next_action.get(key)
-                    if isinstance(value, str):
-                        parts.append(value)
-    elif isinstance(execution_result, str):
-        parts.append(execution_result)
-    return " ".join(part for part in parts if part).strip()
-
-
