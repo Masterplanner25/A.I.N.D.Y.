@@ -176,7 +176,13 @@ than only through the loop's recommendation.
   - `update_goals_from_execution` recomputes from the measures;
   - a goal's `measured` flag gates the loop's `review_plan` override (decision 4);
   - migration `gl1layer0001` (`goal_states.progress` nullable) | columns on `goals`, the `goal_objectives` table |
-| **B** | Seeding and proposals (§5): at lock and once for the existing plan; confirm, edit, drop; stated goals | none beyond A |
+| **B** ✅ **built 2026-11-09** | Seeding and proposals (§5): at lock and once for the existing plan; confirm, edit, drop; stated goals. As built:
+  - `goal_seeding.py`: a proposal is a goal with status `proposed`, read by nothing until confirmed;
+  - suggested links: objectives sharing a word (first five letters) with the criterion;
+  - `GET /apps/goals/overview` proposes once;
+  - `POST …/confirm`, `…/drop`, `PATCH /apps/goals/{id}` (marks a declared goal done);
+  - plan lock calls `propose_goals`;
+  - `POST /apps/goals` takes `objective_ids` | none beyond A |
 | **C** | The Goals panel (§6) and the planner line | none |
 | **D** | Watch the readers act on real goals for a while (§3); then the score question (decision 6) | none |
 

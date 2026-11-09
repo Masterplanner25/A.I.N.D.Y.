@@ -781,7 +781,7 @@ List Goals
 #### POST /apps/goals
 Create Goal Route
 
-**Body:** description: string | null, goal_type: string, name: string (required), priority: number, status: string, success_metric: map[unspecified]
+**Body:** description: string | null, goal_type: string, name: string (required), objective_ids: [string], priority: number, status: string, success_metric: map[unspecified]
 
 **Response 201:** unspecified
 
@@ -789,6 +789,45 @@ Create Goal Route
 List Goal State
 
 **Response 200:** unspecified
+
+#### GET /apps/goals/overview
+Goals Overview Route
+
+`GOALS_LAYER_SPEC` §5 (phase B). The caller's active plan is proposed as goals the first time this is read: its anchor
+(`measure=anchor`) and each success criterion, linked to the objectives whose names it shares a word with
+(`measure=objectives`), else `measure=declared`. A proposal has status `proposed` and acts on nothing until confirmed. Each
+goal carries `progress` (null when declared or unmeasured, never 0), `measured`, `source` and its `objectives`.
+
+**Response 200:** proposed: [goal], goals: [goal], objectives: [{id, name}]
+
+#### POST /apps/goals/{goal_id}/confirm
+Confirm Goal Route
+
+**Body:** name: string | null, description: string | null, priority: number | null (0 to 1), objective_ids: [string] | null
+
+Accept a proposed goal, with any edits; it becomes `active` and is measured from then on. Links are kept only to the
+caller's own objectives; a non-anchor goal with no links is `declared`. 404 for a goal that is not the caller's, 422 for
+one that is not `proposed`.
+
+**Response 200:** goal
+
+#### POST /apps/goals/{goal_id}/drop
+Drop Goal Route
+
+Drop a proposal or a goal (status `dropped`). A dropped proposal is never proposed again. 404 for a goal that is not the
+caller's.
+
+**Response 200:** goal
+
+#### PATCH /apps/goals/{goal_id}
+Update Goal Route
+
+**Body:** name, description, priority, objective_ids (as confirm), status: `completed` | `active` | null
+
+Edit a goal. `status: completed` marks a **declared** goal done; a measured goal completes from its measure (422 if
+asked). `active` reopens one. 404 for a goal that is not the caller's.
+
+**Response 200:** goal
 
 ### Health
 
