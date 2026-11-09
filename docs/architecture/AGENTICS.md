@@ -46,6 +46,22 @@ why Phases A–E below list mostly `AINDY/` files. Per the apps/runtime boundary
   `register_trigger_evaluator`, used for every trigger type through the "default"
   fallback), and app schedulers/flows drive the trigger→decide loop; the
   autonomous-controller plumbing and bounded-loop primitives are runtime.
+
+  **The policy (owner, 2026-11-08, audit D3):**
+  - **Scheduled triggers execute by default.** The three gated jobs are the 6-hourly recurrence check, the 06:00 ETA
+    recalculation and the 07:00 Infinity recalculation.
+  - **The gate holds one back only when the system says so:** health is critical, load is at or above 0.85, or recent
+    traces repeat failures (the conditions in `triggers.py`).
+  - **A deferred daily job is not retried.** It runs again at its next scheduled time.
+
+  **Until 2026-11-08 the gate could not see any of that.** The runtime runs the evaluator in a callback subprocess and
+  redacts the DB session at the extension boundary, so the evaluator built no signals and decided "healthy, idle":
+  25,783 of 25,783 decisions were `execute`.
+
+  **Now:** the signals are computed in the job's own process (`triggers.gate_signals`, the `autonomy.signals` job,
+  called by `apps/_shared/autonomy.py::gate`) and passed as plain data. Each job's `importance` is in the trigger, where
+  it is read. `tests/unit/test_autonomy_gate_signals.py` crosses the real boundary: a critical system executes on the
+  old path and defers on the new one.
 - **D — Multi-Agent Coordination:** *mostly runtime.* The only registerable lever
   is the agent ranking strategy (`apps/masterplan/agents/ranking.py` via
   `register_agent_ranking_strategy`). Delegation, the agent registry, and conflict
