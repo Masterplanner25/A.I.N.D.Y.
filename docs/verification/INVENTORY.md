@@ -17,7 +17,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | | ours | runtime's |
 |---|---|---|
 | Domains | 16 (3 core) | |
-| `/apps` routes | 292 (190 called by the client, 102 not) | 35 (mounted under `/apps`) |
+| `/apps` routes | 292 (196 called by the client, 96 not) | 35 (mounted under `/apps`) |
 | Syscalls | 87 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 16 | 0 |
@@ -40,7 +40,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | dashboard |  |  | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | freelance |  | automation, search, tasks | 22 | 18 | 3 | 2 | 0 | 1 | 16 | 0 | 9 |
 | identity | yes |  | 6 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 1 |
-| masterplan |  | identity | 80 | 18 | 17 | 3 | 3 | 14 | 16 | 0 | 24 |
+| masterplan |  | identity | 80 | 12 | 17 | 3 | 3 | 14 | 16 | 0 | 24 |
 | memory |  |  | 8 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | network_bridge |  | authorship, automation | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | rippletrace |  | analytics, automation | 50 | 4 | 11 | 0 | 5 | 1 | 0 | 3 | 8 |
@@ -266,13 +266,13 @@ the audit's question. Live row counts are not here (they change): `python script
 - `GET /apps/genesis/session/{session_id}`
 - `POST /apps/genesis/synthesize`
 - — `POST /apps/genesis/{plan_id}/activate`
-- — `GET /apps/goals`
-- — `POST /apps/goals`
-- — `GET /apps/goals/overview`
+- `GET /apps/goals`
+- `POST /apps/goals`
+- `GET /apps/goals/overview`
 - — `GET /apps/goals/state`
-- — `PATCH /apps/goals/{goal_id}`
-- — `POST /apps/goals/{goal_id}/confirm`
-- — `POST /apps/goals/{goal_id}/drop`
+- `PATCH /apps/goals/{goal_id}`
+- `POST /apps/goals/{goal_id}/confirm`
+- `POST /apps/goals/{goal_id}/drop`
 - `GET /apps/market`
 - `POST /apps/market/entities`
 - `DELETE /apps/market/entities/{entity_id}`

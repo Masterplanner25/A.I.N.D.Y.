@@ -158,6 +158,23 @@ def _build_date_line() -> str:
     return f"\n\nToday's date: {today} (UTC). Any due_date must be on or after it.\n"
 
 
+def _goal_line(goal: dict) -> str:
+    """One active goal for the planner (GOALS_LAYER_SPEC decision 5): name, how it is measured, and its progress or why
+    there is none. A declared goal has no number by design; an unmeasured one says so rather than reading 0%."""
+    progress = goal.get("progress")
+    reading = f"{round(float(progress) * 100)}% attained" if progress is not None else None
+    measure = goal.get("measure")
+    if measure == "anchor":
+        target = f"{goal.get('target_value'):,.0f} {goal.get('unit') or ''}".strip() if goal.get("target_value") else "a number"
+        due = f" by {goal['target_date']}" if goal.get("target_date") else ""
+        how = f"target {target}{due}; " + (reading or "no measurement yet")
+    elif measure == "objectives":
+        how = f"through objectives {', '.join(goal.get('objectives') or [])}; " + (reading or "no work planned yet")
+    else:
+        how = "declared: no number; the user marks it done"
+    return f"- {goal['name']} ({how})"
+
+
 def _build_plan_context_block(user_id, db) -> str:
     """The user's active MasterPlan with its real IDs, so a plan can attach work to it.
 
@@ -176,28 +193,33 @@ def _build_plan_context_block(user_id, db) -> str:
         if not plan:
             return ""
 
-        lines = [
-            "",
-            "## User's MasterPlan (use these exact IDs; never invent one)",
-            f"masterplan_id: {plan['masterplan_id']}",
-        ]
-        phase = plan.get("current_phase")
-        if phase:
-            lines.append(f"Current phase: {phase['name']} (phase_id: {phase['id']})")
-        strategies = plan.get("strategies") or []
-        if strategies:
-            lines.append(
-                "Open strategies. To attach a task to one, pass BOTH masterplan_id and "
-                "strategy_id to task.create:"
-            )
-            for s in strategies:
-                serves = f", serves {s['objective']}" if s.get("objective") else ""
+        lines = [""]
+        if plan.get("masterplan_id") is not None:
+            lines += [
+                "## User's MasterPlan (use these exact IDs; never invent one)",
+                f"masterplan_id: {plan['masterplan_id']}",
+            ]
+            phase = plan.get("current_phase")
+            if phase:
+                lines.append(f"Current phase: {phase['name']} (phase_id: {phase['id']})")
+            strategies = plan.get("strategies") or []
+            if strategies:
                 lines.append(
-                    f"- {s['name']} (strategy_id: {s['id']}{serves}; "
-                    f"{s['tasks_completed']}/{s['tasks_total']} tasks done)"
+                    "Open strategies. To attach a task to one, pass BOTH masterplan_id and "
+                    "strategy_id to task.create:"
                 )
-        else:
-            lines.append("No open strategies: create tasks with masterplan_id only.")
+                for s in strategies:
+                    serves = f", serves {s['objective']}" if s.get("objective") else ""
+                    lines.append(
+                        f"- {s['name']} (strategy_id: {s['id']}{serves}; "
+                        f"{s['tasks_completed']}/{s['tasks_total']} tasks done)"
+                    )
+            else:
+                lines.append("No open strategies: create tasks with masterplan_id only.")
+        goals = plan.get("goals") or []
+        if goals:
+            lines.append("## What the user is working toward (their goals, highest priority first)")
+            lines += [_goal_line(g) for g in goals]
         return "\n".join(lines) + "\n"
     except Exception as exc:
         logger.warning("[planner_context] plan context skipped: %s", exc)
