@@ -289,7 +289,8 @@ def _get_latest_adjustment_payload(*args, **kwargs):
 
 
 def _scheduler_recalculate_all_scores() -> None:
-    from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
+    from AINDY.agents.autonomous_controller import record_decision
+    from apps._shared.autonomy import gate
     from AINDY.db.database import SessionLocal
     from AINDY.db.models.user import User
     from apps.analytics.services.orchestration.nodus_recalc import recalculate_user
@@ -300,9 +301,11 @@ def _scheduler_recalculate_all_scores() -> None:
         logger.warning("[Infinity Scheduler] DB unavailable: %s", exc)
         return
     try:
-        trigger = {"trigger_type": "schedule", "source": "scheduler.infinity_scores", "goal": "daily_infinity_score_recalculation"}
-        context = {"goal": "daily_infinity_score_recalculation", "importance": 0.60, "goal_alignment": 0.70}
-        decision = evaluate_live_trigger(db=db, trigger=trigger, context=context)
+        # `importance` in the trigger, where the evaluator reads it; in `context` it was ignored (D3).
+        trigger = {"trigger_type": "schedule", "source": "scheduler.infinity_scores",
+                   "goal": "daily_infinity_score_recalculation", "importance": 0.60}
+        context = {"goal": "daily_infinity_score_recalculation", "goal_alignment": 0.70}
+        decision = gate(db, trigger=trigger, context=context)
         record_decision(db=db, trigger=trigger, evaluation=decision, trace_id=str(uuid.uuid4()), context=context)
         if decision["decision"] != "execute":
             logger.info("[Infinity Scheduler] Deferred by autonomy controller: %s", decision["reason"])

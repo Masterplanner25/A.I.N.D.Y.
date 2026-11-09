@@ -21,7 +21,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | Syscalls | 87 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 16 | 0 |
-| Registered jobs | 34 | 0 |
+| Registered jobs | 35 | 0 |
 | Python flow graphs | 82 | 1 |
 | Tables | 88 | 37 |
 | Nodus workflows (`.nd`) | 5 | |
@@ -31,7 +31,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 | Domain | Core | Declared imports | Routes | Not called | Syscalls | Tools | Sched. jobs | Jobs | Flows | `.nd` | Tables |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| agent |  |  | 15 | 4 | 0 | 2 | 0 | 0 | 0 | 0 | 0 |
+| agent |  |  | 15 | 4 | 0 | 2 | 0 | 1 | 0 | 0 | 0 |
 | analytics | yes | arm, identity | 35 | 20 | 9 | 1 | 1 | 7 | 7 | 2 | 25 |
 | arm |  | analytics | 10 | 3 | 4 | 3 | 0 | 1 | 6 | 0 | 4 |
 | authorship |  |  | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 |
@@ -70,6 +70,8 @@ the audit's question. Live row counts are not here (they change): `python script
 - `PUT /apps/agent/trust`
 
 **Agent tools (2):** `memory.recall` (risk low), `memory.write` (risk low)
+
+**Registered jobs (1):** `autonomy.signals`
 
 ## analytics
 

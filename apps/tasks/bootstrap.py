@@ -479,7 +479,8 @@ def _scheduler_check_reminders() -> None:
 
 
 def _scheduler_check_task_recurrence() -> None:
-    from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
+    from AINDY.agents.autonomous_controller import record_decision
+    from apps._shared.autonomy import gate
     from AINDY.db.database import SessionLocal
     from apps.tasks.services.task_service import handle_recurrence
 
@@ -489,9 +490,11 @@ def _scheduler_check_task_recurrence() -> None:
         logger.warning("[Task Scheduler] DB unavailable: %s", exc)
         return
     try:
-        trigger = {"trigger_type": "schedule", "source": "scheduler.recurrence", "goal": "task_recurrence_check"}
-        context = {"goal": "task_recurrence_check", "importance": 0.40}
-        decision = evaluate_live_trigger(db=db, trigger=trigger, context=context)
+        # `importance` in the trigger, where the evaluator reads it; in `context` it was ignored (D3).
+        trigger = {"trigger_type": "schedule", "source": "scheduler.recurrence", "goal": "task_recurrence_check",
+                   "importance": 0.40}
+        context = {"goal": "task_recurrence_check"}
+        decision = gate(db, trigger=trigger, context=context)
         record_decision(db=db, trigger=trigger, evaluation=decision, trace_id=str(uuid.uuid4()), context=context)
         if decision["decision"] == "execute":
             handle_recurrence()

@@ -181,5 +181,28 @@ def _default_goal_alignment(trigger_type: str) -> float:
     }.get(trigger_type, 0.50)
 
 
+def gate_signals(*, db, trigger: dict[str, Any], user_id: Any = None, context: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The evaluator's signals, computed HERE, in the caller's process, with its real session, and returned as plain
+    data (audit 2026-11-01 D3, owner 2026-11-08).
+
+    The runtime runs a trigger evaluator in a callback subprocess, and the extension boundary redacts the DB session on
+    the way in. So `_enrich_context` inside the evaluator never had a session, built no signals, and every trigger saw
+    "healthy, idle, no failures": all 25,783 decisions were `execute`. `_enrich_context` keeps any signal already in the
+    context, so passing them in lets the evaluator act on them across the boundary."""
+    import json
+
+    trigger_type = str(trigger.get("trigger_type") or "system").lower()
+    ctx = dict(context or {})
+    ctx["db"] = db
+    ctx["user_id"] = str(user_id) if user_id is not None else None
+    enriched = _enrich_context(trigger=trigger, trigger_type=trigger_type, context=ctx)
+    enriched.pop("db", None)
+    # Plain JSON, so nothing is lost or redacted at the extension boundary.
+    return json.loads(json.dumps(enriched, default=str))
+
+
 def register() -> None:
+    from AINDY.platform_layer.registry import register_job
+
     register_trigger_evaluator("default", evaluate_autonomy_trigger)
+    register_job("autonomy.signals", gate_signals)
