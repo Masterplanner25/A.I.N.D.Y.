@@ -28,9 +28,6 @@ pytest tests/unit/test_app_manifest_bootstrap_contract.py \
        tests/test_bootstrap_completeness.py \
        -m app_profile -q
 
-# Single test
-pytest tests/unit/test_import_boundaries.py::test_name -v
-
 # Cross-app import boundary check (required before any PR)
 python scripts/check_app_imports.py
 
@@ -141,18 +138,13 @@ def register() -> None:
     #   from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
     # `platform_layer.registry` exports a `register_syscall` too, and it is the wrong one —
     # it writes into a dict the SyscallDispatcher never reads. Every one of this repo's
-    # 84 app-registered syscalls uses the kernel path; zero use the platform_layer path, and
+    # app-registered syscalls uses the kernel path; zero use the platform_layer path, and
     # this block used to say otherwise.
     #
-    # Measured 2026-09-16 rather than carried forward: 97 registered at app-profile boot,
-    # 23 of them the runtime's own (import `AINDY.kernel.syscall_registry` alone to see that
-    # number), so 74 are ours (+2 on 09-10: `sys.v1.masterplan.resolve_phase`,
-    # `sys.v1.task.set_strategy`; +1 on 09-11: `sys.v1.masterplan.get_objective_attainment`; +1 on
-    # 09-28: `sys.v1.market.propose`; +2 on 09-30: `sys.v1.leadgen.search_segment`, `sys.v1.content.draft`, so 77 of 100;
-    # +2 on 10-14: `sys.v1.work.context`, `sys.v1.work.facts`, the MCP read access, so 79 of 102; +4 on 10-22: the archive steps for `archive_published_work_v1.nd`, so 83 of 106; +1 on 10-25: `sys.v1.rippletrace.create_share_drafts` for `share_drafts_v1.nd`, so 84 of 107; +1 on 11-08: `sys.v1.rippletrace.create_piece_answers` for `piece_answers_v1.nd`, so 85 of 108; +1 the same day: `sys.v1.rippletrace.get_answered_pieces`, masterplan's call-time read for ARTICLE_ANSWERS phase C, so 86 of 109; +1 the same day: `sys.v1.work.get_claim_truth`, search's call-time read for phase D1, so 87 of 110 — re-derived 11-08 on runtime 2.33.0). The previous
-    # figure of 90 was stale, which is the same failure the runtime-floor lines above had —
-    # a number nobody re-derives is a number that drifts. To re-derive: boot the app profile,
-    # then `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())`.
+    # Count them; never trust a written number. Boot the app profile, then
+    # `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())` (the runtime alone registers its own;
+    # import `AINDY.kernel.syscall_registry` by itself to see that number), or read the generated
+    # `docs/verification/INVENTORY.md`.
     #
     # AGENT TOOLS: use `register_run_tool_provider` (a callable returning the tool list),
     # NOT `register_agent_tool` (static registration). No app uses the static form; the
@@ -209,92 +201,10 @@ Full pattern documentation: `docs/architecture/PLUGIN_REGISTRY_PATTERN.md`
 
 ### New workflows are written in Nodus (`.nd`)
 
-**Owner, 2026-10-22: A.I.N.D.Y.'s own workflows are written in Nodus.** Before that date, all of our
-orchestration was Python: `register_flow_definitions` node graphs and APScheduler jobs. Nodus ran
-only underneath us, in the agent backend (`nodus_vm`), and the one `.nd` we had was switched off.
-**A new workflow goes in `apps/<domain>/nodus/<name>.nd`, not in a new Python flow graph.** Existing
-Python flows stay as they are until one is deliberately ported.
-
-- **Ours so far, five:**
-  - `apps/analytics/nodus/reasoning_apply_v1.nd`: the reasoning flow.
-  - `apps/analytics/nodus/infinity_recalc_v1.nd`: the daily Infinity recalculation for one user (#487).
-  - `apps/rippletrace/nodus/archive_published_work_v1.nd`: four steps chained with `after`, each
-    `with { retries: 2 }`, for one owner (#489).
-  - `apps/rippletrace/nodus/share_drafts_v1.nd`: the share drafts for one newly published piece (a
-    LinkedIn post, a short post, a meta description, the previous piece's What's Next? footer), into
-    the Drafts section (owner, 2026-10-25). Its step is idempotent: the drafts and the piece's mark
-    are one transaction.
-  - `apps/rippletrace/nodus/piece_answers_v1.nd`: what one newly published piece answers, stored per
-    version of its text (`ARTICLE_ANSWERS_SPEC` B2, owner 2026-11-08). Same shape and idempotence as
-    share drafts.
-
-  Each has a flag: `AINDY_REASONING_NODUS_NATIVE`, `AINDY_INFINITY_RECALC_NODUS`,
-  `AINDY_ARCHIVE_NODUS`, `AINDY_SHARE_DRAFTS_NODUS` and `AINDY_PIECE_ANSWERS_NODUS`. The flags are off in code and on in compose, and any VM failure falls back
-  to Python.
-- **The pattern:**
-  - **Source:** `apps/<domain>/nodus/*.nd`.
-  - **Registration:** one line in the domain's `bootstrap.py`, which calls
-    `apps/_shared/nodus.py::register_domain_nodus_workflows(__file__, "<domain>")`.
-  - **Call:** a small `services/…_nodus.py` that runs it through `run_nodus_workflow`, reads the
-    result and falls back to Python.
-
-  `apps/rippletrace/services/archive_nodus.py` is the fullest example.
-
-  **The `.nd` files ship as package data** (`[tool.setuptools.package-data]` in `pyproject.toml`). A
-  scheduled job's callback imports the *installed* `apps`, not `/app/apps`; until 2026-11-02 that copy
-  had no `nodus/` folders, so every scheduled run fell back with "is not registered".
-  `test_nodus_files_are_packaged.py` builds the wheel and checks them.
-- **A fallback must call `record_nodus_fallback(db, workflow=…, user_id=…, reason=…)`** (`apps/_shared/nodus.py`),
-  after any rollback. It writes a durable `nodus.fallback` event, and `owner_notices.py` emails the owner
-  when one workflow falls back 3 times in a day. Before 2026-11-01 a fallback was one WARNING line, and
-  10 days of them went unseen (`NODUS-FALLBACK-SILENT-1`). `test_owner_notices.py` checks every caller.
-- **A job that fires often must not start a cold worker for nothing.** Start a VM run only when
-  there is work. The archive job runs every 10 minutes, so it checks `archive_due` first, and a
-  settled catalogue stays on the Python path.
-- **The script reaches app logic only through `sys("sys.v1.…", args)`.** It cannot import Python, so
-  everything the workflow needs must be a registered syscall. **`sys()` is granted only the
-  capability the runtime infers from the syscall's name** (`_infer_dispatch_capability`): `get_…`,
-  `list_…` and the like map to `<domain>.read`, `create_…` and the like to `<domain>.write`, and any
-  other name maps to itself. If that is not the capability the syscall requires, every VM run is
-  denied and quietly falls back to Python. `sys.v1.analytics.execute_infinity` (requires
-  `score.recalculate`) fails this; `sys.v1.score.recalculate` passes. Assert it in a test, as
-  `test_infinity_recalc_nodus.py` does.
-- **Build a syscall's handler once, at import, never inside the `register_…` function.** The registry
-  compares handlers by identity, and every app-profile boot registers again. A closure built at
-  registration time is a new object on the second boot, so bootstrap fails with `already registered
-  with a different handler`. That happened on #489, and only CI's second boot showed it.
-- **A workflow acts as one user.** The runtime refuses a payload `user_id` naming another user over
-  MCP since 2.28.0 and **in-process since 2.29.0** (DEC-103: `TENANT_VIOLATION`, the handler does
-  not run), and counts each one (`aindy_payload_identity_mismatch_total`; on 2.29.0 a label is a
-  refused call). `AINDY_PAYLOAD_IDENTITY_DISPATCH=observe` turns the refusal off; we do not set it. So a job over all users stays a Python loop that starts
-  one run per user (`run_nodus_workflow(..., user_id=…)`), and the script's syscalls read
-  `ctx.user_id`.
-- **Run `nodus check <file>.nd` before pushing**, and add a test like
-  `test_analytics_nodus_workflow.py` that compiles it.
-- **A cold worker takes 17–21 s; a warm one about 2 s** (measured 2026-10-22: Python did the same
-  recalculation in 2.0 s). The warm pool is the runtime's default, but a scheduled job's callback
-  is a fresh process (the 90 s `AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS`), so its first run is
-  always cold. Keep `.nd` off request paths that must answer quickly.
-- **A workflow can pause only until an event arrives. It cannot sleep until a time** (checked
-  2026-10-22 on 2.28.1 and runtime `main`, filed as **FR-55**). `await_event(type, schema)` parks the
-  run durably: `waiting_flow_runs` survives a restart, and an event or `POST …/runs/{id}/resume`
-  wakes it. But:
-  - **the deadline fails the run** (`WAIT_TIMEOUT`); it never resumes it;
-  - **the deadline is 30 minutes for every guest script** (`FLOW_WAIT_TIMEOUT_MINUTES`), because they
-    all run under the runtime's `nodus_execute` flow;
-  - **a resume re-runs the script from the top.** Only `nodus_received_events` comes back, not
-    what the script saved with `set_state`, so every step must be safe to run twice.
-
-  nodus-lang has `on_timeout: "resume"`, but the A.I.N.D.Y. embedding does not pass it through.
-  **So write one-shot workflows, and leave tick-driven jobs in Python until FR-55 ships.** The Resolution
-  Check (6 questions a minute) and the release-handoff watcher are two such jobs: ported today, each
-  would still need its tick and would rebuild its progress from its own tables on every wake.
-- **Trigger with `register_scheduled_job`, not the runtime's Nodus scheduler.**
-  `POST /platform/nodus/schedule` stores a copy of the script in a per-user row
-  (`nodus_scheduled_jobs`), so a change to the `.nd` file would never reach it.
-- **Results land in `data.nodus_output_state`** (what `set_state` wrote), with `data.nodus_status`
-  saying whether it succeeded. Each run also leaves a record on the `nodus_state` volume, and
-  nothing prunes it.
+**Owner, 2026-10-22: a new workflow goes in `apps/<domain>/nodus/<name>.nd`, not in a new Python flow graph.**
+Existing Python flows stay until one is deliberately ported. Before writing or changing a `.nd` workflow, load the
+`nodus-workflows` skill (`.claude/skills/nodus-workflows/SKILL.md`): the pattern, the fallback rule, the capability
+trap, the register-twice handler trap, packaging, and FR-55's limits are there.
 
 ### Adding a new domain app
 
@@ -307,13 +217,8 @@ Python flows stay as they are until one is deliberately ported.
 
 ### Boot profiles
 
-| Profile | Manifest | Plugins loaded |
-|---|---|---|
-| `platform-only` | `AINDY/runtime_plugins.json` | none |
-| `default-apps` | `./aindy_plugins.json` | `apps.bootstrap` → 16 apps |
-
-Running `aindy-runtime serve` from this repo root automatically selects `aindy_plugins.json`.
-Set `AINDY_APP_PLUGIN_MANIFEST=./aindy_plugins.json` explicitly if the CWD is different.
+`platform-only` loads no plugins; `default-apps` loads `./aindy_plugins.json` (16 domains). `aindy-runtime serve` from
+the repo root picks `default-apps`; elsewhere set `AINDY_APP_PLUGIN_MANIFEST`. Details: `docs/architecture/BOOT_PROFILES.md`.
 
 ---
 
@@ -466,172 +371,26 @@ wrap the handler: `materialized(handler)` from `apps/_shared/serialization.py`.
 `test_pipeline_routes_pass_session.py` guards the session (80 sites were missing it, #393);
 `test_handler_returns_data_not_rows.py` guards RippleTrace's wrapping.
 
-### `_fresh_main_app()` and `Base.metadata` — model import timing hazard
+### Where the rest lives: nested CLAUDE.md files and skills
 
-`_setup_postgres_schema` (session-scoped, autouse) calls `Base.metadata.create_all()` once at session start. Each test's `_fresh_main_app()` reloads `AINDY.main` + `AINDY.startup`, which imports all app modules and may add new model classes to `Base.metadata`. Tables registered this way exist in `Base.metadata` but **were never created in PostgreSQL** because `create_all` already ran.
+These load only when you work in the matching folder. Read the one a task touches before starting:
+- `tests/CLAUDE.md`: `_fresh_main_app` and `Base.metadata`; why `test_real_vm_run_routes_through_nodus` fails under
+  load or without `pip install -e .[test]`; `AINDY_AGENT_PLANNER_BACKEND=disabled` in integration tests.
+- `apps/agent/CLAUDE.md`: agent tool steps run on `nodus_vm` in the worker: metering, the authority gate, FR-44,
+  durable continuation and the check after every api restart.
+- `apps/arm/CLAUDE.md`: ARM config is keyed per user, and ARM's model names must be DeepSeek's.
+- `apps/masterplan/CLAUDE.md`: what `content.draft` is given, and its model.
+- `scripts/CLAUDE.md`: the MCP launcher (exposure rules, probing) and the watcher launcher.
 
-`cleanup_committed_test_state` guards against this by querying `pg_catalog.pg_tables` before building the `TRUNCATE` list — only truncating tables that actually exist in the DB. **Do not simplify this back to iterating `Base.metadata.sorted_tables` directly.** Tables like `freelance_refund_records` (imported late via a freelance module reload) will raise `UndefinedTable`, which rolls back the cleanup transaction, leaves data in the DB, and cascades into isolation assertion failures and `InFailedSqlTransaction` errors across the rest of the session.
+Skills: `live-probe` (probing the running container: tokens, admin promotion, `/platform/syscall`), `api-hang-triage`
+(the api wedges), `nodus-workflows`.
 
-### `test_real_vm_run_routes_through_nodus` fails under load, not because of your change
+### Another AI reading A.I.N.D.Y. — MCP
 
-The Nodus VM worker cold-starts the whole app stack (~16 apps) per execution. The runtime
-default budget is **30s script + 15s boot**, which a full-suite run on a busy machine can
-exceed:
-
-```
-[nodus.execute] FAILURE error=Nodus worker exceeded 45000ms hard limit
-  (30000ms script budget + 15000ms boot allowance) — worker or plugin cold-start hung
-```
-
-The VM then falls back and `run_reasoning_apply` returns `{'data': {}}` with no `_via`, so the
-assertion reads as a logic failure rather than a timeout. It passes when the file is run alone.
-
-`pytest.ini` now sets `AINDY_NODUS_MAX_EXECUTION_MS=120000` and
-`AINDY_NODUS_BOOT_ALLOWANCE_MS=60000`, matching what `docker-compose.prod.yml` already does
-for the container and for the same documented reason.
-
-**Do not attribute this failure to whatever you just changed until you have re-run it.** It is
-load-dependent, so two consecutive failures are not proof of causation — check the log for the
-`45000ms hard limit` line first.
-
-**If that line is ABSENT, it is the other failure mode: your venv, not the code.** Diagnosed
-2026-09-06 after this entry sent a session looking for a timeout that was not there.
-
-```bash
-python -m pip list | grep aindy-apps-monolith   # empty = this is your problem
-python -m pip install -e .[test] --no-build-isolation
-```
-
-The Nodus worker is spawned as `subprocess.run([sys.executable, nodus_worker.py])`, so
-`sys.path[0]` is the *worker's* directory and the inherited cwd is **not** on `sys.path`. If this
-repo is not pip-installed, the worker cannot `import apps`, `load_plugins()` raises
-`ModuleNotFoundError`, and `_ensure_tools_loaded` swallows it **at DEBUG**. The worker then runs
-with 23 runtime syscalls instead of 97 (measured 2026-09-16), and the visible symptom is
-three layers away:
-
-```
-"error": "Unknown syscall: 'sys.v1.analytics.get_reasoning_recommendation'"
-```
-
-…for a syscall that is registered and present in the parent process. Reasoning then takes its
-designed fallback to Python and the only surviving evidence is the missing `_via` key — i.e.
-**exactly the same assertion failure as the timeout case, with a completely different cause.**
-
-`pytest` and `python -c` both put cwd on `sys.path`, which is why every other test passes and
-only this one — the only test that crosses a subprocess boundary — notices. Two things depend on
-the install and fail silently without it:
-
-| missing | consequence |
-|---|---|
-| `pip install -e .` | the worker cannot import `apps` (above) |
-| `.[test]` extra → `pytest-env` | **`pytest.ini`'s entire `env =` block is inert**, including the `AINDY_NODUS_*` budgets this section prescribes and `ENFORCE_EXECUTION_CONTRACT=true` |
-
-That second row is why the remedy above can appear not to work: without `pytest-env` the budget
-fix is never applied. `conftest.py` sets `DATABASE_URL` and `AINDY_ALLOW_SQLITE` by
-`os.environ.setdefault`, which is why nothing else complains. CI runs `pip install -e .[test]`
-and has neither problem. Filed upstream as `RUNTIME_FEATURE_REQUESTS.md` FR-25(c) — the log
-level, not the spawn, which is ours.
-
-### `AINDY_AGENT_PLANNER_BACKEND` in integration tests
-
-Use `disabled` (set in `pytest.integration.ini`), **not** `stub`. The `stub` backend causes planner-path tests to fail with errors rather than cleanly skip when the planner isn't wired up. Tests that touch planner-dependent paths must check `os.environ.get("AINDY_AGENT_PLANNER_BACKEND") == "disabled"` and skip or fast-path accordingly.
-
-### Where an agent run's tool steps actually execute — `nodus_vm`, in the worker
-
-`apps/agent/bootstrap.py::_select_execution_backend` makes **`nodus_vm` this app's default** on
-every real boot (the runtime's own default is `agent_flow`). A plan is compiled to a native Nodus
-workflow and its tool steps run as the worker's `call_tool` host function → `execute_tool`,
-**in the warm-pool worker process** (`nodus_worker.py --serve`, a separate PID with its own
-import of the 16-app graph). Four consequences, the first three measured 2026-09-16 and filed:
-
-- **A tool step's LLM usage is metered in the worker** and, since runtime 2.20.0 (**FR-35**,
-  #712), rides the worker's reply back and is recorded in the api process — `/metrics`, the
-  Redis tenant window and the run's `score.computed.llm_tokens` all read it. Before 2.20.0 none
-  of them did, so the cost governor saw planning and nothing else on this backend; now the
-  tenant window moves on tool steps too, and `AINDY_QUOTA_MAX_TENANT_TOKENS` (unset here) would
-  refuse guest calls it never used to see.
-- **The authority gate (`register_tool(on_denial="wait")`) fires on `nodus_vm` since 2.22.0**
-  (FR-38; proven 2026-09-23, `RUNTIME_2_22_0_UPGRADE.md` §4.1): a denied `leadgen.act` parks the
-  run and `POST /apps/agent/runs/{id}/resume {"decision": "skip"|"abort", "note"}` decides it.
-  **A park made by a process other than the api is invisible to the api until it restarts**
-  (agent waits rehydrate at boot only, FR-44): a resume then answers 200 `resuming` with
-  `waiters_notified: 0` and the run does not move. Read `waiters_notified`, not `run_status`.
-- **The worker needs this repo pip-installed** or it cannot `import apps` — see the Nodus test
-  section below. A guest execution's memory is bounded by `AINDY_NODUS_MAX_MEMORY_MB` (256,
-  compose) inside the container's `mem_limit` (1536m); `test_compose_memory_bounds.py` keeps the
-  three together — do not lower the cap without re-measuring `cgroup memory.peak` across a boot.
-- **A run cut off by a restart is resumed at the next boot** (`AINDY_DURABLE_CONTINUATION`, ON since
-  2026-10-15 as soak register row 4; `RUNTIME_2_27_0_UPGRADE.md` §7). **The flag alone resumes no agent
-  run**: the runtime continues only agent types the app declares safe, and
-  `apps/agent/bootstrap.py::_declare_continuation_safety` declares ours (`default`) **only while
-  `AINDY_SEARCH_OUTREACH_SEND` is off.** A resumed run re-runs the step in flight at the cut, and
-  `leadgen.act` with sending on really emails, with no exactly-once gate in the worker. **After every
-  api restart:** `docker logs <api> | grep AgentContinuation`, and stranded `executing` runs must be 0.
-  A duplicate task or draft from a resumed run is the soak's failure signal; report the run.
-
-### ARM config — per-user scoping
-
-`arm_config.id` is a `String(36)` primary key. All rows are keyed by user UUID. All `arm_config_dao` calls must pass `user_id=str(current_user["sub"])`. A missing `user_id` falls back to the key `"default"` — the system default singleton, not per-user storage. The `String(36)` length is required to hold a UUID; `String(32)` is too short.
-
-**ARM's only LLM client is DeepSeek, so every model name in ARM must be one DeepSeek accepts**
-(`deepseek-v4-pro`, `deepseek-flash` as of 2026-09-16 — `models.list()` is the source of truth).
-The defaults said `gpt-4o` from the first commit and ARM had **never produced an analysis** on any
-stack until #376 (`ARM-MODEL-NAME-PROVIDER-MISMATCH-1`). Both DeepSeek models are reasoning
-models: with ARM's request shape they spend the whole `max_tokens` budget thinking and return
-**empty content**, so every ARM call passes `extra_body={"reasoning_effort": "none"}`
-(`AINDY_ARM_REASONING_EFFORT` to change it). `test_arm_model_names_match_provider.py` pins both.
-
-### Live probes against the container — the recipe, so it is not re-derived
-
-- **A token without a password:** mint one in-container with the runtime's own function —
-  `docker exec <api> python -c "from AINDY.services.auth_service import create_access_token; print(create_access_token({'sub': '<user uuid>', 'email': '<email>', 'is_admin': False}, token_version=0))"`.
-  Use the designated test account (`kingknight845@gmail.com`) for anything that writes; the
-  owner's account only for read-only GETs on the real plan, and say so.
-- **`/platform/*` needs `platform.admin`.** The test account is not admin. Approved practice:
-  `UPDATE users SET is_admin=true …` before, revert after, every time — never leave it.
-- `POST /platform/syscall` takes `{"name": …, "payload": …}` — the field is `name`, not `syscall`
-  as the 2.19.0 handoff writes it. A user JWT carries no capabilities there (`403 … caller has
-  []`); a scoped API key does.
-- `/metrics` redirects (307) to **`/metrics/`**; curl the trailing slash.
-- `python /tmp/script.py` inside the image imports the **site-packages** `apps`, not `/app/apps`
-  — `pip install .` there is non-editable. Add `-e PYTHONPATH=/app` (or run from a mounted
-  `/src`) or you audit the previous build.
-- The stack must be up with `--profile full`; if `/health` is 500 and `/api/version` is 200,
-  that is redis missing, not the code (Commands, above).
-
-### Another AI reading A.I.N.D.Y. — MCP (since #468)
-
-Owner, 2026-10-14 (#467): **the Infinity Algorithm is the product, and other AIs, repos and outside
-systems are *access* to its state, never a second product.** Judge that work by the same rule:
-does it feed the algorithm? Persist outcomes and references, not transcripts.
-
-- **Claude Code is connected** as MCP server `aindy` (`claude mcp add --scope local`, so it lives in
-  the user's `~/.claude.json`, not the repo). It reads `work_context`, `work_facts {work}` and the five
-  memory reads **as the owner, read-only**, through
-  `docker exec -i -e AINDY_MCP_SERVER_USER_ID=<uid> <api> python /app/scripts/mcp_server.py`.
-  **Use these for the owner's Work facts instead of asking for a paste.** The api container must be up.
-- **Why a launcher and not `aindy-runtime mcp-server`:** since 2.28.0 (FR-53a) the runtime's server
-  loads our plugins itself, so the launcher no longer does. It keeps the read-only allowlist and refuses
-  `AINDY_MCP_SERVER_ALLOW_WRITES`. A plugin that fails to load now stops the MCP server;
-  `AINDY_BOOT_PROFILE=platform-only` serves the runtime's tools alone (DEC-101).
-- **Expose only syscalls that read `ctx.user_id`.** Since 2.28.0 (FR-53b) the MCP transport refuses a
-  payload `user_id` naming another user, and since 2.29.0 (DEC-103) so does in-process dispatch,
-  so a payload can no longer name another user anywhere. Still expose only `ctx.user_id` readers: a
-  handler that *falls back* to a payload id (`get_objective_attainment`, `masterplan.get_active`) is
-  one refusal away from acting for the wrong user. #506–#508 removed ours from `automation.*` and
-  `watcher.query`. Read `aindy_payload_identity_mismatch_total` before each api rebuild. `test_mcp_read_access.py` reads every exposed handler's source.
-- **Over MCP a syscall is granted the capability it declares** (2.31.1, DEC-112). Before that it was
-  inferred from the name, which is why `sys.v1.work.context` declares `work.context`, and why
-  `memory.search`, `.tree` and `.trace` were refused. In-process `sys()` still infers from the name
-  (below). **Any syscall named in `AINDY_MCP_SERVER_TOOLS` is really callable**, so the launcher assigns
-  that list rather than inheriting it. To expose a tool, add it to `READ_ONLY_TOOLS`.
-- **To probe it**, spawn the launcher from an `mcp` SDK client inside the container
-  (`stdio_client(StdioServerParameters(command="python", args=["/app/scripts/mcp_server.py"]))`). In
-  mcp 2.x the result field is `is_error`, not `isError`. A new MCP server reaches a Claude Code session
-  only at session start.
-- **Next:** the release handoff (`docs/specs/RELEASE_HANDOFF_SPEC.md`). Its MCP handoff tool is the
-  first write tool here, and it only *records* a handoff: the api's watcher does the work, so no wait is
-  ever registered outside the api (FR-44).
+Claude Code is connected to MCP server `aindy` (local scope), read-only as the owner. **Use its `work_context`,
+`work_facts` and memory reads for the owner's Work facts instead of asking for a paste.** The api container must be
+up. Owner, 2026-10-14: other AIs are *access* to the Infinity Algorithm's state, never a second product. Launcher,
+exposure rules and probing: `scripts/CLAUDE.md`. ChatGPT and claude.ai wait on FR-66.
 
 ### Every paid call names the user whose key pays (FR-59)
 
@@ -650,84 +409,13 @@ pays a call with no user with the server's key. Only the operator's own calls pa
   account pays with its own key from Settings or gets the 402.
   `test_provider_key_routing.py` fails on a new direct client or key read; add each new site to its per-site list.
 
-### The watcher feeds `focus_quality` (audit D1, owner 2026-11-08)
-
-`focus_quality` is 15% of the score and read 50 in every row until a watcher reported. The runtime ships the watcher:
-`/watcher` routes with per-user keys (DEC-117), and a Windows client in `aindy-sdk`. As shipped, its signals can't count
-for anyone (FR-65).
-
-- **Run it with `scripts/watcher.py`, never the SDK directly.** The launcher sends the key as `X-Platform-Key` and ends
-  a session after `AINDY_WATCHER_IDLE_MINUTES` (default 5) of keyboard and mouse idle. The SDK alone ends one only on a
-  screen lock.
-- **The key:** a watcher key from Settings (Watcher key), in `AINDY_WATCHER_KEY` or `~/.aindy/watcher_key`. Never the
-  shared `AINDY_API_KEY`, which must not live on a laptop.
-- **Only `session_ended` moves the score.** `focus_quality` reads `session_ended`, `distraction_detected` and
-  `focus_achieved` over 14 days.
-- **The watcher had never been used before** (owner). Expect to find its edges, and file them on FR-65.
-
-### `content.draft` — what the drafter is given, and the model
-
-A draft about a Work (`work=` set) gets four things from `draft_service.write_draft`: the owner's
-facts (`work_facts`: summary, connections, presence, confirmed claims), a **NEVER SAY** list (claims the
-owner denied), and **what AI search engines said when asked by name**
-(`resolution_review.engine_answers`). It must also write a *Not to be confused with* section that
-describes each look-alike **only as the engines did** (#461 → #463). If a draft gets the Work wrong, check
-the owner's Work data before the code: "part of Aindy-runtime" in a draft came from the owner's own link,
-and that link is true (owner, 2026-10-14).
-
-**The model is `gpt-5.5`** (`AINDY_DRAFT_MODEL`; `gpt-4o` rolls back). gpt-4o skipped the instructions
-it was given. **gpt-5.x refuses `max_tokens` and any temperature but 1**, so `_sampling(model)` gives a
-reasoning model `max_completion_tokens` (16,000) and `reasoning_effort` (`low`,
-`AINDY_DRAFT_REASONING_EFFORT`). A draft takes about 25–50 s, inside the 120 s step budget. Probe a model
-with a two-token call before switching to it; `models.list()` says what the key can use.
-
 ---
 
-## When the API hangs: the scheduler saturation trap
+## When the API hangs
 
-A wedged API logs this, once a second, loudly:
-
-```
-[Scheduler] job 'scheduler_wait_tick' skipped a run (max_instances) — the scheduler is saturated
-```
-
-**It is almost always a consequence, not the cause, and it is the wrong place to start.** Dispatch
-is serialised through one scheduler slot by design until `AINDY_ASYNC_HEAVY_EXECUTION` is on
-(runtime `APP_HANDOFF_v2.4.0` §7), so *anything* that occupies that slot produces this line. The
-message names the victim, never the culprit.
-
-The full fingerprint — dead `/health`, **zero container restarts**, no log output at all, high CPU,
-starved 1-second heartbeat — has now been produced by at least two unrelated causes: a slow Genesis
-request, and pure host memory starvation with no app traffic whatsoever. Seeing the fingerprint
-tells you the slot is full. It does not tell you what filled it.
-
-**Two fingerprints that look like this and are not, cheaper than all of the below:**
-
-- `/health` **500** with `/api/version` **200**, from the first request after boot, plus
-  `RedisWaitRegistry.get_all_specs failed` tracebacks every second — the rate limiter's Redis
-  storage cannot resolve `redis`. The stack was brought up without `--profile full`. Not the
-  release, not the code.
-- Since #380 the api carries `mem_limit: 1536m` with swap off, so a runaway now ends in an
-  **OOM kill and a restart** — `docker ps` shows a restart count, the log restarts from
-  `[entrypoint]`. "Zero container restarts" is no longer part of the saturation fingerprint; a
-  non-zero count is the cap doing its job, and `cgroup memory.peak` says what grew.
-
-**Then check in this order, cheapest first:**
-
-1. `docker logs <postgres> | grep "terminating any other active server processes"` — a non-zero
-   count means PostgreSQL has been reinitialising its whole cluster and every app symptom is
-   downstream. This was 155 occurrences on 2026-08-19.
-2. Host paging. On Windows use `Get-Counter '\Memory\Available MBytes'` and `'\Memory\Pages/sec'`
-   — **not** `Win32_OperatingSystem.FreePhysicalMemory`, which excludes standby and reads
-   catastrophically low when things are fine. Tens of thousands of hard faults/sec means the
-   container is starved, not broken.
-3. Whether the last log line is `[entrypoint] starting: aindy-runtime serve` — boot imports the
-   16-app graph **twice** and takes minutes on a loaded host. `unhealthy` during that window is
-   the healthcheck being impatient, not a crash.
-
-Only after those three should you look at application code. Full write-ups:
-`docs/verification/DEFECT_GENESIS_MESSAGE_LATENCY.md` §8.1 and
-`docs/verification/DEFECT_INFINITY_RECALC_DEBOUNCE.md`.
+`[Scheduler] job 'scheduler_wait_tick' skipped a run (max_instances)` names the victim, never the culprit. Before
+reading application code, load the `api-hang-triage` skill and check, cheapest first, postgres reinitialisations,
+host paging and boot progress. `/health` 500 with `/api/version` 200 is redis missing (`--profile full`).
 
 ---
 
@@ -750,8 +438,8 @@ Only after those three should you look at application code. Full write-ups:
 | Runtime dependency contract doc | `docs/runtime/RUNTIME_DEPENDENCY.md` |
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
-| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md` — numbering is the runtime's; `test_fr_register_headings.py` guards the headings. FR-33 … FR-38 filed 2026-09-16; FR-32 … FR-36 shipped in 2.20.0 the next day; FR-39 and FR-40 filed 2026-09-17; FR-41 2026-09-19; FR-37 … FR-41 shipped in 2.22.0; FR-43, FR-44, FR-45 filed 2026-09-23; FR-46 (plan steps cannot use earlier results) 2026-09-25; FR-47 2026-09-26; **FR-43 … FR-47 all answered in 2.24.0 / ui-kit 2.1.1** (FR-46 default-off, evidence run owed); FR-48 … FR-50 filed 2026-09-26/30 and **shipped in 2.25.0**; FR-51 and FR-52 shipped in 2.27.0; FR-53 (MCP plugins, payload `user_id`) filed 2026-10-14 and **shipped in 2.28.0** the next day; FR-54 (certifi, security) filed 2026-10-22 and **shipped in 2.28.1** the same day; **FR-55** (guest Nodus waits: no timed resume, resume loses `set_state`, fixed 30-min deadline) filed 2026-10-22, open; **FR-56** (embedding jobs never submitted in the queued path) filed 2026-11-01 and **shipped in 2.29.1** the next day. Its admission-cap risk was a misreading: the `pending` rows were our mirror `automation_logs`, and `job_logs` had them `failed` (`RUNTIME_2_29_1_UPGRADE.md` §4). **Count `job_logs`, not `automation_logs`** |
-| Latest runtime adoption record | `docs/runtime/RUNTIME_2_34_0_UPGRADE.md` — one per release; **2.34.0: FR-61..64 answered (outbound-call events name their user + `events backfill-call-users`; CLI commands load the models; key errors pass through the chat helpers; a flow node keeps its last error). Ours: `_syscall_node` FAILs a key problem instead of retrying it; `count_key_source` is public; no schema step.** 2.33.0's doc (`RUNTIME_2_33_0_UPGRADE.md`): **2.33.0: pgvector 0.5.1 (embeddings read back as lists; no app code reads them), memory expansion's similar half behind `AINDY_MEMORY_EXPAND_SIMILAR` (off; we call no expansion path); no schema step.** 2.32.0's doc (`RUNTIME_2_32_0_UPGRADE.md`): **2.32.0 (with 2.31.6): per-user provider keys, off by default (FR-59 runtime half, DEC-121; `AINDY_PROVIDER_KEYS` stays `server` until our phase 3); registration closed in compose (`AINDY_REGISTRATION=closed`, FR-57); `/db/verify` operator-only (FR-58); trace helpers scoped to the caller (FR-60); memory nodes saved without a path get one (DEC-119, `aindy-runtime memory backfill-paths`); **schema step: runtime head `0020` → `0021`** (`user_provider_keys`), one `bootstrap-schema --reconcile`.** 2.31.5's doc (`RUNTIME_2_31_5_UPGRADE.md`): **2.31.5: nodus-lang 5.15.1 (run-state path traversal; keep `NODUS_RUN_STATE_ROOT` set), another user's agent run answers 404 like a missing one, the effect ledger checks a slot's tenant (DEC-118; watch `aindy_effect_gate_outcomes_total{outcome="tenant_mismatch"}`, should be 0); no schema step.** 2.31.4's doc (`RUNTIME_2_31_4_UPGRADE.md`): **2.31.4: webhooks answer to their creator, Nodus script/workflow names have owners (DEC-116), per-user watcher keys (DEC-117); ours: both webhook subscriptions inactive, 0 watcher signals, client telemetry sends the bearer; no schema step.** 2.31.3's doc (`RUNTIME_2_31_3_UPGRADE.md`): **2.31.3 (with 2.31.0–2.31.2): `sys.v1.agent.undo` works (DEC-108..110; `AINDY_VERIFY_FAILED_AUTO_UNDO` stays unset), MCP grants the declared capability (DEC-112), identity only from authentication at every step (DEC-113, a security fix), the agent registry's routes need an operator (DEC-114); no schema step.** 2.30.0's doc: **2.30.0: own-session recall defaults on (DEC-106; ours has been on since 09-23, so no change), and `aindy-runtime jobs settle-stale-units` closes the 2,387 stranded embedding units (DEC-107, dry run by default); no schema step.** 2.29.2's doc: **2.29.2: pydantic 2.14.2 (two advisories, neither pattern in our tree); the stale-log cleanup now fails the execution unit and fires `job_log.written` (DEC-105), which closes our mirror drift; no schema step.** 2.29.1's doc: **2.29.1 closes FR-56** (the sweep owns embedding, DEC-104; the stranded rows are settled by an operator command; no schema step). 2.29.0's doc: **2.29.0: the dispatcher refuses a payload `user_id` that is not the caller's (DEC-103)**, setuptools 84.1.0 via the `security` extra; no schema step. 2.28.2's doc: **2.28.2 is a security patch** (pymongo 4.18.3, dnspython 2.9.0, dateutil 3.0.0; no schema step), adopted 2026-10-27, **image rebuild deferred to ~10-29**. 2.28.1's doc: **2.28.1 closes FR-54** (certifi ≥ 2026.10.19, a range on purpose; no schema step). 2.28.0's doc: **FR-53 closed** (mcp-server loads plugins; a foreign payload `user_id` is refused on MCP/`sys()`/`/platform/syscall`); `aindy_payload_identity_mismatch_total`: window 1 (10-15 → 10-22) read 0 over 1,496 syscalls; window 2 (10-22 ~17:25Z → 19:51Z) LOST unread; window 3 from 10-22 19:51Z, readout owed **~10-29** (2.28.0 doc §4). It resets on every api recreate: read it before each rebuild. 2.27.0's doc: FR-52 fixed (scores p50 715 ms), soak rows 3–4 (§7). 2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43) — check the column, not the exit code |
+| Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md`: numbering is the runtime's; `test_fr_register_headings.py` guards the headings; the top block says what is open. **Count `job_logs`, not `automation_logs`** (FR-56) |
+| Latest runtime adoption record | `docs/runtime/RUNTIME_2_34_0_UPGRADE.md`; one `RUNTIME_<version>_UPGRADE.md` per release, each saying what changed, what we did, and whether there was a schema step. 2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43); check the column, not the exit code |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
 | Resolution Check (does AI search resolve the owner's entities) | `docs/specs/RESOLUTION_CHECK_SPEC.md`: phases A–C built; `listed` is a verdict (§7.4); the score stays unwired (decision 5) |
