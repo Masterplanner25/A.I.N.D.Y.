@@ -1,6 +1,6 @@
 ---
 title: "Runtime Feature Requests — handoff to aindy-runtime"
-last_verified: "2026-11-08"
+last_verified: "2026-11-09"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -19,6 +19,9 @@ owner: "app-team"
 > **Numbering is the runtime's.** Its `CLAUDE.md` `APP-FR-*` ledger says *next available*; it also
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
+>
+> **Open as of 2026-11-09:** **FR-66 (P3: the MCP server has no streamable HTTP or OAuth, so ChatGPT and claude.ai
+> cannot add it)**, FR-65, FR-55, FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-11-08:** **FR-59 (P2: provider keys cannot be per user, so every account spends the operator's)**,
 > **FR-60 (P3: a trace graph returns every event once the caller owns one)**, FR-57, FR-58, FR-55, FR-14 recurrence
@@ -64,6 +67,42 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-66 — the MCP server cannot be added to ChatGPT or claude.ai: no streamable HTTP transport and no OAuth 🔴 OPEN — filed 2026-11-09, P3
+
+**apps-monolith ref:** the owner asked to read A.I.N.D.Y. from ChatGPT and Claude as well as Claude Code (2026-11-09).
+Read on runtime 2.34.0 with nodus-mcp 0.1.5 in the api image. The number is ours to propose; renumber if the runtime's
+ledger has used it.
+
+**What we see.**
+1. **Transports.** `aindy-runtime mcp-server --transport` takes `stdio` or `sse`. ChatGPT's custom connectors and
+   claude.ai's remote connectors take a URL to a **streamable HTTP** endpoint (conventionally `/mcp`); SSE is the older
+   transport both are moving off.
+2. **Auth.** In multi-tenant SSE (`AINDY_MCP_SERVER_MULTI_TENANT=true`) the user comes from an `Authorization: Bearer` or
+   `X-Platform-Key` header, which a connector set up in those UIs cannot send. They offer OAuth (with dynamic client
+   registration) or no auth. No auth is not an option for this data.
+3. **The other routes do not work either.** OpenAI's Secure MCP Tunnel (a local `tunnel-client` relaying our stdio
+   launcher) connected and polled with no failures, but ChatGPT answered "The MCP server denied access … workspace
+   access", and no request ever reached the client. The owner had the same result with the Nodus MCP server, which is why
+   that one runs behind ngrok with no auth.
+
+So today only local stdio clients can read A.I.N.D.Y.: Claude Code and Claude Desktop, through our launcher
+`scripts/mcp_server.py` (read-only allowlist, one configured user).
+
+**Ask.**
+- `--transport http`: streamable HTTP at `/mcp`, beside stdio and SSE.
+- OAuth 2.1 for it, as the MCP authorization spec describes (protected-resource metadata, dynamic client registration,
+  PKCE), mapping the token to a real user exactly as multi-tenant SSE maps a header today, so DEC-103 and DEC-112 hold.
+- A way for the app to keep its read-only allowlist on that transport (our launcher's `READ_ONLY_TOOLS`), and to refuse
+  writes the way the launcher refuses `AINDY_MCP_SERVER_ALLOW_WRITES`.
+- Nothing about exposure: we would put it behind our own HTTPS (the stack binds to `127.0.0.1`; the owner decides when
+  and how it is reachable).
+
+**Side note, found on the first Claude Desktop session (stdio, 2026-11-09).** A memory read with path `/` was
+refused correctly, since paths must start with `/memory`. But the refusal took 5.6 s and came back labelled transient. A
+bad input should fail at once and as not retryable; the label invites a client to retry a call that can never succeed.
+
+**What we do meanwhile.** Claude Code and Claude Desktop over stdio. ChatGPT and claude.ai wait for this.
+
 ## FR-65 — the `aindy-sdk` watcher cannot count for a user: it sends a per-user key in the wrong header, sends no user, and a session ends only on a screen lock 🔴 OPEN — filed 2026-11-08, P2
 
 **apps-monolith ref:** the owner's audit decision D1 (`AUDIT_2026-11-01.md` §4, 2026-11-08). Read on runtime 2.34.0 and
