@@ -84,3 +84,6 @@ up healthy at **2026-11-11 02:36:24Z**, no restarts.
 4. **The MCP launcher starts** (`claude mcp get aindy`: connected) with `work.context` and `work.facts` declared
    `read_only`, so DEC-128's startup refusal does not fire.
 5. A new identity-counter window opens at 02:36:24Z.
+6. **That window was lost** to an overnight reboot of the laptop (2026-11-11, before it was read; signals stop at
+   07:35Z). Every container restarted at 17:17Z with the same image, so the next window opened at **17:17:28Z** and
+   read 0 identity mismatches and 0 `tenant_mismatch` at 18:01Z. The day-of-traffic read is owed about 11-12 17:20Z.
