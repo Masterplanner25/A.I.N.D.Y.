@@ -57,9 +57,12 @@ print(json.dumps(payload['runtime'], sort_keys=True))
 "
 # Expected: boot_profile=default-apps, app_plugins_loaded=True, app_plugin_count=16
 
-# Local stack — BOTH compose files AND BOTH profiles, every up/down (see the trap below)
-docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail up -d
-docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail build api   # after a merge you want live
+# Local stack — BOTH compose files AND all THREE profiles, every up/down (see the trap below).
+# `public-mcp` (since 2026-11-11) is the read-only MCP server for claude.ai and ChatGPT and its ngrok tunnel;
+# drop it to keep the stack private, but then stop `mcp-tunnel mcp` explicitly, since an up/down without the
+# profile leaves them running.
+docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail --profile public-mcp up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail --profile public-mcp build api   # after a merge you want live (`mcp` shares the image; recreate both)
 # A source-only change rebuilds in ~a minute (deps layer is keyed on pyproject/constraints only, since
 # #395); a pin move re-downloads the tree, 10-15 min on this link. If a source change takes 10+ min,
 # the layer order regressed — DOCKER-PIP-LAYER-INVALIDATION-1.
@@ -390,7 +393,9 @@ Skills: `live-probe` (probing the running container: tokens, admin promotion, `/
 Claude Code is connected to MCP server `aindy` (local scope), read-only as the owner. **Use its `work_context`,
 `work_facts` and memory reads for the owner's Work facts instead of asking for a paste.** The api container must be
 up. Owner, 2026-10-14: other AIs are *access* to the Infinity Algorithm's state, never a second product. Launcher,
-exposure rules and probing: `scripts/CLAUDE.md`. ChatGPT and claude.ai wait on FR-66.
+exposure rules and probing: `scripts/CLAUDE.md`. **claude.ai and ChatGPT read it too, since 2026-11-11** (owner): the
+same seven reads over OAuth at `$AINDY_MCP_PUBLIC_URL/mcp`, compose profile `public-mcp`. That tunnel is the only public
+path; the api stays on `127.0.0.1`.
 
 ### Every paid call names the user whose key pays (FR-59)
 

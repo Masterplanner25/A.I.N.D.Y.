@@ -606,6 +606,9 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_LEADGEN_ALLOW_FIXTURES` | search |  |
 | `AINDY_MASTERPLAN_GOAL_ATTAINMENT` | analytics | `""` |
 | `AINDY_MASTERPLAN_GOAL_ATTAINMENT_SHADOW` | analytics | `""` |
+| `AINDY_MCP_OAUTH_MAX_CLIENTS` | (runtime) | `20` |
+| `AINDY_MCP_OAUTH_REGISTRATIONS_PER_HOUR` | (runtime) | `5` |
+| `AINDY_MCP_PUBLIC_URL` | (runtime) | `""` |
 | `AINDY_MEMORY_RECALL_OWN_SESSION` | (runtime) | `""` |
 | `AINDY_NEXT_ACTION_ACTING` | agent | `false` |
 | `AINDY_NODUS_BOOT_ALLOWANCE_MS` | (runtime) | `60000` |

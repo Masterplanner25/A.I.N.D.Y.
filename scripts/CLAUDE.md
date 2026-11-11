@@ -32,6 +32,30 @@ does it feed the algorithm? Persist outcomes and references, not transcripts.
   (`stdio_client(StdioServerParameters(command="python", args=["/app/scripts/mcp_server.py"]))`). In
   mcp 2.x the result field is `is_error`, not `isError`. A new MCP server reaches a Claude Code session
   only at session start.
+- **Every tool the launcher lists must be registered `read_only=True`** (2.35.0, DEC-128), or the server
+  refuses to start, naming it. `test_mcp_read_access.py` asserts it.
+
+## claude.ai and ChatGPT: the public `/mcp` (owner, 2026-11-11)
+
+FR-66's D7 proved it on 2026-11-11 (report in the FR register); the owner then asked for it for real.
+
+- **What runs:** compose profile `public-mcp`. Service `mcp` is this launcher with `--transport http` (same image
+  and environment as the api, port 8080 on loopback, its own small DB pool); service `mcp-tunnel` is an ngrok agent
+  forwarding `$AINDY_MCP_PUBLIC_URL` to `mcp:8080`, and nothing else. **The api is never behind the tunnel**: through
+  it, `/health`, `/auth/login` and `/docs` are 404. Both need `AINDY_MCP_PUBLIC_URL` and `NGROK_AUTHTOKEN` in `.env`.
+- **The launcher refuses `--transport http` without `AINDY_MCP_OAUTH=on`.** Without OAuth the runtime answers every
+  HTTP caller as one configured user. With it, `/mcp` takes only its own 1-hour tokens, each held to the scopes the
+  user approved on the consent page (sign-in with an existing account; registration stays closed).
+- **Anything added to `READ_ONLY_TOOLS` is public** to whoever holds a grant. Same rule as before, higher stakes.
+- **Connect:** claude.ai "Add custom connector" with **Sign in now** and **Register automatically (DCR)** (not CIMD,
+  which we don't serve); ChatGPT developer-mode connector with OAuth. The free ngrok domain shows a browser warning
+  once before the consent page: **Visit Site**.
+- **See and end connections:** `GET` / `DELETE /auth/mcp-grants` from a signed-in session (each writes
+  `mcp_grant.created` / `.revoked`, source `mcp.oauth`). No app page yet.
+- **The consent page's rate limit (10 attempts a minute) is global here**, because every request arrives from the
+  tunnel's address (FR-68 asks the runtime to trust a named proxy's `X-Forwarded-For`).
+- **Take it down:** `docker compose ... --profile public-mcp stop mcp-tunnel mcp`. The owner's own ngrok agent for
+  the Nodus MCP server (`nodusmcpserver.ngrok.io`) is separate; leave it alone.
 - **Next:** the release handoff (`docs/specs/RELEASE_HANDOFF_SPEC.md`). Its MCP handoff tool is the
   first write tool here, and it only *records* a handoff: the api's watcher does the work, so no wait is
   ever registered outside the api (FR-44).

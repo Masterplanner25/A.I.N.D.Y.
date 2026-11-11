@@ -20,7 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-11-11:** **FR-67 (P3: a memory node's path leaf is not its id, 81 nodes)**, FR-55, FR-14 recurrence
+> **Open as of 2026-11-11:** **FR-68 (P3: behind a proxy the consent page's rate limit is global)**, **FR-67 (P3: a
+> memory node's path leaf is not its id, 81 nodes)**, FR-55, FR-14 recurrence
 > half, FR-6 items 2–3. FR-66 closed by our D7 (2026-11-11); FR-65 shipped (runtime 2.35.0 + `aindy-sdk` 1.2.1).
 >
 > **Open as of 2026-11-09:** **FR-66 (P3: the MCP server has no streamable HTTP or OAuth, so ChatGPT and claude.ai
@@ -70,6 +71,21 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-68 — behind a proxy, the MCP consent page's rate limit is one bucket for everyone 🔴 OPEN — filed 2026-11-11, P3
+
+**apps-monolith ref:** the public `/mcp` for claude.ai and ChatGPT (compose profile `public-mcp`, 2026-11-11), on
+2.35.0. The number is ours to propose; renumber if the runtime's ledger has used it.
+
+**What we see.** `mcp_oauth.py` limits sign-in attempts on `/oauth/consent` to `CONSENT_ATTEMPTS_PER_MINUTE` (10) per
+`request.client.host`. Behind any HTTPS proxy, which the docs require for `--transport http`, that is the proxy's
+address: here every public request reaches the server from the ngrok container (`172.19.0.8`). So the limit is
+global. Brute force is capped tighter than intended, but anyone sending ten bad sign-ins a minute keeps the owner
+from connecting a client.
+
+**Ask.** An opt-in trusted-proxy setting (e.g. `AINDY_MCP_TRUSTED_PROXIES`, CIDRs) under which the consent page keys
+its limit on the client address from `X-Forwarded-For` (the right-most untrusted hop), as uvicorn's
+`--forwarded-allow-ips` does. Unset, keep today's behaviour.
+
 ## FR-67 — a memory node written through `sys.v1.memory.write` has a path whose last segment is not its id 🔴 OPEN — filed 2026-11-11, P3
 
 **apps-monolith ref:** found in FR-66's D7, when claude.ai read a node over MCP and noticed the mismatch. Read on 2.35.0.

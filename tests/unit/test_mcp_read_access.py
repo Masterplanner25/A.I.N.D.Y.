@@ -86,12 +86,38 @@ def test_an_inherited_tool_list_cannot_replace_the_launchers(monkeypatch):
     monkeypatch.delenv("AINDY_MCP_SERVER_ALLOW_WRITES", raising=False)
     monkeypatch.setattr(runtime_server, "serve_stdio", lambda: None)
     launcher = _launcher()
-    launcher.main()
+    launcher.main([])
     assert os.environ["AINDY_MCP_SERVER_TOOLS"] == ",".join(launcher.READ_ONLY_TOOLS)
 
 
 def test_the_launcher_refuses_writes(monkeypatch):
     monkeypatch.setenv("AINDY_MCP_SERVER_ALLOW_WRITES", "true")
     with pytest.raises(SystemExit) as exc:
-        _launcher().main()
+        _launcher().main([])
     assert "read-only" in str(exc.value)
+
+
+def test_over_http_the_launcher_refuses_to_start_without_oauth(monkeypatch):
+    """Without OAuth the runtime answers every HTTP caller as one configured user, and this server is public."""
+    import AINDY.platform_layer.mcp_server as runtime_server
+
+    monkeypatch.delenv("AINDY_MCP_OAUTH", raising=False)
+    monkeypatch.delenv("AINDY_MCP_SERVER_ALLOW_WRITES", raising=False)
+    monkeypatch.setattr(runtime_server, "serve_http", lambda **kw: pytest.fail("served without OAuth"))
+    with pytest.raises(SystemExit) as exc:
+        _launcher().main(["--transport", "http", "--host", "0.0.0.0"])
+    assert "AINDY_MCP_OAUTH" in str(exc.value)
+
+
+def test_over_http_with_oauth_it_serves_the_same_read_only_list(monkeypatch):
+    import AINDY.platform_layer.mcp_server as runtime_server
+
+    served = {}
+    monkeypatch.setenv("AINDY_MCP_OAUTH", "on")
+    monkeypatch.setenv("AINDY_MCP_SERVER_TOOLS", "sys.v1.memory.delete")
+    monkeypatch.delenv("AINDY_MCP_SERVER_ALLOW_WRITES", raising=False)
+    monkeypatch.setattr(runtime_server, "serve_http", lambda **kw: served.update(kw))
+    launcher = _launcher()
+    launcher.main(["--transport", "http", "--host", "0.0.0.0", "--port", "8080"])
+    assert served == {"host": "0.0.0.0", "port": 8080}
+    assert os.environ["AINDY_MCP_SERVER_TOOLS"] == ",".join(launcher.READ_ONLY_TOOLS)
