@@ -46,8 +46,9 @@ unaffected.
 claude.ai connector and a real ChatGPT connector each read a memory node, reporting what each registered, whether
 discovery from the first `401` worked, what the consent page showed, the tool result and any failure.
 
-**Not started here.** D7 needs `/mcp` reachable over public HTTPS (`AINDY_MCP_PUBLIC_URL=https://…`), and the stack is
-loopback-only by the owner's decision. Exposing it is the owner's call, made separately.
+**Run 2026-11-11 (owner's go-ahead):** a temporary `--transport http` server with OAuth behind an ngrok tunnel, 02:41Z
+→ 03:15Z, then taken down. Both connectors registered, consented, and read a memory node. The report is under FR-66 in
+`RUNTIME_FEATURE_REQUESTS.md`; it also found FR-67. The stack is loopback-only again; nothing in compose changed.
 
 When a connected-apps page is built for ordinary users, it calls `GET` / `DELETE /auth/mcp-grants` (session only; the
 runtime's console panel admits only admins).
