@@ -56,8 +56,10 @@ FR-66's D7 proved it on 2026-11-11 (report in the FR register); the owner then a
   grant can be deleted from `mcp_oauth_clients` (its grants cascade; the audit events stay), as two were on 11-11.
 - **The consent page's rate limit (10 attempts a minute) is global here**, because every request arrives from the
   tunnel's address (FR-68 asks the runtime to trust a named proxy's `X-Forwarded-For`).
-- **Take it down:** `docker compose ... --profile public-mcp stop mcp-tunnel mcp`. The owner's own ngrok agent for
-  the Nodus MCP server (`nodusmcpserver.ngrok.io`) is separate; leave it alone.
+- **Take it down:** `docker compose ... --profile public-mcp stop mcp-tunnel mcp`. 
+- **The owner's own Nodus MCP server** (`127.0.0.1:8765`, its own sign-in task) is separate from this one. **Its public
+  tunnel `nodusmcpserver.ngrok.io` stays off** (owner, 2026-11-11): that server has no auth and exposes `nodus_exec`.
+  It comes back only once it has sign-in, the way this `/mcp` does.
 - **Next:** the release handoff (`docs/specs/RELEASE_HANDOFF_SPEC.md`). Its MCP handoff tool is the
   first write tool here, and it only *records* a handoff: the api's watcher does the work, so no wait is
   ever registered outside the api (FR-44).

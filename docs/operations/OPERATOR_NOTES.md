@@ -22,6 +22,11 @@ Add a note when something cost time to learn. Delete one when it stops being tru
 - **Never bulk-remove containers by filter.** `docker ps -q --filter … --format …` ignores `--format`
   under `-q`, and on 2026-10-22 it deleted the live api. Use `--rm` and exact IDs.
 - **`up -d api` after a build recreates only the api,** ~60–80 s to healthy.
+- **After a reboot the stack comes back at sign-in, not at boot** (2026-11-11): Docker Desktop starts at login and
+  `restart: unless-stopped` brings every container back at once. That ignores `depends_on`, so the api fails once or
+  twice ("the database system is starting up") while postgres runs crash recovery, then boots; `RestartCount` 2 is
+  normal there. **A restarted container keeps the image it was created from**, so an image built since does not go
+  live until an `up` recreates it. The watcher and Vite return through their sign-in tasks (`scripts/CLAUDE.md`).
 - **A rebuild is slow when the base image's digest moved, not because of the pin.** 2.28.1 took
   53 min because `python:3.11-slim` had moved and the Debian mirror was slow. A pin move alone took
   399 s on 10-09.
@@ -59,7 +64,11 @@ Add a note when something cost time to learn. Delete one when it stops being tru
 - **A client test that fails under load is usually its timeout,** not its logic. vitest's default is
   20 s since #464; check the duration first, and reproduce with the Python suite running alongside.
 - **`npm ci` while Vite is running fails on Windows** and deletes `node_modules`.
-- **`python -` (stdin) decodes as cp1252 on this host.** Write scripts to a file.
+- **`python -` (stdin) decodes as cp1252 on this host.** Write scripts to a file. The same applies to *output* piped
+  into Python: `curl … | python -c "json.load(sys.stdin)"` reads the api's UTF-8 as cp1252, so an em dash prints as
+  `â€”` and looks like a data bug (2026-11-11). Check the stored value in postgres before believing it.
+- **A backslash at the end of a line in a Python string is a line continuation,** so a search string copied from a
+  shell example ending in `\` never matches. Use the Edit tool for such text.
 - **Escapes in a Bash heredoc get mangled.** A `\n` inside Python inside a heredoc became a real newline
   twice on 10-25, and one heredoc would not parse. Write such code with the Write or Edit tool.
 - **An em dash in a curl JSON body through Git Bash gives `400`.** Use ASCII, or `--data-binary @file`.
@@ -101,6 +110,9 @@ Add a note when something cost time to learn. Delete one when it stops being tru
 - **The `aindy` MCP server disconnects when the api restarts,** and comes back at the next session start.
   It also needs the api container up.
 - **Use the MCP tools for the owner's Work facts** instead of asking for a paste.
+- **The public `/mcp` can be checked end to end from Claude Code:** the owner's claude.ai connector appears in the
+  session as `mcp__claude_ai_A_I_N_D_Y_mcp_server__*` tools, and a call through them goes claude.ai → tunnel → `mcp`.
+  The stdio `aindy` server checks only the api container.
 
 ## Agents, models and content
 
@@ -120,5 +132,6 @@ Add a note when something cost time to learn. Delete one when it stops being tru
 ## Measurement
 
 - **The identity counter (`aindy_payload_identity_mismatch_total`) resets on every api recreate.** Read it
-  before a rebuild; window 2 was lost that way.
+  before a rebuild; window 2 was lost that way. **A reboot resets it too** (and `tenant_mismatch`): 2.35.0's first
+  window was lost to one on 2026-11-11.
 - **Check a schema change by the column, not the exit code** (FR-43).
