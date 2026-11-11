@@ -93,3 +93,19 @@ From #574's merge (`2a4dee5`), image `ff06d67fe91c`, up healthy at **21:51:02Z**
      graph applies FR-60's rule, "edges whose ends both remain", and drops them.
    - **For the runtime:** should a scoped graph keep an edge to the caller's own event outside the trace (as a dangling
      edge, like the unscoped one, or with that event as a node)? Not filed as a request; reported here as asked.
+
+## 7. Day-of-traffic read, 2026-11-11
+
+The window opened at the api recreate of **2026-11-09 03:46:30Z** (image `71270a01e593`, no restarts since) and was read
+at **2026-11-11 01:58Z**, about 46 hours later.
+
+| Counter | Reading |
+|---|---|
+| `aindy_payload_identity_mismatch_total` | **0** (declared, never incremented) |
+| `aindy_effect_gate_outcomes_total{outcome="tenant_mismatch"}` | **0** (absent; the only outcome is `reserved`, 288) |
+| `tenant_mismatch` in the api log since the recreate | 0 lines |
+| `aindy_llm_key_source_total` | 238, all `key_source="server"`: openai 220, perplexity 9, anthropic 9 |
+
+The window carried real traffic: 288 gated effects and 238 model calls. Every model call went on the server's key,
+which is right under `per_user`, since the owner is the only account that made calls and the owner uses the server's
+keys.
