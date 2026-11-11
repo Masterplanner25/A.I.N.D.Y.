@@ -65,5 +65,20 @@ the owner's laptop.
 
 ## 6. Live
 
-Owed after the merge: rebuild, `aindy-runtime bootstrap-schema --reconcile` once, `alembic_version_runtime` reads
-`0022`, the in-container version check, and the MCP launcher starts.
+From #596's merge (`dc30980`), image `638ab79a20f4` (built in about 3 minutes: the deps layer moved, the base did not),
+up healthy at **2026-11-11 02:36:24Z**, no restarts.
+
+1. **Counters before the recreate** (02:35:46Z, closing the window opened 11-09 03:46:30Z): 0 identity mismatches, 0
+   `tenant_mismatch`; 240 model calls, all `key_source="server"`.
+2. **The schema step, out-of-band with the api stopped:**
+   - `bootstrap-schema` on the new image: `state=upgrade_required operator_action=startup_reconcile exit_code=3`, as
+     the handoff said;
+   - `docker compose run --rm --no-deps --entrypoint aindy-runtime api bootstrap-schema --reconcile`:
+     `stamped alembic_version_runtime from revision 0021 to 0022`;
+   - `alembic_version_runtime` reads **`0022`**; `mcp_oauth_clients` and `mcp_oauth_grants` exist. App head
+     `gl1layer0001`, unchanged.
+3. **The handoff's check:** `2.35.0 ['/usr/local/lib/python3.11/site-packages/AINDY']`, FastAPI `0.162.0`.
+   `/health` 200; `default-apps`, `app_plugins_loaded=True`, 16 plugins. No errors in the boot log.
+4. **The MCP launcher starts** (`claude mcp get aindy`: connected) with `work.context` and `work.facts` declared
+   `read_only`, so DEC-128's startup refusal does not fire.
+5. A new identity-counter window opens at 02:36:24Z.
