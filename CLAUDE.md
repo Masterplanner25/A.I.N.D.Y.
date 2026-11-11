@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install — published runtime (default; aindy-runtime is published on PyPI)
-python -m pip install -e . --no-build-isolation   # resolves aindy-runtime[mcp,security]>=2.34.0,<3.0 from PyPI
+python -m pip install -e . --no-build-isolation   # resolves aindy-runtime[mcp,security]>=2.35.0,<3.0 from PyPI
 
 # Install — runtime from a sibling checkout (local paired-repo dev only)
 python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
@@ -257,10 +257,10 @@ merge rules): `docs/operations/MIGRATION_POLICY.md`.
 ## Runtime dependency contract
 
 ```toml
-aindy-runtime[mcp,security]>=2.34.0,<3.0    # pyproject.toml — the COMPATIBILITY range
+aindy-runtime[mcp,security]>=2.35.0,<3.0    # pyproject.toml — the COMPATIBILITY range
 ```
 ```
-aindy-runtime==2.34.0         # constraints.txt — the BUILD pin
+aindy-runtime==2.35.0         # constraints.txt — the BUILD pin
 ```
 
 The upper bound is required. Never widen to an unbounded range.
@@ -293,7 +293,7 @@ python -m pip install -e ../aindy-runtime --no-deps --no-build-isolation
 `--no-deps` prevents pip from overwriting the runtime with a published version while
 still making the editable source importable.
 
-CI installs the published runtime from PyPI (the pinned `aindy-runtime[mcp,security]>=2.34.0,<3.0`
+CI installs the published runtime from PyPI (the pinned `aindy-runtime[mcp,security]>=2.35.0,<3.0`
 dependency) and verifies the installed version at boot. `aindy-runtime` is
 published (PYPI-PUBLISH-1 is closed); the sibling-checkout flow above is for local
 paired-repo development only.
@@ -439,7 +439,7 @@ host paging and boot progress. `/health` 500 with `/api/version` 200 is redis mi
 | CI ownership doc | `docs/operations/CI_OWNERSHIP.md` |
 | Strategy layer (objectives / phases / strategies) | `docs/specs/STRATEGY_LAYER_SPEC.md` — built through §8 step 3b(v) as of 2026-09-16 (phase advance, pace and strategy-conclude proposals; attainment shadow recorded, not flipped) |
 | Runtime feature requests (passbacks to the runtime side, ui-kit included) | `docs/runtime/RUNTIME_FEATURE_REQUESTS.md`: numbering is the runtime's; `test_fr_register_headings.py` guards the headings; the top block says what is open. **Count `job_logs`, not `automation_logs`** (FR-56) |
-| Latest runtime adoption record | `docs/runtime/RUNTIME_2_34_0_UPGRADE.md`; one `RUNTIME_<version>_UPGRADE.md` per release, each saying what changed, what we did, and whether there was a schema step. 2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43); check the column, not the exit code |
+| Latest runtime adoption record | `docs/runtime/RUNTIME_2_35_0_UPGRADE.md`; one `RUNTIME_<version>_UPGRADE.md` per release, each saying what changed, what we did, and whether there was a schema step. 2.22.0's §2: a column WIDENING is invisible to `bootstrap-schema` (FR-43); check the column, not the exit code |
 | Compose memory bounds (api cap, no swap, guest ceiling) | `docker-compose.prod.yml` api service; guarded by `tests/unit/test_compose_memory_bounds.py` |
 | Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
 | Resolution Check (does AI search resolve the owner's entities) | `docs/specs/RESOLUTION_CHECK_SPEC.md`: phases A–C built; `listed` is a verdict (§7.4); the score stays unwired (decision 5) |

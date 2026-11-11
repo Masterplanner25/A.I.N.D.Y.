@@ -71,6 +71,8 @@ def test_every_app_syscall_the_launcher_exposes_is_registered_read_only_and_call
     assert ours == ["sys.v1.work.context", "sys.v1.work.facts"]
     for name in ours:
         entry = SYSCALL_REGISTRY[name]
+        # DEC-128 (2.35.0): without it the launcher refuses to start, naming the syscall.
+        assert entry.read_only is True, f"{name} must be registered read_only=True"
         source = inspect.getsource(entry.handler)
         assert 'payload["user_id"]' not in source and "payload.get(\"user_id\")" not in source, (
             f"{name} reads user_id from the payload; over MCP that is whoever the outside AI names")
