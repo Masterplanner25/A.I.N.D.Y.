@@ -95,6 +95,43 @@ describe("RippleTrace: a piece's answers and links", () => {
     expect(await screen.findByText(/answers within about ten minutes/)).toBeTruthy();
   });
 
+  it("shows a queued piece as queued when reopened, not the button again", async () => {
+    mockGetAnswers.mockResolvedValue({ found: true, status: null, stale: false, answers: [], raised: [] });
+    render(<RippleTrace />);
+    fireEvent.click(await screen.findByTestId("detail-toggle-p2"));
+
+    expect(await screen.findByText(/answers within about ten minutes/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Read what it answers" })).toBeNull();
+  });
+
+  it("fills in the answers when the job has read the piece, without reopening", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockGetAnswers
+        .mockResolvedValueOnce({ found: true, status: "skipped", stale: false, answers: [], raised: [] })
+        .mockResolvedValueOnce({ found: true, status: null, stale: false, answers: [], raised: [] })
+        .mockResolvedValue({
+          found: true, status: "made", stale: false, answers: [{ question: "What is Nodus?" }], raised: [],
+        });
+      render(<RippleTrace />);
+      fireEvent.click(await screen.findByTestId("detail-toggle-p2"));
+      fireEvent.click(await screen.findByRole("button", { name: "Read what it answers" }));
+      expect(await screen.findByText(/answers within about ten minutes/)).toBeTruthy();
+
+      await vi.advanceTimersByTimeAsync(30_000); // still queued
+      expect(screen.queryByText("What is Nodus?")).toBeNull();
+      await vi.advanceTimersByTimeAsync(30_000); // read
+      expect(await screen.findByText("What is Nodus?")).toBeTruthy();
+      expect(screen.getByTestId("piece-answers")).toHaveTextContent("1 answered");
+
+      const calls = mockGetAnswers.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(90_000); // stops asking once read
+      expect(mockGetAnswers.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says when the answers were read from an earlier version", async () => {
     mockGetAnswers.mockResolvedValue({
       data: { found: true, status: "made", stale: true, answers: [{ question: "Q?" }], raised: [] },

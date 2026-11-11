@@ -68,6 +68,14 @@ const STATUS_STYLES = {
   error: "text-red-400",
 };
 
+// A piece waiting for the answers job: its status is unset (DUE), set by "Read what it answers" or for a new
+// piece. The job reads one piece per owner every ten minutes, so an open panel asks again on this beat.
+const ANSWERS_POLL_MS = 30_000;
+
+function answersWaiting(answers) {
+  return Boolean(answers) && answers.found !== false && (answers.status === null || answers.status === undefined);
+}
+
 export default function RippleTrace() {
   const [url, setUrl] = useState("");
   const [sources, setSources] = useState([]);
@@ -91,6 +99,29 @@ export default function RippleTrace() {
   // The open "Answers & links" panel: one piece at a time.
   const [detailFor, setDetailFor] = useState(null);
   const [detail, setDetail] = useState(null);
+
+  // While the open piece waits for the answers job, ask again until they land (owner, 2026-11-11: a click
+  // that queued looked like it did nothing, because the panel never changed).
+  const waitingFor = detailFor && detail && !detail.loading && (detail.queued || answersWaiting(detail.answers))
+    ? detailFor : null;
+  useEffect(() => {
+    if (!waitingFor) return undefined;
+    let alive = true;
+    const timer = setInterval(async () => {
+      try {
+        const fresh = wholeResult(await getPieceAnswers(waitingFor));
+        if (alive && fresh && fresh.found !== false && !answersWaiting(fresh)) {
+          setDetail((current) => (current ? { ...current, answers: fresh, queued: false } : current));
+        }
+      } catch {
+        // keep waiting; the next beat asks again
+      }
+    }, ANSWERS_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [waitingFor]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -731,7 +762,7 @@ export default function RippleTrace() {
                       ) : (
                         <div className="text-zinc-500 mt-1">
                           {detail.answers.status === "failed" ? "Reading it failed. " : "Not read yet. "}
-                          {detail.queued ? (
+                          {detail.queued || answersWaiting(detail.answers) ? (
                             <span className="text-emerald-400">Queued: answers within about ten minutes.</span>
                           ) : (
                             <button
