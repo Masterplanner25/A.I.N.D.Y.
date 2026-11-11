@@ -61,8 +61,9 @@ The SDK now ends a session after `AINDY_WATCHER_IDLE_TIMEOUT` seconds without in
 mark the date when the laptop's watcher moves to 1.2.1.
 
 Our floor is now `>=1.2.1` (1.2.0 calls `classify(window, rules)`, which breaks our launcher's one-argument
-`classify`). **Retiring `scripts/watcher.py` for `aindy-watcher` is a separate change**, since the watcher runs on
-the owner's laptop.
+`classify`). **Retired 2026-11-11 (owner):** `scripts/watcher.py` and its test are deleted, and the laptop runs
+`aindy-watcher` 1.2.1 since **03:20:19Z**; its first `session_started` arrived at 03:20:49Z, attributed to the owner.
+**`focus_quality` before and after that time is not comparable.**
 
 ## 6. Live
 

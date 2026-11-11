@@ -155,7 +155,7 @@ temporary ngrok HTTPS tunnel from 02:41Z to 03:15Z, then taken down. Only the MC
 
 **What we do meanwhile.** Claude Code and Claude Desktop over stdio. ChatGPT and claude.ai wait for this.
 
-## FR-65 — the `aindy-sdk` watcher cannot count for a user: it sends a per-user key in the wrong header, sends no user, and a session ends only on a screen lock ✅ SHIPPED: the header in `aindy-sdk` 1.1.0, idle detection and `session_ended` in 1.2.1, the signal filter in runtime 2.35.0 (#947); ours: retire `scripts/watcher.py` (`RUNTIME_2_35_0_UPGRADE.md` §5) — filed 2026-11-08, P2
+## FR-65 — the `aindy-sdk` watcher cannot count for a user: it sends a per-user key in the wrong header, sends no user, and a session ends only on a screen lock ✅ SHIPPED: the header in `aindy-sdk` 1.1.0, idle detection and `session_ended` in 1.2.1, the signal filter in runtime 2.35.0 (#947); ours: `scripts/watcher.py` retired 2026-11-11, the laptop runs `aindy-watcher` 1.2.1 (`RUNTIME_2_35_0_UPGRADE.md` §5) — filed 2026-11-08, P2
 
 **apps-monolith ref:** the owner's audit decision D1 (`AUDIT_2026-11-01.md` §4, 2026-11-08). Read on runtime 2.34.0 and
 `aindy-sdk` 1.0.0, installed in our venv. The owner: this hookup is the watcher's first real use; little work has gone

@@ -39,14 +39,19 @@ does it feed the algorithm? Persist outcomes and references, not transcripts.
 ## The watcher feeds `focus_quality` (audit D1, owner 2026-11-08)
 
 `focus_quality` is 15% of the score and read 50 in every row until a watcher reported. The runtime ships the watcher:
-`/watcher` routes with per-user keys (DEC-117), and a Windows client in `aindy-sdk`. As shipped, its signals can't count
-for anyone (FR-65).
+`/watcher` routes with per-user keys (DEC-117), and a Windows client in `aindy-sdk`. Until 1.2.1 its signals couldn't
+count for anyone (FR-65, shipped).
 
-- **Run it with `scripts/watcher.py`, never the SDK directly.** The launcher sends the key as `X-Platform-Key` and ends
-  a session after `AINDY_WATCHER_IDLE_MINUTES` (default 5) of keyboard and mouse idle. The SDK alone ends one only on a
-  screen lock.
+- **Run the SDK's `aindy-watcher` (aindy-sdk >= 1.2.1), from the venv.** Since 2026-11-11 there is no launcher of ours:
+  1.2.1 sends a per-user key as `X-Platform-Key`, ends a session after `AINDY_WATCHER_IDLE_TIMEOUT` seconds without
+  input (default 300), and sends `session_ended` on stop (FR-65). The SDK reads the key from the environment only, so
+  from PowerShell, at the repo root:
+  `$env:AINDY_WATCHER_KEY = (Get-Content ~/.aindy/watcher_key -Raw).Trim(); $env:AINDY_WATCHER_API_URL = 'http://127.0.0.1:8000'; venv/Scripts/aindy-watcher.exe`
+  (`--dry-run` first to see what it would send; set the URL, since the SDK defaults to `localhost`).
+- **`focus_quality` before 2026-11-11 03:20:19Z is not comparable with after.** SDK 1.1.0 and earlier inflated
+  `focused_seconds` and `focus_score` (ten minutes read as about 605) and fired `distraction_detected` too early.
 - **The key:** a watcher key from Settings (Watcher key), in `AINDY_WATCHER_KEY` or `~/.aindy/watcher_key`. Never the
   shared `AINDY_API_KEY`, which must not live on a laptop.
 - **Only `session_ended` moves the score.** `focus_quality` reads `session_ended`, `distraction_detected` and
   `focus_achieved` over 14 days.
-- **The watcher had never been used before** (owner). Expect to find its edges, and file them on FR-65.
+- **The watcher was first used 2026-11-08** (owner). FR-65 is shipped; file a new edge as its own FR.
