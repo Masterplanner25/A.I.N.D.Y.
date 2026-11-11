@@ -20,8 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-11-11:** FR-66 waits on our D7 only (2.35.0 shipped it), FR-55, FR-14 recurrence half, FR-6 items
-> 2–3. FR-65 shipped (runtime 2.35.0 + `aindy-sdk` 1.2.1).
+> **Open as of 2026-11-11:** **FR-67 (P3: a memory node's path leaf is not its id, 81 nodes)**, FR-55, FR-14 recurrence
+> half, FR-6 items 2–3. FR-66 closed by our D7 (2026-11-11); FR-65 shipped (runtime 2.35.0 + `aindy-sdk` 1.2.1).
 >
 > **Open as of 2026-11-09:** **FR-66 (P3: the MCP server has no streamable HTTP or OAuth, so ChatGPT and claude.ai
 > cannot add it)**, FR-65, FR-55, FR-14 recurrence half, FR-6 items 2–3.
@@ -70,7 +70,27 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-66 — the MCP server cannot be added to ChatGPT or claude.ai: no streamable HTTP transport and no OAuth 🟡 SHIPPED in 2.35.0 (#951–#953: `--transport http`, OAuth, DEC-125..130); closes on D7, ours: a real claude.ai and a real ChatGPT connector each read a memory node — filed 2026-11-09, P3
+## FR-67 — a memory node written through `sys.v1.memory.write` has a path whose last segment is not its id 🔴 OPEN — filed 2026-11-11, P3
+
+**apps-monolith ref:** found in FR-66's D7, when claude.ai read a node over MCP and noticed the mismatch. Read on 2.35.0.
+The number is ours to propose; renumber if the runtime's ledger has used it.
+
+**What we see.** Paths are documented as `/memory/{tenant}/{namespace}/{type}/{node_id}`, and 1,782 of our 1,863 pathed
+nodes match. **81 do not** (written 2026-09-13 → 11-08): 27 `syscall`/`outcome`, 17 `syscall`/`decision`, 15
+`agent`/`insight`, 13 `agent_findings`/`insight`, 9 `release_handoff`/`outcome`. Example: node `488317bc-…` at
+`/memory/<owner>/general/insight/70494ab4-…`.
+
+**Why.** `memory_address_space.py`'s write-path resolver calls `generate_node_path(...)`, which mints a fresh UUID for
+the leaf and returns `(full_path, node_id)`. The resolver keeps the path and drops the id (`full_path, _ = …`, both
+branches), and the row is then stored under its own id.
+
+**Effect.** Reads by path work, so nothing of ours is broken. But anyone (or any AI) that takes the id from the path gets
+an id that does not exist, and the documented shape is not true for these nodes.
+
+**Ask.** Store the node under the id the path names (or build the path from the row's id), and a backfill like
+`memory backfill-paths` to rewrite the 81, or a decision that the leaf is an address, not an id, written into the docs.
+
+## FR-66 — the MCP server cannot be added to ChatGPT or claude.ai: no streamable HTTP transport and no OAuth ✅ SHIPPED in 2.35.0 (#951–#953: `--transport http`, OAuth, DEC-125..130); D7 run 2026-11-11: a real claude.ai and a real ChatGPT connector each registered, consented and read a memory node (report below) — filed 2026-11-09, P3
 
 **apps-monolith ref:** the owner asked to read A.I.N.D.Y. from ChatGPT and Claude as well as Claude Code (2026-11-09).
 Read on runtime 2.34.0 with nodus-mcp 0.1.5 in the api image. The number is ours to propose; renumber if the runtime's
@@ -103,6 +123,35 @@ So today only local stdio clients can read A.I.N.D.Y.: Claude Code and Claude De
 **Side note, found on the first Claude Desktop session (stdio, 2026-11-09).** A memory read with path `/` was
 refused correctly, since paths must start with `/memory`. But the refusal took 5.6 s and came back labelled transient. A
 bad input should fail at once and as not retryable; the label invites a client to retry a call that can never succeed.
+
+**D7, run 2026-11-11 on 2.35.0 (the evidence that closes this).** One `aindy-runtime mcp-server --transport http
+--host 0.0.0.0 --port 8080` beside the api (same image, `AINDY_MCP_OAUTH=on`, our seven reads in
+`AINDY_MCP_SERVER_TOOLS`, writes off, `AINDY_MCP_OAUTH_MAX_CLIENTS=5`, `…_REGISTRATIONS_PER_HOUR=5`), exposed through a
+temporary ngrok HTTPS tunnel from 02:41Z to 03:15Z, then taken down. Only the MCP server was behind it: the api's
+`/health` and `/auth/login` were 404 through the tunnel. Evidence from the tunnel's request log and the database.
+
+| | claude.ai | ChatGPT |
+|---|---|---|
+| Connector UI | "Add custom connector": detected **Sign in now** and **Register automatically (DCR)**; CIMD offered, not used (we don't serve it) | Developer-mode connector, OAuth |
+| Discovery from the first `401` | ✅ `POST /mcp` 401 → protected-resource → authorization-server | ✅ the same, plus `/.well-known/openid-configuration` (404) on each pass, then it carries on |
+| What it registered | `client_name` `Claude`, redirect `https://claude.ai/api/mcp/auth_callback`, `client_secret_post`, `authorization_code` + `refresh_token`, scope `memory.read work.context work.facts` | `ChatGPT`, redirect `https://chatgpt.com/connector/oauth/…`, otherwise the same |
+| Consent page | the owner signed in (after ngrok's free-domain browser warning); three read scopes, all ticked; no write offered | the same |
+| Grant and token | grant with the 3 scopes, `mcp_grant.created` written (`redirect_host` `claude.ai`); `/token` 200 | the same (`chatgpt.com`); `/token` 200 (`openai-connectors-oauth/1.0`) |
+| Tool calls (all 200) | `work_context`, `memory_list` ×2, **`memory_read`** | `work_context`, `memory_search`, `memory_list` ×2, `memory_tree`, **`memory_read`** |
+| The read | `/memory/<owner>/general/insight/70494ab4…`: one node, `isError: false` | the same node, `isError: false` |
+| Path `/` (the side note) | `failure_class: invalid` ✅ | `failure_class: invalid` ✅ |
+
+**Edges seen:**
+- **An orphan registration.** Claude's first `POST /register` (02:51:59Z) created client `9db4829a…` on the server, but the
+  tunnel recorded no response. Claude registered again 90 s later and went on with the second client. The first never got
+  a grant; the 30-day prune covers it.
+- **ChatGPT probes OpenID discovery** (`/.well-known/openid-configuration`, 404) on every pass. Harmless, since it falls
+  back to the OAuth metadata.
+- **`/revoke`'s known edge** (`client_secret` required on mcp 1.x) was not reached: neither client disconnected. Both
+  grants are still live in the database and end with `DELETE /auth/mcp-grants` or the 30-day refresh expiry; the
+  server is down, so nothing can use them meanwhile.
+- **Found by Claude reading the node:** its `id` (`488317bc…`) is not the last segment of its path (`70494ab4…`). Filed
+  separately as FR-67.
 
 **What we do meanwhile.** Claude Code and Claude Desktop over stdio. ChatGPT and claude.ai wait for this.
 
