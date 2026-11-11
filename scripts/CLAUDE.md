@@ -74,6 +74,11 @@ count for anyone (FR-65, shipped).
   from PowerShell, at the repo root:
   `$env:AINDY_WATCHER_KEY = (Get-Content ~/.aindy/watcher_key -Raw).Trim(); $env:AINDY_WATCHER_API_URL = 'http://127.0.0.1:8000'; venv/Scripts/aindy-watcher.exe`
   (`--dry-run` first to see what it would send; set the URL, since the SDK defaults to `localhost`).
+- **On the owner's laptop it starts at sign-in** (2026-11-11): the scheduled task "A.I.N.D.Y. watcher" runs
+  `~/.aindy/start-watcher.ps1` 2 minutes after sign-in, which does the line above unless a watcher is already running
+  (log `~/.aindy/watcher.log`). "A.I.N.D.Y. client (Vite)" does the same for `npm run dev` (`~/.aindy/start-vite.ps1`,
+  log `~/.aindy/vite.log`). The stack itself comes back with Docker Desktop (start at login on; `restart: unless-stopped`),
+  `mcp` and `mcp-tunnel` included. Both scripts live outside the repo.
 - **`focus_quality` before 2026-11-11 03:20:19Z is not comparable with after.** SDK 1.1.0 and earlier inflated
   `focused_seconds` and `focus_score` (ten minutes read as about 605) and fired `distraction_detected` too early.
 - **The key:** a watcher key from Settings (Watcher key), in `AINDY_WATCHER_KEY` or `~/.aindy/watcher_key`. Never the
