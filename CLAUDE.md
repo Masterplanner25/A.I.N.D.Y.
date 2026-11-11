@@ -380,7 +380,7 @@ These load only when you work in the matching folder. Read the one a task touche
   durable continuation and the check after every api restart.
 - `apps/arm/CLAUDE.md`: ARM config is keyed per user, and ARM's model names must be DeepSeek's.
 - `apps/masterplan/CLAUDE.md`: what `content.draft` is given, and its model.
-- `scripts/CLAUDE.md`: the MCP launcher (exposure rules, probing) and the watcher launcher.
+- `scripts/CLAUDE.md`: the MCP launcher (exposure rules, probing) and how the watcher runs.
 
 Skills: `live-probe` (probing the running container: tokens, admin promotion, `/platform/syscall`), `api-hang-triage`
 (the api wedges), `nodus-workflows`.
