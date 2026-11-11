@@ -1,7 +1,9 @@
+import ConnectedAppsCard from "./ConnectedAppsCard";
 import ProviderKeysCard from "./ProviderKeysCard";
 import WatcherKeysCard from "./WatcherKeysCard";
 
-// Account settings: your own provider API keys (FR-59) and your watcher key (audit D1).
+// Account settings: your own provider API keys (FR-59), your watcher key (audit D1), and the AIs connected over
+// MCP (FR-66; owner, 2026-11-11).
 export default function Settings() {
   return (
     <div className="max-w-3xl space-y-6">
@@ -11,6 +13,7 @@ export default function Settings() {
       </div>
       <ProviderKeysCard />
       <WatcherKeysCard />
+      <ConnectedAppsCard />
     </div>
   );
 }

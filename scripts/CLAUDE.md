@@ -51,7 +51,9 @@ FR-66's D7 proved it on 2026-11-11 (report in the FR register); the owner then a
   which we don't serve); ChatGPT developer-mode connector with OAuth. The free ngrok domain shows a browser warning
   once before the consent page: **Visit Site**.
 - **See and end connections:** `GET` / `DELETE /auth/mcp-grants` from a signed-in session (each writes
-  `mcp_grant.created` / `.revoked`, source `mcp.oauth`). No app page yet.
+  `mcp_grant.created` / `.revoked`, source `mcp.oauth`), which **Settings → Connected apps** calls
+  (`ConnectedAppsCard.jsx`, 2026-11-11). The runtime has no command to delete an OAuth client: a client with no live
+  grant can be deleted from `mcp_oauth_clients` (its grants cascade; the audit events stay), as two were on 11-11.
 - **The consent page's rate limit (10 attempts a minute) is global here**, because every request arrives from the
   tunnel's address (FR-68 asks the runtime to trust a named proxy's `X-Forwarded-For`).
 - **Take it down:** `docker compose ... --profile public-mcp stop mcp-tunnel mcp`. The owner's own ngrok agent for

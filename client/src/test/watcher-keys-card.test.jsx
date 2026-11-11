@@ -29,7 +29,8 @@ describe("WatcherKeysCard", () => {
     expect(createWatcherKey).toHaveBeenCalledWith("laptop");
     expect(fresh).toHaveTextContent("aindy_wk_secret_123");
     expect(fresh).toHaveTextContent("won't be shown again");
-    expect(fresh).toHaveTextContent("scripts\\watcher.py");
+    expect(fresh).toHaveTextContent("aindy-watcher");
+    expect(fresh).not.toHaveTextContent("watcher.py");
     fireEvent.click(screen.getByRole("button", { name: "I've saved it" }));
     expect(screen.queryByTestId("watcher-key-fresh")).toBeNull();
     expect(document.body.textContent).not.toContain("aindy_wk_secret_123");
