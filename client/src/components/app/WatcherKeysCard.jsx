@@ -3,8 +3,8 @@ import { createWatcherKey, listWatcherKeys, revokeWatcherKey } from "../../api/w
 import { safeMap } from "../../utils/safe";
 
 // The watcher (audit D1, owner 2026-11-08): it watches which app is in front and reports focus sessions, so
-// focus_quality (15% of your score) stops being a fixed 50. Run it on this laptop with scripts/watcher.py and a key
-// from here. A key can only send watcher signals; it is shown once.
+// focus_quality (15% of your score) stops being a fixed 50. Run it on this laptop with the SDK's aindy-watcher
+// (aindy-sdk >= 1.2.1; scripts/CLAUDE.md) and a key from here. A key can only send watcher signals; it is shown once.
 
 const BUTTON = "px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-colors disabled:opacity-40";
 
@@ -85,8 +85,8 @@ export default function WatcherKeysCard() {
           <p className="text-xs text-[#00ffaa]">Copy this key now. It won't be shown again.</p>
           <code className="block break-all text-xs text-zinc-100 select-all">{fresh.key}</code>
           <p className="text-[11px] text-zinc-500">
-            Save it in <code>~/.aindy/watcher_key</code> (or set <code>AINDY_WATCHER_KEY</code>), then run{" "}
-            <code>venv\Scripts\python scripts\watcher.py</code> from the repo.
+            Save it in <code>~/.aindy/watcher_key</code>, then start <code>aindy-watcher</code> with it in{" "}
+            <code>AINDY_WATCHER_KEY</code>. The exact line is in <code>scripts/CLAUDE.md</code>.
           </p>
           <button type="button" className={`${BUTTON} border border-zinc-700 text-zinc-400`} onClick={() => setFresh(null)}>
             I've saved it
