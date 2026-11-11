@@ -40,7 +40,7 @@ services:
     # polled and cannot stop one large allocation — only this can.
     mem_limit: 1536m
     memswap_limit: 1536m
-    environment:
+    environment: &api-env
       # psycopg2 is the runtime's bundled driver -> plain postgresql:// scheme.
       DATABASE_URL: "postgresql://${POSTGRES_USER:-aindy}:${POSTGRES_PASSWORD:-aindy}@postgres:5432/${POSTGRES_DB:-aindy}"
       REDIS_URL: "redis://redis:6379/0"
@@ -315,6 +315,61 @@ services:
       # the mongo/OOM outage. Failures during start_period still run, they just do not
       # count toward the verdict, so a container that genuinely dies still exits on its own.
       start_period: 240s
+
+  # A.I.N.D.Y. for claude.ai and ChatGPT (owner, 2026-11-11, after FR-66's D7). Opt-in: only with
+  # `--profile public-mcp`, and both services need AINDY_MCP_PUBLIC_URL and NGROK_AUTHTOKEN in .env.
+  #
+  # `mcp` is our read-only launcher (scripts/mcp_server.py: the same seven reads Claude Code gets,
+  # writes refused) over streamable HTTP with the runtime's OAuth (2.35.0, DEC-129/130). It refuses
+  # to start over HTTP without OAuth. Same image and environment as the api, so the same database
+  # and signing keys; it serves no app route and starts no scheduler (load_plugins registers only).
+  # `mcp-tunnel` is the ONLY public path, and it forwards to `mcp` alone: the api stays on
+  # 127.0.0.1. Taking it down: `docker compose ... --profile public-mcp stop mcp-tunnel mcp`.
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aindy-apps-monolith-api:latest
+    profiles: ["public-mcp"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["python", "/app/scripts/mcp_server.py"]
+    command: ["--transport", "http", "--host", "0.0.0.0", "--port", "8080"]
+    environment:
+      <<: *api-env
+      AINDY_MCP_OAUTH: "on"
+      AINDY_MCP_PUBLIC_URL: "${AINDY_MCP_PUBLIC_URL:-}"
+      # Dynamic registration stays open (both connectors use it), capped low: one owner, few clients.
+      AINDY_MCP_OAUTH_MAX_CLIENTS: "${AINDY_MCP_OAUTH_MAX_CLIENTS:-20}"
+      AINDY_MCP_OAUTH_REGISTRATIONS_PER_HOUR: "${AINDY_MCP_OAUTH_REGISTRATIONS_PER_HOUR:-5}"
+      # A second process on the api's pool settings could take 60 more postgres connections.
+      DB_POOL_SIZE: "5"
+      DB_MAX_OVERFLOW: "5"
+    ports:
+      - "127.0.0.1:8080:8080"
+    # Measured on D7 (2026-11-11): about 250 MB after loading the 16 domains. No swap, as for the api.
+    mem_limit: 768m
+    memswap_limit: 768m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/.well-known/oauth-protected-resource/mcp', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+
+  mcp-tunnel:
+    image: ngrok/ngrok:3.39.8-alpine
+    profiles: ["public-mcp"]
+    restart: unless-stopped
+    depends_on:
+      mcp:
+        condition: service_healthy
+    command: ["http", "mcp:8080", "--url=${AINDY_MCP_PUBLIC_URL:-}", "--log=stdout"]
+    environment:
+      NGROK_AUTHTOKEN: "${NGROK_AUTHTOKEN:-}"
+    mem_limit: 128m
 
   postgres:
     image: pgvector/pgvector:pg16
