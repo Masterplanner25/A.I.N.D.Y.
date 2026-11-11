@@ -1,6 +1,6 @@
 ---
 title: "Inventory — what A.I.N.D.Y. contains"
-last_verified: "2026-11-08"
+last_verified: "2026-11-10"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -23,7 +23,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | Scheduled jobs | 16 | 0 |
 | Registered jobs | 36 | 0 |
 | Python flow graphs | 82 | 1 |
-| Tables | 89 | 37 |
+| Tables | 89 | 39 |
 | Nodus workflows (`.nd`) | 5 | |
 | `AINDY_*` flags read by our code | 53 | |
 
@@ -47,7 +47,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | search |  | analytics, rippletrace | 35 | 12 | 9 | 4 | 0 | 2 | 8 | 0 | 7 |
 | social |  | analytics, automation | 8 | 2 | 4 | 0 | 0 | 0 | 0 | 0 | 0 |
 | tasks | yes |  | 7 | 2 | 18 | 2 | 5 | 7 | 8 | 0 | 1 |
-| (runtime) | | | 35 | 23 | 23 | 0 | 0 | 0 | 1 | 0 | 37 |
+| (runtime) | | | 35 | 23 | 23 | 0 | 0 | 0 | 1 | 0 | 39 |
 
 ## agent
 

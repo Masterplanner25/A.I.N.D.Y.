@@ -695,6 +695,7 @@ def register_masterplan_syscall_handlers() -> None:
             "required": ["block", "works"],
             "properties": {"block": {"type": "string"}, "works": {"type": "array"}},
         },
+        read_only=True,  # DEC-128 (runtime 2.35.0): an MCP launcher without ALLOW_WRITES exposes only these
         stable=False,
     )
     register_syscall(
@@ -710,6 +711,7 @@ def register_masterplan_syscall_handlers() -> None:
             "required": ["works", "own_hosts"],
             "properties": {"works": {"type": "array"}, "own_hosts": {"type": "array"}},
         },
+        read_only=True,  # DEC-128 (runtime 2.35.0): an MCP launcher without ALLOW_WRITES exposes only these
         stable=False,
     )
     register_syscall(
@@ -731,6 +733,7 @@ def register_masterplan_syscall_handlers() -> None:
                 "search": {"type": "string"}, "works": {"type": "array"},
             },
         },
+        read_only=True,  # DEC-128 (runtime 2.35.0): an MCP launcher without ALLOW_WRITES exposes only these
         stable=False,
     )
     register_syscall(
