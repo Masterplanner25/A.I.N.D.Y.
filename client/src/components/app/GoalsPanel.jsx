@@ -39,16 +39,45 @@ function progressText(goal) {
   return `${Math.round(goal.progress * 100)}% attained`;
 }
 
+function targetText(goal) {
+  if (!goal.target_value) return "";
+  const target = `${Number(goal.target_value).toLocaleString()} ${goal.unit || ""}`.trim();
+  const due = goal.target_date ? ` by ${goal.target_date.slice(0, 10)}` : "";
+  return `${target}${due}`;
+}
+
 function measureText(goal) {
   if (goal.measure === "anchor") {
-    const target = goal.target_value ? `${Number(goal.target_value).toLocaleString()} ${goal.unit || ""}`.trim() : "";
-    const due = goal.target_date ? ` by ${goal.target_date.slice(0, 10)}` : "";
-    return `anchor${target ? `: ${target}${due}` : ""}`;
+    const target = targetText(goal);
+    return `anchor${target ? `: ${target}` : ""}`;
   }
+  // Any other goal's target is shown only; it is never what measures the goal (owner, 2026-11-11).
+  const target = targetText(goal) ? ` · target ${targetText(goal)}` : "";
   if (goal.measure === "objectives") {
-    return `through ${safeMap(goal.objectives || [], (o) => o.name).join(", ") || "its objectives"}`;
+    return `through ${safeMap(goal.objectives || [], (o) => o.name).join(", ") || "its objectives"}${target}`;
   }
-  return "declared";
+  return `declared${target}`;
+}
+
+// Priority is 0.45 of a goal's rank, which the loop, the gate and agent ranking read (GOALS_LAYER_SPEC §3).
+const PRIORITIES = [["low", 0.3], ["normal", 0.5], ["high", 0.7], ["top", 0.9]];
+
+function nearestPriority(value) {
+  const v = Number(value ?? 0.5);
+  return PRIORITIES.reduce((best, p) => (Math.abs(p[1] - v) < Math.abs(best[1] - v) ? p : best))[1];
+}
+
+function PrioritySelect({ goal, busy, onPriority }) {
+  return (
+    <label className="flex items-center gap-1 text-[11px] text-zinc-500">
+      priority
+      <select aria-label={`Priority of ${goal.name}`} disabled={busy} value={nearestPriority(goal.priority)}
+        onChange={(e) => onPriority(goal.id, Number(e.target.value))}
+        className="rounded border border-zinc-800 bg-zinc-950 px-1 py-0.5 text-[11px] text-zinc-300">
+        {safeMap(PRIORITIES, ([label, value]) => <option key={label} value={value}>{label}</option>)}
+      </select>
+    </label>
+  );
 }
 
 function ObjectivePicker({ objectives, chosen, onChange, disabled }) {
@@ -91,7 +120,7 @@ function Proposal({ goal, objectives, busy, onConfirm, onDrop }) {
   );
 }
 
-function Goal({ goal, busy, onDone, onReopen, onDrop }) {
+function Goal({ goal, busy, onDone, onReopen, onDrop, onPriority }) {
   const progress = goal.progress;
   const done = goal.status === "completed";
   return (
@@ -106,7 +135,8 @@ function Goal({ goal, busy, onDone, onReopen, onDrop }) {
           <div className="h-1 rounded bg-[#00ffaa]" style={{ width: `${Math.round(progress * 100)}%` }} />
         </div>
       }
-      <div className="flex gap-2 pt-1">
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        {goal.status === "active" && <PrioritySelect goal={goal} busy={busy} onPriority={onPriority} />}
         {goal.status === "active" && goal.measure !== "anchor" &&
           <button type="button" className={QUIET} disabled={busy} onClick={() => onDone(goal.id)}>Mark done</button>}
         {done && <button type="button" className={QUIET} disabled={busy} onClick={() => onReopen(goal.id)}>Reopen</button>}
@@ -116,24 +146,48 @@ function Goal({ goal, busy, onDone, onReopen, onDrop }) {
   );
 }
 
+const INPUT = "rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600";
+
 function AddGoal({ objectives, busy, onAdd }) {
   const [name, setName] = useState("");
   const [chosen, setChosen] = useState([]);
+  const [targetValue, setTargetValue] = useState("");
+  const [unit, setUnit] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+  const number = Number(targetValue);
+  // The server needs a number for a unit or date; say so here rather than send a request it refuses.
+  const targetIncomplete = !targetValue && Boolean(unit.trim() || targetDate);
+  const targetInvalid = Boolean(targetValue) && !(number > 0);
   const submit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    if (await onAdd({ name: name.trim(), objectiveIds: chosen })) {
+    if (!name.trim() || targetIncomplete || targetInvalid) return;
+    const target = targetValue ? { targetValue: number, unit: unit.trim(), targetDate } : {};
+    if (await onAdd({ name: name.trim(), objectiveIds: chosen, ...target })) {
       setName("");
       setChosen([]);
+      setTargetValue("");
+      setUnit("");
+      setTargetDate("");
     }
   };
   return (
     <form className="space-y-2 border-t border-zinc-800/60 pt-3" onSubmit={submit}>
       <div className="flex gap-2">
         <input aria-label="New goal" placeholder="Add a goal of your own" value={name} onChange={(e) => setName(e.target.value)}
-          className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600" />
-        <button type="submit" className={PRIMARY} disabled={busy || !name.trim()}>Add</button>
+          className={`min-w-0 flex-1 ${INPUT}`} />
+        <button type="submit" className={PRIMARY} disabled={busy || !name.trim() || targetIncomplete || targetInvalid}>Add</button>
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-zinc-500">target (optional, shown only)</span>
+        <input aria-label="Target number" type="number" min="0" step="any" placeholder="50" value={targetValue}
+          onChange={(e) => setTargetValue(e.target.value)} className={`w-20 ${INPUT}`} />
+        <input aria-label="Target unit" placeholder="posts" maxLength={32} value={unit}
+          onChange={(e) => setUnit(e.target.value)} className={`w-24 ${INPUT}`} />
+        <input aria-label="Target date" type="date" value={targetDate}
+          onChange={(e) => setTargetDate(e.target.value)} className={INPUT} />
+      </div>
+      {targetIncomplete && <p className="text-[11px] text-amber-400">A unit or date needs a target number.</p>}
+      {targetInvalid && <p className="text-[11px] text-amber-400">The target number must be above 0.</p>}
       <ObjectivePicker objectives={objectives} chosen={chosen} onChange={setChosen} disabled={busy} />
     </form>
   );
@@ -201,7 +255,8 @@ export default function GoalsPanel() {
           <Goal key={g.id} goal={g} busy={busy}
             onDone={(id) => run(() => updateGoal(id, { status: "completed" }))}
             onReopen={(id) => run(() => updateGoal(id, { status: "active" }))}
-            onDrop={(id) => run(() => dropGoal(id))} />
+            onDrop={(id) => run(() => dropGoal(id))}
+            onPriority={(id, priority) => run(() => updateGoal(id, { priority }))} />
         ))}
       </ul>
       <AddGoal objectives={objectives} busy={busy} onAdd={(goal) => run(() => createGoal(goal))} />

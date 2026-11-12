@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from datetime import date
+
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
@@ -68,6 +70,17 @@ class GoalCreateRequest(BaseModel):
     success_metric: dict = Field(default_factory=dict)
     # GOALS_LAYER_SPEC §5: a goal the person states. Measured by the objectives it links to, or declared.
     objective_ids: list[str] = Field(default_factory=list)
+    # A target is shown only (owner, 2026-11-11): it never makes the goal measured, so it changes nothing the loop,
+    # the gate or the planner reads.
+    target_value: float | None = Field(default=None, gt=0)
+    unit: str | None = Field(default=None, max_length=32)
+    target_date: date | None = None
+
+    @model_validator(mode="after")
+    def _target_needs_a_number(self):
+        if self.target_value is None and ((self.unit or "").strip() or self.target_date):
+            raise ValueError("a target's unit or date needs a target number")
+        return self
 
 
 def _do_create_goal(db: Session, body: GoalCreateRequest, user_id: str):
@@ -83,6 +96,9 @@ def _do_create_goal(db: Session, body: GoalCreateRequest, user_id: str):
             "status": body.status,
             "success_metric": body.success_metric,
             "objective_ids": body.objective_ids,
+            "target_value": body.target_value,
+            "unit": (body.unit or "").strip() or None,
+            "target_date": body.target_date.isoformat() if body.target_date else None,
         },
         db=db,
         user_id=user_id,

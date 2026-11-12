@@ -412,6 +412,27 @@ def _handle_genesis_message(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _stated_target(payload: dict) -> dict:
+    """A stated goal's target number, unit and date, or nothing. Never a measure (see `_handle_goal_create`)."""
+    from datetime import datetime, timezone
+
+    try:
+        value = float(payload["target_value"]) if payload.get("target_value") is not None else None
+    except (TypeError, ValueError):
+        raise ValueError("target_value must be a number")
+    if value is None:
+        return {}
+    if value <= 0:
+        raise ValueError("target_value must be above 0")
+    unit = str(payload.get("unit") or "").strip()[:32] or None
+    raw_date = payload.get("target_date")
+    try:
+        when = (datetime.fromisoformat(str(raw_date)[:10]).replace(tzinfo=timezone.utc) if raw_date else None)
+    except ValueError:
+        raise ValueError("target_date must be a date (YYYY-MM-DD)")
+    return {"target_value": value, "unit": unit, "target_date": when}
+
+
 def _handle_goal_create(payload: dict, ctx: SyscallContext) -> dict:
     from apps.masterplan.services.goal_service import create_goal
 
@@ -434,6 +455,8 @@ def _handle_goal_create(payload: dict, ctx: SyscallContext) -> dict:
             source="stated",
             measure="objectives" if payload.get("objective_ids") else "declared",
             objective_ids=list(payload.get("objective_ids") or []),
+            # Shown only (owner, 2026-11-11): the measure above stays, so a target never makes the goal measured.
+            **_stated_target(payload),
         )
         return {"goal_create_result": goal}
     finally:

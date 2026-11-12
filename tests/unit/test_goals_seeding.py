@@ -201,3 +201,46 @@ def test_a_stated_goal_is_measured_by_its_objectives_or_declared(db_session, own
     assert linked["goal_create_result"]["source"] == "stated"
     assert linked["goal_create_result"]["measure"] == "objectives"
     assert plain["goal_create_result"]["measure"] == "declared" and plain["goal_create_result"]["progress"] is None
+
+
+def test_a_stated_goals_target_is_shown_only_and_never_measures_it(db_session, owner, plan):
+    """Owner, 2026-11-11: a target on a goal you state is shown, and the goal stays declared or objectives-measured, so
+    it never completes by itself or steers the loop (decisions 2 and 4)."""
+    from types import SimpleNamespace
+
+    from apps.masterplan.syscalls.syscall_handlers import _handle_goal_create
+
+    _, ids = plan
+    ctx = SimpleNamespace(user_id=owner, metadata={"_db": db_session})
+    target = {"target_value": 50, "unit": " posts ", "target_date": "2027-03-01"}
+    plain = _handle_goal_create({"name": "Publish weekly", **target}, ctx)["goal_create_result"]
+    linked = _handle_goal_create({"name": "Ship the runtime", "objective_ids": [ids["Platform Enablement"]], **target},
+                                 ctx)["goal_create_result"]
+
+    assert plain["measure"] == "declared" and plain["progress"] is None and plain["measured"] is False
+    assert (plain["target_value"], plain["unit"], plain["target_date"][:10]) == (50.0, "posts", "2027-03-01")
+    assert linked["measure"] == "objectives" and linked["target_value"] == 50.0
+    assert plain["status"] == linked["status"] == "active"
+
+
+@pytest.mark.parametrize("payload", [{"target_value": "lots"}, {"target_value": 0}, {"target_value": 5, "target_date": "soon"}])
+def test_a_bad_target_is_refused(db_session, owner, plan, payload):
+    from types import SimpleNamespace
+
+    from apps.masterplan.syscalls.syscall_handlers import _handle_goal_create
+
+    ctx = SimpleNamespace(user_id=owner, metadata={"_db": db_session})
+    with pytest.raises(ValueError):
+        _handle_goal_create({"name": "x", **payload}, ctx)
+
+
+def test_the_create_route_refuses_a_unit_without_a_number(app, client, owner, plan):
+    _as(app, owner)
+    assert client.post("/apps/goals", json={"name": "x", "unit": "posts"}).status_code == 422
+    assert client.post("/apps/goals", json={"name": "x", "target_value": -1}).status_code == 422
+
+
+def test_the_priority_of_a_goal_is_edited(db_session, owner, plan):
+    goal = seeding.propose_goals(db_session, owner)[0]
+    seeding.confirm_goal(db_session, owner, goal["id"])
+    assert seeding.update_goal(db_session, owner, goal["id"], {"priority": 0.9})["priority"] == 0.9
