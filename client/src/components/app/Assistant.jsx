@@ -16,6 +16,7 @@ import WorkPanel from "./WorkPanel";
 import MarketPanel from "./MarketPanel";
 import StepResult from "./StepResult";
 import ReleasePanel from "./ReleasePanel";
+import AgentStartingPoints from "./AgentStartingPoints";
 import { buildFindingsDigest, composeFollowUpGoal, splitGoal } from "../../utils/runFindings";
 
 // The user-facing face for the agent: goal -> plan -> approve -> execute -> result.
@@ -65,11 +66,6 @@ const Risk = ({ risk }) =>
     </span>
   );
 
-const EXAMPLES = [
-  "Create three tasks for my launch: draft the announcement, schedule the posts, set up the landing page",
-  "Research the top approaches to onboarding, then save a note summarizing them",
-  "Recall what I already know about my launch plan",
-];
 
 export default function Assistant() {
   const [goal, setGoal] = useState("");
@@ -382,18 +378,7 @@ export default function Assistant() {
                 ))}
               </div>
             )}
-            <div className="mt-8 space-y-2">
-              <p className="text-[10px] uppercase tracking-wider text-zinc-600">Try</p>
-              {safeMap(EXAMPLES, (ex, i) => (
-                <button
-                  key={i}
-                  onClick={() => setGoal(ex)}
-                  className="block w-full text-left text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-800/60 hover:border-zinc-700 rounded-lg px-3 py-2 transition-colors"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
+            <AgentStartingPoints onPick={setGoal} />
           </div>
           <Toast toast={toast} onDismiss={clearToast} />
         </div>

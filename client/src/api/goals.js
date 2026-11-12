@@ -6,6 +6,11 @@ export function getGoalsOverview() {
   return authRequest("/apps/goals/overview");
 }
 
+// The person's active goals, highest priority first. A plain read: unlike the overview, it never makes proposals.
+export function listActiveGoals() {
+  return authRequest("/apps/goals");
+}
+
 export function confirmGoal(id, edits = {}) {
   return authRequest(`/apps/goals/${encodeURIComponent(id)}/confirm`, { method: "POST", body: JSON.stringify(edits) });
 }
