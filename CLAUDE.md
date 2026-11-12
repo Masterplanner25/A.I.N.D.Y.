@@ -63,9 +63,7 @@ print(json.dumps(payload['runtime'], sort_keys=True))
 # profile leaves them running.
 docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail --profile public-mcp up -d
 docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail --profile public-mcp build api   # after a merge you want live (`mcp` shares the image; recreate both)
-# A source-only change rebuilds in ~a minute (deps layer is keyed on pyproject/constraints only, since
-# #395); a pin move re-downloads the tree, 10-15 min on this link. If a source change takes 10+ min,
-# the layer order regressed — DOCKER-PIP-LAYER-INVALIDATION-1.
+# A source-only change rebuilds in ~a minute; a pin move takes 10-15 min. Slower: OPERATOR_NOTES OPS-004.
 
 # Schema-default parity guard, locally (what CI Step 6 does): migrate a scratch DB FROM EMPTY
 # inside the api image, then diff models vs. migrations. PYTHONPATH is load-bearing —
@@ -78,11 +76,8 @@ MSYS_NO_PATHCONV=1 docker run --rm --network aindy-apps-monolith_default -v "$(p
 docker exec <postgres> psql -U aindy -d aindy -c "drop database parity_scratch"
 ```
 
-**`--profile full` is not optional on this stack** (found 2026-09-16, cost 26 minutes and was first
-read as a runtime regression): `docker-compose.prod.yml` hardcodes `REDIS_URL` while `redis` is
-profile-gated, and the runtime's rate limiter uses Redis storage with no fallback. Without redis
-**every rate-limited route 500s, `/health` included**, so the api sits `unhealthy` forever while
-`/api/version` (unlimited) looks fine. `COMPOSE-REDIS-URL-UNCONDITIONAL-1` in `TECH_DEBT.md`.
+**`--profile full` is not optional on this stack:** without redis every rate-limited route 500s, `/health` included,
+while `/api/version` looks fine (OPS-001, `COMPOSE-REDIS-URL-UNCONDITIONAL-1`).
 
 ---
 
@@ -135,62 +130,32 @@ def register() -> None:
         register_router, register_models, register_flow_definitions,
         register_scheduled_job, register_event_handler,
         register_run_tool_provider,
-        # ...40 `register_*` functions in total (counted 2026-08-20)
+        # ...about 40 `register_*` functions: check names in AINDY/platform_layer/registry.py,
+        # never from a doc (OPS-025)
     )
-    # SYSCALLS DO NOT COME FROM HERE. Verified 2026-08-22:
+    # SYSCALLS come from the kernel, not from here (platform_layer's register_syscall is a dead end, OPS-024):
     #   from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
-    # `platform_layer.registry` exports a `register_syscall` too, and it is the wrong one —
-    # it writes into a dict the SyscallDispatcher never reads. Every one of this repo's
-    # app-registered syscalls uses the kernel path; zero use the platform_layer path, and
-    # this block used to say otherwise.
+    # Count registrations by booting, or read the generated docs/verification/INVENTORY.md; never trust a written number.
     #
-    # Count them; never trust a written number. Boot the app profile, then
-    # `len(AINDY.kernel.syscall_registry.SYSCALL_REGISTRY.keys())` (the runtime alone registers its own;
-    # import `AINDY.kernel.syscall_registry` by itself to see that number), or read the generated
-    # `docs/verification/INVENTORY.md`.
+    # AGENT TOOLS: `register_run_tool_provider` (a callable returning the tool list), never
+    # `register_agent_tool`. The planner sees one line per tool: `- name: description (risk=…) args={…}`.
+    # - Every tool declares `args_schema={"required": [...], "properties": {k: {"type": ...}}}`
+    #   (`test_agent_tool_args_schema.py`; without one the planner guesses the keys, OPS-027). Types are the
+    #   dispatcher's dialect (`syscall_versioning._SCHEMA_TYPE_MAP`): "number" means float ONLY, so leave an
+    #   int-or-float property untyped.
+    # - This stack runs `AINDY_TOOL_ARGS_VALIDATION=enforce` (compose, since 2026-09-26): a schema mismatch
+    #   refuses the step, so a new tool's schema must be right before it ships. It checks shape, not truth.
+    # - Every tool a later step may reference declares `result_schema`, all in `apps/_shared/tool_results.py`,
+    #   checked at plan time. A schema listing `properties` is CLOSED: declare the tool's REAL keys
+    #   (`test_agent_tool_result_schema.py`).
     #
-    # AGENT TOOLS: use `register_run_tool_provider` (a callable returning the tool list),
-    # NOT `register_agent_tool` (static registration). No app uses the static form; the
-    # 18 live tools all arrive through a provider. `iter_agent_tools()` returns 0. Of the
-    # 18, 17 are ours (7 `apps/*/agents/tools.py` modules; 15 counted 2026-09-16, + `market.propose`
-    # 2026-09-28, + `content.draft` 2026-09-30) and one is the
-    # runtime's `runtime.selftest`. The planner sees ONE LINE per tool — `- name: description
-    # (risk=…) args={…}` — the last part rendered from the tool's
-    # `register_tool(..., args_schema={"required": [...], "properties": {k: {"type": ...}}})`
-    # (runtime 2.20.0, FR-33). Every one of our 17 declares one and
-    # `test_agent_tool_args_schema.py` enforces it: a tool without a schema gives the planner
-    # nothing but prose, it guesses the keys, and the step fails at execution (`arm.analyze` said
-    # "or a topic", took `file_path`, failed 4 of 4 runs on 09-13). Types are the dispatcher's
-    # dialect (`syscall_versioning._SCHEMA_TYPE_MAP`; note "number" means float ONLY — leave an
-    # int-or-float property untyped). `execute_tool` checks args against the same schema before
-    # dispatch: `AINDY_TOOL_ARGS_VALIDATION=warn` (default) counts and logs,
-    # `enforce` refuses the step. Since runtime 2.22.0 (FR-40) the tally rides the worker
-    # reply, so on `nodus_vm` (our default) `aindy_tool_args_validation_total` reaches the api's
-    # `/metrics` and the warn WARNING the api log (verified 2026-09-23). **This stack runs
-    # `enforce` since 2026-09-26** (owner, after 38 steps / 11 runs with zero `invalid`; wired in
-    # compose — `.env` alone never reaches the process). A new tool's schema must be right before
-    # it ships: under enforce a mismatch refuses the step. It checks shape, not truth.
-    # RESULTS (2.25.0, FR-48): every tool a later step may reference declares `result_schema`, all
-    # in `apps/_shared/tool_results.py`, and with step references on the planner's paths are
-    # checked against it at PLAN time. A schema listing `properties` is CLOSED, so declare the
-    # tool's REAL keys, not its documented subset; `test_agent_tool_result_schema.py` guards it.
-    # NOTE: these are the REAL exported names (see AINDY/platform_layer/registry.py).
-    # An earlier version of this block listed plural inventions — `register_scheduler_jobs`,
-    # `register_syscalls` — which do not exist. Grepping for them returns nothing, which
-    # reads as "no app uses this hook" rather than "wrong name", and that misreading was
-    # written into two specs before it was caught. Verify against the registry, not here.
-    #
-    # THREE DIFFERENT JOB MECHANISMS. Confusing them produced a wrong remedy in a shipped
-    # defect doc on 2026-08-19, so check which one you actually mean:
+    # THREE JOB MECHANISMS (confusing them shipped a wrong remedy, OPS-026):
     #   register_scheduled_job  - registry            - APScheduler, runs on an interval
-    #   register_job            - registry            - a SYNCHRONOUS callable, looked up
-    #                                                   later via get_job("name"). Registering
-    #                                                   a job does NOT make it async.
-    #   register_async_job      - NOT in the registry - background dispatch. It lives in
-    #                             AINDY.platform_layer.async_job_service, so the import block
-    #                             above is the wrong place to look for it, and "this domain
-    #                             already uses register_async_job" can be true of the app while
-    #                             false of the module doing the slow work. Check the domain.
+    #   register_job            - registry            - a SYNCHRONOUS callable, looked up later via
+    #                                                   get_job("name"); registering does NOT make it async
+    #   register_async_job      - NOT in the registry - background dispatch, in
+    #                             AINDY.platform_layer.async_job_service; check the module doing the
+    #                             slow work uses it, not just the domain
     register_router(router, prefix="/api/myapp")
     register_models([MyModel])
     register_flow_definitions([my_flow_def])
@@ -320,10 +285,7 @@ message = result.get("message", "")
 ```
 
 **`status` is one of `SUCCESS` | `FAILED` | `SKIPPED` | `WAITING` — all uppercase. It is
-never `"error"`.** This block said `"SUCCESS"|"error"` until 2026-09-05, and that half was
-wrong; `_format_execution_response` (`flow_engine/runner_completion.py`) is only ever called
-with those four values. The runtime's own `memory_router._mem_run_flow` tests
-`result.get("status") == "FAILED"`, which is the pattern to copy.
+never `"error"`** (OPS-028).
 
 ```python
 # WRONG — never matches, so a FAILED flow falls through to the success path
@@ -346,17 +308,11 @@ Two things this does NOT mean:
   status two lines later (see `_syscall_node` in `apps/*/flows/`).
 
 **Do not hand-write this check.** Use `run_flow_or_raise` / `run_flow_data` from
-`apps/_shared/flow.py`; every route that runs a flow goes through it. Eight routers each
-hand-rolling the same decision is how eighteen sites in four of them ended up testing
-`== "error"` — fixed in #271, recorded as `APP-FLOW-STATUS-DEADBRANCH-1`. The helper also
-maps a node's `HTTP_<code>:<msg>` error onto that status code, which a hand-written check
-will not.
+`apps/_shared/flow.py`; every route that runs a flow goes through it. The helper also maps a
+node's `HTTP_<code>:<msg>` error onto that status code, which a hand-written check will not.
 
-**A pipeline `route_name` is at most 32 characters.** It is written as `system_events.source`
-(`String(32)` in the runtime's model) on every request's `execution.started`; a longer name fails
-that INSERT, the runtime rolls back and continues at WARNING, and the route is never recorded —
-eight of ours were like that until 2026-09-19 (`ROUTE-NAME-EVENT-SOURCE-1`, FR-41).
-`test_route_names_fit_event_source.py` reads the width off the model and scans every call site.
+**A pipeline `route_name` is at most 32 characters** (`system_events.source`); a longer one is never recorded
+(OPS-029). `test_route_names_fit_event_source.py` checks every call site.
 
 **An adapter whose body carries `data` must be wrapped in `stamped(...)`** (`apps/_shared/envelope.py`).
 ui-kit ≥ 2.1.0 unwraps only a response carrying `X-AINDY-Envelope`, and once it has seen one it
@@ -366,12 +322,9 @@ runtime's own `raw_canonical_adapter` / `legacy_envelope_adapter` do not stamp (
 `unwrapEnvelope` calls any more. Do not add one: stamp the server side.
 
 **A pipeline handler returns data, not ORM rows, and every call passes `metadata={"db": db}`.**
-With the session in metadata the pipeline commits after the handler (events ride the handler's
-transaction since 2.21.0), `expire_on_commit` empties every loaded instance, and a handler that
-returned rows serialises as `{}` — RippleTrace served 214 of them and wedged the api for 15
-minutes on 2026-09-20 (`ROUTE-PIPELINE-ORM-RETURN-1`). Where a service still hands back rows,
-wrap the handler: `materialized(handler)` from `apps/_shared/serialization.py`.
-`test_pipeline_routes_pass_session.py` guards the session (80 sites were missing it, #393);
+The pipeline commits after the handler, which empties loaded rows, so returned rows serialise as `{}` (OPS-030).
+Where a service still hands back rows, wrap the handler: `materialized(handler)` from
+`apps/_shared/serialization.py`. `test_pipeline_routes_pass_session.py` guards the session;
 `test_handler_returns_data_not_rows.py` guards RippleTrace's wrapping.
 
 ### Where the rest lives: nested CLAUDE.md files and skills
@@ -416,11 +369,15 @@ pays a call with no user with the server's key. Only the operator's own calls pa
 
 ---
 
-## When the API hangs
+## When something fails
 
-`[Scheduler] job 'scheduler_wait_tick' skipped a run (max_instances)` names the victim, never the culprit. Before
-reading application code, load the `api-hang-triage` skill and check, cheapest first, postgres reinitialisations,
-host paging and boot progress. `/health` 500 with `/api/version` 200 is redis missing (`--profile full`).
+**Before troubleshooting an unfamiliar failure, read `docs/operations/OPERATOR_NOTES.md`:** each `OPS-` entry starts
+with when it applies (`grep -n -A1 "^### OPS-" docs/operations/OPERATOR_NOTES.md`). When you resolve a new failure that
+could recur, add an entry there, not here; the file says how, and when one becomes a rule.
+
+**The API hangs:** `[Scheduler] job 'scheduler_wait_tick' skipped a run (max_instances)` names the victim, never the
+culprit. Before reading application code, load the `api-hang-triage` skill and check, cheapest first, postgres
+reinitialisations, host paging and boot progress. `/health` 500 with `/api/version` 200 is redis missing (OPS-001).
 
 ---
 
@@ -449,7 +406,7 @@ host paging and boot progress. `/health` 500 with `/api/version` 200 is redis mi
 | Work model (Works, links, presence, drafts) | `docs/specs/WORK_MODEL_SPEC.md` |
 | Resolution Check (does AI search resolve the owner's entities) | `docs/specs/RESOLUTION_CHECK_SPEC.md`: phases A–C built; `listed` is a verdict (§7.4); the score stays unwired (decision 5) |
 | Release handoff (A.I.N.D.Y. carries a runtime release past the approval gate) | `docs/specs/RELEASE_HANDOFF_SPEC.md`: **phase 1 built 2026-10-14** (§7.1; the watcher `release_handoff_watch`, `/apps/releases`, the Collaborator card); needs `AINDY_GITHUB_TOKEN` and real SMTP in `.env`; first real use 2.28.0. **Phase 3a built 2026-10-24**: Approve/Reject on the card (`POST /apps/releases/{id}/approve|reject`), only with a second token `AINDY_GITHUB_APPROVE_TOKEN` (Deployments: write) that nothing else sends; **never an MCP approve tool** (owner). **3b built the same day**: reply APPROVE/REJECT to the gate email (`release_reply.py`; the watcher reads the SMTP account's **Sent Mail** over IMAP, never the inbox, so a forged `From` cannot decide) |
-| Operator notes (lessons from running the stack, testing on this host, releases) | `docs/operations/OPERATOR_NOTES.md` — durable lessons go here, never into the gitignored `SESSION_HANDOFF.md` |
+| Operator notes (the repo's working experience: `OPS-` entries, symptom → cause → fix) | `docs/operations/OPERATOR_NOTES.md` — durable lessons go here, never into the gitignored `SESSION_HANDOFF.md` or into this file |
 | Inventory (what exists, generated) | `docs/verification/INVENTORY.md` from `scripts/inventory.py`; client calls from `docs/verification/client_routes.json` (`client/src/test/client-routes-manifest.test.js`). The audit (after the ~10-29 rebuild) judges what it lists |
 | MCP launcher (another AI reads A.I.N.D.Y.) | `scripts/mcp_server.py`; guarded by `tests/unit/test_mcp_read_access.py` |
 | Tech debt tracker | `TECH_DEBT.md` |

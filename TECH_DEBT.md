@@ -41,6 +41,20 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
+## PUBLISHED-WORK-CHUNK-URL-STALE-1: a piece's memory chunks keep its old URL when only the URL changes (app-owned, P3)
+
+**Found 2026-11-11.** `remember_piece` (`apps/rippletrace/services/content_archive.py`) writes each
+`published_work` chunk with the piece's `url` in its `extra`, and `remember_content` rewrites a piece's chunks
+only when `content_hash != content_memory_hash`. A URL change leaves the text, and so the hash, unchanged,
+so the chunks keep the old URL. The `?source=rss` trim (#513) showed it: 19 chunks still carried the tag
+and were cleaned by hand on 11-11. Chunks written since #513 were already clean.
+
+**Fix (owner's call, offered 11-11):** when a piece's `url` changes, mark its memory due
+(`content_memory_hash = None`) so the next archive pass rewrites the chunks, or update the chunks' `url` in
+place. Until then, a URL change needs a hand cleanup of its chunks.
+
+---
+
 ## JOB-LOG-MIRROR-STALE-1: ✅ CLOSED 2026-11-07 — `automation_logs` keeps `pending` after the runtime marks the job `failed` (app-owned, was P3)
 
 **Closed 2026-11-07 on a code read (owner's call), not on a live stale row.** No row has gone stale
