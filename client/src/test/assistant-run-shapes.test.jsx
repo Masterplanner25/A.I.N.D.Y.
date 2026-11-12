@@ -88,7 +88,8 @@ async function startRun() {
   );
   const input = await screen.findByRole("textbox");
   await userEvent.type(input, "Pick an agent framework.");
-  const submit = screen.getByRole("button", { name: /run|start|send|go/i });
+  // Exactly the submit button: the starting points below it ("Turn a goal…") would match a looser pattern.
+  const submit = screen.getByRole("button", { name: /^run$/i });
   await userEvent.click(submit);
 }
 
