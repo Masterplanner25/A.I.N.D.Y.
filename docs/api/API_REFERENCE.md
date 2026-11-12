@@ -781,7 +781,11 @@ List Goals
 #### POST /apps/goals
 Create Goal Route
 
-**Body:** description: string | null, goal_type: string, name: string (required), objective_ids: [string], priority: number, status: string, success_metric: map[unspecified]
+**Body:** description: string | null, goal_type: string, name: string (required), objective_ids: [string], priority: number, status: string, success_metric: map[unspecified], target_date: string | null, target_value: number | null, unit: string | null
+
+A goal the caller states (`source=stated`): measured by the objectives it links to, else `declared`. An optional target
+(`target_value` above 0, `unit` up to 32 characters, `target_date` as `YYYY-MM-DD`) is **shown only**: it never makes the
+goal measured. 422 for a unit or date without a number.
 
 **Response 201:** unspecified
 

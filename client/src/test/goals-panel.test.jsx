@@ -93,6 +93,53 @@ describe("GoalsPanel", () => {
     await waitFor(() => expect(createGoal).toHaveBeenCalledWith({ name: "Ship the runtime", objectiveIds: [] }));
   });
 
+  it("sets a goal's priority", async () => {
+    const getGoalsOverview = vi.fn().mockResolvedValue({
+      proposed: [],
+      goals: [{ id: "c", name: "Sustainable funding", source: "stated", measure: "declared", progress: null,
+                status: "active", priority: 0.5, objectives: [] }],
+      objectives: OBJECTIVES,
+    });
+    const updateGoal = vi.fn().mockResolvedValue({});
+    await renderPanel({ getGoalsOverview, updateGoal });
+
+    const select = await screen.findByLabelText("Priority of Sustainable funding");
+    expect(select.value).toBe("0.5");
+    fireEvent.change(select, { target: { value: "0.9" } });
+    await waitFor(() => expect(updateGoal).toHaveBeenCalledWith("c", { priority: 0.9 }));
+  });
+
+  it("shows a stated goal's target without making it measured", async () => {
+    const getGoalsOverview = vi.fn().mockResolvedValue({
+      proposed: [],
+      goals: [{ id: "s", name: "Publish weekly", source: "stated", measure: "declared", progress: null, status: "active",
+                target_value: 50, unit: "posts", target_date: "2027-03-01T00:00:00+00:00", objectives: [] }],
+      objectives: OBJECTIVES,
+    });
+    await renderPanel({ getGoalsOverview });
+    const goal = await screen.findByTestId("goal");
+    expect(goal).toHaveTextContent("declared · target 50 posts by 2027-03-01");
+    expect(goal).toHaveTextContent("declared: you mark it done");
+  });
+
+  it("adds a goal with a target, and asks for a number before a unit alone", async () => {
+    const getGoalsOverview = vi.fn().mockResolvedValue({ proposed: [], goals: [], objectives: OBJECTIVES });
+    const createGoal = vi.fn().mockResolvedValue({});
+    await renderPanel({ getGoalsOverview, createGoal });
+
+    fireEvent.change(await screen.findByLabelText("New goal"), { target: { value: "Publish weekly" } });
+    fireEvent.change(screen.getByLabelText("Target unit"), { target: { value: "posts" } });
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+    expect(screen.getByText("A unit or date needs a target number.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Target number"), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Target date"), { target: { value: "2027-03-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(createGoal).toHaveBeenCalledWith({
+      name: "Publish weekly", objectiveIds: [], targetValue: 50, unit: "posts", targetDate: "2027-03-01",
+    }));
+  });
+
   it("reads an objectives goal at 100% as all planned work done", async () => {
     const getGoalsOverview = vi.fn().mockResolvedValue({
       proposed: [],
