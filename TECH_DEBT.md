@@ -41,7 +41,12 @@
 > evidence. Several older rows still prescribe "soak, then flip" as routine ops; they predate the
 > audit and are superseded.
 
-## PUBLISHED-WORK-CHUNK-URL-STALE-1: a piece's memory chunks keep its old URL when only the URL changes (app-owned, P3)
+## PUBLISHED-WORK-CHUNK-URL-STALE-1: ✅ CLOSED 2026-11-11 — a piece's memory chunks keep its old URL when only the URL changes (app-owned, was P3)
+
+**Closed:** `upsert_drop_point` (`content_ingest.py`) marks a remembered piece's memory due when its URL, title,
+platform or date changes, so the next archive pass rewrites its chunks. A cross-posted copy's change reaches the
+earliest copy's header through `collapse_cross_posts`. An unchanged re-ingest (every feed poll) leaves memory alone.
+Tests in `test_rippletrace_content_ingest.py`. The original entry follows.
 
 **Found 2026-11-11.** `remember_piece` (`apps/rippletrace/services/content_archive.py`) writes each
 `published_work` chunk with the piece's `url` in its `extra`, and `remember_content` rewrites a piece's chunks
