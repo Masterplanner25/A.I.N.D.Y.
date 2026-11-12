@@ -378,6 +378,7 @@ def upsert_drop_point(
         if legacy != identifier:
             row = db.query(DropPointDB).filter(DropPointDB.id == legacy, owned).first()
     if row is not None:
+        before = _memory_header(row)
         row.title = display_title
         row.platform = resolved_platform
         row.url = canonical
@@ -391,6 +392,11 @@ def upsert_drop_point(
         tag_drop_with_confirmed_containers(db, row)
         if published_at is not None:
             row.date_dropped = naive_utc(published_at)
+        if row.content_memory_hash is not None and _memory_header(row) != before:
+            # The memory chunks carry these in their header and `extra`, and the archive rewrites
+            # them only when the text's hash moves, which a new URL or title never does. Marking
+            # the memory due has the next archive pass rewrite them (PUBLISHED-WORK-CHUNK-URL-STALE-1).
+            row.content_memory_hash = None
         return row, False
 
     row = DropPointDB(
@@ -407,6 +413,11 @@ def upsert_drop_point(
     db.add(row)
     tag_drop_with_confirmed_containers(db, row)
     return row, True
+
+
+def _memory_header(row: DropPointDB) -> tuple:
+    """What `content_archive.remember_piece` writes into a piece's chunks besides its text."""
+    return (row.url, row.title, row.platform, row.date_dropped)
 
 
 def tag_drop_with_confirmed_containers(db, row: DropPointDB) -> list[str]:

@@ -400,6 +400,62 @@ def test_a_medium_piece_stored_with_the_tag_keeps_its_id_and_loses_the_tag():
         session.close()
 
 
+def _remembered_piece(session, user_id, *, piece_id, url, title="Prototyping with AI"):
+    DropPointDB = content_ingest.DropPointDB
+    session.add(DropPointDB(id=piece_id, title=title, platform="Medium", url=url,
+                            user_id=uuid.UUID(user_id), content_hash="h1", content_memory_hash="h1"))
+    session.commit()
+
+
+def test_a_url_change_makes_the_pieces_memory_due():
+    """Chunks carry the URL; a new URL leaves the text's hash alone, so the memory is marked due."""
+    session = _build_session()
+    user_id = str(uuid.uuid4())
+    try:
+        legacy_id = content_ingest.legacy_drop_point_id_for(user_id, MEDIUM_FEED_LINK)
+        _remembered_piece(session, user_id, piece_id=legacy_id, url=MEDIUM_FEED_LINK)
+
+        row, _ = content_ingest.upsert_drop_point(
+            session, user_id=user_id, url=MEDIUM_FEED_LINK, title="Prototyping with AI", platform="Medium",
+        )
+        assert row.url == MEDIUM_CLEAN
+        assert row.content_hash == "h1"
+        assert row.content_memory_hash is None
+    finally:
+        session.close()
+
+
+def test_a_title_change_makes_the_pieces_memory_due():
+    session = _build_session()
+    user_id = str(uuid.uuid4())
+    try:
+        piece_id = content_ingest.drop_point_id_for(user_id, MEDIUM_CLEAN)
+        _remembered_piece(session, user_id, piece_id=piece_id, url=MEDIUM_CLEAN)
+
+        row, _ = content_ingest.upsert_drop_point(
+            session, user_id=user_id, url=MEDIUM_CLEAN, title="Prototyping with AI, revised", platform="Medium",
+        )
+        assert row.content_memory_hash is None
+    finally:
+        session.close()
+
+
+def test_an_unchanged_re_ingest_leaves_the_memory_alone():
+    """Every feed poll re-ingests its entries; one that changes nothing must not rewrite memory."""
+    session = _build_session()
+    user_id = str(uuid.uuid4())
+    try:
+        piece_id = content_ingest.drop_point_id_for(user_id, MEDIUM_CLEAN)
+        _remembered_piece(session, user_id, piece_id=piece_id, url=MEDIUM_CLEAN)
+
+        row, _ = content_ingest.upsert_drop_point(
+            session, user_id=user_id, url=MEDIUM_CLEAN, title="Prototyping with AI", platform="Medium",
+        )
+        assert row.content_memory_hash == "h1"
+    finally:
+        session.close()
+
+
 def test_a_new_medium_piece_is_stored_without_the_tag():
     session = _build_session()
     try:
