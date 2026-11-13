@@ -103,3 +103,6 @@ about 36 hours later.
 
 The window carried real traffic: 321 gated effects and 145 model calls. Every model call went on the server's key, which
 is right under `per_user`, since the owner is the only account that made calls.
+
+**Closed at 05:53:08Z** just before the 2.36.0 recreate, still 0 and 0 (328 gated effects, 146 model calls, all on the
+server's key); `RUNTIME_2_36_0_UPGRADE.md` §4.
