@@ -28,8 +28,15 @@ release outcome note) pass `content`, `tags`, `node_type` and `source`, never `p
 (`handoff.memory_node_id`, the tool's `{node_id}`), which the backfill never changes. Nothing of ours stores a path, so
 the old addresses stopping is invisible to us.
 
-**Owed after the rebuild:** `aindy-runtime memory backfill-paths`, dry run then `--yes`; report N (the runtime expects
-≥ 81) and the not-addresses count. That closes FR-67.
+**Done 2026-11-13** (after the recreate, §4):
+- dry run: `0 node(s) would get a stored path; 81 path(s) would be rewritten …; left alone: 1904 with no owner`;
+- `--yes` at 06:06:55Z: `rewrote 81 path(s) to end with their node's id; left alone: 1904 with no owner`;
+- re-run: `ok: … every stored path ends with its node's id (left alone: 1904 with no owner.)`;
+- in postgres: 1,892 nodes carry a path, 0 do not end with their id.
+
+**N = 81**, exactly the FR's count: nothing written between 11-08 and the upgrade drifted. **Not-addresses count: none
+reported** (the line never appeared). The only skip is **1,904 nodes with no owner**, a different category the handoff
+did not mention; reported here, not asked about. **FR-67 closed.**
 
 ## 2. FR-68: the consent page behind the tunnel (DEC-132, #958)
 
@@ -40,8 +47,9 @@ No runtime setting: uvicorn's own `FORWARDED_ALLOW_IPS`. Our `mcp` service runs 
 the compose network's subnet (`docker network inspect aindy-apps-monolith_default`), not the tunnel container's
 address, which changes on recreate. Never `*`.
 
-**Owed after the recreate:** the access log's client address for a public request is the caller's, not the tunnel's
-(`172.19.0.x`). That closes FR-68.
+**Checked 2026-11-13:** one unauthenticated `GET $AINDY_MCP_PUBLIC_URL/mcp` through the tunnel answered 401, and
+`mcp`'s access log recorded the caller's own public (IPv6) address, not the tunnel container's `172.19.0.x`. The
+consent page's limit now keys per caller. **FR-68 closed.**
 
 ## 3. nodus-lang 5.16.0 (#959)
 
@@ -51,11 +59,14 @@ Error columns in a Nodus script's errors move to what is called; lines are uncha
 
 ## 4. Live
 
-Owed: one rebuild of the api image (also takes #604–#606 live), recreate `api` and `mcp`, then the handoff's check:
+From #609's merge (`0eff38c`), image `4dfd26687fd9` (built in 2 min 26 s; `api` and `mcp` were stopped for the build,
+host RAM 1.0 GB free). Also takes #604–#606 live.
 
-```bash
-docker exec <api-container> python -c "import AINDY, AINDY._version as v, importlib.metadata as m; print(v.__version__, m.version('nodus-lang'), list(AINDY.__path__))"
-# expect: 2.36.0 5.16.0 ['/usr/local/lib/python3.11/site-packages/AINDY']
-```
-
-A new identity-counter window opens at the recreate.
+1. **Counters before the recreate** (05:53:08Z, closing the 2.35.0 window opened 11-11 17:17:28Z): 0 identity
+   mismatches, 0 `tenant_mismatch`; 328 gated effects, 146 model calls, all `key_source="server"`.
+2. `api` and `mcp` recreated at **05:55:58Z**, `api` healthy at 05:56:34Z. Postgres: 0 reinitialisations.
+3. **The handoff's check:** `2.36.0 5.16.0 ['/usr/local/lib/python3.11/site-packages/AINDY']`. `/health` 200;
+   `default-apps`, `app_plugins_loaded=True`, 16 plugins. No errors in the boot log.
+4. Schema heads unchanged: runtime `0022`, app `gl1layer0001`.
+5. Durable continuation: no `AgentContinuation` lines, 0 agent runs left `executing`.
+6. A new identity-counter window opens at **05:55:58Z**.

@@ -20,8 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-11-13:** **FR-68** and **FR-67** both shipped in runtime 2.36.0 (DEC-132, DEC-131); each closes on
-> our live report (`RUNTIME_2_36_0_UPGRADE.md`). FR-55, FR-14 recurrence half, FR-6 items 2–3.
+> **Open as of 2026-11-13:** FR-55, FR-14 recurrence half, FR-6 items 2–3. FR-67 and FR-68 closed on runtime 2.36.0
+> (live reports in `RUNTIME_2_36_0_UPGRADE.md` §1–§2).
 >
 > **Open as of 2026-11-11:** **FR-68 (P3: behind a proxy the consent page's rate limit is global)**, **FR-67 (P3: a
 > memory node's path leaf is not its id, 81 nodes)**, FR-55, FR-14 recurrence
@@ -74,7 +74,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-68 — behind a proxy, the MCP consent page's rate limit is one bucket for everyone 🟡 SHIPPED in 2.36.0 (#958, DEC-132: uvicorn's `FORWARDED_ALLOW_IPS`, no runtime setting); closes on our live check — filed 2026-11-11, P3
+## FR-68 — behind a proxy, the MCP consent page's rate limit is one bucket for everyone ✅ SHIPPED in 2.36.0 (#958, DEC-132: uvicorn's `FORWARDED_ALLOW_IPS`, no runtime setting); closed 2026-11-13: set on `mcp`, the access log shows the caller's address — filed 2026-11-11, P3
 
 **apps-monolith ref:** the public `/mcp` for claude.ai and ChatGPT (compose profile `public-mcp`, 2026-11-11), on
 2.35.0. The number is ours to propose; renumber if the runtime's ledger has used it.
@@ -89,7 +89,7 @@ from connecting a client.
 its limit on the client address from `X-Forwarded-For` (the right-most untrusted hop), as uvicorn's
 `--forwarded-allow-ips` does. Unset, keep today's behaviour.
 
-## FR-67 — a memory node written through `sys.v1.memory.write` has a path whose last segment is not its id 🟡 SHIPPED in 2.36.0 (#957, DEC-131: `MemoryNodeDAO.save` takes the id from the path; `memory backfill-paths` rewrites old paths); closes on our backfill report — filed 2026-11-11, P3
+## FR-67 — a memory node written through `sys.v1.memory.write` has a path whose last segment is not its id ✅ SHIPPED in 2.36.0 (#957, DEC-131: `MemoryNodeDAO.save` takes the id from the path; `memory backfill-paths` rewrites old paths); closed 2026-11-13: backfill rewrote 81, 0 left — filed 2026-11-11, P3
 
 **apps-monolith ref:** found in FR-66's D7, when claude.ai read a node over MCP and noticed the mismatch. Read on 2.35.0.
 The number is ours to propose; renumber if the runtime's ledger has used it.
