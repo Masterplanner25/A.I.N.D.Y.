@@ -344,6 +344,10 @@ services:
       # Dynamic registration stays open (both connectors use it), capped low: one owner, few clients.
       AINDY_MCP_OAUTH_MAX_CLIENTS: "${AINDY_MCP_OAUTH_MAX_CLIENTS:-20}"
       AINDY_MCP_OAUTH_REGISTRATIONS_PER_HOUR: "${AINDY_MCP_OAUTH_REGISTRATIONS_PER_HOUR:-5}"
+      # Trust X-Forwarded-For from mcp-tunnel, so the consent page limits sign-ins per caller, not per proxy
+      # (FR-68, runtime 2.36.0 DEC-132; uvicorn's own setting). The compose network's SUBNET, since the tunnel's
+      # address changes on recreate. Never "*": a host request arrives from the gateway, inside this subnet.
+      FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-172.19.0.0/16}"
       # A second process on the api's pool settings could take 60 more postgres connections.
       DB_POOL_SIZE: "5"
       DB_MAX_OVERFLOW: "5"
