@@ -87,3 +87,19 @@ up healthy at **2026-11-11 02:36:24Z**, no restarts.
 6. **That window was lost** to an overnight reboot of the laptop (2026-11-11, before it was read; signals stop at
    07:35Z). Every container restarted at 17:17Z with the same image, so the next window opened at **17:17:28Z** and
    read 0 identity mismatches and 0 `tenant_mismatch` at 18:01Z. The day-of-traffic read is owed about 11-12 17:20Z.
+
+## 7. Day-of-traffic read, 2026-11-13
+
+The 02:36:24Z window was lost to the reboot (§6, item 6) and never read. The window read here opened at the reboot's
+restart of **2026-11-11 17:17:28Z** (image `638ab79a20f4`, no restarts since) and was read at **2026-11-13 05:35Z**,
+about 36 hours later.
+
+| Counter | Reading |
+|---|---|
+| `aindy_payload_identity_mismatch_total` | **0** (declared, never incremented) |
+| `aindy_effect_gate_outcomes_total{outcome="tenant_mismatch"}` | **0** (absent; the only outcome is `reserved`, 321) |
+| `tenant_mismatch` in the api log since the restart | 0 lines |
+| `aindy_llm_key_source_total` | 145, all `key_source="server"`: openai 145 |
+
+The window carried real traffic: 321 gated effects and 145 model calls. Every model call went on the server's key, which
+is right under `per_user`, since the owner is the only account that made calls.
