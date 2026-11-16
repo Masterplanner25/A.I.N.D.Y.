@@ -19,6 +19,7 @@ import {
   setContentSourceActive,
 } from "../../api/rippletrace.js";
 import { safeMap } from "../../utils/safe";
+import { refusalDetail, refusalMessage } from "../../lib/apiError.js";
 
 // What a piece's share drafts are doing (`share_drafts` on the drop point). Older pieces
 // (`skipped`) say nothing: they get drafts only when asked.
@@ -209,7 +210,7 @@ export default function RippleTrace() {
     } catch (err) {
       // The API returns a specific reason (bad scheme, non-public host, HTTP status);
       // showing it beats a generic failure, since the user can usually fix the URL.
-      setError(err?.data?.detail?.message || err.message || "Could not ingest that URL");
+      setError(refusalMessage(err, "Could not ingest that URL"));
     } finally {
       setBusy(false);
     }
@@ -260,12 +261,7 @@ export default function RippleTrace() {
       );
       await load();
     } catch (err) {
-      const detail = err?.data?.detail;
-      setError(
-        detail?.error === "mention_search_unavailable"
-          ? detail.message
-          : err.message || "Could not check for ripples"
-      );
+      setError(refusalMessage(err, "Could not check for ripples"));
     } finally {
       setBusy(false);
     }
@@ -283,8 +279,7 @@ export default function RippleTrace() {
       setShareNote({ id: dropPointId, text });
       await load();
     } catch (err) {
-      const detail = err?.data?.detail;
-      const text = detail?.error === "no_text" ? detail.message : err.message || "Could not queue share drafts";
+      const text = refusalMessage(err, "Could not queue share drafts");
       setError(text);
       setShareNote({ id: dropPointId, text, failed: true });
     } finally {
@@ -316,7 +311,7 @@ export default function RippleTrace() {
       await queuePieceAnswers(dropPointId);
       setDetail((current) => ({ ...current, queued: true }));
     } catch (err) {
-      const message = err?.data?.detail?.message || err.message || "Could not ask for answers";
+      const message = refusalMessage(err, "Could not ask for answers");
       setDetail((current) => ({ ...current, queueError: message }));
     } finally {
       setBusy(false);
@@ -349,11 +344,11 @@ export default function RippleTrace() {
       setCitationUrl("");
       await load();
     } catch (err) {
-      const detail = err?.data?.detail;
+      const detail = refusalDetail(err);
       setError(
         detail?.error === "not_a_citation" || detail?.error === "invalid_citation"
           ? `Not recorded — ${detail.message}`
-          : err.message || "Could not record that citation"
+          : refusalMessage(err, "Could not record that citation")
       );
     } finally {
       setBusy(false);

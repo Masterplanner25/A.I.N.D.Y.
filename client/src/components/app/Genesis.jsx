@@ -11,6 +11,7 @@ import { Toast } from "../shared/Toast";
 import { safeMap } from "../../utils/safe";
 import { useToast } from "../../utils/useToast";
 import GenesisDraftPreview from "./GenesisDraftPreview";
+import { refusalMessage } from "../../lib/apiError.js";
 
 // Genesis progress lives server-side, but the session id is what lets us find it again after
 // a navigation. Persist it so returning to the page resumes instead of starting over.
@@ -132,7 +133,7 @@ export default function Genesis() {
       setMessages(restoreMessages(data));
     } catch (err) {
       showToast(
-        err?.data?.detail?.message || err?.message || "Could not read that plan."
+        refusalMessage(err, "Could not read that plan.")
       );
     } finally {
       setLoading(false);

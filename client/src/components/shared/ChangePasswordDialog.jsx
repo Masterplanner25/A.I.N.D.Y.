@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { refusalMessage } from "../../lib/apiError.js";
 
 // Mirrors the runtime's MIN_PASSWORD_LENGTH so the obvious failure is caught before a
 // round trip. The server still enforces it — this is a courtesy, not the guard.
@@ -39,15 +40,12 @@ export default function ChangePasswordDialog({ onClose }) {
       // The runtime distinguishes these, and the difference matters to the user:
       // 401 means they mistyped the current one, 400 means the new one was rejected.
       const status = err?.status ?? err?.response?.status;
-      const detail = err?.data?.detail;
       if (status === 401) {
         setError("That current password isn't right.");
       } else if (status === 403) {
         setError("This account is disabled.");
-      } else if (typeof detail === "string") {
-        setError(detail);
       } else {
-        setError(detail?.message || err.message || "Could not change your password.");
+        setError(refusalMessage(err, "Could not change your password."));
       }
     } finally {
       setBusy(false);
