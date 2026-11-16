@@ -92,10 +92,17 @@ jobs:
       #
       # PYSEC-2026-4320 (certifi 2026.7.22) was ignored here on 2026-10-22 for one day: aindy-runtime
       # pinned certifi exactly. FR-54; 2.28.1 brought certifi>=2026.10.19, its removal condition.
+      #
+      # GHSA-vvf4-9x63-8xvv (dnspython 2.9.0, fixed 2.9.2), ignored since 2026-11-16: aindy-runtime pins
+      # dnspython==2.9.0 exactly (FR-69). Unreachable here: it needs attacker-controlled zone-file text in
+      # dns.rdata.from_text / dns.zone; nothing of ours or the runtime's imports dns, and pymongo's only use
+      # (mongodb+srv resolution, wire format) is off since MONGO_URL is mongodb://. Revisit if code of ours
+      # parses DNS text or MONGO_URL becomes mongodb+srv. REMOVE at the adoption that brings dnspython>=2.9.2.
       - name: Audit installed Python dependencies
         run: >-
           pip-audit --desc
           --ignore-vuln PYSEC-2026-3740
+          --ignore-vuln GHSA-vvf4-9x63-8xvv
 
   client-audit:
     name: Client Dependency Audit
