@@ -19,6 +19,7 @@ import {
 import StructurePanel from "./StructurePanel";
 import { safeMap } from "../../utils/safe";
 import SearchHistory from "./SearchHistory";
+import { refusalMessage } from "../../lib/apiError.js";
 
 // SERP budgets, in CHARACTERS. Mirrored from `seo_services.py` so the counter can respond as
 // the writer types rather than after a round trip; the server stays authoritative and returns
@@ -42,21 +43,6 @@ const CLAIM_STATUS = {
   unsourced: { label: "no source in the draft", tone: "text-amber-300" },
 };
 const CLAIM_ORDER = ["contradicts", "new", "confirmed", "sourced", "unsourced"];
-
-// The sentence the server sent with a failure (a 402 says "Add it in Settings"), if any.
-function serverSentence(error) {
-  let body = error?.data ?? error?.body;
-  if (typeof body === "string") {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      body = null;
-    }
-  }
-  const detail = body?.detail ?? body;
-  if (typeof detail === "string") return detail;
-  return detail?.message || body?.message || "";
-}
 
 export default function AiSeoTool() {
   const [content, setContent] = useState("");
@@ -182,7 +168,7 @@ export default function AiSeoTool() {
       setPatterns(await apiGetStructurePatterns(content, title));
     } catch (error) {
       console.error("Structure Patterns Error: ", error);
-      setPatterns({ patterns: [], reason: serverSentence(error) || "the structure service could not be reached" });
+      setPatterns({ patterns: [], reason: refusalMessage(error, "the structure service could not be reached") });
     }
     if (!structure) await loadStructure();
     setLoading(false);
@@ -270,7 +256,7 @@ export default function AiSeoTool() {
       setClaims(await apiGetArticleClaims(content, title));
     } catch (error) {
       console.error("Article Claims Error: ", error);
-      setClaims({ claims: [], sources: [], reason: serverSentence(error) || "the claims service could not be reached" });
+      setClaims({ claims: [], sources: [], reason: refusalMessage(error, "the claims service could not be reached") });
     }
     setLoading(false);
   };

@@ -23,6 +23,21 @@ export function refusalDetail(err) {
 export function refusalMessage(err, fallback) {
   const detail = refusalDetail(err);
   if (detail?.message) return detail.message;
+  const top = topLevelMessage(err);
+  if (top) return top;
   if (err?.status === 408 && err?.message) return err.message;
   return fallback;
+}
+
+// `{detail: {...}, message}`: a sentence beside a detail that has none of its own.
+function topLevelMessage(err) {
+  let raw = err?.data ?? err?.body;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return "";
+    }
+  }
+  return raw && typeof raw === "object" && typeof raw.message === "string" ? raw.message : "";
 }

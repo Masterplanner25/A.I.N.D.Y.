@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteProviderKey, listProviderKeys, setProviderKey } from "../../api/auth.js";
 import { safeMap } from "../../utils/safe";
+import { refusalMessage } from "../../lib/apiError.js";
 
 // Your own API keys (FR-59). When the server turns per-user keys on, your model and search calls
 // are paid with these; without one a feature says "Add it in Settings". Write-only: a stored key
@@ -18,19 +19,8 @@ const PRIMARY = `${BUTTON} bg-[#00ffaa] text-black hover:bg-[#00ffaa]/80`;
 const QUIET = `${BUTTON} border border-zinc-700 text-zinc-400 hover:bg-zinc-800`;
 
 function errorText(err, fallback) {
-  const raw = err?.data ?? err?.body;
-  let body = raw;
-  if (typeof raw === "string") {
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      body = null;
-    }
-  }
-  const detail = body?.detail ?? body;
   if (err?.status === 503) return "Provider keys aren't switched on for this server yet.";
-  if (typeof detail === "string") return detail;
-  return detail?.message || body?.message || fallback;
+  return refusalMessage(err, fallback);
 }
 
 function KeyRow({ provider, stored, busy, onSave, onRemove }) {

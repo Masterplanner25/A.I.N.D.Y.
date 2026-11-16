@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { confirmGoal, createGoal, dropGoal, getGoalsOverview, updateGoal } from "../../api/goals.js";
 import { safeMap } from "../../utils/safe";
+import { refusalMessage } from "../../lib/apiError.js";
 
 // What you are working toward, above any one plan (GOALS_LAYER_SPEC §6, decided 2026-11-09).
 // Proposals come from your plan's anchor and success criteria and act on nothing until you confirm them. A goal is
@@ -13,20 +14,6 @@ const SOURCE = { anchor: "your anchor", success_criterion: "a success criterion"
 
 function unwrap(response) {
   return response?.data && !response?.proposed ? response.data : response;
-}
-
-function errorText(err, fallback) {
-  let raw = err?.data ?? err?.body;
-  if (typeof raw === "string") {
-    try {
-      raw = JSON.parse(raw);
-    } catch {
-      raw = null;
-    }
-  }
-  const detail = raw?.detail ?? raw;
-  if (typeof detail === "string") return detail;
-  return detail?.message || raw?.message || fallback;
 }
 
 function progressText(goal) {
@@ -199,7 +186,7 @@ export default function GoalsPanel() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(
-    () => getGoalsOverview().then((r) => setData(unwrap(r)), (e) => setError(errorText(e, "Could not load your goals."))),
+    () => getGoalsOverview().then((r) => setData(unwrap(r)), (e) => setError(refusalMessage(e, "Could not load your goals."))),
     [],
   );
 
@@ -215,7 +202,7 @@ export default function GoalsPanel() {
       await load();
       return true;
     } catch (e) {
-      setError(errorText(e, "That didn't work."));
+      setError(refusalMessage(e, "That didn't work."));
       return false;
     } finally {
       setBusy(false);

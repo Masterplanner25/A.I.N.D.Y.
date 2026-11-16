@@ -14,6 +14,7 @@ import {
 } from "../../api/masterplan.js";
 import { safeMap } from "../../utils/safe";
 import { describeHours } from "../../utils/effort.js";
+import { refusalMessage } from "../../lib/apiError.js";
 
 // The plan's phases, and what the system has to say about the current one.
 //
@@ -43,17 +44,6 @@ const STRATEGY_COLOR = {
   displaced: "#a78bfa",
 };
 const FINISHED = new Set(["concluded", "abandoned", "displaced"]);
-
-// The API's 409 arrives as ApiError with the raw body; the useful sentence is in
-// detail.message. Fall back to whatever message there is.
-function refusalMessage(err) {
-  try {
-    const parsed = JSON.parse(err?.body || "");
-    return parsed?.detail?.message || parsed?.detail || err?.message;
-  } catch {
-    return err?.message || "Could not confirm.";
-  }
-}
 
 function miniBtn(color) {
   return {
@@ -129,7 +119,7 @@ export default function PhasePanel({ planId }) {
       await load();
       return result;
     } catch (err) {
-      setError(refusalMessage(err));
+      setError(refusalMessage(err, "Could not confirm."));
       return null;
     } finally {
       setBusy(null);

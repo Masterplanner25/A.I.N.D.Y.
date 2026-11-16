@@ -17,6 +17,12 @@ describe("refusalMessage", () => {
     expect(refusalMessage(apiError(400, { detail: "Password too short" }), "fallback")).toBe("Password too short");
   });
 
+  it("takes a top-level message beside a detail that has none", () => {
+    expect(refusalMessage(apiError(402, { detail: { error: "no_key" }, message: "Add it in Settings." }), "fallback"))
+      .toBe("Add it in Settings.");
+    expect(refusalMessage(apiError(409, { error: "x", message: "Already decided." }), "fallback")).toBe("Already decided.");
+  });
+
   it("never shows raw response text", () => {
     expect(refusalMessage(apiError(500, "<html>Internal Server Error</html>"), "Could not do it")).toBe("Could not do it");
     expect(refusalMessage(apiError(502, { detail: { error: "upstream" } }), "Could not do it")).toBe("Could not do it");
