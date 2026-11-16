@@ -1,6 +1,6 @@
 ---
 title: "App HTTP REST API Reference"
-last_verified: "2026-09-27"
+last_verified: "2026-11-16"
 api_version: "1.0"
 status: current
 owner: "apps-team"
@@ -2669,6 +2669,17 @@ Reject the gate as the owner — `{comment?}`. Same checks and refusals as appro
 **Access:** an operator only; anyone else gets 403.
 
 **Response 200:** the handoff, with `decision` set
+
+### Directing
+
+Prompts the person sent an agent (`DIRECTING_TIME_SPEC.md`): what the watcher cannot see while an agent does the work. One event per typed prompt, carrying times, ids and the project folder only, **never the prompt's text**. Written by the Claude Code hook and the transcript backfill (phase B); read by the derived sessions and the `directing_minutes` shadow (phase C), which nothing in the score reads.
+
+#### POST /apps/directing/events
+Store directing events — `{events: [{source, project, agent_session_id, source_event_id, occurred_at, agent_until?}]}`, up to 500. Idempotent on `(caller, source, source_event_id)`: a repeat is a duplicate, and moves `agent_until` on when later. The caller is the authenticated user; the body is closed, so a `user_id`, `content` or any other extra field is a 422
+
+**Access:** a session, or a platform key that is not watcher-only (the watcher key itself waits on FR-70).
+
+**Response 200:** {accepted, duplicates, extended, rejected}
 
 ### Works
 
