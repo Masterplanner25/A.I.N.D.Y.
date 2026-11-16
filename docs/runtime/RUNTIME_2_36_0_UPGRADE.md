@@ -1,6 +1,6 @@
 ---
 title: "Runtime 2.36.0 adoption"
-last_verified: "2026-11-13"
+last_verified: "2026-11-16"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -70,3 +70,18 @@ host RAM 1.0 GB free). Also takes #604–#606 live.
 4. Schema heads unchanged: runtime `0022`, app `gl1layer0001`.
 5. Durable continuation: no `AgentContinuation` lines, 0 agent runs left `executing`.
 6. A new identity-counter window opens at **05:55:58Z**.
+
+## 5. Day-of-traffic read, 2026-11-16
+
+The window opened at the recreate of **2026-11-13 05:55:58Z** (image `4dfd26687fd9`, no restarts since) and was read
+at **2026-11-16 02:23:54Z**, about 68 hours later (due about 11-14 06:00Z; read late, window intact).
+
+| Counter | Reading |
+|---|---|
+| `aindy_payload_identity_mismatch_total` | **0** (declared, never incremented) |
+| `aindy_effect_gate_outcomes_total{outcome="tenant_mismatch"}` | **0** (absent; the only outcome is `reserved`, 79) |
+| `tenant_mismatch` in the api log since the recreate | 0 lines |
+| `aindy_llm_key_source_total` | 273, all `key_source="server"`: openai 273 |
+
+The window carried real traffic: 79 gated effects and 273 model calls. Every model call went on the server's key, which
+is right under `per_user`, since the owner is the only account that made calls.
