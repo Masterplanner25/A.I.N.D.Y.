@@ -79,9 +79,11 @@ def _register_models() -> None:
 def _register_router() -> None:
     from AINDY.platform_layer.registry import register_router
     from apps.automation.routes.automation_router import router as automation_router
+    from apps.automation.routes.directing_router import router as directing_router
     from apps.automation.routes.release_router import router as release_router
     register_router(automation_router)
     register_router(release_router)
+    register_router(directing_router)
 
 
 def _register_route_prefixes() -> None:

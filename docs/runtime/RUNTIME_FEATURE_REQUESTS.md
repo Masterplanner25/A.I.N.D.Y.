@@ -20,7 +20,8 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-11-16:** **FR-69 (P3: `dnspython==2.9.0` exact pin, GHSA-vvf4-9x63-8xvv; fixed in 2.9.2)**, FR-55,
+> **Open as of 2026-11-16:** **FR-70 (P3: an app route cannot accept a watcher-only key)**, **FR-69 (P3: `dnspython==2.9.0`
+> exact pin, GHSA-vvf4-9x63-8xvv; fixed in 2.9.2)**, FR-55,
 > FR-14 recurrence half, FR-6 items 2–3.
 >
 > **Open as of 2026-11-13:** FR-55, FR-14 recurrence half, FR-6 items 2–3. FR-67 and FR-68 closed on runtime 2.36.0
@@ -77,6 +78,33 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-70 — an app route cannot accept a watcher-only key, so a laptop-side activity source has no narrow credential 🔴 OPEN — filed 2026-11-16, P3
+
+**apps-monolith ref:** `DIRECTING_TIME_SPEC.md` decision 6 (owner, 2026-11-16). Read on 2.36.0. The number is ours to
+propose; renumber if the runtime's ledger has used it.
+
+**What we are building.** A Claude Code `UserPromptSubmit` hook on the person's laptop posts directing events
+(timestamps and ids of their prompts to an agent, never text) to our route `POST /apps/directing/events`. It runs
+unattended, like the watcher, so its credential sits in a file the way `~/.aindy/watcher_key` does.
+
+**What we see.** The narrow credential that exists, the person's watcher key (`watcher.signals` only, DEC-117), is
+refused on every route but the runtime's own `/watcher` ones: `get_current_user` calls
+`_resolve_platform_key_as_user(raw_key, db)` with `allow_watcher_only=False`, and the only opt-in is that private
+function, used by `watcher_router._watcher_caller`. App code must not import it. The alternative, a dedicated
+platform key with some other scope, is not narrow: any non-watcher-only key passes `get_current_user`, and by
+`_jwt_scope_enforcement_enabled`'s own count only 7 of 147 routes check a scope, so that key would reach almost every
+app route from a file on disk.
+
+**Ask** (either is enough; the runtime chooses):
+1. **A public dependency that admits a watcher-only key**, e.g. `AINDY.services.auth_service.get_activity_caller`
+   (the `_watcher_caller` logic: a platform key holding `watcher.signals` or `platform.admin`, or a session), for app
+   routes that ingest the person's own activity. The watcher key's reach grows by exactly the routes that opt in.
+2. **Or an app-registrable exclusive scope**, `register_key_scope("directing.events", exclusive=True)`, treated like
+   `watcher.signals`: refused everywhere except on routes that name it, mintable by the person for themselves.
+
+Until then our route takes what `get_current_user` takes (a session or a non-watcher key), with `_directing_caller` as
+the one seam to change, and phase B's hook waits on this.
+
 ## FR-69 — `dnspython==2.9.0` is an exact pin, and 2.9.0 has GHSA-vvf4-9x63-8xvv (a WKS record in zone-file text exhausts memory); the fix is 2.9.2 🔴 OPEN — filed 2026-11-16, P3
 
 **apps-monolith ref:** found 2026-11-16 on Dependabot #611–#613: `Python Dependency Audit` went red on all three,

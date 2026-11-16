@@ -8,7 +8,8 @@ owner: "app-team"
 
 # Directing time: the person's attention while an agent does the work
 
-**Status:** scoped 2026-11-16. Decisions in §8 are open. Not built.
+**Status:** scoped 2026-11-16; §8 decided the same day (all seven as recommended; 6 resolved to FR-70). Phase A built
+2026-11-16.
 
 **Origin.** On 2026-11-16 the watcher's signal volume fell from 100–270 a day to 10–35. The watcher was working
 correctly: the owner's time at the laptop had become prompting Claude Code and watching it work. The watcher counts
@@ -34,8 +35,10 @@ backfill** (2026-11-16).
 - **Claude Code transcripts:** `~/.claude/projects/<repo>/<session>.jsonl`, one JSON object per line. A prompt the
   person typed is `type: "user"` with string `message.content`, plus a `uuid`, a `sessionId` and an ISO `timestamp`.
   Claude Code keeps about 30 days of them.
-  - On this laptop (read 2026-11-16): 21 transcripts across 17 repos, **1,004 prompts from 2026-10-10**. For example,
-    57 on 11-12, a day the watcher tracked 61 minutes.
+  - On this laptop (read 2026-11-16): 21 transcripts across 17 repos, back to 2026-10-10. **749 lines are typed
+    prompts** (746 text, 3 with an image). The other ~9,700 `user` lines are tool results (9,393), task
+    notifications (217), local commands, compaction summaries and skill loads. A first count of 1,004 included the
+    task notifications and similar lines, so §2's exclusions matter.
 - **Claude Code hooks:** `UserPromptSubmit` runs a command on every prompt. It receives JSON on stdin with
   `session_id`, `transcript_path` and `cwd`. A hook that fails or times out must not block the prompt.
 - **What is not covered:** claude.ai and ChatGPT keep no local transcript. The Collaborator's messages are already in
@@ -47,6 +50,11 @@ backfill** (2026-11-16).
   - `user_id`, `source` (`claude_code` for now), and `project`, the transcript's folder name (e.g.
     `C--dev-aindy-apps-monolith`);
   - `agent_session_id` and `occurred_at`;
+  - `agent_until`: the last transcript timestamp before the next typed prompt, the end of the agent's work on this one
+    (decision 2), counting only the agent's own lines: assistant messages and tool results. Claude Code's bookkeeping
+    lines (`api-request` written as the person submits, `system` `away_summary` while they are away, `turn_duration`,
+    `pr-link`, `attachment`) would stretch it to the next prompt, which was measured on 11-16 before the rule. It is
+    unknown while the agent works, and a later ingest moves it on, never back;
   - `source_event_id`, the transcript line's `uuid`. This is unique per user, and it is what makes ingestion
     idempotent.
   - **The prompt's text is never stored or sent** (decision 3).
@@ -57,8 +65,10 @@ backfill** (2026-11-16).
   - Within one agent session, consecutive prompts chain. Two agent sessions chain if they overlap or touch within T.
 - **Not counted as a prompt:** lines that are not the person typing:
   - tool results, `isMeta` lines;
-  - text wrapped in `<command-name>`, `<local-command-…>`, `<task-notification>` or `<system-reminder>`;
-  - background-task notices.
+  - `isSidechain` (a subagent's prompt, written by the main agent) and `isCompactSummary` lines;
+  - text starting `<command-name>`, `<command-message>`, `<command-args>`, `<local-command-…>`,
+    `<task-notification>`, `<system-reminder>`, `[Cross-session delivery notice]` or `[Request interrupted`.
+  - A prompt with an image is a list holding a `text` block and no `tool_result`, and counts.
   - The parser has a fixed exclusion list with a test per case.
 
 ## 3. Capture: one ingester, two triggers
@@ -72,7 +82,9 @@ the line `uuid`, the hook and the backfill can overlap, and a run after an outag
    - If the api is down, it does nothing: the next run, or the backfill, picks the prompts up.
    - The hook fires before the prompt it reports is written to the transcript. So each prompt is ingested by the next
      prompt's hook, and the session's last prompt by the backfill. Phase B checks this ordering live, and if the
-     prompt is in the file, it is ingested at once.
+     prompt is in the file, it is ingested at once. **Seen 2026-11-16:** a prompt was in the transcript by the time
+     the agent's first tool call ran, which suggests it is written before the hook fires; phase B confirms it in the
+     hook itself.
 2. **The backfill.** `scripts/directing_backfill.py [--since DATE] [--dry-run]` walks every transcript under
    `~/.claude/projects/`. It runs once at build (back to 10-10), then from the watcher's sign-in task daily. The dry
    run is the default, as with `memory backfill-paths`.
@@ -112,7 +124,7 @@ ignored (DEC-103).
 - It does not read claude.ai or ChatGPT.
 - It does not infer attention between prompts beyond T. A long silence ends the session.
 
-## 8. Decisions: the owner's, open
+## 8. Decisions: the owner's, **all seven taken 2026-11-16, as recommended**
 
 1. **The gap T that ends a directing session.** Recommended: **20 minutes.** On 11-16, prompts after 02:16Z came 1–11
    minutes apart while work ran. One gap was 25 minutes (01:51 → 02:16Z), a 15-minute dependency-merge loop the
@@ -136,6 +148,11 @@ ignored (DEC-103).
    available to app routes; **otherwise mint a dedicated key** with the narrowest scope that reaches
    `/apps/directing/events`. If neither exists, file a runtime FR for an app-registrable key scope.
    - Never a full-access key.
+   - **Resolved in phase A: neither exists.** The runtime admits a watcher-only key only on its own `/watcher` routes
+     (`_resolve_platform_key_as_user(..., allow_watcher_only=True)` is private). A dedicated key is not narrow: any
+     non-watcher-only key passes `get_current_user`, and only 7 of 147 routes check a scope. **FR-70 filed.** The
+     route takes a session or a non-watcher key until then, through one seam (`_directing_caller`), and phase B's hook
+     waits on FR-70.
 7. **Which repos count.** Recommended: **all**, with an ignore list (empty by default). Research repos are still the
    person directing work.
    - Alternative: an allow list.
@@ -144,8 +161,14 @@ ignored (DEC-103).
 
 | Phase | What | Schema |
 |---|---|---|
-| **A** | The table, the ingest route, the transcript parser and its exclusion tests; the key question (decision 6) answered | `directing_events` (automation) |
-| **B** | The hook script and its `settings.json` entry; the backfill (dry run, then once to 10-10); the sign-in task runs it daily; hook ordering checked live (§3) | none |
+| **A** ✅ **built 2026-11-16** | The table, the ingest route, the transcript parser and its exclusion tests; the key question (decision 6) answered. As built:
+  - `apps/automation/directing.py` (`DirectingEvent`), migration `dt1directing0001`;
+  - `services/directing_transcript.py`: the parser, stdlib only, so the hook and backfill run it on the laptop;
+  - `services/directing_service.py`: `ingest_events`, idempotent, moves `agent_until` on;
+  - `POST /apps/directing/events` (`routes/directing_router.py`): closed body, ≤ 500 events, route name `automation.directing.ingest`;
+  - `tests/unit/test_directing_events.py`;
+  - decision 6 → FR-70 | `directing_events` (automation) |
+| **B** (waits on FR-70) | The hook script and its `settings.json` entry; the backfill (dry run, then once to 10-10); the sign-in task runs it daily; hook ordering checked live (§3) | none |
 | **C** | Derived sessions, the summary route, the `directing_minutes` shadow in the KPI snapshot, the KPI page line; the Collaborator's messages as a second source (decision 4) | none |
 | **D** | Two normal weeks of shadow; then the score question (decision 5) | none |
 
