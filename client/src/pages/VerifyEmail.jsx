@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 import { useSystem } from "../context/SystemContext";
+import { refusalMessage } from "../lib/apiError.js";
 
 /**
  * Landing page for the emailed verification link (aindy-runtime >= 2.0.0).
@@ -46,11 +47,7 @@ export default function VerifyEmailPage() {
         navigate("/dashboard", { replace: true });
       } catch (err) {
         setStatus("error");
-        setError(
-          err?.data?.detail?.message ||
-            err?.message ||
-            "That verification link is invalid or has expired."
-        );
+        setError(refusalMessage(err, "That verification link is invalid or has expired."));
       }
     })();
   }, [token, verifyEmail, bootSystem, navigate]);

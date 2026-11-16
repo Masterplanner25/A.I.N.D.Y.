@@ -132,6 +132,19 @@ describe("RippleTrace: a piece's answers and links", () => {
     }
   });
 
+  it("says why a piece with no stored text cannot be read, not the raw response", async () => {
+    // ui-kit's ApiError: `.body` is the raw text and `.message` embeds it; there is no `.data`.
+    const body = JSON.stringify({ detail: { error: "no_text", message: "This piece has no stored text to read yet." } });
+    const err = Object.assign(new Error(`API Error (409): ${body}`), { name: "ApiError", status: 409, body });
+    mockGetAnswers.mockResolvedValue({ found: true, status: "skipped", stale: false, answers: [], raised: [] });
+    mockQueueAnswers.mockRejectedValue(err);
+    render(<RippleTrace />);
+    fireEvent.click(await screen.findByTestId("detail-toggle-p2"));
+    fireEvent.click(await screen.findByRole("button", { name: "Read what it answers" }));
+    expect(await screen.findByText(/This piece has no stored text to read yet\./)).toBeTruthy();
+    expect(screen.queryByText(/API Error/)).toBeNull();
+  });
+
   it("says when the answers were read from an earlier version", async () => {
     mockGetAnswers.mockResolvedValue({
       data: { found: true, status: "made", stale: true, answers: [{ question: "Q?" }], raised: [] },
