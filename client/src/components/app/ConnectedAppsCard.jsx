@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { listMcpGrants, revokeMcpGrant } from "../../api/mcpGrants.js";
 import { safeMap } from "../../utils/safe";
+import { refusalMessage } from "../../lib/apiError.js";
 
 // Connected apps (owner, 2026-11-11): the AIs you let read A.I.N.D.Y. over MCP, such as claude.ai and ChatGPT
 // (scripts/CLAUDE.md, "claude.ai and ChatGPT"). They read only; disconnecting ends their access.
@@ -23,20 +24,6 @@ function day(value) {
   return value ? new Date(value).toLocaleDateString() : "";
 }
 
-function errorText(err, fallback) {
-  let body = err?.data ?? err?.body;
-  if (typeof body === "string") {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      body = null;
-    }
-  }
-  const detail = body?.detail ?? body;
-  if (typeof detail === "string") return detail;
-  return detail?.message || body?.message || fallback;
-}
-
 export default function ConnectedAppsCard() {
   const [grants, setGrants] = useState(null);
   const [error, setError] = useState("");
@@ -46,7 +33,7 @@ export default function ConnectedAppsCard() {
     () =>
       listMcpGrants().then(setGrants, (e) => {
         setGrants([]);
-        setError(errorText(e, "Could not load your connected apps."));
+        setError(refusalMessage(e, "Could not load your connected apps."));
       }),
     [],
   );
@@ -62,7 +49,7 @@ export default function ConnectedAppsCard() {
       await revokeMcpGrant(id);
       await load();
     } catch (err) {
-      setError(errorText(err, "Could not disconnect that app."));
+      setError(refusalMessage(err, "Could not disconnect that app."));
     } finally {
       setBusy(false);
     }

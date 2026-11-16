@@ -1,26 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { createWatcherKey, listWatcherKeys, revokeWatcherKey } from "../../api/watcher.js";
 import { safeMap } from "../../utils/safe";
+import { refusalMessage } from "../../lib/apiError.js";
 
 // The watcher (audit D1, owner 2026-11-08): it watches which app is in front and reports focus sessions, so
 // focus_quality (15% of your score) stops being a fixed 50. Run it on this laptop with the SDK's aindy-watcher
 // (aindy-sdk >= 1.2.1; scripts/CLAUDE.md) and a key from here. A key can only send watcher signals; it is shown once.
 
 const BUTTON = "px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-colors disabled:opacity-40";
-
-function errorText(err, fallback) {
-  let body = err?.data ?? err?.body;
-  if (typeof body === "string") {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      body = null;
-    }
-  }
-  const detail = body?.detail ?? body;
-  if (typeof detail === "string") return detail;
-  return detail?.message || body?.message || fallback;
-}
 
 export default function WatcherKeysCard() {
   const [keys, setKeys] = useState(null);
@@ -33,7 +20,7 @@ export default function WatcherKeysCard() {
     () =>
       listWatcherKeys().then(setKeys, (e) => {
         setKeys([]);
-        setError(errorText(e, "Could not load your watcher keys."));
+        setError(refusalMessage(e, "Could not load your watcher keys."));
       }),
     [],
   );
@@ -51,7 +38,7 @@ export default function WatcherKeysCard() {
       setFresh(made?.key ? made : made?.data ?? made);
       await load();
     } catch (err) {
-      setError(errorText(err, "Could not make a key."));
+      setError(refusalMessage(err, "Could not make a key."));
     } finally {
       setBusy(false);
     }
@@ -64,7 +51,7 @@ export default function WatcherKeysCard() {
       await revokeWatcherKey(id);
       await load();
     } catch (err) {
-      setError(errorText(err, "Could not revoke that key."));
+      setError(refusalMessage(err, "Could not revoke that key."));
     } finally {
       setBusy(false);
     }
