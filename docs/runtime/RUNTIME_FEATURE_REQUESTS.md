@@ -20,6 +20,9 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
+> **Open as of 2026-11-16:** **FR-69 (P3: `dnspython==2.9.0` exact pin, GHSA-vvf4-9x63-8xvv; fixed in 2.9.2)**, FR-55,
+> FR-14 recurrence half, FR-6 items 2–3.
+>
 > **Open as of 2026-11-13:** FR-55, FR-14 recurrence half, FR-6 items 2–3. FR-67 and FR-68 closed on runtime 2.36.0
 > (live reports in `RUNTIME_2_36_0_UPGRADE.md` §1–§2).
 >
@@ -74,6 +77,36 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
+## FR-69 — `dnspython==2.9.0` is an exact pin, and 2.9.0 has GHSA-vvf4-9x63-8xvv (a WKS record in zone-file text exhausts memory); the fix is 2.9.2 🔴 OPEN — filed 2026-11-16, P3
+
+**apps-monolith ref:** found 2026-11-16 on Dependabot #611–#613: `Python Dependency Audit` went red on all three,
+two of them npm-only, so nothing of ours was involved: the FR-51 / FR-54 shape again. Pinned in runtime 2.36.0's
+`pyproject.toml` (`dnspython==2.9.0`) and `AINDY/requirements.txt`.
+
+```
+dnspython 2.9.0  GHSA-vvf4-9x63-8xvv (CVE-2026-128089, high)  2.9.2  from_text() does not bound a WKS record's
+                                                                     service number, so crafted zone-file text
+                                                                     allocates without limit
+```
+
+### Why we cannot fix this on our side
+
+`dnspython` arrives through `aindy-runtime`'s exact pin (pymongo also requires it, with a range), so a constraint to
+2.9.2 makes pip refuse the install.
+
+### Our exposure, assessed: why we ignore it in the meantime
+
+Not reachable here. The advisory needs attacker-controlled **zone-file text** reaching `dns.rdata.from_text` /
+`dns.zone`. Nothing in `apps/`, `scripts/`, `tests/` or the runtime's `AINDY/` imports `dns` at all; the only user is
+pymongo, which uses dnspython's resolver for `mongodb+srv://` seed lists (wire format, not text), and our `MONGO_URL`
+is `mongodb://mongo:27017/aindy`, so even that path is unused. The ignore's revisit condition: any code of ours that
+parses DNS text, or a `mongodb+srv` URL.
+
+### Ask
+
+**Bump `dnspython` to `>=2.9.2`** in the next release, ideally as a range like certifi (DEC-102), so the next patch
+needs no runtime release. No hurry beyond clearing our audit ignore.
+
 ## FR-68 — behind a proxy, the MCP consent page's rate limit is one bucket for everyone ✅ SHIPPED in 2.36.0 (#958, DEC-132: uvicorn's `FORWARDED_ALLOW_IPS`, no runtime setting); closed 2026-11-13: set on `mcp`, the access log shows the caller's address — filed 2026-11-11, P3
 
 **apps-monolith ref:** the public `/mcp` for claude.ai and ChatGPT (compose profile `public-mcp`, 2026-11-11), on
