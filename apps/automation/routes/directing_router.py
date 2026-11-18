@@ -3,10 +3,10 @@
 The caller is the authenticated user; nothing in the payload names a user (DEC-103). The body is closed
 (`extra="forbid"`), so a client that tried to send a prompt's text would be refused, not stored (§6).
 
-**The key (decision 6, FR-70):** the hook is meant to use the person's watcher key. The runtime admits a watcher-only
-key on its own `/watcher` routes and no others, and offers app routes no public way to opt in, so for now this route
-takes what `get_current_user` takes. A session works, and so does any non-watcher platform key. When FR-70 ships,
-`_directing_caller` is the one seam to change.
+**The key (decision 6, FR-70):** the hook posts with the person's watcher key. Runtime 2.37.0's `get_activity_caller`
+(DEC-133) admits a session, a key holding `watcher.signals` (a watcher-only key included) or `platform.admin`; any other
+platform key is a 403 and the shared `X-API-Key` a 401, since it names no user. Never add `enforce_api_key_scope` here:
+it resolves through `get_current_user`, which refuses a watcher-only key.
 """
 from datetime import datetime
 from typing import Optional
@@ -19,7 +19,7 @@ from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from AINDY.services.auth_service import get_current_user
+from AINDY.services.auth_service import get_activity_caller
 
 from apps.automation.services.directing_service import MAX_BATCH
 
@@ -43,7 +43,7 @@ class DirectingBatch(BaseModel):
     events: list[DirectingEventIn] = Field(max_length=MAX_BATCH)
 
 
-def _directing_caller(current_user: dict = Depends(get_current_user)) -> dict:
+def _directing_caller(current_user: dict = Depends(get_activity_caller)) -> dict:
     return current_user
 
 

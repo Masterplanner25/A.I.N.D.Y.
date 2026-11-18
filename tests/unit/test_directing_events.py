@@ -136,7 +136,7 @@ def test_the_same_event_id_is_separate_per_user(db_session, owner):
 
 
 def test_the_route_stores_for_the_caller_and_refuses_text(app, client, monkeypatch):
-    from AINDY.services.auth_service import get_current_user
+    from AINDY.services.auth_service import get_activity_caller
     import apps.automation.services.directing_service as service
 
     caller = uuid.uuid4()
@@ -147,7 +147,7 @@ def test_the_route_stores_for_the_caller_and_refuses_text(app, client, monkeypat
         return {"accepted": len(seen["events"]), "duplicates": 0, "extended": 0, "rejected": 0}
 
     monkeypatch.setattr(service, "ingest_events", fake)
-    app.dependency_overrides[get_current_user] = lambda: {"sub": str(caller), "is_admin": False}
+    app.dependency_overrides[get_activity_caller] = lambda: {"sub": str(caller), "is_admin": False}
 
     response = client.post("/apps/directing/events", json={"events": [_event("u1")]})
     assert response.status_code == 200, response.text[:300]
@@ -159,6 +159,21 @@ def test_the_route_stores_for_the_caller_and_refuses_text(app, client, monkeypat
     assert client.post("/apps/directing/events", json={"events": [with_text]}).status_code == 422
     with_user = {"events": [_event("u3")], "user_id": str(uuid.uuid4())}
     assert client.post("/apps/directing/events", json=with_user).status_code == 422
+
+
+def test_the_route_admits_the_watcher_key_through_get_activity_caller():
+    """FR-70 (runtime 2.37.0, DEC-133): the caller is `get_activity_caller`, never `get_current_user`, which refuses a
+    watcher-only key, and no `enforce_api_key_scope` beside it, which would refuse it again."""
+    import inspect
+
+    from AINDY.services.auth_service import get_activity_caller, get_current_user
+    from apps.automation.routes import directing_router as module
+
+    default = inspect.signature(module._directing_caller).parameters["current_user"].default
+    assert default.dependency is get_activity_caller
+    source = inspect.getsource(module)
+    assert "enforce_api_key_scope" not in source.split('"""', 2)[2]
+    assert get_current_user.__name__ not in source.split('"""', 2)[2]
 
 
 def test_route_name_fits_the_event_source_column():
