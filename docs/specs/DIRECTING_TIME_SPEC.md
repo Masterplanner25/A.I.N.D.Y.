@@ -10,7 +10,8 @@ owner: "app-team"
 
 **Status:** scoped 2026-11-16; §8 decided the same day (all seven as recommended; 6 resolved to FR-70). Phase A built
 2026-11-16. FR-70 shipped in runtime 2.37.0 (2026-11-18). **Phase B built 2026-11-18**: the hook is installed, the backfill ran
-(698 prompts), and the sign-in task runs it daily. FR-70 closed on it.
+(698 prompts), and the sign-in task runs it daily. FR-70 closed on it. **Phase C built 2026-11-18**: sessions, the
+summary, the shadow and the KPI line; phase D (two normal weeks) starts.
 
 **Origin.** On 2026-11-16 the watcher's signal volume fell from 100–270 a day to 10–35. The watcher was working
 correctly: the owner's time at the laptop had become prompting Claude Code and watching it work. The watcher counts
@@ -64,6 +65,10 @@ backfill** (2026-11-16).
   - It runs from the first prompt to the end of the agent's work after the last prompt: the last assistant line before
     the next gap, capped at T (decision 2).
   - Within one agent session, consecutive prompts chain. Two agent sessions chain if they overlap or touch within T.
+  - **As built (phase C):** a prompt joins the session when it comes within T of the session's *end so far*: each
+    prompt covers its time to the agent's last line, capped at T. When the agent answers quickly that is the gap
+    between prompts; when it worked a while, it is the person's own idle gap after it finished, since they were on
+    call until then (decision 2). A session counts on the local day it starts.
 - **Not counted as a prompt:** lines that are not the person typing:
   - tool results, `isMeta` lines;
   - `isSidechain` (a subagent's prompt, written by the main agent) and `isCompactSummary` lines;
@@ -86,6 +91,9 @@ the line `uuid`, the hook and the backfill can overlap, and a run after an outag
      prompt is in the file, it is ingested at once. **Seen 2026-11-16:** a prompt was in the transcript by the time
      the agent's first tool call ran, which suggests it is written before the hook fires; phase B confirms it in the
      hook itself.
+   - **Confirmed 2026-11-18** on the owner's first real prompts after install (`~/.aindy/directing_hook.log`): every
+     run logged `newest_age_s=1` and `accepted=1`, in two repos. **The prompt is in the file when the hook fires**, so
+     each prompt is stored at once, not by the next one; the backfill only completes `agent_until`.
 2. **The backfill.** `scripts/directing_backfill.py [--since DATE] [--dry-run]` walks every transcript under
    `~/.claude/projects/`. It runs once at build (back to 10-10), then from the watcher's sign-in task daily. The dry
    run is the default, as with `memory backfill-paths`.
@@ -102,6 +110,11 @@ ignored (DEC-103).
 - **Shadow measure only.** `analytics` computes `directing_minutes` (per day, over the scoring window) and records it
   next to `focus_quality` in the score's KPI snapshot, **read by nothing** (decision 5). `focus_quality` does not
   change.
+  - **As built (phase C): derived, not stored.** `directing_minutes` is `apps/automation/services/directing_read.py`'s
+    arithmetic over kept inputs (directing events, agent runs), so its value beside any past `focus_quality` row in
+    `score_history` can be computed for that date at any time, backfilled prompts included. A stored copy would need
+    a table (the spec says phase C has none) and would freeze values the backfill later completes. `analytics` stays
+    untouched and imports nothing from `automation`: phase D joins the summary to `score_history` by date.
 
 ## 5. What the person sees
 
@@ -179,7 +192,13 @@ ignored (DEC-103).
   - the hook in the user-level `~/.claude/settings.json` (timeout 3 s); `~/.aindy/start-watcher.ps1` runs `--days 3 --yes --wait 900` at sign-in (log `~/.aindy/directing_backfill.log`);
   - **the backfill, 2026-11-18:** 698 prompts in 4 projects (aindy-apps-monolith 339, aindy-runtime 212, Coding-Language 139, nodus-mcp-server 8), all with `agent_until`; a re-run: 698 duplicates. **The oldest is 10-20, not 10-10:** Claude Code's ~30-day retention deleted 10-10 → 10-19 between 11-16 and 11-18 (about 51 prompts, gone). From now on the daily run keeps ahead of it;
   - `tests/unit/test_directing_scripts.py` | none |
-| **C** | Derived sessions, the summary route, the `directing_minutes` shadow in the KPI snapshot, the KPI page line; the Collaborator's messages as a second source (decision 4) | none |
+| **C** ✅ **built 2026-11-18** | Derived sessions, the summary route, the `directing_minutes` shadow in the KPI snapshot, the KPI page line; the Collaborator's messages as a second source (decision 4). As built:
+  - `services/directing_read.py`: `derive_sessions` (T = 20 min, per-prompt end capped at T), `sessions_between` (reads back 3·T so a running session is not cut), `summary` (local days via an IANA `tz`; watcher minutes are `session_ended` durations);
+  - **the Collaborator source is the agent runs the person started** (`created_at` → `completed_at`; agent-spawned runs left out), read at query time, never copied into `directing_events`. Genesis is not a source: its transcript has no per-message times. Owner's runs: 7, all 10-10 → 10-14, so it adds nothing today;
+  - `GET /apps/directing/sessions?from&to`, `GET /apps/directing/summary?days&tz` (a signed-in session; the watcher key only writes);
+  - the KPI page: one line in the Focus Quality tile, *"Directing agents: 3 h 10 m over 6 sessions in the last 7 days (not in the score)."*, only when there are prompts (`client/src/utils/directing.js`);
+  - the shadow is derived, not stored (§4);
+  - `tests/unit/test_directing_read.py`, `client/src/test/kpi-directing-line.test.jsx` | none |
 | **D** | Two normal weeks of shadow; then the score question (decision 5) | none |
 
 Each phase is one PR. A and B change nothing the score reads.

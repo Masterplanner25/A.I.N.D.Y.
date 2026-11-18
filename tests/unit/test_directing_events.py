@@ -162,18 +162,19 @@ def test_the_route_stores_for_the_caller_and_refuses_text(app, client, monkeypat
 
 
 def test_the_route_admits_the_watcher_key_through_get_activity_caller():
-    """FR-70 (runtime 2.37.0, DEC-133): the caller is `get_activity_caller`, never `get_current_user`, which refuses a
-    watcher-only key, and no `enforce_api_key_scope` beside it, which would refuse it again."""
+    """FR-70 (runtime 2.37.0, DEC-133): the ingest route's caller is `get_activity_caller`, never `get_current_user`,
+    which refuses a watcher-only key, and no `enforce_api_key_scope` beside it, which would refuse it again. The read
+    routes (phase C) take a session: the watcher key only writes."""
     import inspect
 
-    from AINDY.services.auth_service import get_activity_caller, get_current_user
+    from AINDY.services.auth_service import get_activity_caller
     from apps.automation.routes import directing_router as module
 
     default = inspect.signature(module._directing_caller).parameters["current_user"].default
     assert default.dependency is get_activity_caller
-    source = inspect.getsource(module)
-    assert "enforce_api_key_scope" not in source.split('"""', 2)[2]
-    assert get_current_user.__name__ not in source.split('"""', 2)[2]
+    ingest = inspect.signature(module.ingest_directing_events_route).parameters["current_user"].default
+    assert ingest.dependency is module._directing_caller
+    assert "enforce_api_key_scope" not in inspect.getsource(module).split('"""', 2)[2]
 
 
 def test_route_name_fits_the_event_source_column():

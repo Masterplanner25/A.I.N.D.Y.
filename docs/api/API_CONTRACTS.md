@@ -102,7 +102,7 @@ Mutable domain features. All paths below are prefixed with `/apps`.
 - `apps/masterplan/routes/genesis_router.py` (router prefix `/genesis`) **[JWT auth required]** ? `/apps/genesis/session`, `/apps/genesis/message`, etc.
 - `apps/automation/routes/automation_router.py` (router prefix `/automation`) **[JWT auth required]** ? `/apps/automation/logs`, etc.
 - `apps/automation/routes/release_router.py` (router prefix `/releases`) **[JWT auth required]** → `/apps/releases`. The release handoff (`RELEASE_HANDOFF_SPEC.md`); registered by `apps.automation.bootstrap`.
-- `apps/automation/routes/directing_router.py` (router prefix `/directing`) **[JWT auth required]** → `/apps/directing`. Directing events (`DIRECTING_TIME_SPEC.md`); registered by `apps.automation.bootstrap`.
+- `apps/automation/routes/directing_router.py` (router prefix `/directing`) **[JWT auth required]** → `/apps/directing`. Directing events, sessions and the daily summary (`DIRECTING_TIME_SPEC.md`); registered by `apps.automation.bootstrap`.
 - `AINDY/routes/memory_router.py` (router prefix `/memory`) **[JWT auth required]** ? `/apps/memory/nodes`, `/apps/memory/recall`, etc.
 - `apps/memory/routes/memory_metrics_router.py` (router prefix `/memory`) **[JWT auth required]** → `/apps/memory/metrics`, etc. Registered by `apps.memory.bootstrap`.
 - `apps/memory/routes/memory_trace_router.py` (router prefix `/memory`) **[JWT auth required]** → `/apps/memory/traces`, etc. Registered by `apps.memory.bootstrap`.

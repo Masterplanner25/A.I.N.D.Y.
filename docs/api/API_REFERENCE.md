@@ -2681,6 +2681,20 @@ Store directing events — `{events: [{source, project, agent_session_id, source
 
 **Response 200:** {accepted, duplicates, extended, rejected}
 
+#### GET /apps/directing/sessions
+Directing sessions that start in `[from, to)` (dates `YYYY-MM-DD` or ISO times; default the last 7 days, at most 92), derived when read (§2): a prompt joins the session when it comes within 20 minutes of the session's end so far, and each prompt's end is the agent's last line capped at 20 minutes. Two sources: Claude Code prompts and the agent runs the person started from the Collaborator (`source: "collaborator"`); agent-spawned runs are left out. A reversed or longer range, or a bad bound, is a 422
+
+**Access:** a signed-in session
+
+**Response 200:** {from, to, gap_minutes, sessions: [{start, end, minutes, prompts, projects, sources}]}
+
+#### GET /apps/directing/summary
+Directing minutes per local day beside the watcher's tracked minutes (`session_ended` durations), over the last `days` (1–90, default 7) days in `tz` (an IANA name, default UTC; an unknown one is a 422). A session counts on the day it starts. This is the `directing_minutes` shadow: `in_score` is always false, and nothing in the score reads it
+
+**Access:** a signed-in session
+
+**Response 200:** {days, time_zone, daily: [{date, directing_minutes, sessions, prompts, watcher_minutes}], totals: {directing_minutes, sessions, prompts, watcher_minutes}, gap_minutes, in_score}
+
 ### Works
 
 What the owner has made, how the works relate, and which plan objectives they serve (`WORK_MODEL_SPEC.md`). A Work holds intent (summary in the owner's words, role, lifecycle), never measurement. Nothing is inferred into it: proposals are derived on demand and written only when the owner confirms them. Refusals are `{error: "work_refused", message}`.
