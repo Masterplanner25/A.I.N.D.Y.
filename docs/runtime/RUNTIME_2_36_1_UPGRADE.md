@@ -1,6 +1,6 @@
 ---
 title: "Runtime 2.36.1 adoption"
-last_verified: "2026-11-17"
+last_verified: "2026-11-18"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -39,11 +39,18 @@ vite/postcss and two native-crate build dependencies, neither of which we build.
 
 ## 4. Live
 
-Owed after merge: `build api`, then `up` with all three profiles (`mcp` shares the image), then the handoff's check:
+Merged as #620 (its `Python Dependency Audit` passed on 2.36.1 without the ignore: **FR-69 closed**). Built
+2026-11-18 (image `461eaf9bc8d3`, about two minutes with api and `mcp` stopped first for memory) and brought up with
+all three profiles at **03:40:58Z**; api healthy at 03:41:28Z.
 
-```bash
-docker exec <api> python -c "import AINDY, AINDY._version as v, importlib.metadata as m; print(v.__version__, m.version('dnspython'), m.version('python-dateutil'), list(AINDY.__path__))"
-# expect: 2.36.1 2.9.2 4.0.0 ['/usr/local/lib/python3.11/site-packages/AINDY']
+```
+$ docker exec <api> python -c "import AINDY, AINDY._version as v, importlib.metadata as m; print(...)"
+2.36.1 2.9.2 4.0.0 ['/usr/local/lib/python3.11/site-packages/AINDY']
 ```
 
-The recreate closes the counter window opened 2026-11-16 13:34:49Z and opens a new one.
+`mcp` reports 2.36.1 too. Schema heads unchanged: runtime `0022`, app `dt1directing0001`. `/health` 200, the public
+`/mcp` answers 401 without a token, postgres logged no reinitialisation.
+
+**Counters:** the window opened 2026-11-16 13:34:49Z (the directing phase A recreate) was read just before the stop,
+at 2026-11-18 03:37:20Z: **0** `aindy_payload_identity_mismatch_total` and **0** `tenant_mismatch` (neither series
+present), 32 gated effects (`reserved`). A new window opened at 03:40:58Z.
