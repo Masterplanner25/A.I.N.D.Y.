@@ -57,9 +57,9 @@ FR-66's D7 proved it on 2026-11-11 (report in the FR register); the owner then a
 - **The consent page's rate limit (10 attempts a minute) is global here**, because every request arrives from the
   tunnel's address (FR-68 asks the runtime to trust a named proxy's `X-Forwarded-For`).
 - **Take it down:** `docker compose ... --profile public-mcp stop mcp-tunnel mcp`. 
-- **The owner's own Nodus MCP server** (`127.0.0.1:8765`, its own sign-in task) is separate from this one. **Its public
-  tunnel `nodusmcpserver.ngrok.io` stays off** (owner, 2026-11-11): that server has no auth and exposes `nodus_exec`.
-  It comes back only once it has sign-in, the way this `/mcp` does.
+- **The owner's own Nodus MCP server** (`127.0.0.1:8765`, its own sign-in task) is separate from this one. Its public
+  tunnel `nodusmcpserver.ngrok.io` was off 11-06 → 11-16 (no auth); **since 11-16 it is back** on nodus-mcp-server
+  0.2.1 with OAuth (owner's passphrase), no remote exec, and the tunnel starts only after the server answers 401.
 - **Next:** the release handoff (`docs/specs/RELEASE_HANDOFF_SPEC.md`). Its MCP handoff tool is the
   first write tool here, and it only *records* a handoff: the api's watcher does the work, so no wait is
   ever registered outside the api (FR-44).
@@ -88,3 +88,22 @@ count for anyone (FR-65, shipped).
 - **Only `session_ended` moves the score.** `focus_quality` reads `session_ended`, `distraction_detected` and
   `focus_achieved` over 14 days.
 - **The watcher was first used 2026-11-08** (owner). FR-65 is shipped; file a new edge as its own FR.
+
+## Directing time: the Claude Code hook and backfill (phase B, 2026-11-18)
+
+The prompts the owner sends Claude Code, as times and ids, never text (`docs/specs/DIRECTING_TIME_SPEC.md`).
+
+- **Three scripts, one ingester.** `directing_ingest.py` loads the phase A parser from its file (no `apps` import) and
+  posts to `POST /apps/directing/events` on loopback only, with the watcher key. `directing_hook.py` is the
+  `UserPromptSubmit` hook; `directing_backfill.py` walks `~/.claude/projects/*/*.jsonl` (dry run unless `--yes`).
+- **The hook must stay fast:** Claude Code holds the prompt until a `UserPromptSubmit` hook returns. It only spawns a
+  detached `--worker <path>` and exits 0 with no output. Never make it post inline.
+- **Where it lives:** the hook entry is in the user-level `~/.claude/settings.json` (every repo; backup
+  `settings.json.bak-2026-11-18`) and runs the venv's python with `-I` on this checkout's `scripts/`, so **switching
+  this checkout to a branch without the scripts silently stops the hook** (the backfill catches up). The daily backfill
+  is in `~/.aindy/start-watcher.ps1` (`--days 3 --yes --wait 900`).
+- **Logs:** `~/.aindy/directing_hook.log` (one line per prompt: counts, `newest_age_s`, `error=`), and
+  `~/.aindy/directing_backfill.log`.
+- **To leave a repo out:** `~/.aindy/directing.json` `{"ignore_projects": ["C--dev-<folder>"]}`; ignored prompts are
+  never sent.
+- **Claude Code keeps ~30 days of transcripts**: a prompt that ages out before a backfill is gone (10-10 → 10-19 were).

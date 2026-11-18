@@ -39,6 +39,9 @@ empty). `test_the_route_admits_the_watcher_key_through_get_activity_caller` pins
 **FR-70 closes** on phase B: the hook's first 2xx with a watcher-only key, and a 403 from the same key on another app
 route (the control the runtime asked for). Phase B is unblocked.
 
+**Closed 2026-11-18** with phase B: the hook posted with the owner's own watcher key (scopes `{watcher.signals}`) and
+got a 2xx at 05:51:47Z, the backfill then stored 696 more with it, and the same key on `GET /apps/goals` is a 403.
+
 ## 2. Live
 
 Merged as #622. Built 2026-11-18 (image `44bf0e2c0dac`, api and `mcp` stopped first for memory) and brought up with all
