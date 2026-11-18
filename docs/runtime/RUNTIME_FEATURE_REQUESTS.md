@@ -20,6 +20,9 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
+> **Open as of 2026-11-18:** FR-70 shipped in 2.37.0 and is adopted; it closes on phase B's first hook post with the
+> watcher key (the runtime asked for that proof). FR-55, FR-14 recurrence half, FR-6 items 2–3.
+>
 > **Open as of 2026-11-17:** **FR-70 (P3: an app route cannot accept a watcher-only key)**; the runtime has it and
 > owes a decision between our two options, in its own release. FR-55, FR-14 recurrence half, FR-6 items 2–3. FR-69
 > closed on runtime 2.36.1 (`RUNTIME_2_36_1_UPGRADE.md` §1).
@@ -82,7 +85,7 @@ owner: "app-team"
 > denial) · FR-14 recurrence half · FR-6 items 2–3 · FR-37 (FR-19's client half, the ui-kit's —
 > ours is the cleanup after). **FR-32 … FR-36 all shipped in 2.20.0**, the day after four of them
 > were filed; FR-33's app half (declaring `args_schema`) is ours and pending.
-## FR-70 — an app route cannot accept a watcher-only key, so a laptop-side activity source has no narrow credential 🔴 OPEN — filed 2026-11-16, P3
+## FR-70 — an app route cannot accept a watcher-only key, so a laptop-side activity source has no narrow credential ✅ SHIPPED in 2.37.0 (#978, DEC-133: `get_activity_caller`, our option 1); adopted 2026-11-18, the route uses it (`RUNTIME_2_37_0_UPGRADE.md` §1). Closes on phase B's hook: its first 2xx with a watcher-only key, and a 403 from the same key on another app route — filed 2026-11-16, P3
 
 **apps-monolith ref:** `DIRECTING_TIME_SPEC.md` decision 6 (owner, 2026-11-16). Read on 2.36.0. The number is ours to
 propose; renumber if the runtime's ledger has used it.

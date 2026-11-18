@@ -9,7 +9,7 @@ owner: "app-team"
 # Directing time: the person's attention while an agent does the work
 
 **Status:** scoped 2026-11-16; §8 decided the same day (all seven as recommended; 6 resolved to FR-70). Phase A built
-2026-11-16.
+2026-11-16. FR-70 shipped in runtime 2.37.0 (2026-11-18): the route takes the watcher key, so phase B is unblocked.
 
 **Origin.** On 2026-11-16 the watcher's signal volume fell from 100–270 a day to 10–35. The watcher was working
 correctly: the owner's time at the laptop had become prompting Claude Code and watching it work. The watcher counts
@@ -153,6 +153,9 @@ ignored (DEC-103).
      non-watcher-only key passes `get_current_user`, and only 7 of 147 routes check a scope. **FR-70 filed.** The
      route takes a session or a non-watcher key until then, through one seam (`_directing_caller`), and phase B's hook
      waits on FR-70.
+   - **FR-70 shipped in runtime 2.37.0** (DEC-133, the runtime chose our option 1): `_directing_caller` now depends on
+     `get_activity_caller`, which admits a session or a key holding `watcher.signals`. The hook uses the person's
+     watcher key.
 7. **Which repos count.** Recommended: **all**, with an ignore list (empty by default). Research repos are still the
    person directing work.
    - Alternative: an allow list.
@@ -168,7 +171,7 @@ ignored (DEC-103).
   - `POST /apps/directing/events` (`routes/directing_router.py`): closed body, ≤ 500 events, route name `automation.directing.ingest`;
   - `tests/unit/test_directing_events.py`;
   - decision 6 → FR-70 | `directing_events` (automation) |
-| **B** (waits on FR-70) | The hook script and its `settings.json` entry; the backfill (dry run, then once to 10-10); the sign-in task runs it daily; hook ordering checked live (§3) | none |
+| **B** (unblocked by runtime 2.37.0) | The hook script and its `settings.json` entry; the backfill (dry run, then once to 10-10); the sign-in task runs it daily; hook ordering checked live (§3) | none |
 | **C** | Derived sessions, the summary route, the `directing_minutes` shadow in the KPI snapshot, the KPI page line; the Collaborator's messages as a second source (decision 4) | none |
 | **D** | Two normal weeks of shadow; then the score question (decision 5) | none |
 

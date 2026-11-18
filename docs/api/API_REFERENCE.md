@@ -2677,7 +2677,7 @@ Prompts the person sent an agent (`DIRECTING_TIME_SPEC.md`): what the watcher ca
 #### POST /apps/directing/events
 Store directing events — `{events: [{source, project, agent_session_id, source_event_id, occurred_at, agent_until?}]}`, up to 500. Idempotent on `(caller, source, source_event_id)`: a repeat is a duplicate, and moves `agent_until` on when later. The caller is the authenticated user; the body is closed, so a `user_id`, `content` or any other extra field is a 422
 
-**Access:** a session, or a platform key that is not watcher-only (the watcher key itself waits on FR-70).
+**Access:** a session, or a platform key holding `watcher.signals` (the person's watcher key from `POST /watcher/keys`) or `platform.admin` (`get_activity_caller`, runtime 2.37.0, FR-70). Any other platform key is a 403; the shared `X-API-Key` alone is a 401.
 
 **Response 200:** {accepted, duplicates, extended, rejected}
 
