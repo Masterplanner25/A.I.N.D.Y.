@@ -20,6 +20,10 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
+> **Open as of 2026-11-17:** **FR-70 (P3: an app route cannot accept a watcher-only key)**; the runtime has it and
+> owes a decision between our two options, in its own release. FR-55, FR-14 recurrence half, FR-6 items 2–3. FR-69
+> closed on runtime 2.36.1 (`RUNTIME_2_36_1_UPGRADE.md` §1).
+>
 > **Open as of 2026-11-16:** **FR-70 (P3: an app route cannot accept a watcher-only key)**, **FR-69 (P3: `dnspython==2.9.0`
 > exact pin, GHSA-vvf4-9x63-8xvv; fixed in 2.9.2)**, FR-55,
 > FR-14 recurrence half, FR-6 items 2–3.
@@ -105,7 +109,7 @@ app route from a file on disk.
 Until then our route takes what `get_current_user` takes (a session or a non-watcher key), with `_directing_caller` as
 the one seam to change, and phase B's hook waits on this.
 
-## FR-69 — `dnspython==2.9.0` is an exact pin, and 2.9.0 has GHSA-vvf4-9x63-8xvv (a WKS record in zone-file text exhausts memory); the fix is 2.9.2 🔴 OPEN — filed 2026-11-16, P3
+## FR-69 — `dnspython==2.9.0` is an exact pin, and 2.9.0 has GHSA-vvf4-9x63-8xvv (a WKS record in zone-file text exhausts memory); the fix is 2.9.2 ✅ SHIPPED in 2.36.1 (#975: `dnspython==2.9.2`, still exact by the runtime owner's choice); closed 2026-11-17: our audit runs clean with the ignore removed (`RUNTIME_2_36_1_UPGRADE.md` §1) — filed 2026-11-16, P3
 
 **apps-monolith ref:** found 2026-11-16 on Dependabot #611–#613: `Python Dependency Audit` went red on all three,
 two of them npm-only, so nothing of ours was involved: the FR-51 / FR-54 shape again. Pinned in runtime 2.36.0's
