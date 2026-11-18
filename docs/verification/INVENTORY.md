@@ -1,6 +1,6 @@
 ---
 title: "Inventory — what A.I.N.D.Y. contains"
-last_verified: "2026-11-15"
+last_verified: "2026-11-18"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -17,7 +17,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | | ours | runtime's |
 |---|---|---|
 | Domains | 16 (3 core) | |
-| `/apps` routes | 293 (196 called by the client, 97 not) | 35 (mounted under `/apps`) |
+| `/apps` routes | 295 (197 called by the client, 98 not) | 35 (mounted under `/apps`) |
 | Syscalls | 87 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 16 | 0 |
@@ -35,7 +35,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | analytics | yes | arm, identity | 35 | 20 | 9 | 1 | 1 | 8 | 7 | 2 | 25 |
 | arm |  | analytics | 10 | 3 | 4 | 3 | 0 | 1 | 6 | 0 | 4 |
 | authorship |  |  | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 |
-| automation |  |  | 10 | 5 | 9 | 0 | 2 | 1 | 21 | 0 | 9 |
+| automation |  |  | 12 | 6 | 9 | 0 | 2 | 1 | 21 | 0 | 9 |
 | autonomy |  |  | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
 | dashboard |  |  | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | freelance |  | automation, search, tasks | 22 | 18 | 3 | 2 | 0 | 1 | 16 | 0 | 9 |
@@ -164,7 +164,7 @@ the audit's question. Live row counts are not here (they change): `python script
 
 ## automation
 
-**Routes (10).** — = no client code calls it.
+**Routes (12).** — = no client code calls it.
 
 - `GET /apps/automation/logs`
 - `GET /apps/automation/logs/{log_id}`
@@ -172,6 +172,8 @@ the audit's question. Live row counts are not here (they change): `python script
 - — `GET /apps/automation/scheduler/status`
 - — `POST /apps/automation/tasks/{task_id}/trigger`
 - — `POST /apps/directing/events`
+- — `GET /apps/directing/sessions`
+- `GET /apps/directing/summary`
 - `GET /apps/releases`
 - `POST /apps/releases`
 - — `POST /apps/releases/{handoff_id}/approve`

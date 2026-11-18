@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { getMyScore, recalculateScore, getScoreHistory, getThreeAxis } from "../../api/product.js";
+import { getDirectingSummary } from "../../api/directing.js";
+import { directingNote } from "../../utils/directing";
 import { safeMap } from "../../utils/safe";
 
 // Palette matches Dashboard.jsx's InfinityScorePanel — this is the same score data on a
@@ -65,7 +67,7 @@ function ScoreRing({ score }) {
 }
 
 // ── One behavioral-KPI tile ────────────────────────────────────────────────────
-function KpiTile({ label, blurb, value, weight }) {
+function KpiTile({ label, blurb, value, weight, note }) {
   const val = Number.isFinite(value) ? value : 0;
   const color = scoreColor(val);
   return (
@@ -82,6 +84,9 @@ function KpiTile({ label, blurb, value, weight }) {
       </div>
       {weight != null && (
         <div style={{ fontSize: 10, color: C.text2, marginTop: 4 }}>{Math.round(weight * 100)}% of master</div>
+      )}
+      {note && (
+        <div data-testid="kpi-note" style={{ fontSize: 10, color: C.text1, marginTop: 6, lineHeight: 1.4 }}>{note}</div>
       )}
     </div>
   );
@@ -137,11 +142,20 @@ function ScoreSparkline({ history }) {
   );
 }
 
+function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
+}
+
 // ── Main component ──────────────────────────────────────────────────────────────
 export default function KPIDashboard() {
   const [score, setScore] = useState(null);
   const [history, setHistory] = useState([]);
   const [axes, setAxes] = useState(null);
+  const [directing, setDirecting] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [recalculating, setRecalculating] = useState(false);
@@ -153,14 +167,16 @@ export default function KPIDashboard() {
       // /scores/me self-computes on first miss, so a brand-new user still gets a score.
       // The two secondary reads are best-effort: a failure in history or three-axis must
       // not blank the whole dashboard.
-      const [s, h, a] = await Promise.all([
+      const [s, h, a, d] = await Promise.all([
         getMyScore(),
         getScoreHistory(30).catch(() => ({ history: [] })),
         getThreeAxis().catch(() => null),
+        getDirectingSummary(7, browserTimeZone()).catch(() => null),
       ]);
       setScore(s);
       setHistory(h?.history || []);
       setAxes(a);
+      setDirecting(d);
     } catch (e) {
       setError(e?.message || "Failed to load KPI data.");
     } finally {
@@ -294,7 +310,8 @@ export default function KPIDashboard() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
             {safeMap(Object.entries(KPI_META), ([key, { label, blurb }]) => (
-              <KpiTile key={key} label={label} blurb={blurb} value={kpis[key]} weight={weights[key]} />
+              <KpiTile key={key} label={label} blurb={blurb} value={kpis[key]} weight={weights[key]}
+                note={key === "focus_quality" ? directingNote(directing) : null} />
             ))}
           </div>
         </div>
