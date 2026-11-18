@@ -1,6 +1,6 @@
 ---
 title: "Directing time"
-last_verified: "2026-11-16"
+last_verified: "2026-11-18"
 api_version: "1.0"
 status: draft
 owner: "app-team"
@@ -9,7 +9,8 @@ owner: "app-team"
 # Directing time: the person's attention while an agent does the work
 
 **Status:** scoped 2026-11-16; §8 decided the same day (all seven as recommended; 6 resolved to FR-70). Phase A built
-2026-11-16. FR-70 shipped in runtime 2.37.0 (2026-11-18): the route takes the watcher key, so phase B is unblocked.
+2026-11-16. FR-70 shipped in runtime 2.37.0 (2026-11-18). **Phase B built 2026-11-18**: the hook is installed, the backfill ran
+(698 prompts), and the sign-in task runs it daily. FR-70 closed on it.
 
 **Origin.** On 2026-11-16 the watcher's signal volume fell from 100–270 a day to 10–35. The watcher was working
 correctly: the owner's time at the laptop had become prompting Claude Code and watching it work. The watcher counts
@@ -171,7 +172,13 @@ ignored (DEC-103).
   - `POST /apps/directing/events` (`routes/directing_router.py`): closed body, ≤ 500 events, route name `automation.directing.ingest`;
   - `tests/unit/test_directing_events.py`;
   - decision 6 → FR-70 | `directing_events` (automation) |
-| **B** (unblocked by runtime 2.37.0) | The hook script and its `settings.json` entry; the backfill (dry run, then once to 10-10); the sign-in task runs it daily; hook ordering checked live (§3) | none |
+| **B** ✅ **built 2026-11-18** | The hook script and its `settings.json` entry; the backfill (dry run, then once to 10-10); the sign-in task runs it daily; hook ordering checked live (§3). As built:
+  - `scripts/directing_ingest.py`: the one ingester (loads the phase A parser from its file; loopback api only; refuses an event with any key beyond the six); config `~/.aindy/directing.json` (`ignore_projects`, `api_url`); key `AINDY_WATCHER_KEY` or `~/.aindy/watcher_key`;
+  - `scripts/directing_hook.py`: **starts a detached worker and returns** (0.19 s measured), because a `UserPromptSubmit` hook holds the prompt and a post takes 0.7–2 s. The worker reads the transcript's last 1 MB (transcripts reach 29 MB) and posts with a 10 s timeout; it gets the path, never the prompt. Log `~/.aindy/directing_hook.log` (counts and `newest_age_s`, no text);
+  - `scripts/directing_backfill.py`: dry run by default, `--yes`, `--since`/`--days`, `--wait`;
+  - the hook in the user-level `~/.claude/settings.json` (timeout 3 s); `~/.aindy/start-watcher.ps1` runs `--days 3 --yes --wait 900` at sign-in (log `~/.aindy/directing_backfill.log`);
+  - **the backfill, 2026-11-18:** 698 prompts in 4 projects (aindy-apps-monolith 339, aindy-runtime 212, Coding-Language 139, nodus-mcp-server 8), all with `agent_until`; a re-run: 698 duplicates. **The oldest is 10-20, not 10-10:** Claude Code's ~30-day retention deleted 10-10 → 10-19 between 11-16 and 11-18 (about 51 prompts, gone). From now on the daily run keeps ahead of it;
+  - `tests/unit/test_directing_scripts.py` | none |
 | **C** | Derived sessions, the summary route, the `directing_minutes` shadow in the KPI snapshot, the KPI page line; the Collaborator's messages as a second source (decision 4) | none |
 | **D** | Two normal weeks of shadow; then the score question (decision 5) | none |
 
