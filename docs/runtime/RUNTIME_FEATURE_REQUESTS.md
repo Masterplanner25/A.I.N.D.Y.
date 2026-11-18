@@ -20,6 +20,9 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
+> **Open as of 2026-11-18 (later):** FR-55 (the runtime logged it in #983; its ask (b) needs a new DEC revisiting
+> DEC-012), FR-6 items 2–3. FR-14 closed on runtime #983 (the README's entrypoint recipe).
+>
 > **Open as of 2026-11-18:** FR-55, FR-14 recurrence half, FR-6 items 2–3. FR-70 closed on runtime 2.37.0: directing
 > phase B's hook posts with the owner's watcher-only key (2xx), and the same key is a 403 on `/apps/goals`.
 >
@@ -3023,7 +3026,7 @@ release that enforces them.**
 
 ---
 
-## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release 🟡 HALF CLOSED in 2.3.0
+## FR-14 — the recommended deploy entrypoint crash-loops on any additive runtime schema release ✅ CLOSED 2026-11-18 (exit codes and recurrence guard in 2.3.0; the README's entrypoint recipe branches on the code since runtime #983)
 
 **Both things we asked for shipped**, and one arrived better than requested.
 
@@ -3050,6 +3053,13 @@ structurally cannot reach, for the reason recorded in this entry.
 
 **Still open: the entrypoint-pattern half.** The runtime's own `init` scaffold still recommends
 the bare form, which is what led us here originally.
+
+**Closed 2026-11-18 (runtime #983, docs only, no release).** By then the `init` scaffold no longer called
+`bootstrap-schema` at all (its Dockerfile runs `serve` only); the last place recommending the bare form was the
+README's deploy section, which gave the bare command as the recipe with `--reconcile` as a footnote. It now says
+never to run it bare under `set -e`, gives the exit-code table, states that **4 wins over 3**, and shows an
+entrypoint that branches on the code, the same shape as our `docker/entrypoint.sh`. The recurrence half was already
+evidenced by four live runtime schema steps on this stack (`0019`–`0022`) with no crash loop.
 
 ---
 
