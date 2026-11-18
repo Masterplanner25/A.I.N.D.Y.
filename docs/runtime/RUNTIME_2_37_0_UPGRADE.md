@@ -41,11 +41,30 @@ route (the control the runtime asked for). Phase B is unblocked.
 
 ## 2. Live
 
-Owed after merge: `build api`, then `up` with all three profiles (`mcp` shares the image), then the handoff's check:
+Merged as #622. Built 2026-11-18 (image `44bf0e2c0dac`, api and `mcp` stopped first for memory) and brought up with all
+three profiles at **05:34:09Z**; api healthy at 05:34:39Z.
 
-```bash
-docker exec <api> python -c "import AINDY, AINDY._version as v; from AINDY.services.auth_service import get_activity_caller; print(v.__version__, get_activity_caller.__name__, list(AINDY.__path__))"
-# expect: 2.37.0 get_activity_caller ['/usr/local/lib/python3.11/site-packages/AINDY']
+```
+$ docker exec <api> python -c "...get_activity_caller..."
+2.37.0 get_activity_caller ['/usr/local/lib/python3.11/site-packages/AINDY']
 ```
 
-The recreate closes the counter window opened 2026-11-18 03:40:58Z and opens a new one.
+`mcp` reports 2.37.0 too. Runtime schema head `0022`, `/health` 200, the public `/mcp` 401 without a token, no postgres
+reinitialisation.
+
+**The key, probed live at 05:35Z with the test account** (a fresh key from `POST /watcher/keys`, scopes
+`['watcher.signals']` only):
+
+| Request | Answer |
+|---|---|
+| `POST /apps/directing/events` with the watcher key | **200**, `accepted: 1` |
+| `GET /apps/goals` with the same key (the control) | **403** |
+| `POST /apps/directing/events` with no credential | 401 |
+| the same post after `DELETE /watcher/keys/{id}` (204) | 401 |
+
+The probe row was deleted; `directing_events` is empty. Both halves the runtime asked for hold. **FR-70 stays open
+only for its stated proof**: phase B's hook posting with the owner's own watcher key.
+
+**Counters:** the window opened 2026-11-18 03:40:58Z (2.36.1) was read just before the stop, at 05:30:44Z: **0**
+identity mismatches and **0** `tenant_mismatch` (neither series present), 22 gated effects (`reserved`). A new window
+opened at 05:34:09Z.
