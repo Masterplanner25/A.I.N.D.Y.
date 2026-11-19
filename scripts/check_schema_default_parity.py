@@ -33,6 +33,7 @@ import os
 import re
 import sys
 
+from AINDY.config import normalize_database_url
 from sqlalchemy import create_engine, inspect
 
 _CAST = re.compile(r"::[a-z_ \[\]\"]+")
@@ -88,7 +89,7 @@ def main() -> int:
     apps_bootstrap.bootstrap_models()
     from AINDY.db.database import Base
 
-    engine = create_engine(os.environ["DATABASE_URL"])
+    engine = create_engine(normalize_database_url(os.environ["DATABASE_URL"]))
     insp = inspect(engine)
     db_tables = set(insp.get_table_names())
 

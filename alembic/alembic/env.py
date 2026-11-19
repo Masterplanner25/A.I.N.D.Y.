@@ -60,6 +60,10 @@ if not database_url:
         "DATABASE_URL not set. Ensure .env is present in repo root or AINDY/"
     )
 
+# SQLAlchemy 2.1 reads a bare postgresql:// as psycopg 3, which nothing installs: name psycopg2 (runtime 2.38.0).
+from AINDY.config import normalize_database_url  # noqa: E402
+
+database_url = normalize_database_url(database_url)
 config.set_main_option("sqlalchemy.url", database_url)
 
 # Interpret the config file for Python logging.
