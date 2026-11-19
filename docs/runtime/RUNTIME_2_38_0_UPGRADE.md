@@ -47,5 +47,18 @@ f-string starting `sqlite` included), and line-scans `.github/workflows/*.yml` f
 
 ## 3. Live
 
-_Filled in after the rebuild: the handoff's confirm line from the container, `alembic current` on the app line,
-`deploy-bootstrap-guard` on the adoption PR, and the counters._
+**Live 2026-11-19 05:22:14Z** on image `9dda5a6fdd63` (#627; a 4-minute build with `api` and `mcp` stopped). `/health`
+200, `restarts=0`, postgres 0 reinitialisations.
+
+| The handoff's report item | Result |
+|---|---|
+| Confirm line, from the container | `2.38.0 2.1.8 psycopg2 ['/usr/local/lib/python3.11/site-packages/AINDY']`, as expected |
+| `alembic current` on the app line | `dt1directing0001 (head)`, through the normalised `env.py`; runtime line `0022` |
+| `deploy-bootstrap-guard` on the adoption PR | **passed**: fresh Postgres, `ensure_pgvector.py`, both inline checks, migrations and `serve`, on SQLAlchemy 2.1.8 |
+| The entrypoint's first step | `[ensure_pgvector] extension 'vector' already present`: the site that would have stopped the boot |
+
+**Counters, the 2.37.0 window** (11-18 18:12:08Z → 11-19 05:18:35Z, read before the recreate): 0 identity mismatches,
+0 `tenant_mismatch`, 59 gated effects (`reserved`). The 2.38.0 window opens at 05:22:14Z.
+
+The directing hook's one post during the build failed (`URLError`, api down) and is picked up from the transcript tail
+by the next prompt; nothing is lost.
