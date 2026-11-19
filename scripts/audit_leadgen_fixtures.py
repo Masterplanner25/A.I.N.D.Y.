@@ -54,9 +54,10 @@ def main() -> int:
         print("DATABASE_URL is not set.", file=sys.stderr)
         return 2
 
+    from AINDY.config import normalize_database_url
     from sqlalchemy import create_engine
 
-    engine = create_engine(os.environ["DATABASE_URL"])
+    engine = create_engine(normalize_database_url(os.environ["DATABASE_URL"]))
     params = {"urls": list(FIXTURE_URLS), "companies": list(FIXTURE_COMPANIES)}
     findings = 0
 

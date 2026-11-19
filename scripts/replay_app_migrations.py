@@ -41,6 +41,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 
+from AINDY.config import normalize_database_url
 from sqlalchemy import create_engine, inspect, text
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -166,7 +167,7 @@ def main() -> int:
         print("refusing: DATABASE_URL looks like the local stack's database, and this script downgrades", file=sys.stderr)
         return 2
 
-    engine = create_engine(url)
+    engine = create_engine(normalize_database_url(url))
     head = _head()
     if _current(engine) != head:
         print(f"expected alembic_version at head {head}, found {_current(engine)} — run the fresh path first", file=sys.stderr)

@@ -14,13 +14,14 @@ Idempotent. Requires DATABASE_URL.
 """
 import os
 
+from AINDY.config import normalize_database_url
 from sqlalchemy import create_engine, text
 
 url = (os.environ.get("DATABASE_URL") or "").strip()
 if not url or url.startswith("sqlite"):
     raise SystemExit(f"[ensure_pgvector] DATABASE_URL must be a Postgres URL, got {url!r}")
 
-with create_engine(url).begin() as conn:
+with create_engine(normalize_database_url(url)).begin() as conn:
     present = conn.execute(
         text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
     ).scalar()

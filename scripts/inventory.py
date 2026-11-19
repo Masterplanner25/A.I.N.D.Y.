@@ -328,9 +328,10 @@ def render(inv: dict) -> str:
 
 def live(inv: dict) -> str:
     """Row counts for our tables from DATABASE_URL. For the audit; never committed."""
+    from AINDY.config import normalize_database_url
     from sqlalchemy import create_engine, inspect, text
 
-    engine = create_engine(os.environ["AINDY_INVENTORY_DATABASE_URL"])
+    engine = create_engine(normalize_database_url(os.environ["AINDY_INVENTORY_DATABASE_URL"]))
     present = set(inspect(engine).get_table_names())
     lines = ["| Domain | Table | Rows |", "|---|---|---|"]
     with engine.connect() as conn:
