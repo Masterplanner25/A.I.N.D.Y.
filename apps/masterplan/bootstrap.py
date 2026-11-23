@@ -163,6 +163,11 @@ def _register_scheduled_jobs() -> None:
         trigger="interval",
         trigger_kwargs={"minutes": TICK_INTERVAL_MINUTES},
     )
+    # FR-55 (runtime 2.39.0): behind AINDY_RESOLUTION_NODUS the tick hands a new check to
+    # resolution_check_v1.nd, which answers it in batches and sleeps between them.
+    from apps._shared.nodus import register_domain_nodus_workflows
+
+    register_domain_nodus_workflows(__file__, "masterplan")
 
 
 def _register_async_jobs() -> None:

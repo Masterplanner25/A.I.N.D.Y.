@@ -1,6 +1,6 @@
 ---
 title: "Inventory — what A.I.N.D.Y. contains"
-last_verified: "2026-11-18"
+last_verified: "2026-11-22"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -18,14 +18,14 @@ the audit's question. Live row counts are not here (they change): `python script
 |---|---|---|
 | Domains | 16 (3 core) | |
 | `/apps` routes | 295 (197 called by the client, 98 not) | 35 (mounted under `/apps`) |
-| Syscalls | 87 | 23 |
+| Syscalls | 88 | 23 |
 | Agent tools | 17 | 0 |
 | Scheduled jobs | 16 | 0 |
 | Registered jobs | 36 | 0 |
 | Python flow graphs | 82 | 1 |
 | Tables | 90 | 39 |
-| Nodus workflows (`.nd`) | 5 | |
-| `AINDY_*` flags read by our code | 53 | |
+| Nodus workflows (`.nd`) | 6 | |
+| `AINDY_*` flags read by our code | 54 | |
 
 ## Domains
 
@@ -40,7 +40,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | dashboard |  |  | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | freelance |  | automation, search, tasks | 22 | 18 | 3 | 2 | 0 | 1 | 16 | 0 | 9 |
 | identity | yes |  | 6 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 1 |
-| masterplan |  | identity | 80 | 12 | 17 | 3 | 3 | 14 | 16 | 0 | 24 |
+| masterplan |  | identity | 80 | 12 | 18 | 3 | 3 | 14 | 16 | 1 | 24 |
 | memory |  |  | 8 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | network_bridge |  | authorship, automation | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | rippletrace |  | analytics, automation | 50 | 4 | 11 | 0 | 5 | 1 | 0 | 3 | 8 |
@@ -341,7 +341,7 @@ the audit's question. Live row counts are not here (they change): `python script
 - `PUT /apps/works/{work_id}/objectives`
 - `POST /apps/works/{work_id}/presence`
 
-**Syscalls (17):** `sys.v1.content.draft` (content.draft), `sys.v1.genesis.call_llm` (genesis.execute_llm), `sys.v1.genesis.execute_llm` (genesis.execute_llm), `sys.v1.genesis.import_plan` (genesis.execute_llm), `sys.v1.genesis.message` (genesis.message), `sys.v1.goal.create` (goal.create), `sys.v1.market.propose` (market.propose), `sys.v1.masterplan.assert_owned` (masterplan.read), `sys.v1.masterplan.cascade_activate` (masterplan.cascade_activate), `sys.v1.masterplan.get_active` (masterplan.read), `sys.v1.masterplan.get_eta` (masterplan.read), `sys.v1.masterplan.get_objective_attainment` (masterplan.read), `sys.v1.masterplan.recalculate_wcu` (masterplan.read), `sys.v1.masterplan.resolve_phase` (masterplan.read), `sys.v1.work.context` (work.context), `sys.v1.work.facts` (work.facts), `sys.v1.work.get_claim_truth` (work.read)
+**Syscalls (18):** `sys.v1.content.draft` (content.draft), `sys.v1.genesis.call_llm` (genesis.execute_llm), `sys.v1.genesis.execute_llm` (genesis.execute_llm), `sys.v1.genesis.import_plan` (genesis.execute_llm), `sys.v1.genesis.message` (genesis.message), `sys.v1.goal.create` (goal.create), `sys.v1.market.propose` (market.propose), `sys.v1.masterplan.assert_owned` (masterplan.read), `sys.v1.masterplan.cascade_activate` (masterplan.cascade_activate), `sys.v1.masterplan.get_active` (masterplan.read), `sys.v1.masterplan.get_eta` (masterplan.read), `sys.v1.masterplan.get_objective_attainment` (masterplan.read), `sys.v1.masterplan.recalculate_wcu` (masterplan.read), `sys.v1.masterplan.resolve_phase` (masterplan.read), `sys.v1.resolution.update_run` (resolution.write), `sys.v1.work.context` (work.context), `sys.v1.work.facts` (work.facts), `sys.v1.work.get_claim_truth` (work.read)
 
 **Agent tools (3):** `content.draft` (risk low), `genesis.message` (risk high), `market.propose` (risk low)
 
@@ -350,6 +350,8 @@ the audit's question. Live row counts are not here (they change): `python script
 **Registered jobs (14):** `genesis.audit`, `genesis.synthesize`, `goals.calculate_alignment`, `goals.rank`, `goals.update_from_execution`, `masterplan.attach_drafts_to_run`, `masterplan.market_context`, `masterplan.market_propose`, `masterplan.planning_context`, `masterplan.save_share_drafts`, `masterplan.segment_brief`, `masterplan.work_context`, `masterplan.works_by_container`, `scheduler.masterplan_eta`
 
 **Python flow graphs (16):** `genesis_activate` (1 nodes), `genesis_audit` (1 nodes), `genesis_draft_get` (1 nodes), `genesis_lock` (1 nodes), `genesis_session_create` (1 nodes), `genesis_session_get` (1 nodes), `genesis_synthesize` (1 nodes), `goals_list` (1 nodes), `goals_state` (1 nodes), `masterplan_activate` (1 nodes), `masterplan_anchor` (1 nodes), `masterplan_get` (1 nodes), `masterplan_list` (1 nodes), `masterplan_lock` (1 nodes), `masterplan_lock_from_genesis` (1 nodes), `masterplan_projection` (1 nodes)
+
+**Nodus workflows (1):** `apps/masterplan/nodus/resolution_check_v1.nd`
 
 **Tables (24):** `genesis_sessions`, `goal_objectives`, `goal_states`, `goals`, `market_entities`, `market_evidence`, `market_proposals`, `market_revisions`, `market_segments`, `master_plans`, `plan_objectives`, `plan_phases`, `plan_strategies`, `resolution_answers`, `resolution_claims`, `resolution_runs`, `segment_works`, `work_drafts`, `work_links`, `work_objectives`, `work_presence`, `work_proposal_dismissals`, `work_revisions`, `works`
 
@@ -637,6 +639,7 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_RESOLUTION_ENGINES` | masterplan |  |
 | `AINDY_RESOLUTION_JUDGE_MODEL` | masterplan |  |
 | `AINDY_RESOLUTION_MONTHLY_CEILING_USD` | masterplan |  |
+| `AINDY_RESOLUTION_NODUS` | masterplan | `1` |
 | `AINDY_RESOLUTION_OPENAI_MODEL` | masterplan |  |
 | `AINDY_RESOLUTION_PERPLEXITY_MODEL` | masterplan |  |
 | `AINDY_RIPPLE_MENTION_DETECTION` | rippletrace | `""` |

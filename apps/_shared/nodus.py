@@ -15,10 +15,22 @@ the name is missing.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+_FLOW_GRAPH = re.compile(r"^\s*(workflow|goal)\s+\w+\s*\{", re.MULTILINE)
+
+
+def workflow_kind(source: str) -> str:
+    """``flow-graph`` for a ``workflow {}`` / ``goal {}`` program, ``script`` for anything else.
+
+    A script that parks with ``await_event_for`` (FR-55) must not be a ``workflow {}``: a step's
+    retry would catch the exception the wait raises to park."""
+    return "flow-graph" if _FLOW_GRAPH.search(source) else "script"
 
 
 def register_domain_nodus_workflows(bootstrap_file: str, domain: str) -> list[str]:
@@ -35,10 +47,11 @@ def register_domain_nodus_workflows(bootstrap_file: str, domain: str) -> list[st
     registered: list[str] = []
     for nd_file in sorted(nd_dir.glob("*.nd")):
         try:
+            source = nd_file.read_text(encoding="utf-8")
             register_nodus_workflow(
                 nd_file.stem,
-                nd_file.read_text(encoding="utf-8"),
-                kind="flow-graph",
+                source,
+                kind=workflow_kind(source),
                 owner_class="first-party-app",
                 allow_legacy_missing_provenance=True,
                 overwrite=True,
