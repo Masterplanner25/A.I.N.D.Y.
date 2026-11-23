@@ -696,6 +696,25 @@ def _handle_work_get_claim_truth(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_resolution_update_run(payload: dict, ctx: SyscallContext) -> dict:
+    """sys.v1.resolution.update_run: one batch of one of the caller's resolution checks, for
+    `resolution_check_v1.nd` (FR-55). Acts as ctx.user_id; a payload user_id is never read. `update_`
+    makes the capability the runtime infers for a .nd's sys() `resolution.write`, the one this requires."""
+    if not ctx.user_id:
+        raise ValueError("a resolution batch needs the run's user")
+    run_id = str(payload.get("run_id") or "").strip()
+    if not run_id:
+        raise ValueError("sys.v1.resolution.update_run requires 'run_id'")
+    from apps.masterplan.services.resolution_service import update_run_batch
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return update_run_batch(db, ctx.user_id, run_id, woke=payload.get("woke"))
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_masterplan_syscall_handlers() -> None:
     """Register all masterplan domain syscall handlers.
 
@@ -927,6 +946,14 @@ def register_masterplan_syscall_handlers() -> None:
         handler=_handle_genesis_call_llm,
         capability="genesis.execute_llm",
         description="Call Genesis LLM without session persistence.",
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.resolution.update_run",
+        handler=_handle_resolution_update_run,
+        capability="resolution.write",
+        description="Answer and judge the next batch of one of the caller's resolution checks.",
+        input_schema={"required": ["run_id"], "properties": {"run_id": {"type": "string"}, "woke": {}}},
         stable=False,
     )
     register_syscall(

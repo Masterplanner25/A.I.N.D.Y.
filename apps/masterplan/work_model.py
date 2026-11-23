@@ -188,6 +188,10 @@ class ResolutionRun(Base):
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     finished_at = Column(DateTime(timezone=True), nullable=True)
+    #: Who answers this check: None for the Python tick, "nodus" for `resolution_check_v1.nd` (FR-55),
+    #: with that workflow's flow run. The tick leaves a check alone while that run is alive.
+    driver = Column(String(16), nullable=True)
+    driver_run_id = Column(String, nullable=True)
 
 
 class ResolutionAnswer(Base):
