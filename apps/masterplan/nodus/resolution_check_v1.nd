@@ -1,0 +1,35 @@
+// The Resolution Check as one workflow that sleeps between batches (FR-55, runtime 2.39.0).
+//
+// A plain script, not a `workflow {}`: a step's retry would catch the exception `await_event_for`
+// raises to park. Each wake runs the script from the top (DEC-012); `prior_state` says which batch is
+// next. The first run only parks, for a second, so the job that starts it never waits on an answer.
+//
+// Each wait has its own name. On the wake, the call for the name that woke the run returns its
+// timeout marker at once, and the batch is handed the marker's deadline to measure how late it woke.
+
+let args = input_payload["args"]
+let run_id = args["run_id"]
+let prefix = "resolution." + run_id + ".wait."
+
+let done = prior_state("batches_done")
+if (done == nil) { done = 0i }
+
+// First run: parks here. A wake: returns the marker of the wait that woke it.
+let woke = await_event_for(prefix + str(done), nil, 1i)
+
+let result = sys("sys.v1.resolution.update_run", {"run_id": run_id, "woke": woke})
+set_state("batch_" + str(done), result)
+if (result["status"] != "success") {
+  throw "resolution batch failed"
+}
+let data = result["data"]
+set_state("batches_done", done + 1i)
+
+if (data["remaining"] > 0) {
+  if (data["handled"] == 0) {
+    throw "resolution batch answered nothing with pairs still open"
+  }
+  if (done + 1i < args["max_batches"]) {
+    let next = await_event_for(prefix + str(done + 1i), nil, args["sleep_seconds"])
+  }
+}

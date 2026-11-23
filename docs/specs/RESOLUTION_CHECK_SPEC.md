@@ -127,7 +127,9 @@ execution, systems thinking, and digital strategy*). Shown, not judged.
 As built: Work kinds `person` and `brand`, and the relation `created`; a person is implicitly connected to
 every Work whose role is creator or author. Judge: `gpt-4o` at temperature 0. Engines: Perplexity `sonar`,
 OpenAI `gpt-4.1` + `web_search`, Claude + `web_search` (`AINDY_RESOLUTION_ENGINES` narrows them). A check
-is answered six answers a minute by `masterplan_resolution_tick`.
+is answered six answers a minute by `masterplan_resolution_tick`. Since 2026-11-23 (FR-55, runtime 2.39.0)
+the tick hands a new check to `resolution_check_v1.nd`, which answers six per wake and sleeps 30 s between
+wakes (`AINDY_RESOLUTION_NODUS`); the tick takes back a check whose workflow died. Same answers, same cost.
 
 ---
 

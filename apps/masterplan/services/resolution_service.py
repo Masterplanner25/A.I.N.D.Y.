@@ -431,17 +431,48 @@ def process_run(db: Session, run: ResolutionRun, *, limit: int = TICK_PAIRS,
     return handled
 
 
+def update_run_batch(db: Session, user_id: Any, run_id: str, *, woke: Any = None) -> dict:
+    """One batch of one check, for `resolution_check_v1.nd` (`sys.v1.resolution.update_run`).
+
+    Only the caller's own check. A check already finished answers nothing and reports none remaining,
+    so a late wake ends the workflow instead of failing it."""
+    from apps.masterplan.services.resolution_nodus import lateness_seconds, remaining_pairs
+
+    uid = _uid(user_id)
+    run = db.query(ResolutionRun).filter(ResolutionRun.id == run_id, ResolutionRun.user_id == uid).first()
+    if run is None:
+        raise ValueError(f"NOT_FOUND: resolution check {run_id}")
+    late = lateness_seconds(woke)
+    handled = process_run(db, run) if run.status in ("pending", "running") else 0
+    remaining = remaining_pairs(db, run)
+    if late is not None:
+        logger.info("[resolution] check %s woke %.1f s after its deadline; %d answered, %d left",
+                    run.id, late, handled, remaining)
+    return {"handled": handled, "remaining": remaining, "status": run.status, "late_s": late}
+
+
 def resolution_tick() -> dict:
-    """Scheduled job body: advance each open check by one batch. Its own session; non-blocking guard."""
+    """Scheduled job body: advance each open check by one batch. Its own session; non-blocking guard.
+
+    Behind `AINDY_RESOLUTION_NODUS` a new check is handed to `resolution_check_v1.nd` instead, and a
+    check the workflow still drives is left alone (`resolution_nodus`)."""
     if not _tick_lock.acquire(blocking=False):
         return {"skipped": True}
     from AINDY.db.database import SessionLocal
+    from apps.masterplan.services import resolution_nodus
 
     db = SessionLocal()
-    summary = {"runs": 0, "answered": 0, "skipped": False}
+    summary = {"runs": 0, "answered": 0, "skipped": False, "nodus": 0}
     try:
         for run in db.query(ResolutionRun).filter(ResolutionRun.status.in_(("pending", "running"))).order_by(
                 ResolutionRun.created_at.asc()).all():
+            if resolution_nodus.owned_by_nodus(db, run):
+                summary["nodus"] += 1
+                continue
+            if (run.status == "pending" and run.driver is None and resolution_nodus.nodus_resolution_enabled()
+                    and resolution_nodus.launch(db, run, per_batch=TICK_PAIRS)):
+                summary["nodus"] += 1
+                continue
             summary["answered"] += process_run(db, run)
             summary["runs"] += 1
     except Exception as exc:

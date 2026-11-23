@@ -26,8 +26,12 @@ Python flows stay as they are until one is deliberately ported.
     version of its text (`ARTICLE_ANSWERS_SPEC` B2, owner 2026-11-08). Same shape and idempotence as
     share drafts.
 
+  - `apps/masterplan/nodus/resolution_check_v1.nd`: **the first loop** (FR-55, 2026-11-23). One
+    Resolution Check, a batch per wake, sleeping between batches; see the FR-55 bullet below.
+
   Each has a flag: `AINDY_REASONING_NODUS_NATIVE`, `AINDY_INFINITY_RECALC_NODUS`,
-  `AINDY_ARCHIVE_NODUS`, `AINDY_SHARE_DRAFTS_NODUS` and `AINDY_PIECE_ANSWERS_NODUS`. The flags are off in code and on in compose, and any VM failure falls back
+  `AINDY_ARCHIVE_NODUS`, `AINDY_SHARE_DRAFTS_NODUS`, `AINDY_PIECE_ANSWERS_NODUS` and
+  `AINDY_RESOLUTION_NODUS`. The flags are off in code and on in compose, and any VM failure falls back
   to Python.
 - **The pattern:**
   - **Source:** `apps/<domain>/nodus/*.nd`.
@@ -73,8 +77,26 @@ Python flows stay as they are until one is deliberately ported.
   recalculation in 2.0 s). The warm pool is the runtime's default, but a scheduled job's callback
   is a fresh process (the 90 s `AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS`), so its first run is
   always cold. Keep `.nd` off request paths that must answer quickly.
-- **A workflow can pause only until an event arrives. It cannot sleep until a time** (checked
-  2026-10-22 on 2.28.1 and runtime `main`, filed as **FR-55**). `await_event(type, schema)` parks the
+- **A workflow can sleep and loop since runtime 2.39.0 (FR-55).** `await_event_for(name, nil, seconds)`
+  parks with its own deadline and the run is *resumed* at it, returning `{"timed_out": true, "deadline"}`;
+  `prior_state(key)` reads what the script saved before it parked. The pattern, as
+  `resolution_check_v1.nd` does it:
+  - **A plain script, not a `workflow {}`** (`apps/_shared/nodus.py::workflow_kind` registers it as
+    `script`): a step's retry would catch the exception the wait raises to park.
+  - **A distinct name per wait** (`prefix + str(done)`): a name already delivered returns at once.
+    That is also how a wake reads its own marker: call the wait that woke it again.
+  - **The first run only parks** (1 s), so the scheduled job that starts it, a fresh 90 s process,
+    pays the cold worker and nothing else. Each wake is a new execution unit (fresh 100-syscall,
+    5-minute budget).
+  - **`0i`, not `0`**: a bare `0` is a float and `str(0)` is `"0.0"`.
+  - **The job that launches it is also its fallback**: it records the flow run's id, leaves the
+    work alone while that run is waiting or executing, and takes it back (with
+    `record_nodus_fallback`) when the run failed, finished early or is gone.
+  - Deadlines are delivered by a ~15 s scheduler job; measured live on 2026-11-23, wakes landed
+    2–11 s after their deadline.
+
+  **Before 2.39.0** (kept for reading older code): a workflow could pause only until an event
+  arrived (checked 2026-10-22 on 2.28.1, filed as **FR-55**). `await_event(type, schema)` parks the
   run durably: `waiting_flow_runs` survives a restart, and an event or `POST …/runs/{id}/resume`
   wakes it. But:
   - **the deadline fails the run** (`WAIT_TIMEOUT`); it never resumes it;
@@ -83,10 +105,9 @@ Python flows stay as they are until one is deliberately ported.
   - **a resume re-runs the script from the top.** Only `nodus_received_events` comes back, not
     what the script saved with `set_state`, so every step must be safe to run twice.
 
-  nodus-lang has `on_timeout: "resume"`, but the A.I.N.D.Y. embedding does not pass it through.
-  **So write one-shot workflows, and leave tick-driven jobs in Python until FR-55 ships.** The Resolution
-  Check (6 questions a minute) and the release-handoff watcher are two such jobs: ported today, each
-  would still need its tick and would rebuild its progress from its own tables on every wake.
+  A resume still re-runs the script from the top on 2.39.0 (DEC-012 stands); `prior_state` is what
+  lets it skip work already done. The release-handoff watcher is the other tick-driven job that
+  could now be a loop; it has not been ported.
 - **Trigger with `register_scheduled_job`, not the runtime's Nodus scheduler.**
   `POST /platform/nodus/schedule` stores a copy of the script in a per-user row
   (`nodus_scheduled_jobs`), so a change to the `.nd` file would never reach it.
