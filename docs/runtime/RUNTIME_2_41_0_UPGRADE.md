@@ -54,7 +54,7 @@ not `0`; work before a wait runs again on every resume, so external calls go aft
 
 Answered by DEC-137: a scoped graph keeps edges to the caller's own events outside the trace, as dangling edges;
 edges to another user's or a userless event are still dropped (FR-60 stands). Expected for `d534a3fd…` read as its
-owner: 584 nodes, 583 edges, depth unchanged. Result: §5.
+owner: 584 nodes, 583 edges, depth unchanged. **Read live 2026-11-23: 584 / 583, closed** (§5).
 
 ## 4. FR-6
 
@@ -63,4 +63,32 @@ Items 2–3 shipped in 2.0.0 (#337, #338, our option (a)); the runtime closed FR
 
 ## 5. Live
 
-Pending the rebuild.
+**Live 2026-11-23 04:10:16Z** on image `7b495c900fa1` (#633, `dac630e`). `/health` 200 at 04:10:53Z, `restarts=0`,
+postgres 0 reinitialisations, `default-apps` with 16 plugins.
+
+The first build attempt was stopped for host memory (7.7 GB, 0.8 GB free) with `api` and `mcp` already down. Stopping
+Vite (1.0 GB after running since sign-in) and dropping the WSL VM's page cache let the second attempt finish in
+2.2 minutes; Vite restarted from its sign-in task afterwards. The api was down from about 03:56Z to 04:10Z.
+
+| Check | Result |
+|---|---|
+| Confirm lines (all three handoffs), from the container | `2.41.0 5.17.0 3.57.0 2.16.2 2592000 True ['/usr/local/lib/python3.11/site-packages/AINDY']`: runtime, nodus-lang, openai, httpx2, `MAX_WAIT_SECONDS`, `memory.nd` packaged, site-packages |
+| Schema heads | runtime `0022`, app `dt1directing0001 (head)`: no schema step, as stated |
+| The entrypoint's first step | `[ensure_pgvector] extension 'vector' already present` |
+| FR-6's routes | `/auth/password/change`, `/auth/password/forgot`, `/auth/password/reset` all in `/openapi.json` (not exercised: forgot sends a real mail) |
+
+**The trace question, closed.** `get_trace_graph` read in-container for `d534a3fd-0133-45c6-8d6a-ba9e1a6b4718`
+(read-only, rolled back):
+
+| | Nodes | Edges | Dangling |
+|---|---|---|---|
+| Unscoped | 584 | 583 | 290 |
+| Scoped to its owner, on 2.34.0 | 584 | 293 | |
+| **Scoped to its owner, now** | **584** | **583** | 290 (all `async_child` to the owner's own events in other traces) |
+
+As DEC-137 says: the scoped graph now keeps the caller's own cross-trace edges as dangling edges, and the far events
+are not added as nodes. Depth was not re-read (the service function does not return it; the handoff says it does not
+change).
+
+**Counters, the 2.38.0 window** (11-19 05:22:14Z → 11-23 03:55:04Z, read before the build): 0 identity mismatches,
+0 `tenant_mismatch`, 276 gated effects (`reserved`). The 2.41.0 window opens at 04:10:16Z.

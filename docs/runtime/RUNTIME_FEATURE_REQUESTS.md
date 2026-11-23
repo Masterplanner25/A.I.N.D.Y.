@@ -21,7 +21,7 @@ owner: "app-team"
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
 > **Open as of 2026-11-22:** none of ours. **FR-55 shipped in 2.39.0** and closes on our report of a ported loop (`RUNTIME_2_41_0_UPGRADE.md` §2). **FR-6 is closed:** items 2–3 shipped in 2.0.0 and the runtime's 2.40.0 handoff
-> said so. The scoped-traces question (`RUNTIME_2_34_0_UPGRADE.md` §6) is answered by DEC-137 and closes on our re-read.
+> said so. The scoped-traces question (`RUNTIME_2_34_0_UPGRADE.md` §6) is answered by DEC-137 and closed on our live re-read (584 nodes,`n> 583 edges scoped, as unscoped; `RUNTIME_2_41_0_UPGRADE.md` §5).
 >
 > **Open as of 2026-11-18 (later):** FR-55 (the runtime logged it in #983; its ask (b) needs a new DEC revisiting
 > DEC-012), FR-6 items 2–3. FR-14 closed on runtime #983 (the README's entrypoint recipe).
