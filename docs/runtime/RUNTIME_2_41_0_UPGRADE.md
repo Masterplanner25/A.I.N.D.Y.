@@ -50,6 +50,24 @@ batches, reporting iterations parked and resumed and any wake outside the ~15 s 
 of its own, not part of this adoption. The handoff's traps, kept for it: a distinct event name per iteration; `0i`,
 not `0`; work before a wait runs again on every resume, so external calls go after the `prior_state` check.
 
+**Ported in #635 (`apps/masterplan/nodus/resolution_check_v1.nd`), closed 2026-11-25** on its first real run, the
+weekly check of 2026-11-23 07:30Z: resolution run `1052e284…`, driver `nodus`, flow run `bf1f6c71…`
+(`nodus_execute`, `success`), 07:30:26Z to 07:38:22Z. The Python driver took 5:51 to 8:43 on the five Mondays before.
+
+| Wait | Parked | Deadline | Queued (after deadline) | Resumed |
+|---|---|---|---|---|
+| `wait.0` (1 s, the first yield) | 07:30:26.9 | 07:30:27.9 | 07:30:41.4 (+13.5 s) | 07:30:42.5 |
+| `wait.1` (30 s) | 07:31:44.4 | 07:32:14.3 | 07:32:26.5 (+12.2 s) | 07:32:27.5 |
+| `wait.2` (30 s) | 07:33:27.2 | 07:33:57.2 | 07:34:11.4 (+14.3 s) | 07:34:12.5 |
+| `wait.3` (30 s) | 07:35:27.2 | 07:35:57.1 | 07:36:11.4 (+14.3 s) | 07:36:12.5 |
+| `wait.4` (30 s) | 07:37:26.2 | 07:37:56.1 | 07:37:56.4 (+0.3 s) | 07:37:57.5 |
+
+- **Parked 5, resumed 5**, each with `{"timed_out": true}`; every wake was queued on the scheduler's next 15 s poll
+  after its deadline, and resumed about 1 s later. None outside the window.
+- **`prior_state` held across every resume:** five `sys.v1.resolution.update_run` calls, one per batch, and 27
+  answers for 9 questions × 3 engines, 27 distinct: no batch asked twice.
+- **No `nodus.fallback` event** since the adoption, so the Python driver never took over.
+
 ## 3. The scoped-traces question (2.34.0 record §6)
 
 Answered by DEC-137: a scoped graph keeps edges to the caller's own events outside the trace, as dangling edges;
