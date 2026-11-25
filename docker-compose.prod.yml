@@ -21,6 +21,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Unset: the image `build api` makes here. On a host that deploys CI's images, `.env` holds
+    # AINDY_IMAGE=ghcr.io/<owner>/aindy-api:<sha>, written by scripts/deploy_stack.py (phase C).
+    image: "${AINDY_IMAGE:-aindy-apps-monolith-api:latest}"
     restart: unless-stopped
     depends_on:
       postgres:
@@ -339,7 +342,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: aindy-apps-monolith-api:latest
+    image: "${AINDY_IMAGE:-aindy-apps-monolith-api:latest}"
     profiles: ["public-mcp"]
     restart: unless-stopped
     depends_on:

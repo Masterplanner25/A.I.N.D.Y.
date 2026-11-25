@@ -28,6 +28,12 @@ These checks are app-owned and should live in A.I.N.D.Y.:
 - frontend production build smoke
 - client container build smoke from `client/Dockerfile`
 
+Image publishing (since 2026-11-25, `OFF_LAPTOP_DEPLOYMENT_SPEC` phase C):
+
+- `.github/workflows/publish-image.yml` builds the api image from `Dockerfile` (so with `-c constraints.txt`) and
+  smokes it on a PR touching the image's inputs; on a merge to `main` it pushes `ghcr.io/masterplanner25/aindy-api`
+  `:<sha>` and `:main` (public package). Not a required check: it runs after the merge.
+
 ## Runtime Install Strategy
 
 `aindy-runtime` is published on PyPI, so app CI installs it as a normal pinned

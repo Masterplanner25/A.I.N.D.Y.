@@ -121,8 +121,8 @@ and both act on GitHub.** Until dev mode exists (spec §5, phase D), a host rest
 real job the moment its api starts. **So the server's api does not start while the laptop's does, until phase D.**
 
 1. **Provision** (§2). Join the tailnet. Note the server's tailnet address.
-2. **Install.** Clone the repo; write `.env` (§3) with `AINDY_BIND_ADDR=<tailnet address>`; build or pull the image
-   (phase C: `AINDY_IMAGE`).
+2. **Install.** Clone the repo; write `.env` (§3) with `AINDY_BIND_ADDR=<tailnet address>` and
+   `AINDY_IMAGE=ghcr.io/masterplanner25/aindy-api:<sha>` (the image the laptop runs); `docker pull` it.
 3. **Restore a recent backup, without the api:**
    ```bash
    $COMPOSE create                       # every container and volume, nothing started
@@ -151,19 +151,35 @@ real job the moment its api starts. **So the server's api does not start while t
 
 ## 7. Releasing to a running host
 
-Today, on the host itself:
+**From CI's image (phase C, since 2026-11-25).** Every merge to `main` publishes
+`ghcr.io/masterplanner25/aindy-api:<full sha>` (`.github/workflows/publish-image.yml`; public, so no login). On the
+host:
+
+```bash
+git pull                                       # compose files and scripts at the commit being deployed
+python3 scripts/deploy_stack.py <sha>          # or a ref this clone resolves: HEAD, main, a short sha
+```
+
+It pulls first (a failed pull changes nothing), reads the counters, backs up (`--no-backup` to skip), writes
+`AINDY_IMAGE=<image>` into `.env`, recreates `api` and `mcp`, waits for healthy, and prints the confirm line and
+the rollback command. **A rollback is the same command with the previous sha.** Each deploy appends a line to
+`~/aindy-deploys.jsonl`. A runtime pin move still migrates the database at boot: the adoption record is the gate,
+and the backup is the way back.
+
+**A host that deploys CI's images does not build.** With `AINDY_IMAGE` set, `$COMPOSE build api` would tag a local
+build with the CI image's name. To go back to local builds, delete the `AINDY_IMAGE` line from `.env`.
+
+**A local build** (no `AINDY_IMAGE`; the laptop until it switches):
 
 ```bash
 git pull
 $COMPOSE build api                 # a source change ~1 min; a runtime pin move 10-15 min (OPS-004)
 # read the counters (§5)
 $COMPOSE up -d api mcp             # recreates both: mcp shares the image
-# check (§5)
 ```
 
 On the laptop a build can be killed for memory: stop Vite and drop the Docker VM's page cache first
-(`wsl -d docker-desktop sh -c "sync; echo 3 > /proc/sys/vm/drop_caches"`). Phase C replaces the build with a pull of a
-CI-built image by commit SHA, so a rollback is the same command with the previous SHA.
+(`wsl -d docker-desktop sh -c "sync; echo 3 > /proc/sys/vm/drop_caches"`). Pulling CI's image avoids that.
 
 ## 8. Tuning for slower / cold-start-heavy hosts
 
