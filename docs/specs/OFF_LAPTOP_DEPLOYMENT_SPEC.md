@@ -1,6 +1,6 @@
 ---
 title: "Off the laptop"
-last_verified: "2026-11-23"
+last_verified: "2026-11-25"
 api_version: "1.0"
 status: draft
 owner: "app-team"
@@ -8,7 +8,7 @@ owner: "app-team"
 
 # Off the laptop: A.I.N.D.Y. runs on a server, the laptop goes back to being a laptop
 
-**Status:** scoped 2026-11-23. §8's decisions are open. Nothing is built.
+**Status:** scoped 2026-11-23. §8's decisions are open. **Phase A built 2026-11-25** (§4); B–F are not.
 
 **Origin.** The owner, 2026-11-23: *"right now the limit to developing and/or using my laptop fully is that I need to
 keep the app running."* The whole stack (api, `mcp`, postgres, mongo, redis, mailpit, the ngrok tunnel) runs in Docker
@@ -99,6 +99,30 @@ The practice the owner asked for is mostly here.
 - **A restore is tested,** not assumed: into a scratch database, with row counts compared, by the same script that
   will do the migration (§6). A backup that has never been restored does not count.
 - **The same scripts move the data** from the laptop to the server, so the migration is the restore's first real use.
+
+**Built 2026-11-25 (phase A).** `scripts/backup_stack.py` and `scripts/restore_stack.py`, stdlib only (a server runs them
+with its system python3), reaching the databases by `docker exec` on the containers' compose labels, so they need
+neither the compose files nor `.env`.
+
+- **Backup:** `python scripts/backup_stack.py` writes `$AINDY_BACKUP_DIR` (default `~/aindy-backups`)`/<UTC stamp>/`:
+  `postgres.dump` (`pg_dump -Fc`), `mongo.archive.gz`, `nodus_state.tar.gz` and `manifest.json` (sha256s, schema heads,
+  row counts). It keeps 14. The stack stays up: postgres is counted before and after the dump, and a table that moved
+  during it must restore to a count between the two; every other table must restore exactly. First run: 134 tables,
+  974,843 rows, 130 MB, 45 s.
+- **Restore test (the default):** `python scripts/restore_stack.py [latest|<stamp>]` restores into
+  `aindy_restore_check` and `aindy_default_restore_check`, compares, and drops them; about a minute. Passed on the
+  first backup.
+- **Live restore (§6):** `--live --yes` refuses while `api` or `mcp` runs, tests the backup first, takes a
+  `-before-restore` safety backup (never pruned), restores postgres into `aindy_incoming` and swaps it in only after
+  its counts pass (the old database is renamed `aindy_replaced_<stamp>`, not dropped), then mongo and nodus_state.
+  Proven against a throwaway postgres and mongo standing in for a fresh server: everything matched on a second
+  backup taken from it.
+- **The social database is `aindy_default`,** the runtime's `MONGO_DB_NAME` default. The `/aindy` in compose's
+  `MONGO_URL` names a database nothing writes to, and the 518 MB in §1 is the volume, not data: 2 posts and 14
+  metric rows.
+- **Nightly on the laptop until the move:** the Windows task "A.I.N.D.Y. backup" (03:00, runs on wake if missed)
+  calls `~/.aindy/backup-stack.ps1`, outside the repo; Sundays it also runs the restore test. Log
+  `~/.aindy/backup.log`.
 
 ## 5. Two environments, kept apart
 
