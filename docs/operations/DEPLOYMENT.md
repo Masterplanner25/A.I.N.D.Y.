@@ -61,6 +61,20 @@ The `deploy-bootstrap-guard` CI workflow runs this against a blank Postgres on e
 - **Tailscale**, and nothing inbound but SSH, from the tailnet once it works.
 - A clone of this repo (compose files, `docker/`, `scripts/`), and Python 3 for the backup scripts (stdlib only).
 
+**`scripts/server/setup_host.sh` does all of that** on a fresh Ubuntu 24.04 VPS (phase E), and can be run again:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/Masterplanner25/A.I.N.D.Y./main/scripts/server/setup_host.sh
+sudo bash setup_host.sh              # docker-ce, tailscale, restic, ufw (SSH only), user aindy, ~aindy/aindy, the timer
+sudo tailscale up                    # sign in; `tailscale ip -4` is the AINDY_BIND_ADDR
+# from the laptop, `ssh aindy@<tailnet address>` works? then, keeping the old session open:
+sudo bash setup_host.sh --lock-ssh   # SSH from the tailnet only
+```
+
+Docker publishes ports past ufw, through its own iptables rules. What keeps the stack private is compose binding every
+host port to `127.0.0.1` and the api to `AINDY_BIND_ADDR`; the VPS provider's own firewall, if it has one, can also
+allow nothing but SSH.
+
 ## 3. `.env`
 
 Copy it from the laptop, file to file, never through a chat or an issue. Compose reads it from the repo root.
@@ -93,8 +107,32 @@ python3 scripts/restore_stack.py <stamp> --live --yes   # replace the stack's da
 
 A backup is about 130 MB and 45 s. The live restore keeps the database it replaced (`aindy_replaced_<stamp>`) and a
 `-before-restore` backup; drop them once the restored stack is checked. On the laptop the task "A.I.N.D.Y. backup"
-runs it nightly. On a server, a cron line does (`0 3 * * * cd ~/aindy && python3 scripts/backup_stack.py`), and the
-copies must also leave the server (decision 5).
+runs it nightly.
+
+**On a server**, systemd's `aindy-backup.timer` (from `setup_host.sh`; 03:00 UTC, caught up after downtime) runs
+`scripts/server/nightly_backup.sh` as `aindy`: the backup, the restore test on Sundays, then **the copy off the
+server** (decision 5) with restic, encrypted before it leaves. It reads `~aindy/.aindy/offsite.env` (mode 600):
+
+```bash
+RESTIC_REPOSITORY=s3:https://<endpoint>/<bucket>/aindy     # any S3-compatible object storage
+RESTIC_PASSWORD_FILE=/home/aindy/.aindy/restic-password    # generate it once; keep a copy in a password manager
+AWS_ACCESS_KEY_ID=...                                       # a key limited to that bucket
+AWS_SECRET_ACCESS_KEY=...
+AINDY_BACKUP_PING_URL=https://hc-ping.com/<uuid>            # optional: a dead-man's switch that mails when a night is missed
+```
+
+It keeps 14 daily, 8 weekly and 6 monthly copies, and on Sundays `restic check` reads back 5% of them. Without
+`offsite.env` it backs up locally and logs that it skipped the copy. Check it: `systemctl list-timers aindy-backup.timer`,
+`journalctl -u aindy-backup -n 50`. **Getting a backup back from the copy** (the server is gone, or its disk is):
+
+```bash
+restic snapshots                                           # with offsite.env's variables exported
+restic restore latest --target /tmp/from-offsite           # -> /tmp/from-offsite/home/aindy/aindy-backups/<stamp>/
+mv /tmp/from-offsite/home/aindy/aindy-backups/<stamp> ~/aindy-backups/ && python3 scripts/restore_stack.py <stamp>
+```
+
+**Without the restic password the copies cannot be read**: it is the one secret that must live somewhere other than
+the server.
 
 ## 5. Checking a running stack
 
@@ -120,7 +158,7 @@ The order matters more than any one command: **two instances acting on two copie
 and both act on GitHub.** So exactly one stack runs without dev mode (below) at any time: the laptop until step 4,
 the server after it.
 
-1. **Provision** (§2). Join the tailnet. Note the server's tailnet address.
+1. **Provision** (§2: `setup_host.sh`). Join the tailnet. Note the server's tailnet address.
 2. **Install.** Clone the repo; write `.env` (§3) with `AINDY_BIND_ADDR=<tailnet address>` and
    `AINDY_IMAGE=ghcr.io/masterplanner25/aindy-api:<sha>` (the image the laptop runs); `docker pull` it.
 3. **Restore a recent backup, without the api:**
@@ -167,8 +205,11 @@ both GitHub tokens and the ngrok token, and turns off durable agent continuation
 
 **Where a dev stack is used:** the server between steps 3 and 4 of the move; the laptop after it (decision 7), never
 started at sign-in. A recreate must keep naming the overlay: an `up` without `-f docker-compose.dev.yml` takes dev
-mode away. `deploy_stack.py` does not know about it, so deploy to a dev stack with `$DEV up -d --no-build api` after
-setting `AINDY_IMAGE`.
+mode away. **`deploy_stack.py` keeps the mode it finds**: it reads `AINDY_ENVIRONMENT` from the running api and
+recreates in the same mode (with the overlay and without `public-mcp` for a dev stack), then fails if the api came up
+in any other. `--dev` or `--instance` changes it on purpose; with no api running, it asks for one of them. The first
+deploy after the restore (§6 step 3) is therefore `deploy_stack.py <sha> --dev`, and cutover (step 4) is
+`--instance`.
 
 **A new scheduled job** registers with `schedule_job(..., outward=True|False)` from `apps/_shared/environment.py`;
 an outward one also carries `@outward_job` on its function. `test_dev_mode.py` fails otherwise.
@@ -192,7 +233,7 @@ git pull                                       # compose files and scripts at th
 python3 scripts/deploy_stack.py <sha>          # or a ref this clone resolves: HEAD, main, a short sha
 ```
 
-It pulls first (a failed pull changes nothing), reads the counters, backs up (`--no-backup` to skip), writes
+It keeps the stack's mode (§6, dev mode), pulls first (a failed pull changes nothing), reads the counters, backs up (`--no-backup` to skip), writes
 `AINDY_IMAGE=<image>` into `.env`, recreates `api` and `mcp`, waits for healthy, and prints the confirm line and
 the rollback command. **A rollback is the same command with the previous sha.** Each deploy appends a line to
 `~/aindy-deploys.jsonl`. A runtime pin move still migrates the database at boot: the adoption record is the gate,

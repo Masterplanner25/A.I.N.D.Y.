@@ -18,6 +18,11 @@ In order, stopping at the first failure:
 6. **Confirm:** the runtime version and where it is installed, the boot profile and plugin count, both schema heads.
    Each deploy appends one line to `~/aindy-deploys.jsonl` (`$AINDY_DEPLOY_LOG`): when, from what, to what, the counters.
 
+**The stack keeps its mode.** A host runs either as the instance (all three profiles) or in dev mode
+(`docker-compose.dev.yml` layered on, no `public-mcp`; DEPLOYMENT.md §6). The script reads the mode from the running
+api and deploys in the same one, so a deploy to the server during its parallel run cannot quietly make it a second
+instance. `--dev` or `--instance` changes it on purpose; with no api running, one of them is required.
+
 The compose files come from this clone: when its HEAD is not the commit being deployed, it says so (`git checkout <sha>`
 first, so compose and the image agree). Stdlib only.
 """
@@ -41,6 +46,8 @@ import backup_stack as bs  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE_FILES = ("docker-compose.prod.yml", "docker-compose.mongo.yml")
 PROFILES = ("full", "mail", "public-mcp")
+DEV_FILE = "docker-compose.dev.yml"
+DEV_PROFILES = ("full", "mail")  # only the instance holds the public domain
 REPOSITORY = os.environ.get("AINDY_IMAGE_REPOSITORY", "ghcr.io/masterplanner25/aindy-api")
 HEALTH_TIMEOUT_S = 600
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -49,9 +56,9 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 COUNTERS = ("aindy_payload_identity_mismatch_total", "aindy_effect_gate_outcomes_total", "aindy_llm_key_source_total")
 
 
-def compose(*args: str, profiles=PROFILES) -> list[str]:
+def compose(*args: str, profiles=PROFILES, dev: bool = False) -> list[str]:
     cmd = ["docker", "compose"]
-    for f in COMPOSE_FILES:
+    for f in COMPOSE_FILES + ((DEV_FILE,) if dev else ()):
         cmd += ["-f", str(ROOT / f)]
     for p in profiles:
         cmd += ["--profile", p]
@@ -132,6 +139,14 @@ def health(container_id: str) -> str:
     return bs.text(out).strip()
 
 
+def running_mode(container_id: str) -> str:
+    """'dev' when the container runs with AINDY_ENVIRONMENT=dev, else 'instance'. Reads the env, never prints it."""
+    out = bs.run(["docker", "inspect", "-f", "{{range .Config.Env}}{{println .}}{{end}}", container_id],
+                 what="reading the api's mode")
+    lines = bs.text(out).splitlines()
+    return "dev" if any(line.strip().lower() == "aindy_environment=dev" for line in lines) else "instance"
+
+
 def wait_healthy(timeout_s: int = HEALTH_TIMEOUT_S, project: str = bs.PROJECT) -> str:
     deadline = time.monotonic() + timeout_s
     last = ""
@@ -165,9 +180,23 @@ def confirm(cid: str, env: dict[str, str], project: str = bs.PROJECT) -> dict:
 # ── the deploy ─────────────────────────────────────────────────────────────────────────────
 
 
-def deploy(ref: str, *, backup: bool = True, services=("api", "mcp"), profiles=PROFILES,
+def deploy(ref: str, *, backup: bool = True, services=("api", "mcp"), profiles=None, mode: str = "keep",
            project: str = bs.PROJECT) -> dict:
     sha = resolve_sha(ref)
+    current = bs.container("api", project, required=False)
+    running = running_mode(current) if current else None
+    if mode == "keep":
+        if not running:
+            raise bs.StackError("no api is running, so there is no mode to keep: say --dev or --instance")
+        mode = running
+    elif running and running != mode:
+        bs.log(f"MODE CHANGE: the running api is {running}; this deploy makes it {mode}")
+    dev = mode == "dev"
+    if profiles is None:
+        profiles = DEV_PROFILES if dev else PROFILES
+    if dev and "public-mcp" in profiles:
+        raise bs.StackError("a dev stack never runs public-mcp: only the instance holds the public domain")
+    bs.log(f"mode: {mode}")
     image = f"{REPOSITORY}:{sha}"
     env_path = ROOT / ".env"
     env = read_env(env_path)
@@ -178,7 +207,6 @@ def deploy(ref: str, *, backup: bool = True, services=("api", "mcp"), profiles=P
     bs.log(f"pulling {image} ...")
     bs.run(["docker", "pull", image], what=f"pulling {image}")
 
-    current = bs.container("api", project, required=False)
     previous = bs.image_of(current) if current else None
     read = []
     if current:
@@ -196,14 +224,17 @@ def deploy(ref: str, *, backup: bool = True, services=("api", "mcp"), profiles=P
     bs.log(f".env: AINDY_IMAGE={image} (was {old or 'unset: local build'})")
 
     bs.log(f"recreating {', '.join(services)} ...")
-    bs.run(compose("up", "-d", "--no-build", *services, profiles=profiles), what="docker compose up")
+    bs.run(compose("up", "-d", "--no-build", *services, profiles=profiles, dev=dev), what="docker compose up")
     cid = wait_healthy(project=project)
+    came_up = running_mode(cid)
+    if came_up != mode:
+        raise bs.StackError(f"the api came up as {came_up}, not {mode}: stop it and check the compose files")
     result = confirm(cid, read_env(env_path), project)
     bs.log(f"confirm: runtime {result['runtime']}; {result['boot_profile']}, {result['app_plugin_count']} plugins; "
            f"heads {result['heads']}")
 
     record = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "sha": sha, "image": image,
-              "previous_image": previous, "counters": read, **result}
+              "previous_image": previous, "mode": mode, "counters": read, **result}
     log_path = Path(os.environ.get("AINDY_DEPLOY_LOG") or Path.home() / "aindy-deploys.jsonl")
     with log_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
@@ -219,12 +250,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("commit", help="full sha, or a git ref this clone can resolve")
     parser.add_argument("--no-backup", action="store_true", help="skip the backup before the recreate")
     parser.add_argument("--services", default="api,mcp", help="services to recreate (default api,mcp)")
-    parser.add_argument("--profiles", default=",".join(PROFILES), help="compose profiles (default all three)")
+    parser.add_argument("--profiles", default=None,
+                        help="compose profiles (default: all three for the instance, full,mail in dev mode)")
+    which = parser.add_mutually_exclusive_group()
+    which.add_argument("--dev", dest="mode", action="store_const", const="dev",
+                       help="deploy in dev mode (docker-compose.dev.yml, no public-mcp)")
+    which.add_argument("--instance", dest="mode", action="store_const", const="instance",
+                       help="deploy as the instance: only ever on the one host that is it")
     parser.add_argument("--project", default=bs.PROJECT)
     args = parser.parse_args(argv)
     try:
         deploy(args.commit, backup=not args.no_backup, services=tuple(filter(None, args.services.split(","))),
-               profiles=tuple(filter(None, args.profiles.split(","))), project=args.project)
+               profiles=tuple(filter(None, args.profiles.split(","))) if args.profiles else None,
+               mode=args.mode or "keep", project=args.project)
     except bs.StackError as exc:
         bs.log(f"DEPLOY FAILED: {exc}")
         return 1
