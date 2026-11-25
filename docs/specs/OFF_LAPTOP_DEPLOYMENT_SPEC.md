@@ -8,7 +8,7 @@ owner: "app-team"
 
 # Off the laptop: A.I.N.D.Y. runs on a server, the laptop goes back to being a laptop
 
-**Status:** scoped 2026-11-23. §8's decisions are open except 3 (taken 2026-11-25). **Phases A–D built 2026-11-25** (§4, §5; `DEPLOYMENT.md` is the runbook); E–F need the server.
+**Status:** scoped 2026-11-23. **Every §8 decision taken** (3 on 2026-11-25, the rest the same day: the owner took the recommendations). **Phases A–D built 2026-11-25** (§4, §5; `DEPLOYMENT.md` is the runbook). **E's repo half built 2026-11-25** (§9); its other half is the server itself, which needs the owner's accounts. F follows E.
 
 **Origin.** The owner, 2026-11-23: *"right now the limit to developing and/or using my laptop fully is that I need to
 keep the app running."* The whole stack (api, `mcp`, postgres, mongo, redis, mailpit, the ngrok tunnel) runs in Docker
@@ -181,8 +181,11 @@ Claude Code's `aindy` MCP keeps its `docker exec` and gains `DOCKER_HOST=ssh://<
 ## 8. Decisions: the owner's
 
 1. **Where.** A VPS (**recommended**: the practice is the point, and it is resizable) or a box at home. 8 GB of RAM,
-   native Linux.
-2. **The private link.** Tailscale (**recommended**) or an SSH tunnel (§7).
+   native Linux. ✅ **Taken 2026-11-25 (owner): a VPS**, Ubuntu 24.04 (what `scripts/server/setup_host.sh` is
+   written for). The provider is the owner's account to open.
+2. **The private link.** Tailscale (**recommended**) or an SSH tunnel (§7). ✅ **Taken 2026-11-25 (owner):
+   Tailscale.** It also settles the directing hook's rule: since phase D it sends to loopback or a host whose every
+   address is a Tailscale one.
 3. **The registry.** ✅ **Taken 2026-11-25 (owner): GitHub's container registry, public package**,
    `ghcr.io/masterplanner25/aindy-api`. Scoped as private; checked before deciding: the repo is public and the image
    carries no `.env` (the Dockerfile copies named folders only), so private would have bought a pull token on the
@@ -190,9 +193,11 @@ Claude Code's `aindy` MCP keeps its `docker exec` and gains `DOCKER_HOST=ssh://<
    Hub (a second account, pull limits), the VPS provider's registry (ties it to decision 1), no registry (CI holds
    an SSH key to the server).
 4. **How a deploy is triggered.** A script run by hand on the server first (**recommended**), a dispatched workflow
-   once the script has run a few releases.
+   once the script has run a few releases. ✅ **Taken 2026-11-25 (owner): by hand**, `deploy_stack.py`.
 5. **Where backups go off the server.** Object storage at the same provider, or pulled to the laptop nightly while it
-   is on. **Recommended: object storage**: the laptop is the machine being freed.
+   is on. **Recommended: object storage**: the laptop is the machine being freed. ✅ **Taken 2026-11-25 (owner):
+   object storage**, any S3-compatible store, through restic (encrypted on the server before it leaves; §4 of the
+   runbook). The restic password is kept off the server too, or the copies cannot be read when the server is gone.
 6. **What dev mode turns off** (§5). Recommended: every scheduled job that spends money, sends mail or calls GitHub,
    plus real mail and the tunnel. Everything else runs, so a local stack still behaves like the real one.
    **Built 2026-11-25 as proposed, for the owner to confirm:** nine outward jobs (`release_handoff_watch`,
@@ -200,8 +205,10 @@ Claude Code's `aindy` MCP keeps its `docker exec` and gains `DOCKER_HOST=ssh://<
    archive, share drafts, piece answers and mention detection). The poll spends nothing, but it brings in new
    pieces the other four act on. Seven inward jobs run: the 07:00 Infinity and 06:00 ETA recalculations, task
    reminders and recurrence, the lease heartbeat, the wait recovery poll and the resume watchdog. Also off: real mail
-   (mailpit), both GitHub tokens, the ngrok token, durable agent continuation.
+   (mailpit), both GitHub tokens, the ngrok token, durable agent continuation. ✅ **Confirmed 2026-11-25 (owner).**
 7. **The laptop stack afterwards.** Kept as the dev stack, not started at sign-in (**recommended**), or removed.
+   ✅ **Taken 2026-11-25 (owner): kept as the dev stack**, started by hand with the overlay (phase F does the
+   sign-in change).
 
 ## 9. Phases
 
@@ -223,6 +230,13 @@ Each phase is a PR, or a session on the server. A–D are repo work and need no 
   the directing hook (which now also accepts a Tailscale address, checked after DNS) and the watcher's sign-in
   script. All of this is in our code: the runtime's scheduler needed no switch, so no FR.
 - **E. The server.** Provision (decision 1), install, restore, run in dev mode beside the laptop, check.
+  **Repo half built 2026-11-25:** `scripts/server/setup_host.sh` (docker-ce, Tailscale, ufw with SSH only and then
+  SSH from the tailnet only, restic, user `aindy`, the clone, a systemd timer for the nightly backup);
+  `scripts/server/nightly_backup.sh` (backup, the Sunday restore test, the restic copy off the server, an optional
+  dead-man's ping); `deploy_stack.py` keeps the running stack's mode, so a deploy to a dev-mode server cannot make it
+  a second instance (`--dev` / `--instance` to change it on purpose). Proven in a throwaway Ubuntu container: two
+  nights, two encrypted snapshots, a restore from the copy. **Still to do, on the server:** DEPLOYMENT.md §6 steps
+  1-3.
 - **F. Cutover.** §6 step 4, then two weeks with the laptop's volumes kept. The handoff and `OPERATOR_NOTES` say where
   the instance lives.
 

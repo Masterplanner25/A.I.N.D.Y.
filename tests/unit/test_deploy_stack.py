@@ -97,6 +97,7 @@ def host(tmp_path, monkeypatch):
     monkeypatch.setattr(bs, "run", run)
     monkeypatch.setattr(bs, "container", lambda s, p=bs.PROJECT, required=True: "cid-" + s)
     monkeypatch.setattr(bs, "image_of", lambda cid: "aindy-apps-monolith-api:latest")
+    monkeypatch.setattr(ds, "running_mode", lambda cid: host_mode["mode"])
     monkeypatch.setattr(bs, "backup", lambda *a, **k: calls.append(["backup"]))
     monkeypatch.setattr(ds, "get", lambda url, timeout=10: "aindy_effect_gate_outcomes_total 1.0\n"
                         if url.endswith("/metrics/") else json.dumps({"runtime": {"boot_profile": "default-apps",
@@ -105,6 +106,14 @@ def host(tmp_path, monkeypatch):
     monkeypatch.setattr(ds, "confirm", lambda cid, env, project=bs.PROJECT: {"runtime": "2.41.0", "boot_profile": "default-apps",
                                                                         "app_plugin_count": 16, "heads": {}})
     return tmp_path, calls
+
+
+host_mode = {"mode": "instance"}
+
+
+@pytest.fixture(autouse=True)
+def _instance_by_default():
+    host_mode["mode"] = "instance"
 
 
 def test_pull_counters_backup_env_recreate_in_that_order(host):
@@ -162,3 +171,45 @@ def test_the_workflow_publishes_from_main_only_with_its_own_token():
         if "uses" in step:
             assert "@" in step["uses"] and len(step["uses"].split("@")[1].split()[0]) == 40, step["uses"]
     assert ds.REPOSITORY.endswith("/aindy-api") and "aindy-api" in text
+
+
+# ── the mode is kept ───────────────────────────────────────────────────────────────────────
+
+
+def _up(calls):
+    return next(c for c in calls if c[:2] == ["docker", "compose"])
+
+
+def test_a_dev_stack_is_deployed_in_dev_mode_without_the_tunnel(host):
+    _, calls = host
+    host_mode["mode"] = "dev"
+    record = ds.deploy(SHA)
+    up = _up(calls)
+    assert any(c.endswith(ds.DEV_FILE) for c in up)
+    assert [up[i + 1] for i, c in enumerate(up) if c == "--profile"] == ["full", "mail"]
+    assert record["mode"] == "dev"
+
+
+def test_an_instance_is_deployed_as_the_instance(host):
+    _, calls = host
+    up = _up(calls) if ds.deploy(SHA) else None
+    assert not any(c.endswith(ds.DEV_FILE) for c in up) and "public-mcp" in up
+
+
+def test_with_no_api_running_the_mode_must_be_said(host, monkeypatch):
+    root, calls = host
+    monkeypatch.setattr(bs, "container", lambda s, p=bs.PROJECT, required=True: None if s == "api" else "cid-" + s)
+    assert ds.main([SHA]) == 1 and calls == []
+    assert "AINDY_IMAGE" not in ds.read_env(root / ".env")
+
+
+def test_dev_mode_refuses_the_public_tunnel(host):
+    with pytest.raises(bs.StackError, match="public-mcp"):
+        ds.deploy(SHA, mode="dev", profiles=("full", "mail", "public-mcp"))
+
+
+def test_an_api_that_comes_up_in_the_wrong_mode_fails_the_deploy(host, monkeypatch):
+    seen = iter(["dev", "instance"])  # running before; what came up after
+    monkeypatch.setattr(ds, "running_mode", lambda cid: next(seen))
+    with pytest.raises(bs.StackError, match="came up as instance, not dev"):
+        ds.deploy(SHA)
