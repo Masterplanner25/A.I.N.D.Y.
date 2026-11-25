@@ -1,0 +1,91 @@
+# Builds the api image and publishes it to GitHub's container registry (OFF_LAPTOP_DEPLOYMENT_SPEC §3, phase C).
+#
+#   ghcr.io/<owner>/aindy-api:<full commit sha>   one per merge to main; what a host deploys
+#   ghcr.io/<owner>/aindy-api:main                the newest; the build cache, never deployed by name
+#
+# The package is PUBLIC (owner, 2026-11-25): the repo is public and the image holds only what it does (the Dockerfile
+# copies apps/, scripts/, alembic/ and the manifest; never .env), plus the runtime from PyPI. So a host pulls without
+# a token. A host deploys with scripts/deploy_stack.py <sha>.
+#
+# On a pull request that touches the image's inputs it builds and smokes the image without pushing, so a broken
+# Dockerfile shows up before the merge. Plain docker commands, no third-party actions: the only secret is the job's
+# own GITHUB_TOKEN, with packages: write on main only.
+name: publish-image
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker/**
+      - pyproject.toml
+      - constraints.txt
+      - .github/workflows/publish-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SHA: ${{ github.sha }}
+      REPO: ${{ github.repository }}
+      ACTOR: ${{ github.actor }}
+      PUSH: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Name the image
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/aindy-api" >> "$GITHUB_ENV"
+
+      - name: Log in to the registry
+        if: env.PUSH == 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+      - name: Build
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          # The previous image's layers are the cache: a source-only change rebuilds only the top layers.
+          docker pull "$IMAGE:main" || echo "no previous image; building from scratch"
+          docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --cache-from "$IMAGE:main" \
+            --label "org.opencontainers.image.source=https://github.com/$REPO" \
+            --label "org.opencontainers.image.revision=$SHA" \
+            --label "org.opencontainers.image.description=A.I.N.D.Y. api (app profile on aindy-runtime)" \
+            -t "$IMAGE:$SHA" -t "$IMAGE:main" .
+
+      - name: Smoke the image
+        run: |
+          # The runtime is the pinned one, installed in site-packages, and the app's package and manifest are there.
+          docker run --rm --entrypoint python "$IMAGE:$SHA" -c "
+          import pathlib, AINDY, AINDY._version as v, apps
+          pin = pathlib.Path('constraints.txt').read_text().split('aindy-runtime==')[1].split()[0]
+          assert v.__version__ == pin, (v.__version__, pin)
+          assert 'site-packages' in list(AINDY.__path__)[0]
+          assert pathlib.Path('aindy_plugins.json').is_file()
+          print('runtime', v.__version__, 'ok')
+          "
+          docker image ls "$IMAGE"
+
+      - name: Push
+        if: env.PUSH == 'true'
+        run: |
+          docker push "$IMAGE:$SHA"
+          docker push "$IMAGE:main"
+          echo "### Published \`$IMAGE:$SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy: \`python3 scripts/deploy_stack.py $SHA\`" >> "$GITHUB_STEP_SUMMARY"

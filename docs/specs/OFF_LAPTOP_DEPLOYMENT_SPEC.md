@@ -8,7 +8,7 @@ owner: "app-team"
 
 # Off the laptop: A.I.N.D.Y. runs on a server, the laptop goes back to being a laptop
 
-**Status:** scoped 2026-11-23. §8's decisions are open. **Phases A and B built 2026-11-25** (§4; `DEPLOYMENT.md` is the runbook); C–F are not.
+**Status:** scoped 2026-11-23. §8's decisions are open except 3 (taken 2026-11-25). **Phases A–C built 2026-11-25** (§4; `DEPLOYMENT.md` is the runbook); D–F are not.
 
 **Origin.** The owner, 2026-11-23: *"right now the limit to developing and/or using my laptop fully is that I need to
 keep the app running."* The whole stack (api, `mcp`, postgres, mongo, redis, mailpit, the ngrok tunnel) runs in Docker
@@ -79,7 +79,8 @@ release watcher, the 06:00 Infinity recalculation and the owner notices run only
 The practice the owner asked for is mostly here.
 
 - **CI builds the api image on every merge to `main`** and pushes it to GitHub's container registry, tagged with the
-  commit SHA (and `main`). The package is private. The image holds the code (public anyway) and no secrets.
+  commit SHA (and `main`). **The package is public** (decision 3): the image holds the code (public anyway), the
+  runtime from PyPI, and no secrets, so a host pulls it without a token.
 - **Compose takes the image from a variable** (`AINDY_IMAGE`, defaulting to today's local build), so the laptop can
   still build locally and the server names a tag.
 - **A deploy is:** `AINDY_IMAGE=ghcr.io/…:<sha> docker compose … pull api && … up -d api mcp`, wrapped in one script on
@@ -182,8 +183,12 @@ Claude Code's `aindy` MCP keeps its `docker exec` and gains `DOCKER_HOST=ssh://<
 1. **Where.** A VPS (**recommended**: the practice is the point, and it is resizable) or a box at home. 8 GB of RAM,
    native Linux.
 2. **The private link.** Tailscale (**recommended**) or an SSH tunnel (§7).
-3. **The registry.** GitHub's container registry, private package (**recommended**: it is where the code already is,
-   and Actions can push with its own token).
+3. **The registry.** ✅ **Taken 2026-11-25 (owner): GitHub's container registry, public package**,
+   `ghcr.io/masterplanner25/aindy-api`. Scoped as private; checked before deciding: the repo is public and the image
+   carries no `.env` (the Dockerfile copies named folders only), so private would have bought a pull token on the
+   server and, if GitHub bills private packages, a cleanup job under the free plan's 500 MB. Also weighed: Docker
+   Hub (a second account, pull limits), the VPS provider's registry (ties it to decision 1), no registry (CI holds
+   an SSH key to the server).
 4. **How a deploy is triggered.** A script run by hand on the server first (**recommended**), a dispatched workflow
    once the script has run a few releases.
 5. **Where backups go off the server.** Object storage at the same provider, or pulled to the laptop nightly while it
@@ -201,8 +206,10 @@ Each phase is a PR, or a session on the server. A–D are repo work and need no 
 - **B. The bring-up, written down.** ✅ 2026-11-25: redis out of its profile, `AINDY_BIND_ADDR`, `DEPLOYMENT.md`
   rewritten as the runbook (the deploy script is phase C's, with the image). Fix `COMPOSE-REDIS-URL-UNCONDITIONAL-1`; rewrite `DEPLOYMENT.md` as the runbook
   for §6 (profiles, overlay, the `.env` checklist, the tunnel, the deploy script); `AINDY_BIND_ADDR`.
-- **C. Images from CI.** Build and push on merge to `main`; `AINDY_IMAGE` in compose; the deploy script with its
-  counter read and confirm line.
+- **C. Images from CI.** ✅ 2026-11-25: `.github/workflows/publish-image.yml` (builds and smokes on a PR that
+  touches the image's inputs; pushes `:<sha>` and `:main` on merge, plain docker commands with the job's own token),
+  `AINDY_IMAGE` for `api` and `mcp`, `scripts/deploy_stack.py` (pull, counters, backup, `.env`, recreate, health,
+  confirm line, `~/aindy-deploys.jsonl`).
 - **D. Dev mode.** The switch, the job classification with its test, mail to mailpit only; `AINDY_API_URL` for the
   watcher, the hook and Vite.
 - **E. The server.** Provision (decision 1), install, restore, run in dev mode beside the laptop, check.
