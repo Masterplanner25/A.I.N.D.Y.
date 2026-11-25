@@ -7,6 +7,10 @@ import { defineConfig } from "vite";
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
 const rootDir = process.cwd();
+// Where the dev proxy sends API calls. AINDY_API_URL is the one setting the watcher and the directing hook read too:
+// unset, the api on this laptop; on the server's tailnet address once the instance moves (OFF_LAPTOP_DEPLOYMENT_SPEC
+// §7). Keep `127.0.0.1` as the default, never `localhost` (see the proxy note below).
+const apiTarget = (process.env.AINDY_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 const platformComponentPaths = [
   "./src/components/platform/AgentConsole.jsx",
   "./src/components/platform/FlowEngineConsole.jsx",
@@ -195,13 +199,13 @@ export default defineConfig(({ mode }) => {
         // no `/version`, so `/api/version` (ui-kit's ROUTES.PLATFORM.VERSION) 404'd in dev
         // while working in prod. No backend route lives at a stripped `/api/*` path, so there
         // is nothing for the rewrite to serve.
-        "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
-        "/auth": { target: "http://127.0.0.1:8000", changeOrigin: true },
-        "/apps": { target: "http://127.0.0.1:8000", changeOrigin: true },
+        "/api": { target: apiTarget, changeOrigin: true },
+        "/auth": { target: apiTarget, changeOrigin: true },
+        "/apps": { target: apiTarget, changeOrigin: true },
         // The runtime's watcher routes (Settings, Watcher key). Missing until 2026-11-09: the card's request went to
         // Vite, came back as the SPA's HTML, and read "Could not make a key". `proxy-covers-client-paths.test.js`
         // now checks every prefix the client calls.
-        "/watcher": { target: "http://127.0.0.1:8000", changeOrigin: true },
+        "/watcher": { target: apiTarget, changeOrigin: true },
         // `/platform` is BOTH the SPA mount and the backend's operator API namespace
         // (51 routes). The split has to happen here rather than in a plugin middleware:
         // Vite installs the proxy ahead of plugin middlewares, so the proxy sees these
@@ -212,7 +216,7 @@ export default defineConfig(({ mode }) => {
         // asks for text/html — fetch/XHR sends */* or application/json — so document
         // requests render the SPA and every API call is forwarded verbatim.
         "/platform": {
-          target: "http://127.0.0.1:8000",
+          target: apiTarget,
           changeOrigin: true,
           bypass(req) {
             const method = req.method?.toUpperCase();
@@ -232,9 +236,9 @@ export default defineConfig(({ mode }) => {
         // POST hit Vite instead and 404'd, so client telemetry has never worked in dev
         // — the browser console fills with `:5173/client/vitals 404` on every page.
         // Same class as the `/platform` gap that swallowed every operator API call.
-        "/client": { target: "http://127.0.0.1:8000", changeOrigin: true },
-        "/health": { target: "http://127.0.0.1:8000", changeOrigin: true },
-        "/openapi.json": { target: "http://127.0.0.1:8000", changeOrigin: true },
+        "/client": { target: apiTarget, changeOrigin: true },
+        "/health": { target: apiTarget, changeOrigin: true },
+        "/openapi.json": { target: apiTarget, changeOrigin: true },
       },
     },
 

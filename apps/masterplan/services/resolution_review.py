@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from AINDY.platform_layer.user_ids import parse_user_id
 from apps.masterplan.services.resolution_service import BARE_NAME_KINDS
 from apps.masterplan.work_model import ResolutionAnswer, ResolutionClaim, ResolutionRun, Work
+from apps._shared.environment import outward_job
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,7 @@ def check_ceiling(db: Session, uid, questions: list, engines: list) -> None:
 # ── Weekly ────────────────────────────────────────────────────────────────────────────────
 
 
+@outward_job
 def weekly_resolution_checks() -> dict:
     """Scheduled job body: a core check for each owner who has run one, once a week, within the ceiling.
     Having run a check is the opt-in; nobody is checked who never asked for it."""

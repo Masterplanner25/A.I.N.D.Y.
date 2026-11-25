@@ -179,41 +179,46 @@ def _register_jobs() -> None:
 
 
 def _register_scheduled_jobs() -> None:
-    from AINDY.platform_layer.registry import register_scheduled_job
+    from apps._shared.environment import schedule_job
     from apps.tasks.services import task_service as task_services
     from AINDY.config import settings
 
-    register_scheduled_job(
+    schedule_job(
         "task_reminder_check",
         _scheduler_check_reminders,
+        outward=False,
         name="Task reminder check",
         trigger="interval",
         trigger_kwargs={"minutes": REMINDER_CHECK_INTERVAL_MINUTES},
     )
-    register_scheduled_job(
+    schedule_job(
         "task_recurrence_check",
         _scheduler_check_task_recurrence,
+        outward=False,
         name="Task recurrence check",
         trigger="cron",
         trigger_kwargs={"hour": "*/6"},
     )
-    register_scheduled_job(
+    schedule_job(
         "background_lease_heartbeat",
         lambda: task_services._heartbeat_lease_job(),
+        outward=False,
         name="Background task lease heartbeat",
         trigger="interval",
         trigger_kwargs={"seconds": 60},
     )
-    register_scheduled_job(
+    schedule_job(
         "wait_recovery_poll",
         _job_wait_recovery_poll,
+        outward=False,
         name="WAIT recovery poll",
         trigger="interval",
         trigger_kwargs={"seconds": 60},
     )
-    register_scheduled_job(
+    schedule_job(
         "resume_watchdog",
         _job_resume_watchdog,
+        outward=False,
         name="Flow resume watchdog (Redis failure recovery)",
         trigger="interval",
         trigger_kwargs={"minutes": settings.AINDY_WATCHDOG_INTERVAL_MINUTES},

@@ -281,6 +281,12 @@ def bootstrap() -> None:
             "System started with degraded domains: %s",
             ", ".join(failed_peripheral),
         )
+    from apps._shared.environment import JOB_SIDES, dev_mode
+
+    if dev_mode():
+        skipped = sorted(job for job, outward in JOB_SIDES.items() if outward)
+        logger.warning("[dev mode] AINDY_ENVIRONMENT=dev: %d outward jobs skip every run: %s",
+                       len(skipped), ", ".join(skipped))
 
 
 def bootstrap_models() -> None:

@@ -142,7 +142,7 @@ def _register_jobs() -> None:
 
 
 def _register_scheduled_jobs() -> None:
-    from AINDY.platform_layer.registry import register_scheduled_job
+    from apps._shared.environment import schedule_job
     from apps.automation.services.release_handoff_service import (
         TICK_INTERVAL_MINUTES,
         release_handoff_watch,
@@ -150,9 +150,10 @@ def _register_scheduled_jobs() -> None:
 
     # RELEASE_HANDOFF_SPEC §4: follow each handed-off release run. Idle (no GitHub call) unless a
     # handoff is open; four reads per open handoff per tick.
-    register_scheduled_job(
+    schedule_job(
         "release_handoff_watch",
         release_handoff_watch,
+        outward=True,
         name="Follow handed-off releases",
         trigger="interval",
         trigger_kwargs={"minutes": TICK_INTERVAL_MINUTES},
@@ -162,9 +163,10 @@ def _register_scheduled_jobs() -> None:
 
     # AUDIT_2026-11-01 §3: one email when a Nodus workflow keeps falling back or the LLM provider
     # fails. Off unless AINDY_OWNER_NOTICES; one embedding probe of OpenAI a tick when on.
-    register_scheduled_job(
+    schedule_job(
         "owner_notices_tick",
         owner_notices.owner_notices_tick,
+        outward=True,
         name="Tell the owner about silent failures",
         trigger="interval",
         trigger_kwargs={"minutes": owner_notices.TICK_INTERVAL_MINUTES},

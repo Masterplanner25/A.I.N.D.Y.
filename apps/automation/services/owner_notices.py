@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from sqlalchemy.orm import Session
+from apps._shared.environment import outward_job
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +230,7 @@ def _parse(value: Any) -> datetime:
 # ── The job ────────────────────────────────────────────────────────────────────────────────
 
 
+@outward_job
 def owner_notices_tick() -> dict[str, Any]:
     """Scheduled job body: its own session, every `TICK_INTERVAL_MINUTES`."""
     if not notices_enabled():

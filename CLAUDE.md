@@ -151,7 +151,10 @@ def register() -> None:
     #   (`test_agent_tool_result_schema.py`).
     #
     # THREE JOB MECHANISMS (confusing them shipped a wrong remedy, OPS-026):
-    #   register_scheduled_job  - registry            - APScheduler, runs on an interval
+    #   register_scheduled_job  - registry            - APScheduler, runs on an interval. NEVER call it directly:
+    #                             use apps._shared.environment.schedule_job(id, fn, outward=True|False, ...), and
+    #                             put @outward_job on fn if it spends, mails, calls GitHub or fetches new data, so
+    #                             dev mode skips it (OFF_LAPTOP_DEPLOYMENT_SPEC §5; test_dev_mode.py)
     #   register_job            - registry            - a SYNCHRONOUS callable, looked up later via
     #                                                   get_job("name"); registering does NOT make it async
     #   register_async_job      - NOT in the registry - background dispatch, in

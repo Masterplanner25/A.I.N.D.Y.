@@ -102,7 +102,7 @@ def test_a_tail_gives_whole_lines_and_correct_agent_until(projects):
 def test_post_refuses_a_non_loopback_url_and_an_event_with_text(sent):
     event = {"source": "claude_code", "project": "p", "agent_session_id": "s", "source_event_id": "e",
              "occurred_at": "2026-11-17T01:00:00Z", "agent_until": None}
-    with pytest.raises(ValueError, match="this laptop only"):
+    with pytest.raises(ValueError, match="this laptop or the tailnet only"):
         ingest.post_events([event], api_url="https://example.com", key="k", timeout=1)
     with pytest.raises(ValueError, match="refusing"):
         ingest.post_events([dict(event, content=SECRET)], api_url="http://127.0.0.1:8000", key="k", timeout=1)
@@ -119,7 +119,8 @@ def test_post_batches_by_500_with_the_watcher_key(sent):
     assert sent[0]["headers"]["X-platform-key"] == "kk"
 
 
-def test_config_defaults_and_ignore_list(tmp_path):
+def test_config_defaults_and_ignore_list(tmp_path, monkeypatch):
+    monkeypatch.delenv("AINDY_API_URL", raising=False)
     assert ingest.load_config(tmp_path) == {"ignore_projects": set(), "api_url": "http://127.0.0.1:8000"}
     (tmp_path / "directing.json").write_text(json.dumps({"ignore_projects": ["C--dev-private"]}))
     assert ingest.load_config(tmp_path)["ignore_projects"] == {"C--dev-private"}
@@ -214,3 +215,32 @@ def test_the_backfill_posts_with_yes_honours_since_and_the_ignore_list(projects,
     sent.clear()
     assert backfill.main(["--since", "2026-11-18", "--yes"], root=root, home=home) == 0
     assert sent == []
+
+
+# ── the server's address (OFF_LAPTOP_DEPLOYMENT_SPEC §7, 2026-11-25) ────────────────────────
+
+
+def _resolves_to(monkeypatch, *addresses):
+    monkeypatch.setattr(ingest.socket, "getaddrinfo",
+                        lambda host, port, **k: [(None, None, None, "", (a, port)) for a in addresses])
+
+
+def test_a_tailnet_address_is_allowed_and_anything_public_is_not(monkeypatch):
+    _resolves_to(monkeypatch, "100.101.102.103")
+    assert ingest.is_allowed_destination("http://100.101.102.103:8000")
+    assert ingest.is_allowed_destination("http://aindy-server.tail1234.ts.net:8000")
+    _resolves_to(monkeypatch, "93.184.216.34")
+    assert not ingest.is_allowed_destination("http://aindy-server.example.com:8000")
+    # A name with one tailnet and one public address is refused: every address must be private.
+    _resolves_to(monkeypatch, "100.101.102.103", "93.184.216.34")
+    assert not ingest.is_allowed_destination("http://split.example.com:8000")
+    _resolves_to(monkeypatch, "192.168.1.20")
+    assert not ingest.is_allowed_destination("http://192.168.1.20:8000"), "the LAN is not the tailnet"
+    assert not ingest.is_allowed_destination("ftp://127.0.0.1")
+
+
+def test_aindy_api_url_is_the_shared_setting_and_the_config_file_wins(tmp_path, monkeypatch):
+    monkeypatch.setenv("AINDY_API_URL", "http://100.101.102.103:8000")
+    assert ingest.load_config(tmp_path)["api_url"] == "http://100.101.102.103:8000"
+    (tmp_path / "directing.json").write_text(json.dumps({"api_url": "http://127.0.0.1:8000"}))
+    assert ingest.load_config(tmp_path)["api_url"] == "http://127.0.0.1:8000"

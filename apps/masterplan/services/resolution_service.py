@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.platform_layer.user_ids import parse_user_id
 from apps.masterplan.work_model import ResolutionAnswer, ResolutionRun, Work, WorkLink, WorkPresence
+from apps._shared.environment import outward_job
 
 logger = logging.getLogger(__name__)
 
@@ -451,6 +452,7 @@ def update_run_batch(db: Session, user_id: Any, run_id: str, *, woke: Any = None
     return {"handled": handled, "remaining": remaining, "status": run.status, "late_s": late}
 
 
+@outward_job
 def resolution_tick() -> dict:
     """Scheduled job body: advance each open check by one batch. Its own session; non-blocking guard.
 

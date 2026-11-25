@@ -1,6 +1,6 @@
 ---
 title: "Inventory — what A.I.N.D.Y. contains"
-last_verified: "2026-11-22"
+last_verified: "2026-11-24"
 api_version: "1.0"
 status: current
 owner: "app-team"
@@ -25,7 +25,7 @@ the audit's question. Live row counts are not here (they change): `python script
 | Python flow graphs | 82 | 1 |
 | Tables | 90 | 39 |
 | Nodus workflows (`.nd`) | 6 | |
-| `AINDY_*` flags read by our code | 54 | |
+| `AINDY_*` flags read by our code | 55 | |
 
 ## Domains
 
@@ -598,6 +598,7 @@ default it passes when `.env` says nothing; blank means compose does not set it.
 | `AINDY_DURABLE_CONTINUATION` | (runtime) | `false` |
 | `AINDY_EMAIL_VERIFY_TTL_HOURS` | (runtime) | `48` |
 | `AINDY_EMAIL_VERIFY_URL_TEMPLATE` | (runtime) | `""` |
+| `AINDY_ENVIRONMENT` | _shared |  |
 | `AINDY_GITHUB_APPROVE_TOKEN` | automation | `""` |
 | `AINDY_GITHUB_TOKEN` | automation | `""` |
 | `AINDY_IDENTITY_EVIDENCE_HALF_LIFE_DAYS` | identity |  |

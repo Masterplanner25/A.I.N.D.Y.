@@ -186,7 +186,7 @@ ignored (DEC-103).
   - `tests/unit/test_directing_events.py`;
   - decision 6 → FR-70 | `directing_events` (automation) |
 | **B** ✅ **built 2026-11-18** | The hook script and its `settings.json` entry; the backfill (dry run, then once to 10-10); the sign-in task runs it daily; hook ordering checked live (§3). As built:
-  - `scripts/directing_ingest.py`: the one ingester (loads the phase A parser from its file; loopback api only; refuses an event with any key beyond the six); config `~/.aindy/directing.json` (`ignore_projects`, `api_url`); key `AINDY_WATCHER_KEY` or `~/.aindy/watcher_key`;
+  - `scripts/directing_ingest.py`: the one ingester (loads the phase A parser from its file; loopback api only, or since 2026-11-25 a host whose every address is a Tailscale address, for the server (OFF_LAPTOP_DEPLOYMENT_SPEC §7); `AINDY_API_URL` when `directing.json` names no `api_url`; refuses an event with any key beyond the six); config `~/.aindy/directing.json` (`ignore_projects`, `api_url`); key `AINDY_WATCHER_KEY` or `~/.aindy/watcher_key`;
   - `scripts/directing_hook.py`: **starts a detached worker and returns** (0.19 s measured), because a `UserPromptSubmit` hook holds the prompt and a post takes 0.7–2 s. The worker reads the transcript's last 1 MB (transcripts reach 29 MB) and posts with a 10 s timeout; it gets the path, never the prompt. Log `~/.aindy/directing_hook.log` (counts and `newest_age_s`, no text);
   - `scripts/directing_backfill.py`: dry run by default, `--yes`, `--since`/`--days`, `--wait`;
   - the hook in the user-level `~/.claude/settings.json` (timeout 3 s); `~/.aindy/start-watcher.ps1` runs `--days 3 --yes --wait 900` at sign-in (log `~/.aindy/directing_backfill.log`);

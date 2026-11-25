@@ -132,11 +132,12 @@ def _register_jobs() -> None:
 
 
 def _register_scheduled_jobs() -> None:
-    from AINDY.platform_layer.registry import register_scheduled_job
+    from apps._shared.environment import schedule_job
 
-    register_scheduled_job(
+    schedule_job(
         "daily_eta_recalculation",
         _scheduler_recalculate_all_etas,
+        outward=False,
         name="Daily ETA projection recalculation",
         trigger="cron",
         trigger_kwargs={"hour": 6},
@@ -149,16 +150,18 @@ def _register_scheduled_jobs() -> None:
     # 06:00, which already carries the ETA recalculation.
     from apps.masterplan.services.resolution_review import weekly_resolution_checks
 
-    register_scheduled_job(
+    schedule_job(
         "masterplan_resolution_weekly",
         weekly_resolution_checks,
+        outward=True,
         name="Weekly resolution check",
         trigger="cron",
         trigger_kwargs={"day_of_week": "mon", "hour": 7, "minute": 30},
     )
-    register_scheduled_job(
+    schedule_job(
         "masterplan_resolution_tick",
         resolution_tick,
+        outward=True,
         name="Advance open resolution checks",
         trigger="interval",
         trigger_kwargs={"minutes": TICK_INTERVAL_MINUTES},

@@ -52,6 +52,7 @@ from apps.rippletrace.services.content_fetch import (
     parse_page_metadata,
     strip_html,
 )
+from apps._shared.environment import outward_job
 
 logger = logging.getLogger(__name__)
 
@@ -779,6 +780,7 @@ def poll_source(db: Session, source: ContentSourceDB) -> dict[str, Any]:
 _poll_lock = threading.Lock()
 
 
+@outward_job
 def poll_due_sources() -> dict[str, Any]:
     """Scheduled job body: poll every active source that is due.
 

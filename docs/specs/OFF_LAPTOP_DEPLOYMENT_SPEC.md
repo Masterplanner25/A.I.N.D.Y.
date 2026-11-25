@@ -8,7 +8,7 @@ owner: "app-team"
 
 # Off the laptop: A.I.N.D.Y. runs on a server, the laptop goes back to being a laptop
 
-**Status:** scoped 2026-11-23. §8's decisions are open except 3 (taken 2026-11-25). **Phases A–C built 2026-11-25** (§4; `DEPLOYMENT.md` is the runbook); D–F are not.
+**Status:** scoped 2026-11-23. §8's decisions are open except 3 (taken 2026-11-25). **Phases A–D built 2026-11-25** (§4, §5; `DEPLOYMENT.md` is the runbook); E–F need the server.
 
 **Origin.** The owner, 2026-11-23: *"right now the limit to developing and/or using my laptop fully is that I need to
 keep the app running."* The whole stack (api, `mcp`, postgres, mongo, redis, mailpit, the ngrok tunnel) runs in Docker
@@ -195,6 +195,12 @@ Claude Code's `aindy` MCP keeps its `docker exec` and gains `DOCKER_HOST=ssh://<
    is on. **Recommended: object storage**: the laptop is the machine being freed.
 6. **What dev mode turns off** (§5). Recommended: every scheduled job that spends money, sends mail or calls GitHub,
    plus real mail and the tunnel. Everything else runs, so a local stack still behaves like the real one.
+   **Built 2026-11-25 as proposed, for the owner to confirm:** nine outward jobs (`release_handoff_watch`,
+   `owner_notices_tick`, `masterplan_resolution_weekly`, `masterplan_resolution_tick`, and RippleTrace's poll,
+   archive, share drafts, piece answers and mention detection). The poll spends nothing, but it brings in new
+   pieces the other four act on. Seven inward jobs run: the 07:00 Infinity and 06:00 ETA recalculations, task
+   reminders and recurrence, the lease heartbeat, the wait recovery poll and the resume watchdog. Also off: real mail
+   (mailpit), both GitHub tokens, the ngrok token, durable agent continuation.
 7. **The laptop stack afterwards.** Kept as the dev stack, not started at sign-in (**recommended**), or removed.
 
 ## 9. Phases
@@ -210,8 +216,12 @@ Each phase is a PR, or a session on the server. A–D are repo work and need no 
   touches the image's inputs; pushes `:<sha>` and `:main` on merge, plain docker commands with the job's own token),
   `AINDY_IMAGE` for `api` and `mcp`, `scripts/deploy_stack.py` (pull, counters, backup, `.env`, recreate, health,
   confirm line, `~/aindy-deploys.jsonl`).
-- **D. Dev mode.** The switch, the job classification with its test, mail to mailpit only; `AINDY_API_URL` for the
-  watcher, the hook and Vite.
+- **D. Dev mode.** ✅ 2026-11-25: `docker-compose.dev.yml` (AINDY_ENVIRONMENT=dev, mail to mailpit, no GitHub or
+  ngrok tokens, no durable continuation); every scheduled job registered through `apps/_shared/environment.py`'s
+  `schedule_job(..., outward=)`, outward ones guarded by `@outward_job` on their definitions, and
+  `test_dev_mode.py` pinning the list; a boot warning naming the skipped jobs. `AINDY_API_URL` for Vite's proxy,
+  the directing hook (which now also accepts a Tailscale address, checked after DNS) and the watcher's sign-in
+  script. All of this is in our code: the runtime's scheduler needed no switch, so no FR.
 - **E. The server.** Provision (decision 1), install, restore, run in dev mode beside the laptop, check.
 - **F. Cutover.** §6 step 4, then two weeks with the laptop's volumes kept. The handoff and `OPERATOR_NOTES` say where
   the instance lives.

@@ -34,6 +34,7 @@ from apps.automation.services.github_actions import (
 )
 from apps.automation.services.github_actions import token as github_token
 from apps.automation.services.release_reply import SentMailbox, email_reply_enabled, reply_code
+from apps._shared.environment import outward_job
 
 logger = logging.getLogger(__name__)
 
@@ -640,6 +641,7 @@ def process(db: Session, handoff: ReleaseHandoff, github: GitHubActions, *, now:
     return entered
 
 
+@outward_job
 def release_handoff_watch() -> dict:
     """Scheduled job body (every minute): advance each open handoff. Its own session; non-blocking guard."""
     if not _tick_lock.acquire(blocking=False):

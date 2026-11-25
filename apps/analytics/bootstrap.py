@@ -168,11 +168,12 @@ def _job_infinity_recalc(payload: dict, db):
 
 
 def _register_scheduled_jobs() -> None:
-    from AINDY.platform_layer.registry import register_scheduled_job
+    from apps._shared.environment import schedule_job
 
-    register_scheduled_job(
+    schedule_job(
         "daily_infinity_score_recalculation",
         _scheduler_recalculate_all_scores,
+        outward=False,
         name="Daily Infinity score recalculation",
         trigger="cron",
         trigger_kwargs={"hour": 7},
