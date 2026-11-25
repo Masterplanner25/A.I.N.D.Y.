@@ -1,147 +1,208 @@
 ---
 title: "Server Deployment"
-last_verified: "2026-07-15"
+last_verified: "2026-11-25"
 api_version: "1.0"
 status: current
 owner: "apps-team"
 ---
 # Server Deployment
 
-How to deploy the app-profile server (this repo's apps running on top of the
-installed `aindy-runtime`). This document belongs to A.I.N.D.Y..
+How A.I.N.D.Y. runs on a host, and how it moves to a new one. Rewritten 2026-11-25 as the runbook for
+`docs/specs/OFF_LAPTOP_DEPLOYMENT_SPEC.md` §6 (phase B). Until the move, the instance is the owner's laptop; the
+commands are the same on a Linux server.
 
-## The deploy artifact
+**Not for going live.** The api is private: bound to loopback, or to a tailnet address on a server. The only public
+path is the read-only MCP tunnel (`public-mcp`, below).
 
-The repo ships a self-contained server deploy artifact:
+## 1. What runs
 
-| File | Role |
-|---|---|
-| `Dockerfile` | Builds the app-profile server image (apps + installed runtime). |
-| `docker-compose.prod.yml` | Production-style overlay: `api` + `postgres` (pgvector) + optional `redis`. |
-| `docker/entrypoint.sh` | Schema bootstrap by ownership, then `exec` the serving command. |
-| `docker/init-pgvector.sql` | Creates the `vector` extension on first Postgres init. |
-| `scripts/ensure_pgvector.py` | Idempotent `CREATE EXTENSION IF NOT EXISTS vector` (managed-PG safe). |
-
-### What the entrypoint does
-
-`docker/entrypoint.sh` runs before the server binds, in a clean ownership split:
-
-1. `python scripts/ensure_pgvector.py` — guarantees the pgvector extension exists
-   (the runtime's schema build includes a `Vector` embedding column).
-2. `aindy-runtime bootstrap-schema` — the **runtime** builds its own tables from
-   packaged metadata and stamps `alembic_version_runtime` (aindy-runtime>=1.7.0).
-3. `python scripts/deploy_bootstrap.py` — the **app** builds its tables: fresh DB →
-   `create_all` + `alembic stamp head`; existing DB → `alembic upgrade head`.
-4. `exec aindy-runtime serve` — binds `AINDY_HOST:AINDY_PORT`, discovers
-   `./aindy_plugins.json` → `apps.bootstrap` (the 17-app profile), and starts the
-   scheduler heartbeat that drives `nodus_vm` continuation.
-
-This split is required: a bare `alembic upgrade head` on a fresh DB would replay the
-100+ pre-split revisions at a drifted runtime schema, which the boot guard rejects.
-The `deploy-bootstrap-guard` CI workflow regression-locks this ordering.
-
-## Running it
+Two compose files and three profiles. **Every `up` and `down` names all of them**: an `up` or `down` without a
+profile leaves that profile's services as they were.
 
 ```bash
-# From the repo root, with a .env holding the required secrets (see below):
-docker compose -f docker-compose.prod.yml up -d
-
-# With the distributed job queue / event bus (adds redis):
-EXECUTION_MODE=distributed docker compose -f docker-compose.prod.yml --profile full up -d
+COMPOSE="docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail --profile public-mcp"
+$COMPOSE up -d
 ```
 
-### Required environment
+| Service | From | Memory cap | Notes |
+|---|---|---|---|
+| `api` | `docker-compose.prod.yml` | 1,536 MB | the app; port 8000 on `AINDY_BIND_ADDR` (default `127.0.0.1`) |
+| `postgres` | `docker-compose.prod.yml` | none | pgvector, pg16; volume `postgres_data` |
+| `redis` | `docker-compose.prod.yml` | none | **always runs** (since 2026-11-25): the rate limiter and wait registry need it |
+| `mongo` | `docker-compose.mongo.yml` | 768 MB | the social layer's database, `aindy_default`; volume `mongo_data` |
+| `mailpit` | profile `mail` | none | a mail sink on 127.0.0.1:8025; the api sends real mail unless `.env` points it here |
+| `mcp`, `mcp-tunnel` | profile `public-mcp` | 768 MB, 128 MB | read-only MCP for claude.ai and ChatGPT, over ngrok (`scripts/CLAUDE.md`) |
 
-Set these in your deploy `.env` (see `.env.example` for the full reference — never
-commit real values):
+The `full` profile gates nothing any more; it stays in the commands so older ones still read the same. Before
+2026-11-25 it gated redis, and an `up` without it served 500 on every rate-limited route, `/health` included
+(`COMPOSE-REDIS-URL-UNCONDITIONAL-1`).
 
-| Var | Required | Notes |
+**Only one ngrok agent can hold the public domain.** Never run `public-mcp` on two hosts at once.
+
+### The image and what its entrypoint does
+
+`Dockerfile` builds the app image (apps + the pinned runtime from `constraints.txt`); `mcp` uses the same image.
+`docker/entrypoint.sh` runs before the server binds:
+
+1. `python scripts/ensure_pgvector.py`: the `vector` extension exists.
+2. `aindy-runtime bootstrap-schema`: the **runtime** builds or migrates its own tables (`alembic_version_runtime`).
+   **A runtime pin move therefore migrates the database at boot**; the adoption record (`docs/runtime/`) is the gate.
+3. `python scripts/deploy_bootstrap.py`: the **app's** tables (fresh database: `create_all` + `stamp head`; existing:
+   `alembic upgrade head`).
+4. `exec aindy-runtime serve`: binds, loads `./aindy_plugins.json` (16 domains), starts the scheduler.
+
+The `deploy-bootstrap-guard` CI workflow runs this against a blank Postgres on every PR.
+
+## 2. The host
+
+- **Linux with native `docker-ce`**, not Docker Desktop (whose VM inflates every postgres round trip; see §8).
+- **8 GB of RAM, about 40 GB of disk.** The stack takes 3.5–4 GB; builds do not happen here once images come from CI
+  (phase C). Until then a build needs about 2 GB free on top.
+- **Tailscale**, and nothing inbound but SSH, from the tailnet once it works.
+- A clone of this repo (compose files, `docker/`, `scripts/`), and Python 3 for the backup scripts (stdlib only).
+
+## 3. `.env`
+
+Copy it from the laptop, file to file, never through a chat or an issue. Compose reads it from the repo root.
+
+| Group | Keys | On a new host |
 |---|---|---|
-| `SECRET_KEY` | ✅ | JWT signing key, ≥32 chars. |
-| `AINDY_API_KEY` | ✅ | Bearer token for machine-to-machine API calls. |
-| `PERMISSION_SECRET` | ✅ | App-layer permission signing key (separate from `SECRET_KEY`). |
-| `OPENAI_API_KEY` | ✅ (prod) | Memory embeddings + LLM calls; runtime refuses to boot in prod if unset. |
-| `POSTGRES_PASSWORD` | recommended | Overrides the compose default. |
-| `MONGO_URL` | optional | Social layer (degradable) — leave unset to run without Mongo. |
-| `ANTHROPIC_API_KEY` | optional* | *Required to enable the Claude agent planner — see below. |
+| **Must match the data** | `AINDY_SECRET_PROVIDER_KEY_ENCRYPTION_KEYS` | **Copy exactly.** It decrypts the per-user provider keys stored in the database; without it every stored key is unreadable, and startup refuses `AINDY_PROVIDER_KEYS=per_user` (the compose default). |
+| Signing | `SECRET_KEY`, `PERMISSION_SECRET`, `AINDY_API_KEY` | Copy. A new `SECRET_KEY` signs everyone out. |
+| Model keys | `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY` | Copy. |
+| Mail | `AINDY_SMTP_HOST`, `_PORT`, `_USER`, `_PASSWORD`, `_FROM`, `_STARTTLS` | Copy. This is real mail (owner notices, the release handoff gate). On a host that must not send, point them at `mailpit` (port 1025, STARTTLS false). |
+| GitHub | `AINDY_GITHUB_TOKEN`, `AINDY_GITHUB_APPROVE_TOKEN` | Copy. The approve token acts on runtime releases: only the instance holds it. |
+| Public MCP | `NGROK_AUTHTOKEN`, `AINDY_MCP_PUBLIC_URL` | Copy; used only with `public-mcp`. |
+| Links in mail | `AINDY_EMAIL_VERIFY_URL_TEMPLATE`, `AINDY_PASSWORD_RESET_URL_TEMPLATE`, `ALLOWED_ORIGINS` | Copy. They name the client on the laptop (`localhost:5173`), which is where the owner signs in. |
+| Behaviour flags | every other `AINDY_*` | Copy as they are. |
+| **Server only** | `AINDY_BIND_ADDR` | The server's tailnet address (§6). Never `0.0.0.0`. |
+| Server only, before the first `up` | `POSTGRES_PASSWORD` | Optional (postgres has no host port), but it can only be set before postgres first initialises its volume. |
+| Laptop only | `DATABASE_URL` | For host-side tools; compose sets the containers' own. Leave it out on a server. |
 
-`DATABASE_URL` and `REDIS_URL` are wired for you inside `docker-compose.prod.yml`;
-override them only for an external/managed datastore.
+`.env.example` lists the rest of what the runtime reads.
 
-`AINDY_BOOT_MODE` is defaulted to `app-profile` inside `docker-compose.prod.yml` — this
-is what makes A.I.N.D.Y.'s 16 domains load. (`aindy-runtime serve` setdefaults it to
-`runtime-only`, a platform-only profile with **no** apps, so a bare `serve` outside compose
-must set `AINDY_BOOT_MODE=app-profile` explicitly.)
+## 4. Backups
 
-## Enabling the Claude planner (BUILD_PLAN Track 2)
-
-By default the agent planner is `runtime_local` — a deterministic, no-egress engine.
-To have **Claude author real multi-step plans**, flip the planner backend. The
-mechanism is already proven end-to-end (BUILD_PLAN "Validated foundation"); the only
-prerequisite is an environment with model egress.
-
-### Requirements
-
-- **Outbound HTTPS to `api.anthropic.com`.** This is the one thing GitHub-hosted
-  runners lack (RTR-1-NODUS-APPTOOL-500), which is why Track 2 is a *deploy*
-  concern, not a code one. A self-hosted runner or any cloud Linux box works.
-- **`ANTHROPIC_API_KEY`** set in the deploy `.env` (`docker-compose.prod.yml` already
-  plumbs it into the `api` service).
-- **The `anthropic` SDK** — already a hard dependency of the image (`pyproject.toml`),
-  so nothing to install.
-- **Stable, long-lived containers** — `nodus_vm` continuation is driven by the
-  scheduler heartbeat that `aindy-runtime serve` starts; ephemeral CI runners can't
-  provide it. `docker compose` on a persistent host does.
-
-### The flip
-
-Add to your deploy `.env`:
+`scripts/backup_stack.py` and `scripts/restore_stack.py` (phase A, built 2026-11-25; the spec's §4 has the detail).
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...              # your real key
-AINDY_AGENT_PLANNER_BACKEND=anthropic_chat
-# AINDY_CLAUDE_PLANNER_MODEL=             # optional — pin a model id; default is valid
+python3 scripts/backup_stack.py                 # postgres + mongo + nodus_state -> ~/aindy-backups/<UTC stamp>/, keeps 14
+python3 scripts/restore_stack.py                # TEST the newest: scratch databases, counts compared; changes nothing
+python3 scripts/restore_stack.py <stamp> --live --yes   # replace the stack's data (api and mcp must be stopped)
 ```
 
-No app code changes — the `anthropic_chat` planner is already registered and
-available; this only makes it the default.
+A backup is about 130 MB and 45 s. The live restore keeps the database it replaced (`aindy_replaced_<stamp>`) and a
+`-before-restore` backup; drop them once the restored stack is checked. On the laptop the task "A.I.N.D.Y. backup"
+runs it nightly. On a server, a cron line does (`0 3 * * * cd ~/aindy && python3 scripts/backup_stack.py`), and the
+copies must also leave the server (decision 5).
 
-### Verifying
+## 5. Checking a running stack
 
-Dispatch the `serve-run-completion` workflow (or run the same steps on the host)
-with `planner_backend=anthropic_chat`. Its SDK preflight (`client.models.list()`)
-checks egress first, so a still-blocked network fails *there*, clearly, instead of as
-an opaque create-500. Once it passes, the full loop runs: register → create (**Claude
-plans**) → approve → execute → `completed` — the last mile the no-egress
-`runtime_local` run cannot cover.
+```bash
+API=$($COMPOSE ps -q api)
+curl -s http://$AINDY_BIND_ADDR:8000/health                      # 200; a 500 with /api/version 200 means redis is down
+docker exec $API python -c "import AINDY, AINDY._version as v; print(v.__version__, list(AINDY.__path__))"
+#   -> the pinned runtime, from site-packages
+curl -s http://$AINDY_BIND_ADDR:8000/api/version | python3 -m json.tool | grep -E 'boot_profile|app_plugin'
+#   -> default-apps, 16 plugins
+docker exec $($COMPOSE ps -q postgres) psql -U aindy -Atc \
+  "select version_num from alembic_version_runtime union all select version_num from alembic_version"
+#   -> the heads the latest adoption record names
+docker logs $($COMPOSE ps -q postgres) 2>&1 | grep -c "terminating any other active server processes"   # 0
+```
 
-## Tuning for slower / cold-start-heavy hosts
+**Before any recreate of the api, read the counters** the open adoption record names (OPS-041: they reset on every
+recreate), e.g. `curl -s http://127.0.0.1:8000/metrics/ | grep -E 'mismatch|gated'`.
 
-The app profile is heavier than a bare runtime — a full agent run cold-starts the ~17-app
-stack in a per-execution Nodus worker, fans out concurrent memory/embedding writes, and
-holds DB transactions across multi-step execution. The runtime's *default* limits are tuned
-for a bare runtime and are too tight for this profile on a slower host, producing failures
-that look unrelated: `register` hangs, executions fail with `Nodus worker exceeded 45000ms
-hard limit`, or `QueuePool limit … reached`. `docker-compose.prod.yml` therefore ships more
-generous, **env-overridable** defaults for the app profile:
+## 6. Moving to a new host
+
+The order matters more than any one command: **two instances acting on two copies of the data both spend, both mail,
+and both act on GitHub.** Until dev mode exists (spec §5, phase D), a host restored from the real data runs every
+real job the moment its api starts. **So the server's api does not start while the laptop's does, until phase D.**
+
+1. **Provision** (§2). Join the tailnet. Note the server's tailnet address.
+2. **Install.** Clone the repo; write `.env` (§3) with `AINDY_BIND_ADDR=<tailnet address>`; build or pull the image
+   (phase C: `AINDY_IMAGE`).
+3. **Restore a recent backup, without the api:**
+   ```bash
+   $COMPOSE create                       # every container and volume, nothing started
+   $COMPOSE up -d postgres mongo redis
+   scp -r laptop:~/aindy-backups/<stamp> ~/aindy-backups/
+   python3 scripts/restore_stack.py <stamp>                 # the test first
+   python3 scripts/restore_stack.py <stamp> --live --yes
+   ```
+   With dev mode (phase D), start the api here in dev mode and check it (§5, the Collaborator, a few real reads, a
+   stored provider key read). Without it, stop: the check happens at cutover.
+4. **Cut over, in one sitting:**
+   1. On the laptop: read the counters, then `$COMPOSE stop api mcp mcp-tunnel`. The data stops changing.
+   2. `python scripts/backup_stack.py` on the laptop; copy that folder over; `restore_stack.py <stamp> --live --yes`
+      on the server.
+   3. On the server: `$COMPOSE up -d`. Check §5.
+   4. Point the laptop's clients at the server (spec §7: the watcher, the directing hook, Vite's proxy, Claude Code's
+      `aindy` MCP with `DOCKER_HOST=ssh://<server>`), then check each: a watcher post, a directing prompt, signing in
+      through Vite, an MCP read, claude.ai's connector.
+   5. Remove the stack from the laptop's sign-in (Docker Desktop's start at login, or `restart: no`), so the laptop
+      never brings a second instance back.
+5. **Keep the laptop's volumes for two weeks**, untouched. Delete them only after a restore from the server's own
+   backups has passed.
+
+**To go back** within those two weeks: stop the server's stack, back it up, restore that onto the laptop with
+`--live --yes`, start the laptop's stack.
+
+## 7. Releasing to a running host
+
+Today, on the host itself:
+
+```bash
+git pull
+$COMPOSE build api                 # a source change ~1 min; a runtime pin move 10-15 min (OPS-004)
+# read the counters (§5)
+$COMPOSE up -d api mcp             # recreates both: mcp shares the image
+# check (§5)
+```
+
+On the laptop a build can be killed for memory: stop Vite and drop the Docker VM's page cache first
+(`wsl -d docker-desktop sh -c "sync; echo 3 > /proc/sys/vm/drop_caches"`). Phase C replaces the build with a pull of a
+CI-built image by commit SHA, so a rollback is the same command with the previous SHA.
+
+## 8. Tuning for slower / cold-start-heavy hosts
+
+The app profile is heavier than a bare runtime: a full agent run cold-starts the 16-domain stack in a per-execution
+Nodus worker, fans out concurrent memory/embedding writes, and holds DB transactions across multi-step execution. The
+runtime's *default* limits are too tight for it on a slow host, and the failures look unrelated: `register` hangs,
+`Nodus worker exceeded 45000ms hard limit`, `QueuePool limit … reached`. `docker-compose.prod.yml` ships
+**env-overridable** defaults:
 
 | Var | Compose default | Runtime default | Guards against |
 |---|---|---|---|
 | `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` / `DB_STATEMENT_TIMEOUT_MS` | `120000` | `30000` | slow requests getting their connection reaped mid-transaction |
-| `AINDY_NODUS_MAX_EXECUTION_MS` / `AINDY_NODUS_BOOT_ALLOWANCE_MS` | `120000` / `60000` | `30000` / `15000` | the per-run 17-app cold-start blowing the Nodus budget |
+| `AINDY_NODUS_MAX_EXECUTION_MS` / `AINDY_NODUS_BOOT_ALLOWANCE_MS` | `120000` / `60000` | `30000` / `15000` | the per-run cold-start blowing the Nodus budget |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | `20` / `40` | `10` / `20` | the embedding fan-out exhausting the pool during execution |
 | `AINDY_RUNTIME_CALLBACK_TIMEOUT_SECS` | `90` | `30` | scheduled-job callbacks cold-importing the app in a subprocess, several at once on the hour |
 
-These are floors that let the full run→`completed` loop breathe; raise them further only if a
-genuinely slow host still trips a limit. **Note:** the real fix for a *pathologically* slow
-datastore (e.g. Docker Desktop on Windows, where each pg round-trip is inflated) is a faster
-host, not larger limits — bigger pools against a slow pg make it worse. Use a native-Linux
-Docker engine (a Linux box, or `docker-ce` inside a WSL2 distro — **not** Docker Desktop's
-VM engine, which WSL integration silently substitutes).
+Raise them only if a genuinely slow host still trips a limit. The real fix for a *pathologically* slow datastore
+(Docker Desktop on Windows inflates each postgres round trip) is a faster host, not larger limits: bigger pools
+against a slow postgres make it worse. Use a native-Linux Docker engine.
+
+## 9. Enabling the Claude planner (BUILD_PLAN Track 2)
+
+By default the agent planner is `runtime_local`, a deterministic, no-egress engine. For Claude to author multi-step
+plans, the host needs outbound HTTPS to `api.anthropic.com` (GitHub-hosted runners lack it: RTR-1-NODUS-APPTOOL-500),
+`ANTHROPIC_API_KEY` in `.env`, and long-lived containers (continuation is driven by the scheduler `serve` starts).
+Then add to `.env`:
+
+```bash
+AINDY_AGENT_PLANNER_BACKEND=anthropic_chat
+# AINDY_CLAUDE_PLANNER_MODEL=             # optional; the default is valid
+```
+
+To verify, dispatch the `serve-run-completion` workflow with `planner_backend=anthropic_chat`: its SDK preflight
+checks egress first, then the full loop runs (register → create → approve → execute → `completed`).
 
 ## References
 
-- [BUILD_PLAN.md](../architecture/BUILD_PLAN.md) — Track 2 and the validated foundation.
-- `.env.example` — full environment variable reference.
-- [MIGRATION_POLICY.md](./MIGRATION_POLICY.md) — schema/migration discipline.
-- `TECH_DEBT.md` — RTR-1-NODUS-APPTOOL-500 (egress), APP-DEPLOY-1 (closed).
+- `docs/specs/OFF_LAPTOP_DEPLOYMENT_SPEC.md`: the move, its decisions (§8) and phases.
+- `docs/operations/OPERATOR_NOTES.md`: OPS-004 (slow builds), OPS-041 (counters).
+- [MIGRATION_POLICY.md](./MIGRATION_POLICY.md): schema and migration discipline.
+- `.env.example`: the environment the runtime reads.
+- `TECH_DEBT.md`: COMPOSE-REDIS-URL-UNCONDITIONAL-1 (closed), RTR-1-NODUS-APPTOOL-500 (egress).

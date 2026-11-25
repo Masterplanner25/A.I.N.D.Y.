@@ -8,8 +8,13 @@
 #   Model keys (as used by the domains): OPENAI_API_KEY, DEEPSEEK_API_KEY, ANTHROPIC_API_KEY
 #   Optional: MONGO_URL (social layer; degradable), POSTGRES_PASSWORD
 #
-# Redis (distributed job queue / cross-instance events) is opt-in, mirroring the runtime:
-#   set EXECUTION_MODE=distributed and run:  docker compose --profile full up -d
+# Redis always runs (since 2026-11-25, COMPOSE-REDIS-URL-UNCONDITIONAL-1): the api's rate limiter and wait
+# registry use REDIS_URL, and without redis every rate-limited route, /health included, answers 500. The `full`
+# profile no longer gates anything; `--profile full` in older commands is harmless.
+#
+# AINDY_BIND_ADDR (default 127.0.0.1) is the host address the api's port binds to. On a server, set it to the
+# server's private (tailnet) address so the laptop reaches it and nothing else does (OFF_LAPTOP_DEPLOYMENT_SPEC §7).
+# Never 0.0.0.0 on a host with a public interface: signup is open.
 services:
 
   api:
@@ -19,6 +24,8 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     # Hard memory ceiling for the api container — the API process PLUS the Nodus warm-pool
     # workers that run agent steps (nodus_vm is this app's default backend, so every agent
@@ -298,10 +305,10 @@ services:
       NODUS_RUN_STATE_ROOT: /var/lib/aindy/nodus-state
     volumes:
       - nodus_state:/var/lib/aindy/nodus-state
-    # Loopback only (owner, 2026-11-07): signup is open and needs no verified email, so a port on
-    # 0.0.0.0 let anyone on the same network make an account. The host is used from this laptop alone.
+    # Loopback by default (owner, 2026-11-07): signup is open and needs no verified email, so a port on
+    # 0.0.0.0 let anyone on the same network make an account. A server sets AINDY_BIND_ADDR to its tailnet address.
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${AINDY_BIND_ADDR:-127.0.0.1}:8000:8000"
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/health"]
       interval: 15s
@@ -337,6 +344,8 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     entrypoint: ["python", "/app/scripts/mcp_server.py"]
     command: ["--transport", "http", "--host", "0.0.0.0", "--port", "8080"]
@@ -397,7 +406,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    profiles: ["full"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

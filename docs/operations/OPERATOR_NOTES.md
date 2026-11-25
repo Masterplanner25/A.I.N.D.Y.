@@ -45,14 +45,6 @@ Facts with no failure behind them (ids, timings, recipes) sit in each section's 
 
 ## The local stack (Docker on this Windows host)
 
-### OPS-001: `/health` 500s and the api sits `unhealthy` without `--profile full`
-**Applies when:** bringing the stack up, or `/health` fails while `/api/version` answers. **Seen:** 2026-09-16
-(26 minutes, first read as a runtime regression). **Retire when:** `COMPOSE-REDIS-URL-UNCONDITIONAL-1` closes.
-`docker-compose.prod.yml` sets `REDIS_URL` unconditionally while `redis` is in profile `full`, and the runtime's rate
-limiter uses Redis with no fallback. Every rate-limited route raises, `/health` included; `/api/version` has no limit,
-so it looks fine. The scheduler-saturation line shows up too, as a victim. **Fix:** always up and down with
-`--profile full --profile mail --profile public-mcp`.
-
 ### OPS-002: a filtered `docker rm` deleted the live api
 **Applies when:** removing containers. **Seen:** 2026-10-22.
 `docker ps -q --filter … --format …` ignores `--format` under `-q`, so the filter matched more than it showed.
@@ -326,5 +318,8 @@ A column widening is invisible to `bootstrap-schema`'s exit code. **Fix:** check
 
 Kept so the old lesson is not re-learned. Each says what replaced it.
 
+- **OPS-001 (was "`/health` 500s and the api sits `unhealthy` without `--profile full`").** Retired 2026-11-25 with
+  `COMPOSE-REDIS-URL-UNCONDITIONAL-1`: redis no longer sits behind a profile, so a plain `up` starts it. The symptom
+  still means redis: `/health` 500 with `/api/version` 200 is a redis that is down, not missing from the command.
 - **OPS-901 (was "before a runtime release, message the runtime session").** Replaced 2026-11-02 by the owner: the
   runtime session is often not open, and a message to it bounces or expires. Questions go in `docs/runtime/`.
