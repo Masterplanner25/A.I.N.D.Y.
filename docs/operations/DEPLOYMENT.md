@@ -117,8 +117,8 @@ recreate), e.g. `curl -s http://127.0.0.1:8000/metrics/ | grep -E 'mismatch|gate
 ## 6. Moving to a new host
 
 The order matters more than any one command: **two instances acting on two copies of the data both spend, both mail,
-and both act on GitHub.** Until dev mode exists (spec §5, phase D), a host restored from the real data runs every
-real job the moment its api starts. **So the server's api does not start while the laptop's does, until phase D.**
+and both act on GitHub.** So exactly one stack runs without dev mode (below) at any time: the laptop until step 4,
+the server after it.
 
 1. **Provision** (§2). Join the tailnet. Note the server's tailnet address.
 2. **Install.** Clone the repo; write `.env` (§3) with `AINDY_BIND_ADDR=<tailnet address>` and
@@ -131,8 +131,9 @@ real job the moment its api starts. **So the server's api does not start while t
    python3 scripts/restore_stack.py <stamp>                 # the test first
    python3 scripts/restore_stack.py <stamp> --live --yes
    ```
-   With dev mode (phase D), start the api here in dev mode and check it (§5, the Collaborator, a few real reads, a
-   stored provider key read). Without it, stop: the check happens at cutover.
+   Then start the server **in dev mode** (`-f docker-compose.dev.yml`, no `public-mcp`; below) and check it: §5, the
+   boot warning, the Collaborator through an SSH tunnel or `AINDY_API_URL`, a few real reads, a stored provider key
+   read.
 4. **Cut over, in one sitting:**
    1. On the laptop: read the counters, then `$COMPOSE stop api mcp mcp-tunnel`. The data stops changing.
    2. `python scripts/backup_stack.py` on the laptop; copy that folder over; `restore_stack.py <stamp> --live --yes`
@@ -148,6 +149,37 @@ real job the moment its api starts. **So the server's api does not start while t
 
 **To go back** within those two weeks: stop the server's stack, back it up, restore that onto the laptop with
 `--live --yes`, start the laptop's stack.
+
+### Dev mode: any stack that is not the instance
+
+`docker-compose.dev.yml` (phase D, 2026-11-25), layered on, and **without** `public-mcp`:
+
+```bash
+DEV="docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml -f docker-compose.dev.yml --profile full --profile mail"
+$DEV up -d
+docker logs $($DEV ps -q api) 2>&1 | grep "\[dev mode\]"   # no line, no dev mode
+```
+
+It sets `AINDY_ENVIRONMENT=dev`, under which the nine outward scheduled jobs (anything that spends, mails, calls
+GitHub or fetches new data the instance acts on; the list is `tests/unit/test_dev_mode.py`) return
+`{"skipped": true, "reason": "dev_mode"}` on every run. It also sends all mail to mailpit (`127.0.0.1:8025`), blanks
+both GitHub tokens and the ngrok token, and turns off durable agent continuation. Everything else runs.
+
+**Where a dev stack is used:** the server between steps 3 and 4 of the move; the laptop after it (decision 7), never
+started at sign-in. A recreate must keep naming the overlay: an `up` without `-f docker-compose.dev.yml` takes dev
+mode away. `deploy_stack.py` does not know about it, so deploy to a dev stack with `$DEV up -d --no-build api` after
+setting `AINDY_IMAGE`.
+
+**A new scheduled job** registers with `schedule_job(..., outward=True|False)` from `apps/_shared/environment.py`;
+an outward one also carries `@outward_job` on its function. `test_dev_mode.py` fails otherwise.
+
+### Pointing the laptop's clients at a server
+
+One setting, `AINDY_API_URL` (a Windows user environment variable, e.g. `http://<tailnet address>:8000`), read by
+Vite's dev proxy (`client/vite.config.ts`), the directing hook and backfill (`scripts/directing_ingest.py`; an
+`api_url` in `~/.aindy/directing.json` still wins), and the watcher's sign-in script (`~/.aindy/start-watcher.ps1`).
+Unset, all three use `http://127.0.0.1:8000`. The hook sends only to loopback or to a host whose every address is a
+Tailscale address. Restart Vite and the watcher, and open a new Claude Code session, after changing it.
 
 ## 7. Releasing to a running host
 

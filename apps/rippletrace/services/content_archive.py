@@ -44,6 +44,7 @@ from urllib.parse import urlparse
 from sqlalchemy.orm import Session
 
 from apps.rippletrace.drop import DropPointDB
+from apps._shared.environment import outward_job
 
 logger = logging.getLogger(__name__)
 
@@ -546,6 +547,7 @@ def archive_step(db: Session, *, user_id, limit: int = BATCH, fetchers=None, pau
             "status": archive_status(db, user_id=user_id)}
 
 
+@outward_job
 def archive_published_work() -> dict:
     """Scheduled job body: one batch per owner with pieces to fetch or remember. Its own session and a
     non-blocking guard, like the feed poll, since the scheduler does not prevent overlap."""

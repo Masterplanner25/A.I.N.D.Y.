@@ -19,6 +19,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from apps.rippletrace.drop import DropPointDB
+from apps._shared.environment import outward_job
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ def _outcome(out: dict[str, Any] | None) -> dict | None:
     return envelope.get("data") or {}
 
 
+@outward_job
 def write_share_drafts() -> dict:
     """Scheduled job body: one due piece per owner. Its own session and a non-blocking guard, like the
     archive job, since the scheduler does not prevent overlap."""

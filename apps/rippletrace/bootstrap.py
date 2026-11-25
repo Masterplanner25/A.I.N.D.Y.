@@ -108,7 +108,7 @@ def _register_scheduled_jobs() -> None:
     so the handler carries its own non-blocking re-entrancy guard rather than relying
     on the scheduler to prevent overlap.
     """
-    from AINDY.platform_layer.registry import register_scheduled_job
+    from apps._shared.environment import schedule_job
     from apps.rippletrace.services.content_ingest import (
         POLL_JOB_INTERVAL_MINUTES,
         poll_due_sources,
@@ -119,9 +119,10 @@ def _register_scheduled_jobs() -> None:
         detect_due_mentions,
     )
 
-    register_scheduled_job(
+    schedule_job(
         "rippletrace_poll_content_sources",
         poll_due_sources,
+        outward=True,
         name="Poll rippletrace content sources",
         trigger="interval",
         trigger_kwargs={"minutes": POLL_JOB_INTERVAL_MINUTES},
@@ -133,9 +134,10 @@ def _register_scheduled_jobs() -> None:
     # per run until the catalogue is done, then only what is new. Guarded like the feed poll.
     from apps.rippletrace.services.content_archive import JOB_INTERVAL_MINUTES, archive_published_work
 
-    register_scheduled_job(
+    schedule_job(
         "rippletrace_archive_published_work",
         archive_published_work,
+        outward=True,
         name="Store and remember published writing",
         trigger="interval",
         trigger_kwargs={"minutes": JOB_INTERVAL_MINUTES},
@@ -143,9 +145,10 @@ def _register_scheduled_jobs() -> None:
     # Share drafts for each newly published piece (owner, 2026-10-25), one piece per owner a run.
     from apps.rippletrace.services.share_nodus import JOB_INTERVAL_MINUTES as SHARE_INTERVAL, write_share_drafts
 
-    register_scheduled_job(
+    schedule_job(
         "rippletrace_share_drafts",
         write_share_drafts,
+        outward=True,
         name="Write share drafts for new pieces",
         trigger="interval",
         trigger_kwargs={"minutes": SHARE_INTERVAL},
@@ -153,16 +156,18 @@ def _register_scheduled_jobs() -> None:
     # What each newly published piece answers (ARTICLE_ANSWERS_SPEC B2, owner 2026-11-08), one per owner a run.
     from apps.rippletrace.services.answers_nodus import JOB_INTERVAL_MINUTES as ANSWERS_INTERVAL, write_piece_answers
 
-    register_scheduled_job(
+    schedule_job(
         "rippletrace_piece_answers",
         write_piece_answers,
+        outward=True,
         name="Store what each new piece answers",
         trigger="interval",
         trigger_kwargs={"minutes": ANSWERS_INTERVAL},
     )
-    register_scheduled_job(
+    schedule_job(
         "rippletrace_detect_mentions",
         detect_due_mentions,
+        outward=True,
         name="Detect rippletrace content mentions",
         trigger="interval",
         trigger_kwargs={"minutes": DETECTION_JOB_INTERVAL_MINUTES},

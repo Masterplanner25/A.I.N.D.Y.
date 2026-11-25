@@ -56,6 +56,7 @@ from apps.rippletrace.services.mention_search import (
     search,
 )
 from apps.rippletrace.services.threadweaver import analyze_drop_point, classify_connection_type
+from apps._shared.environment import outward_job
 
 logger = logging.getLogger(__name__)
 
@@ -518,6 +519,7 @@ def detect_batch(
 _detect_lock = threading.Lock()
 
 
+@outward_job
 def detect_due_mentions() -> dict[str, Any]:
     """Scheduled job body. Opt-in: does nothing unless the flag is set.
 

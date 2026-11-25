@@ -1,0 +1,36 @@
+# Dev mode (OFF_LAPTOP_DEPLOYMENT_SPEC §5, phase D): a stack that must not act on the world.
+#
+# Layer it on for any stack that is not the instance: the laptop once the server holds the data, or a server during
+# the parallel run before cutover. Leave out `--profile public-mcp` (only the instance holds the public domain):
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml -f docker-compose.dev.yml \
+#     --profile full --profile mail up -d
+#
+# What it changes:
+# - AINDY_ENVIRONMENT=dev: the nine outward scheduled jobs skip every run (apps/_shared/environment.py; the list
+#   is in tests/unit/test_dev_mode.py). Everything else runs, so the stack still behaves like the real one.
+# - Mail goes to mailpit (http://127.0.0.1:8025), never out: verification, password resets, owner notices.
+# - No GitHub tokens: nothing can read or act on runtime releases, even by hand.
+# - No durable agent continuation: a parked agent run copied from the instance is not resumed here.
+# - No ngrok token: the tunnel cannot take the public domain even if `public-mcp` is started by mistake.
+#
+# The api logs "[dev mode] ... outward jobs skip every run" at boot. No line, no dev mode.
+x-dev-env: &dev-env
+  AINDY_ENVIRONMENT: "dev"
+  AINDY_SMTP_HOST: "mailpit"
+  AINDY_SMTP_PORT: "1025"
+  AINDY_SMTP_USER: ""
+  AINDY_SMTP_PASSWORD: ""
+  AINDY_SMTP_STARTTLS: "false"
+  AINDY_GITHUB_TOKEN: ""
+  AINDY_GITHUB_APPROVE_TOKEN: ""
+  AINDY_DURABLE_CONTINUATION: "false"
+
+services:
+  api:
+    environment: *dev-env
+  mcp:
+    environment: *dev-env
+  mcp-tunnel:
+    environment:
+      NGROK_AUTHTOKEN: ""

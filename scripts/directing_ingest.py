@@ -8,16 +8,21 @@ Stdlib only, and it imports nothing from `apps` or the runtime: the parser is lo
 any Python 3.9+ without the repo installed.
 
 **Never sends text** (§6): an event is `{source, project, agent_session_id, source_event_id, occurred_at, agent_until}`,
-and `post_events` refuses anything else. **Never leaves the laptop**: the api URL must be loopback.
+and `post_events` refuses anything else. **Never leaves the laptop or the owner's tailnet**: the api URL must be
+loopback, or a host whose every address is a Tailscale address (100.64.0.0/10, fd7a:115c:a1e0::/48), checked after DNS
+so a name cannot point it elsewhere. The tailnet was added 2026-11-25 for the server (OFF_LAPTOP_DEPLOYMENT_SPEC §7).
 
-Config: `~/.aindy/directing.json`, optional, `{"ignore_projects": ["C--dev-private"], "api_url": "http://127.0.0.1:8000"}`.
+Config: the api URL is `api_url` in `~/.aindy/directing.json`, else `AINDY_API_URL` (the one setting the watcher and
+Vite read too), else `http://127.0.0.1:8000`. `{"ignore_projects": ["C--dev-private"], "api_url": "..."}`.
 Key: the person's watcher key (decision 6, FR-70), `AINDY_WATCHER_KEY` or `~/.aindy/watcher_key`.
 """
 from __future__ import annotations
 
 import importlib.util
+import ipaddress
 import json
 import os
+import socket
 import urllib.request
 from pathlib import Path
 from typing import Iterable, Optional
@@ -28,6 +33,7 @@ BATCH = 500  # the route's MAX_BATCH
 EVENT_KEYS = frozenset({"source", "project", "agent_session_id", "source_event_id", "occurred_at", "agent_until"})
 DEFAULT_API_URL = "http://127.0.0.1:8000"
 LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
+TAILNET = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 AINDY_DIR = Path.home() / ".aindy"
 
@@ -53,9 +59,11 @@ def load_config(home: Path = AINDY_DIR) -> dict:
         data = {}
     ignore = data.get("ignore_projects") if isinstance(data, dict) else None
     api_url = data.get("api_url") if isinstance(data, dict) else None
+    if not (isinstance(api_url, str) and api_url):
+        api_url = os.environ.get("AINDY_API_URL", "").strip() or DEFAULT_API_URL
     return {
         "ignore_projects": {str(p) for p in ignore} if isinstance(ignore, list) else set(),
-        "api_url": api_url if isinstance(api_url, str) and api_url else DEFAULT_API_URL,
+        "api_url": api_url,
     }
 
 
@@ -72,6 +80,26 @@ def load_key(home: Path = AINDY_DIR) -> Optional[str]:
 def is_loopback(api_url: str) -> bool:
     parsed = urlparse(api_url)
     return parsed.scheme in {"http", "https"} and (parsed.hostname or "") in LOOPBACK
+
+
+def _private_address(address: str) -> bool:
+    ip = ipaddress.ip_address(address.split("%")[0])
+    return ip.is_loopback or any(ip in net for net in TAILNET)
+
+
+def is_allowed_destination(api_url: str) -> bool:
+    """Loopback, or a host whose every resolved address is loopback or on the tailnet."""
+    if is_loopback(api_url):
+        return True
+    parsed = urlparse(api_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, parsed.port or 80, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return False
+    addresses = {info[4][0] for info in infos}
+    return bool(addresses) and all(_private_address(a) for a in addresses)
 
 
 def read_tail_lines(path: Path, max_bytes: int) -> list[str]:
@@ -103,8 +131,8 @@ def events_for(path: Path, *, tail_bytes: Optional[int] = None, ignore: Iterable
 
 def post_events(events: list[dict], *, api_url: str, key: str, timeout: float) -> dict:
     """Post in batches of 500; answers the summed counts. Raises on a refusal or an unreachable api."""
-    if not is_loopback(api_url):
-        raise ValueError(f"directing events go to this laptop only, not {api_url!r}")
+    if not is_allowed_destination(api_url):
+        raise ValueError(f"directing events go to this laptop or the tailnet only, not {api_url!r}")
     totals = {"accepted": 0, "duplicates": 0, "extended": 0, "rejected": 0}
     for start in range(0, len(events), BATCH):
         batch = events[start:start + BATCH]
