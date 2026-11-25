@@ -20,8 +20,9 @@ owner: "app-team"
 > assigns numbers to findings of its own that never pass through this file (**FR-28**, acknowledge
 > authz, is one), which is how our FR-29 was nearly filed as FR-28. Read the ledger before numbering.
 >
-> **Open as of 2026-11-22:** none of ours. **FR-55 shipped in 2.39.0** and closes on our report of a ported loop (`RUNTIME_2_41_0_UPGRADE.md` §2). **FR-6 is closed:** items 2–3 shipped in 2.0.0 and the runtime's 2.40.0 handoff
-> said so. The scoped-traces question (`RUNTIME_2_34_0_UPGRADE.md` §6) is answered by DEC-137 and closed on our live re-read (584 nodes,`n> 583 edges scoped, as unscoped; `RUNTIME_2_41_0_UPGRADE.md` §5).
+> **Open as of 2026-11-25:** none of ours. **FR-55 is closed** on our report of the ported loop's first real run (`RUNTIME_2_41_0_UPGRADE.md` §2). **FR-6 is closed:** items 2–3 shipped in 2.0.0 and the runtime's 2.40.0 handoff
+> said so. The scoped-traces question (`RUNTIME_2_34_0_UPGRADE.md` §6) is answered by DEC-137 and closed on our live re-read (584 nodes,
+> 583 edges scoped, as unscoped; `RUNTIME_2_41_0_UPGRADE.md` §5).
 >
 > **Open as of 2026-11-18 (later):** FR-55 (the runtime logged it in #983; its ask (b) needs a new DEC revisiting
 > DEC-012), FR-6 items 2–3. FR-14 closed on runtime #983 (the README's entrypoint recipe).
@@ -522,7 +523,7 @@ caller passing `False`.
 Nothing in the app depends on these rows. We leave both admission caps unset until this ships, and
 we do not edit the rows by hand: they are the evidence.
 
-## FR-55 — a guest Nodus wait can only end on an event or in failure: no timed resume, a resume restarts the script without its state, and the 30-minute deadline cannot be set per workflow 🟡 SHIPPED in 2.39.0 (#986 `prior_state`, DEC-135; #987 `await_event_for`, DEC-136; (c) answered by (a)); adopted 2026-11-22, closes on our ported-loop report — filed 2026-10-22, P3
+## FR-55 — a guest Nodus wait can only end on an event or in failure: no timed resume, a resume restarts the script without its state, and the 30-minute deadline cannot be set per workflow ✅ SHIPPED in 2.39.0 (#986 `prior_state`, DEC-135; #987 `await_event_for`, DEC-136; (c) answered by (a)); adopted 2026-11-22; **closed 2026-11-25** on the ported loop's first real run (2026-11-23 07:30Z: 5 parks, 5 timed resumes, every wake inside the window, no fallback; `RUNTIME_2_41_0_UPGRADE.md` §2) — filed 2026-10-22, P3
 
 **apps-monolith ref:** found 2026-10-22 while scoping the next `.nd` port. Owner, the same day:
 **A.I.N.D.Y.'s own workflows are written in Nodus** (#486, our `CLAUDE.md`). Two ports have shipped,
