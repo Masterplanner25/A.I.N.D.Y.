@@ -8,7 +8,7 @@ owner: "app-team"
 
 # Off the laptop: A.I.N.D.Y. runs on a server, the laptop goes back to being a laptop
 
-**Status:** scoped 2026-11-23. §8's decisions are open. **Phase A built 2026-11-25** (§4); B–F are not.
+**Status:** scoped 2026-11-23. §8's decisions are open. **Phases A and B built 2026-11-25** (§4; `DEPLOYMENT.md` is the runbook); C–F are not.
 
 **Origin.** The owner, 2026-11-23: *"right now the limit to developing and/or using my laptop fully is that I need to
 keep the app running."* The whole stack (api, `mcp`, postgres, mongo, redis, mailpit, the ngrok tunnel) runs in Docker
@@ -198,7 +198,8 @@ Each phase is a PR, or a session on the server. A–D are repo work and need no 
 
 - **A. Backup and restore.** `scripts/backup_stack.*` and `restore_stack.*` (postgres, mongo, `nodus_state`), a
   restore tested into a scratch database with row counts compared. Run nightly on the laptop until the move.
-- **B. The bring-up, written down.** Fix `COMPOSE-REDIS-URL-UNCONDITIONAL-1`; rewrite `DEPLOYMENT.md` as the runbook
+- **B. The bring-up, written down.** ✅ 2026-11-25: redis out of its profile, `AINDY_BIND_ADDR`, `DEPLOYMENT.md`
+  rewritten as the runbook (the deploy script is phase C's, with the image). Fix `COMPOSE-REDIS-URL-UNCONDITIONAL-1`; rewrite `DEPLOYMENT.md` as the runbook
   for §6 (profiles, overlay, the `.env` checklist, the tunnel, the deploy script); `AINDY_BIND_ADDR`.
 - **C. Images from CI.** Build and push on merge to `main`; `AINDY_IMAGE` in compose; the deploy script with its
   counter read and confirm line.

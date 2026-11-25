@@ -405,7 +405,12 @@ defaults are the account's `models.list()` on 2026-09-16, and nothing re-derives
 
 ---
 
-## COMPOSE-REDIS-URL-UNCONDITIONAL-1: the documented single-instance `up` serves 500 on every rate-limited route, `/health` included (app-owned, P2)
+## COMPOSE-REDIS-URL-UNCONDITIONAL-1: ✅ CLOSED 2026-11-25 — the documented single-instance `up` serves 500 on every rate-limited route, `/health` included (app-owned, was P2)
+
+**Closed 2026-11-25 (off-laptop phase B):** the second option, inverted: redis left the `full` profile, so it
+runs whenever the api does, and `api` and `mcp` wait for it healthy. `REDIS_URL` stays unconditional. Redis idles at
+about 6 MB, so making it optional bought nothing. `docker compose config --services` with no profile now lists it;
+`tests/unit/test_compose_deploy_shape.py` guards it, and `DEPLOYMENT.md` was rewritten as the runbook. OPS-001 retired.
 
 **Found 2026-09-16 during the 2.19.0 adoption, and it was first read as the release.** The
 stack was brought up as `DEPLOYMENT.md` line 47 documents — `docker compose -f

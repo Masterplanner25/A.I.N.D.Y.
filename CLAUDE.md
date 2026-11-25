@@ -76,8 +76,9 @@ MSYS_NO_PATHCONV=1 docker run --rm --network aindy-apps-monolith_default -v "$(p
 docker exec <postgres> psql -U aindy -d aindy -c "drop database parity_scratch"
 ```
 
-**`--profile full` is not optional on this stack:** without redis every rate-limited route 500s, `/health` included,
-while `/api/version` looks fine (OPS-001, `COMPOSE-REDIS-URL-UNCONDITIONAL-1`).
+**Redis always runs** (since 2026-11-25; `--profile full` no longer gates it and is kept in the commands harmlessly).
+Without redis every rate-limited route 500s, `/health` included, while `/api/version` looks fine: that pair means
+redis is down. Moving the stack to another host: `docs/operations/DEPLOYMENT.md` (the runbook).
 
 ---
 
@@ -377,7 +378,7 @@ could recur, add an entry there, not here; the file says how, and when one becom
 
 **The API hangs:** `[Scheduler] job 'scheduler_wait_tick' skipped a run (max_instances)` names the victim, never the
 culprit. Before reading application code, load the `api-hang-triage` skill and check, cheapest first, postgres
-reinitialisations, host paging and boot progress. `/health` 500 with `/api/version` 200 is redis missing (OPS-001).
+reinitialisations, host paging and boot progress. `/health` 500 with `/api/version` 200 is redis down.
 
 ---
 
