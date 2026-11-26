@@ -181,8 +181,8 @@ Claude Code's `aindy` MCP keeps its `docker exec` and gains `DOCKER_HOST=ssh://<
 ## 8. Decisions: the owner's
 
 1. **Where.** A VPS (**recommended**: the practice is the point, and it is resizable) or a box at home. 8 GB of RAM,
-   native Linux. ✅ **Taken 2026-11-25 (owner): a VPS**, Ubuntu 24.04 (what `scripts/server/setup_host.sh` is
-   written for). The provider is the owner's account to open.
+   native Linux. ✅ **Taken 2026-11-25 (owner): a VPS**: Hetzner Cloud, Hillsboro OR, x86, 4 vCPU, 8 GB, 150 GB,
+   Ubuntu 26.04 (opened 2026-11-26). Backups off it go to Backblaze B2.
 2. **The private link.** Tailscale (**recommended**) or an SSH tunnel (§7). ✅ **Taken 2026-11-25 (owner):
    Tailscale.** It also settles the directing hook's rule: since phase D it sends to loopback or a host whose every
    address is a Tailscale one.

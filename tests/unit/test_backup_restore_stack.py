@@ -59,6 +59,18 @@ def test_mongo_counts_come_from_the_tools_own_log():
     assert bs.mongo_restored(restored, "aindy_default_restore_check") == ({"posts": 2}, 0)
 
 
+def test_mongo_counts_read_the_newer_tools_backticks():
+    # mongo-tools 100.20.1 (a fresh `mongo:7` pull, 2026-11-26) quotes namespaces; 100.15.0 did not.
+    dumped = "2026-11-26T04:00:50.9+0000\tdone dumping `aindy_default.posts` (2 documents)\n"
+    assert bs.mongo_dumped(dumped, "aindy_default") == {"posts": 2}
+    restored = ("2026-11-26T04:00:50.9+0000\tfinished restoring `aindy_default_restore_check.social_metrics_history` "
+                "(14 documents, 0 failures)\n"
+                "2026-11-26T04:00:50.9+0000\tfinished restoring `aindy_default_restore_check.posts` "
+                "(2 documents, 0 failures)\n")
+    assert bs.mongo_restored(restored, "aindy_default_restore_check") == (
+        {"social_metrics_history": 14, "posts": 2}, 0)
+
+
 def test_the_social_database_is_the_runtimes_name_not_the_urls(monkeypatch):
     # AINDY/db/mongo_setup.py reads MONGO_DB_NAME (default aindy_default); compose's URL path names an empty one.
     import importlib
