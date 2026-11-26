@@ -8,8 +8,8 @@ owner: "apps-team"
 # Server Deployment
 
 How A.I.N.D.Y. runs on a host, and how it moves to a new one. Rewritten 2026-11-25 as the runbook for
-`docs/specs/OFF_LAPTOP_DEPLOYMENT_SPEC.md` §6 (phase B). Until the move, the instance is the owner's laptop; the
-commands are the same on a Linux server.
+`docs/specs/OFF_LAPTOP_DEPLOYMENT_SPEC.md` §6 (phase B). **Since 2026-11-26 the instance is the server** (Hetzner,
+Ubuntu 26.04, reached over Tailscale; §6 was run end to end). The laptop keeps a dev stack (§6, dev mode).
 
 **Not for going live.** The api is private: bound to loopback, or to a tailnet address on a server. The only public
 path is the read-only MCP tunnel (`public-mcp`, below).
@@ -92,6 +92,7 @@ Copy it from the laptop, file to file, never through a chat or an issue. Compose
 | Behaviour flags | every other `AINDY_*` | Copy as they are. |
 | **Server only** | `AINDY_BIND_ADDR` | The server's tailnet address (§6). Never `0.0.0.0`. |
 | **Server only** | `COMPOSE_PROJECT_NAME=aindy-apps-monolith` | The laptop's project is named after its folder; the server's clone is `~/aindy`. Without this the server's containers and volumes get another name, and the backup scripts (which look for `aindy-apps-monolith`) find nothing. |
+| **Server only** | `FORWARDED_ALLOW_IPS=<the server's compose subnet>` | `mcp` trusts `X-Forwarded-For` only from this range, and compose's default (`172.19.0.0/16`) is the laptop's. Read the server's with `docker network inspect aindy-apps-monolith_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'` (it was `172.18.0.0/16`). Wrong, the consent page's rate limit counts every caller as one. |
 | Server only, before the first `up` | `POSTGRES_PASSWORD` | Optional (postgres has no host port), but it can only be set before postgres first initialises its volume. |
 | Laptop only | `DATABASE_URL` | For host-side tools; compose sets the containers' own. Leave it out on a server. |
 
@@ -181,12 +182,16 @@ the server after it.
    1. On the laptop: read the counters, then `$COMPOSE stop api mcp mcp-tunnel`. The data stops changing.
    2. `python scripts/backup_stack.py` on the laptop; copy that folder over; `restore_stack.py <stamp> --live --yes`
       on the server.
-   3. On the server: `$COMPOSE up -d`. Check §5.
+   3. On the server: `python3 scripts/deploy_stack.py <sha> --instance --services api,mcp,mcp-tunnel`, with the
+      image the server already runs. **Name `mcp-tunnel`**: the default recreates `api,mcp` only, and the tunnel is
+      not running yet. Check §5, that the api has no `[dev mode]` line, and through the public URL that
+      `/.well-known/oauth-protected-resource/mcp` is 200 and `/health` is 404.
    4. Point the laptop's clients at the server (spec §7: the watcher, the directing hook, Vite's proxy, Claude Code's
       `aindy` MCP with `DOCKER_HOST=ssh://<server>`), then check each: a watcher post, a directing prompt, signing in
       through Vite, an MCP read, claude.ai's connector.
-   5. Remove the stack from the laptop's sign-in (Docker Desktop's start at login, or `restart: no`), so the laptop
-      never brings a second instance back.
+   5. Remove the stack from the laptop's sign-in, so the laptop never brings a second instance back. Done on
+      2026-11-26 by `$COMPOSE stop` of the whole laptop stack (`restart: unless-stopped` keeps it stopped through
+      reboots; the volumes stay) and disabling the laptop's nightly backup task, which the server's replaces.
 5. **Keep the laptop's volumes for two weeks**, untouched. Delete them only after a restore from the server's own
    backups has passed.
 

@@ -12,6 +12,9 @@ The repo's working experience: problems met while running, testing and releasing
 what resolved them. The code does not show these. `CLAUDE.md` holds the rules every change must follow; this holds the
 experience behind them. `SESSION_HANDOFF.md` (gitignored) holds only *where we are*.
 
+**Where the instance lives: the server, since 2026-11-26** (`DEPLOYMENT.md`; reached over Tailscale as `aindy@`).
+The laptop runs only a dev stack. A container, log or counter read for the real stack is read on the server.
+
 **Before troubleshooting an unfamiliar failure, look here.** Each entry starts with when it applies, so you need not
 read them all:
 
@@ -311,6 +314,19 @@ read them before a rebuild.
 ### OPS-042: a schema change passed but the column did not change
 **Applies when:** checking a migration or `bootstrap-schema`. **Seen:** 2026-09-23 (FR-43).
 A column widening is invisible to `bootstrap-schema`'s exit code. **Fix:** check the column, not the exit code.
+
+## The server
+
+### OPS-043: the nightly backup hangs at the off-server copy
+**Applies when:** `nightly_backup.sh` stops after "backup written", with `restic cat config` (or any restic command)
+running at 0% CPU. **Seen:** 2026-11-26.
+restic retries a refused request with backoff and prints nothing unless it is given a timeout. Run it by hand with
+`offsite.env` exported and `timeout 40 restic cat config` to see the error. **"The key '<keyID>' is not valid"** from
+Backblaze B2 means the endpoint is another region's: a B2 key works only at its own region's endpoint, which the
+bucket's page shows (the first was `us-east-005`; `us-west-004` refused it). **"repository does not exist"** is the
+right answer before the first backup, which then creates it. Before running restic, check `offsite.env` line by line
+for shape without printing values: a password pasted into `RESTIC_PASSWORD_FILE` is echoed by restic's error as a
+file name, and had to be replaced.
 
 ---
 

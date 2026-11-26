@@ -57,13 +57,12 @@ print(json.dumps(payload['runtime'], sort_keys=True))
 "
 # Expected: boot_profile=default-apps, app_plugins_loaded=True, app_plugin_count=16
 
-# Local stack — BOTH compose files AND all THREE profiles, every up/down (see the trap below).
-# `public-mcp` (since 2026-11-11) is the read-only MCP server for claude.ai and ChatGPT and its ngrok tunnel;
-# drop it to keep the stack private, but then stop `mcp-tunnel mcp` explicitly, since an up/down without the
-# profile leaves them running.
-docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail --profile public-mcp up -d
-docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml --profile full --profile mail --profile public-mcp build api   # after a merge you want live (`mcp` shares the image; recreate both)
-# A source-only change rebuilds in ~a minute; a pin move takes 10-15 min. Slower: OPERATOR_NOTES OPS-004.
+# THE INSTANCE RUNS ON THE SERVER since 2026-11-26 (Hetzner, reached over Tailscale; docs/operations/DEPLOYMENT.md).
+# A release: on the server, `git pull && python3 scripts/deploy_stack.py <sha>` (CI's image; keeps the stack's mode).
+# The laptop's stack is a DEV STACK: the dev overlay, never `public-mcp` (only the instance holds the public domain),
+# never started at sign-in. Without the overlay it would run the paid, mailing and GitHub jobs on a second copy.
+docker compose -f docker-compose.prod.yml -f docker-compose.mongo.yml -f docker-compose.dev.yml --profile full --profile mail up -d
+# The laptop's .env sets AINDY_IMAGE (a CI image): do not `build api` while it does (DEPLOYMENT.md §7).
 
 # Schema-default parity guard, locally (what CI Step 6 does): migrate a scratch DB FROM EMPTY
 # inside the api image, then diff models vs. migrations. PYTHONPATH is load-bearing —
@@ -352,7 +351,7 @@ Claude Code is connected to MCP server `aindy` (local scope), read-only as the o
 up. Owner, 2026-10-14: other AIs are *access* to the Infinity Algorithm's state, never a second product. Launcher,
 exposure rules and probing: `scripts/CLAUDE.md`. **claude.ai and ChatGPT read it too, since 2026-11-11** (owner): the
 same seven reads over OAuth at `$AINDY_MCP_PUBLIC_URL/mcp`, compose profile `public-mcp`. That tunnel is the only public
-path; the api stays on `127.0.0.1`.
+path; the api answers only on loopback or the server's tailnet address.
 
 ### Every paid call names the user whose key pays (FR-59)
 

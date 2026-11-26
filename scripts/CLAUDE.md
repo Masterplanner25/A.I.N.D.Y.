@@ -13,6 +13,8 @@ does it feed the algorithm? Persist outcomes and references, not transcripts.
   memory reads **as the owner, read-only**, through
   `docker exec -i -e AINDY_MCP_SERVER_USER_ID=<uid> <api> python /app/scripts/mcp_server.py`.
   **Use these for the owner's Work facts instead of asking for a paste.** The api container must be up.
+  Since the cutover (2026-11-26) that container is on the server: the entry carries `DOCKER_HOST=ssh://aindy@<tailnet
+  address>`, so `docker exec` runs there over SSH (the laptop's SSH key must be in its agent).
 - **Why a launcher and not `aindy-runtime mcp-server`:** since 2.28.0 (FR-53a) the runtime's server
   loads our plugins itself, so the launcher no longer does. It keeps the read-only allowlist and refuses
   `AINDY_MCP_SERVER_ALLOW_WRITES`. A plugin that fails to load now stops the MCP server;
@@ -74,13 +76,14 @@ count for anyone (FR-65, shipped).
   1.2.1 sends a per-user key as `X-Platform-Key`, ends a session after `AINDY_WATCHER_IDLE_TIMEOUT` seconds without
   input (default 300), and sends `session_ended` on stop (FR-65). The SDK reads the key from the environment only, so
   from PowerShell, at the repo root:
-  `$env:AINDY_WATCHER_KEY = (Get-Content ~/.aindy/watcher_key -Raw).Trim(); $env:AINDY_WATCHER_API_URL = 'http://127.0.0.1:8000'; venv/Scripts/aindy-watcher.exe`
+  `$env:AINDY_WATCHER_KEY = (Get-Content ~/.aindy/watcher_key -Raw).Trim(); $env:AINDY_WATCHER_API_URL = $env:AINDY_API_URL; venv/Scripts/aindy-watcher.exe`
   (`--dry-run` first to see what it would send; set the URL, since the SDK defaults to `localhost`).
 - **On the owner's laptop it starts at sign-in** (2026-11-11): the scheduled task "A.I.N.D.Y. watcher" runs
   `~/.aindy/start-watcher.ps1` 2 minutes after sign-in, which does the line above unless a watcher is already running
   (log `~/.aindy/watcher.log`). "A.I.N.D.Y. client (Vite)" does the same for `npm run dev` (`~/.aindy/start-vite.ps1`,
-  log `~/.aindy/vite.log`). The stack itself comes back with Docker Desktop (start at login on; `restart: unless-stopped`),
-  `mcp` and `mcp-tunnel` included. Both scripts live outside the repo.
+  log `~/.aindy/vite.log`). Both scripts live outside the repo, and both follow the user environment variable
+  `AINDY_API_URL`, set since the cutover (2026-11-26) to the server's tailnet address. The laptop's own stack no
+  longer starts: it was stopped at cutover, and `restart: unless-stopped` keeps a stopped container stopped.
 - **`focus_quality` before 2026-11-11 03:20:19Z is not comparable with after.** SDK 1.1.0 and earlier inflated
   `focused_seconds` and `focus_score` (ten minutes read as about 605) and fired `distraction_detected` too early.
 - **The key:** a watcher key from Settings (Watcher key), in `AINDY_WATCHER_KEY` or `~/.aindy/watcher_key`. Never the

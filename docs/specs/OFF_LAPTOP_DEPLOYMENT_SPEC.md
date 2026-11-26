@@ -8,7 +8,7 @@ owner: "app-team"
 
 # Off the laptop: A.I.N.D.Y. runs on a server, the laptop goes back to being a laptop
 
-**Status:** scoped 2026-11-23. **Every §8 decision taken** (3 on 2026-11-25, the rest the same day: the owner took the recommendations). **Phases A–D built 2026-11-25** (§4, §5; `DEPLOYMENT.md` is the runbook). **E's repo half built 2026-11-25** (§9); its other half is the server itself, which needs the owner's accounts. F follows E.
+**Status:** scoped 2026-11-23. **Every §8 decision taken** (3 on 2026-11-25, the rest the same day: the owner took the recommendations). **Phases A–D built 2026-11-25** (§4, §5; `DEPLOYMENT.md` is the runbook). **E done 2026-11-26** (the server, in dev mode, its backups in B2 restore-tested). **F done 2026-11-26: the server is the instance**; the laptop's volumes are kept until about 2026-12-10 (§9 F).
 
 **Origin.** The owner, 2026-11-23: *"right now the limit to developing and/or using my laptop fully is that I need to
 keep the app running."* The whole stack (api, `mcp`, postgres, mongo, redis, mailpit, the ngrok tunnel) runs in Docker
@@ -235,10 +235,16 @@ Each phase is a PR, or a session on the server. A–D are repo work and need no 
   `scripts/server/nightly_backup.sh` (backup, the Sunday restore test, the restic copy off the server, an optional
   dead-man's ping); `deploy_stack.py` keeps the running stack's mode, so a deploy to a dev-mode server cannot make it
   a second instance (`--dev` / `--instance` to change it on purpose). Proven in a throwaway Ubuntu container: two
-  nights, two encrypted snapshots, a restore from the copy. **Still to do, on the server:** DEPLOYMENT.md §6 steps
-  1-3.
+  nights, two encrypted snapshots, a restore from the copy. ✅ **Server half 2026-11-26:** Hetzner (decision 1),
+  restored from the laptop's backup, run in dev mode, checked; the nightly copy to Backblaze B2 restored and passed
+  the restore test. Two things the real server taught are in #643 (mongo-tools 100.20's backticks;
+  `COMPOSE_PROJECT_NAME`, LF and the image-age rule in the runbook).
 - **F. Cutover.** §6 step 4, then two weeks with the laptop's volumes kept. The handoff and `OPERATOR_NOTES` say where
-  the instance lives.
+  the instance lives. ✅ **Done 2026-11-26, about 10 minutes of api downtime:** counters read, the laptop's api, `mcp`
+  and tunnel stopped, a final backup (no table written during the dump) restored live on the server, the server
+  deployed `--instance` with the tunnel; the watcher, Vite, the directing hook and Claude Code's `aindy` MCP pointed at
+  it; the owner checked signing in and claude.ai's connector. **Still to do:** delete the laptop's volumes after
+  2026-12-10, once a restore from the server's own backups has passed (the Sunday test does one).
 
 ## 10. Risks
 
