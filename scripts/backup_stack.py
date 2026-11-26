@@ -147,8 +147,9 @@ def pg_heads(pg: str, user: str, db: str) -> dict[str, str | None]:
     return heads
 
 
-_DUMPED = re.compile(r"done dumping (\S+) \((\d+) documents?\)")
-_RESTORED = re.compile(r"finished restoring (\S+) \((\d+) documents?, (\d+) failures?\)")
+# mongo-tools 100.20 quotes the namespace in backticks; 100.15 did not. Both are read.
+_DUMPED = re.compile(r"done dumping `?([^\s`]+)`? \((\d+) documents?\)")
+_RESTORED = re.compile(r"finished restoring `?([^\s`]+)`? \((\d+) documents?, (\d+) failures?\)")
 
 
 def mongo_dumped(stderr: str, db: str) -> dict[str, int]:

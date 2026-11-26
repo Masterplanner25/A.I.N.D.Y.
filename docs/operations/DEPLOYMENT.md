@@ -61,7 +61,8 @@ The `deploy-bootstrap-guard` CI workflow runs this against a blank Postgres on e
 - **Tailscale**, and nothing inbound but SSH, from the tailnet once it works.
 - A clone of this repo (compose files, `docker/`, `scripts/`), and Python 3 for the backup scripts (stdlib only).
 
-**`scripts/server/setup_host.sh` does all of that** on a fresh Ubuntu 24.04 VPS (phase E), and can be run again:
+**`scripts/server/setup_host.sh` does all of that** on a fresh Ubuntu VPS (phase E; first run 2026-11-26 on Hetzner's
+Ubuntu 26.04, whose `resolute` packages Docker and Tailscale both publish), and can be run again:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/Masterplanner25/A.I.N.D.Y./main/scripts/server/setup_host.sh
@@ -90,6 +91,7 @@ Copy it from the laptop, file to file, never through a chat or an issue. Compose
 | Links in mail | `AINDY_EMAIL_VERIFY_URL_TEMPLATE`, `AINDY_PASSWORD_RESET_URL_TEMPLATE`, `ALLOWED_ORIGINS` | Copy. They name the client on the laptop (`localhost:5173`), which is where the owner signs in. |
 | Behaviour flags | every other `AINDY_*` | Copy as they are. |
 | **Server only** | `AINDY_BIND_ADDR` | The server's tailnet address (§6). Never `0.0.0.0`. |
+| **Server only** | `COMPOSE_PROJECT_NAME=aindy-apps-monolith` | The laptop's project is named after its folder; the server's clone is `~/aindy`. Without this the server's containers and volumes get another name, and the backup scripts (which look for `aindy-apps-monolith`) find nothing. |
 | Server only, before the first `up` | `POSTGRES_PASSWORD` | Optional (postgres has no host port), but it can only be set before postgres first initialises its volume. |
 | Laptop only | `DATABASE_URL` | For host-side tools; compose sets the containers' own. Leave it out on a server. |
 
@@ -159,8 +161,11 @@ and both act on GitHub.** So exactly one stack runs without dev mode (below) at 
 the server after it.
 
 1. **Provision** (§2: `setup_host.sh`). Join the tailnet. Note the server's tailnet address.
-2. **Install.** Clone the repo; write `.env` (§3) with `AINDY_BIND_ADDR=<tailnet address>` and
-   `AINDY_IMAGE=ghcr.io/masterplanner25/aindy-api:<sha>` (the image the laptop runs); `docker pull` it.
+2. **Install.** Clone the repo; write `.env` (§3) with `AINDY_BIND_ADDR=<tailnet address>`,
+   `COMPOSE_PROJECT_NAME=aindy-apps-monolith`, Unix line endings (a laptop `.env` has CRLF: `sed -i 's/\r$//' .env`)
+   and `AINDY_IMAGE=ghcr.io/masterplanner25/aindy-api:<sha>`; `docker pull` it. **The image must be from #640 or
+   later** (`17ece86`): an older one has no dev mode, so `AINDY_ENVIRONMENT=dev` does nothing and the server runs the
+   paid jobs. Same runtime pin as the laptop, so the restored data needs no migration.
 3. **Restore a recent backup, without the api:**
    ```bash
    $COMPOSE create                       # every container and volume, nothing started
